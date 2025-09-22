@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - UN Security System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i class="bi bi-speedometer2"></i> Security Dashboard
+            <small class="text-muted">- {{ user.get_role_display }}</small>
+        </h1>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <i class="bi bi-people display-4 text-primary"></i>
+                <h5 class="card-title mt-2">Active Visitors</h5>
+                <h2 class="text-primary" id="active-visitors">{{ active_visitors }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <i class="bi bi-clock display-4 text-warning"></i>
+                <h5 class="card-title mt-2">Pending Approvals</h5>
+                <h2 class="text-warning" id="pending-approvals">{{ pending_approvals }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <i class="bi bi-car-front display-4 text-success"></i>
+                <h5 class="card-title mt-2">Vehicles in Compound</h5>
+                <h2 class="text-success" id="vehicles-in-compound">{{ vehicles_in_compound }}</h2>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <i class="bi bi-calendar-day display-4 text-info"></i>
+                <h5 class="card-title mt-2">Today's Visitors</h5>
+                <h2 class="text-info">{{ total_visitors_today }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if user.role == 'data_entry' %}
+<!-- Data Entry Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-lightning"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <a href="{% url 'visitors:visitor_create' %}" class="btn btn-primary btn-lg w-100 mb-2">
+                            <i class="bi bi-person-plus"></i><br>Register Visitor
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <a href="{% url 'vehicles:record_movement' %}" class="btn btn-success btn-lg w-100 mb-2">
+                            <i class="bi bi-arrow-left-right"></i><br>Record Vehicle Movement
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-warning btn-lg w-100 mb-2" data-bs-toggle="modal" data-bs-target="#parkingCardModal">
+                            <i class="bi bi-credit-card"></i><br>Check Parking Card
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if user.role in 'lsa,soc' %}
+<!-- Advanced Dashboard for LSA/SOC -->
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-activity"></i> Recent Activities</h5>
+            </div>
+            <div class="card-body">
+                <div id="recent-activities">
+                    <!-- Activities will be loaded via AJAX -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-exclamation-triangle"></i> Security Alerts</h5>
+            </div>
+            <div class="card-body">
+                {% for incident in recent_incidents %}
+                <div class="alert alert-{{ incident.severity }} alert-sm">
+                    <strong>{{ incident.title }}</strong><br>
+                    <small>{{ incident.reported_at|timesince }} ago</small>
+                </div>
+                {% empty %}
+                <p class="text-muted">No incidents reported today.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Parking Card Check Modal -->
+<div class="modal fade" id="parkingCardModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Check Parking Card</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="parking-card-form">
+                    <div class="mb-3">
+                        <label for="card-number" class="form-label">Card Number</label>
+                        <input type="text" class="form-control" id="card-number" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Check Card</button>
+                </form>
+                <div id="card-result" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Real-time dashboard updates
+function updateDashboard() {
+    fetch('/dashboard/api/')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('active-visitors').textContent = data.active_visitors;
+            document.getElementById('pending-approvals').textContent = data.pending_approvals;
+            document.getElementById('vehicles-in-compound').textContent = data.vehicles_in_compound;
+            
+            // Update recent activities
+            const activitiesDiv = document.getElementById('recent-activities');
+            if (activitiesDiv) {
+                activitiesDiv.innerHTML = '';
+                data.recent_activities.forEach(activity => {
+                    const activityElement = document.createElement('div');
+                    activityElement.className = 'border-bottom pb-2 mb-2';
+                    activityElement.innerHTML = `
+                        <div class="d-flex justify-content-between">
+                            <strong>${activity.description}</strong>
+                            <small class="text-muted">${new Date(activity.timestamp).toLocaleTimeString()}</small>
+                        </div>
+                        <small class="text-muted">by ${activity.user}</small>
+                    `;
+                    activitiesDiv.appendChild(activityElement);
+                });
+            }
+        })
+        .catch(error => console.error('Error updating dashboard:', error));
+}
+
+// Update dashboard every 30 seconds
+setInterval(updateDashboard, 30000);
+
+// Parking card validation
+document.getElementById('parking-card-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const cardNumber = document.getElementById('card-number').value;
+    const resultDiv = document.getElementById('card-result');
+    
+    fetch(`/vehicles/validate-parking-card/?card_number=${encodeURIComponent(cardNumber)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.valid) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <strong>Valid Card</strong><br>
+                        Owner: ${data.owner_name}<br>
+                        Vehicle: ${data.vehicle_plate}<br>
+                        Department: ${data.department}<br>
+                        Expires: ${data.expiry_date}
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Invalid Card</strong><br>
+                        ${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>Error</strong><br>
+                    Could not validate card. Please try again.
+                </div>
+            `;
+        });
+});
+</script>
+{% endblock %}
