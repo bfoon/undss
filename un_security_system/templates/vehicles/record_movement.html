@@ -1,0 +1,118 @@
+{# templates/vehicles/record_movement.html #}
+{% load crispy_forms_tags %}
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Record Vehicle Movement • UN Security System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f6f8fb; }
+    .card-rounded { border-radius: 16px; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    .kbd { padding: .2rem .35rem; border: 1px solid #dee2e6; border-radius: .25rem; background:#fff; font-size: .825rem;}
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg bg-white border-bottom">
+    <div class="container">
+      <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
+      <div class="ms-auto d-flex gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'vehicles:movement_list' %}">All Movements</a>
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container my-5">
+    <div class="row g-4">
+      <div class="col-12 col-lg-8">
+        <div class="card card-rounded shadow-soft">
+          <div class="card-body p-4 p-md-5">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+              <h4 class="mb-0">Record Vehicle Movement</h4>
+              <span class="text-muted small">{% now "Y-m-d H:i" %}</span>
+            </div>
+
+            {# Django messages #}
+            {% if messages %}
+              <div class="mb-3">
+                {% for message in messages %}
+                  <div class="alert alert-{{ message.tags|default:'info' }} mb-2" role="alert">
+                    {{ message }}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            <form method="post" class="vehicle-movement-form" novalidate>
+              {% csrf_token %}
+              {{ form|crispy }}
+
+              <div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-success btn-lg">Save Movement</button>
+                <a href="{% url 'vehicles:movement_list' %}" class="btn btn-outline-secondary">Cancel</a>
+              </div>
+            </form>
+
+            <hr class="my-4">
+            <div class="small text-muted">
+              <strong>Tip:</strong>
+              <span>Type or scan the plate into <em>Vehicle Plate Number</em>. Use the selector for <em>Entry/Exit</em> and choose the correct gate.</span>
+              <span class="ms-2">Press <span class="kbd">Enter</span> to submit quickly.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <div class="card card-rounded shadow-soft">
+          <div class="card-body">
+            <h6 class="mb-3">Quick Links</h6>
+            <div class="d-grid gap-2">
+              <a class="btn btn-light border" href="{% url 'vehicles:quick_movement' %}">Quick Movement Page</a>
+              <a class="btn btn-light border" href="{% url 'vehicles:vehicle_list' %}">Vehicles</a>
+              <a class="btn btn-light border" href="{% url 'vehicles:parking_card_list' %}">Parking Cards</a>
+            </div>
+            <hr>
+            <p class="small text-muted mb-1"><strong>Best practice</strong></p>
+            <ul class="small text-muted mb-0 ps-3">
+              <li>Confirm plate readability before saving.</li>
+              <li>Use notes for unusual cases (e.g., temporary access).</li>
+              <li>For staff vehicles, ensure parking card is valid.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // UX helpers: autofocus and uppercase plate input
+    (function() {
+      const plate = document.getElementById('id_plate_number');
+      if (plate) {
+        plate.focus();
+        plate.addEventListener('input', function () {
+          this.value = this.value.toUpperCase();
+        });
+        // Submit form on Enter when focus is on plate field
+        plate.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            this.form && this.form.submit();
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

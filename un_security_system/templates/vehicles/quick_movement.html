@@ -1,0 +1,279 @@
+{# templates/vehicles/quick_movement.html #}
+{% load crispy_forms_tags %}
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Quick Movement • UN Security System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#f6f8fb; }
+    .card-rounded { border-radius: 16px; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    .muted { color:#6c757d; }
+    .kbd { padding:.15rem .35rem; border:1px solid #dee2e6; border-radius:.25rem; background:#fff; font-size:.825rem; }
+    .stat { min-width: 120px; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg bg-white border-bottom">
+  <div class="container">
+    <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
+    <div class="ms-auto d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'vehicles:movement_list' %}">All Movements</a>
+      <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-4 my-md-5">
+  <!-- Alerts / messages -->
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} mb-2" role="alert">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="row g-4">
+    <!-- Left: Parking Card Quick Check -->
+    <div class="col-12 col-lg-5">
+      <div class="card card-rounded shadow-soft">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h5 class="mb-0">Parking Card Quick Check</h5>
+            <span class="muted small">{% now "Y-m-d H:i" %}</span>
+          </div>
+
+          <form id="card-check-form" method="get" class="mb-3" novalidate>
+            {{ check_form|crispy }}
+          </form>
+
+          <div id="card-result" class="d-none">
+            <div class="alert mb-3" id="card-status"></div>
+            <div class="row g-2">
+              <div class="col-6">
+                <div class="p-2 border rounded">
+                  <div class="muted small">Owner</div>
+                  <div id="card-owner" class="fw-semibold">—</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-2 border rounded">
+                  <div class="muted small">Dept</div>
+                  <div id="card-dept" class="fw-semibold">—</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-2 border rounded">
+                  <div class="muted small">Vehicle Plate</div>
+                  <div id="card-plate" class="fw-semibold">—</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-2 border rounded">
+                  <div class="muted small">Expiry</div>
+                  <div id="card-expiry" class="fw-semibold">—</div>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="p-2 border rounded">
+                  <div class="muted small">Contact</div>
+                  <div id="card-contact" class="fw-semibold">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-grid gap-2 mt-3">
+              <button class="btn btn-outline-secondary" id="clear-card">Clear</button>
+            </div>
+          </div>
+
+          <hr class="my-4">
+          <div class="small muted">
+            <strong>Tip:</strong> Scan the card into the field and hit <span class="kbd">Enter</span>.
+            If valid, its plate will auto-fill the movement form.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Fast Movement Entry -->
+    <div class="col-12 col-lg-7">
+      <div class="card card-rounded shadow-soft">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h5 class="mb-0">Fast Movement Entry</h5>
+            <div class="d-none d-md-flex align-items-center gap-2">
+              <span class="muted small">Quick keys:</span>
+              <span class="kbd">E</span><span class="muted small">Entry</span>
+              <span class="kbd">X</span><span class="muted small">Exit</span>
+            </div>
+          </div>
+
+          <form method="post" action="{% url 'vehicles:record_movement' %}" id="movement-form" novalidate>
+            {% csrf_token %}
+            {{ movement_form|crispy }}
+
+            <div class="d-flex gap-2 mt-2">
+              <button type="submit" class="btn btn-success btn-lg">Save Movement</button>
+              <a href="{% url 'vehicles:movement_list' %}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+          </form>
+
+          <hr class="my-4">
+          <div class="row g-2">
+            <div class="col">
+              <div class="p-2 border rounded text-center stat">
+                <div class="muted small">Now</div>
+                <div class="fw-semibold" id="now-clock">—</div>
+              </div>
+            </div>
+            <div class="col">
+              <div class="p-2 border rounded text-center stat">
+                <div class="muted small">Plate</div>
+                <div class="fw-semibold" id="plate-preview">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="small muted mt-3">
+            <strong>Note:</strong> For staff vehicles, ensure the card is valid. For visitors, include brief purpose in notes.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  // Clock
+  (function tick() {
+    const el = document.getElementById('now-clock');
+    if (el) {
+      const d = new Date();
+      el.textContent = d.toLocaleString();
+    }
+    setTimeout(tick, 1000);
+  })();
+
+  // Helpers: elements
+  const cardInput = document.getElementById('id_card_number');
+  const cardForm = document.getElementById('card-check-form');
+  const cardResult = document.getElementById('card-result');
+  const cardStatus = document.getElementById('card-status');
+  const clearBtn = document.getElementById('clear-card');
+
+  const plateInput = document.getElementById('id_plate_number');   // from VehicleMovementForm
+  const platePreview = document.getElementById('plate-preview');
+  const movementType = document.getElementById('id_movement_type');
+
+  // Uppercase plate and live preview
+  if (plateInput) {
+    plateInput.addEventListener('input', function() {
+      this.value = this.value.toUpperCase();
+      platePreview.textContent = this.value || '—';
+    });
+    // Submit form on Enter when focused on plate field
+    plateInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('movement-form').submit();
+      }
+    });
+    // Autofocus for speed
+    plateInput.focus();
+  }
+
+  // Keyboard shortcuts E/X to set movement type quickly
+  document.addEventListener('keydown', function(e) {
+    if (!movementType) return;
+    // ignore if typing in inputs/textarea/select
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
+    if (e.key.toLowerCase() === 'e') {
+      movementType.value = 'entry';
+    } else if (e.key.toLowerCase() === 'x') {
+      movementType.value = 'exit';
+    }
+  });
+
+  // Parking card quick validate (AJAX)
+  async function validateCard(number) {
+    const url = `{% url 'vehicles:validate_parking_card' %}?card_number=` + encodeURIComponent(number);
+    try {
+      const res = await fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      const data = await res.json();
+
+      cardResult.classList.remove('d-none');
+
+      if (data.valid) {
+        cardStatus.className = 'alert alert-success';
+        cardStatus.textContent = 'Parking card is valid.';
+        document.getElementById('card-owner').textContent = data.owner_name || '—';
+        document.getElementById('card-dept').textContent = data.department || '—';
+        document.getElementById('card-plate').textContent = data.vehicle_plate || '—';
+        document.getElementById('card-expiry').textContent = data.expiry_date || '—';
+        document.getElementById('card-contact').textContent = data.phone || '—';
+
+        // Autofill plate on success
+        if (plateInput && data.vehicle_plate) {
+          plateInput.value = (data.vehicle_plate || '').toUpperCase();
+          plateInput.dispatchEvent(new Event('input'));
+        }
+      } else {
+        cardStatus.className = 'alert alert-danger';
+        cardStatus.textContent = data.error || 'Invalid parking card.';
+        document.getElementById('card-owner').textContent = '—';
+        document.getElementById('card-dept').textContent = '—';
+        document.getElementById('card-plate').textContent = '—';
+        document.getElementById('card-expiry').textContent = '—';
+        document.getElementById('card-contact').textContent = '—';
+      }
+    } catch (e) {
+      cardResult.classList.remove('d-none');
+      cardStatus.className = 'alert alert-warning';
+      cardStatus.textContent = 'Network error while validating card.';
+    }
+  }
+
+  if (cardForm && cardInput) {
+    cardForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const number = (cardInput.value || '').trim();
+      if (!number) return;
+      validateCard(number);
+    });
+
+    // pressing Enter inside the card field submits validation
+    cardInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        cardForm.requestSubmit();
+      }
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (cardInput) cardInput.value = '';
+      cardResult.classList.add('d-none');
+      // keep focus on plate for speed
+      plateInput && plateInput.focus();
+    });
+  }
+</script>
+</body>
+</html>

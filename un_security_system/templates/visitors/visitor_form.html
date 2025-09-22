@@ -1,0 +1,93 @@
+{# templates/visitors/visitor_form.html #}
+{% load crispy_forms_tags %}
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% if object %}Edit Visitor{% else %}Register Visitor{% endif %} • UN Security System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f6f8fb; }
+    .card-rounded { border-radius: 16px; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    .muted { color: #6c757d; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg bg-white border-bottom">
+    <div class="container">
+      <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
+      <div class="ms-auto d-flex gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:reports' %}">Reports</a>
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container my-5">
+    <div class="row justify-content-center">
+      <div class="col-12 col-lg-10">
+        <div class="card card-rounded shadow-soft">
+          <div class="card-body p-4 p-md-5">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+              <h4 class="mb-0">
+                {% if object %}Edit Visitor{% else %}Register Visitor{% endif %}
+              </h4>
+              <span class="muted small">
+                {% now "Y-m-d H:i" %} • {{ request.user.get_role_display|default:request.user.username }}
+              </span>
+            </div>
+
+            {# Django messages #}
+            {% if messages %}
+              <div class="mb-3">
+                {% for message in messages %}
+                  <div class="alert alert-{{ message.tags|default:'info' }} mb-2" role="alert">
+                    {{ message }}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            <form method="post" enctype="multipart/form-data" novalidate>
+              {% csrf_token %}
+              {{ form|crispy }}
+
+              <div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-primary">
+                  {% if object %}Save Changes{% else %}Save Visitor{% endif %}
+                </button>
+                <a href="javascript:history.back()" class="btn btn-outline-secondary">Cancel</a>
+              </div>
+            </form>
+
+            {# Optional: quick tips / status chips—safe to remove if not needed #}
+            <hr class="my-4">
+            <div class="small muted">
+              <strong>Tip:</strong>
+              Ensure the visitor’s host, purpose, and identification are accurate. If this visitor arrives by vehicle,
+              make sure the plate number is recorded in the vehicle module and approval is sent to the LSA if required.
+            </div>
+          </div>
+        </div>
+
+        {# Optional footer cards with links to other visitor pages—adjust URLs if you have them #}
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          {% if object %}
+            <a class="btn btn-light border" href="{% url 'visitors:visitor_detail' object.pk %}">View Visitor</a>
+          {% endif %}
+          <a class="btn btn-light border" href="{% url 'visitors:visitor_list' %}">All Visitors</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

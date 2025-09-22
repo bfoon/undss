@@ -1,0 +1,140 @@
+{# templates/visitors/visitor_list.html #}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Visitors • UN Security System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#f6f8fb; }
+    .card-rounded { border-radius: 16px; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    .table thead th { white-space: nowrap; }
+    .status-badge { text-transform: capitalize; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg bg-white border-bottom">
+  <div class="container">
+    <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
+    <div class="ms-auto d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
+      {% comment %} If you have a "create visitor" route, add it here {% endcomment %}
+      {# <a class="btn btn-primary btn-sm" href="{% url 'visitors:visitor_create' %}">Register Visitor</a> #}
+      <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-4 my-md-5">
+  <div class="card card-rounded shadow-soft">
+    <div class="card-body p-3 p-md-4">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h4 class="mb-0">Visitors</h4>
+        <form class="d-flex gap-2" method="get">
+          <input type="text" class="form-control" name="search" placeholder="Search name/ID/host…"
+                 value="{{ request.GET.search|default_if_none:'' }}">
+          <button class="btn btn-primary" type="submit">Search</button>
+          <a class="btn btn-outline-secondary" href="{% url 'visitors:visitor_list' %}">Reset</a>
+        </form>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Full Name</th>
+              <th>ID Number</th>
+              <th>Host</th>
+              <th>Purpose</th>
+              <th>Status</th>
+              <th>Registered</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for v in visitors %}
+            <tr>
+              <td>{{ v.id }}</td>
+              <td class="fw-semibold">{{ v.name|default:v.full_name }}</td>
+              <td>{{ v.id_number|default:"—" }}</td>
+              <td>
+                {% if v.host %}
+                  {{ v.host.get_full_name|default:v.host.username }}
+                {% else %}—{% endif %}
+              </td>
+              <td class="text-truncate" style="max-width: 240px;">{{ v.purpose|default:"—" }}</td>
+              <td>
+                {% if v.status %}
+                  <span class="badge text-bg-{% if v.status == 'pending' %}warning{% elif v.status == 'approved' %}success{% elif v.status == 'rejected' %}danger{% else %}secondary{% endif %} status-badge">
+                    {{ v.status }}
+                  </span>
+                {% else %}
+                  {% if v.is_approved %}<span class="badge text-bg-success">approved</span>
+                  {% else %}<span class="badge text-bg-warning">pending</span>{% endif %}
+                {% endif %}
+              </td>
+              <td>
+                {% if v.created_at %}
+                  <span title="{{ v.created_at }}">{{ v.created_at|date:"Y-m-d H:i" }}</span>
+                {% elif v.registered_at %}
+                  <span title="{{ v.registered_at }}">{{ v.registered_at|date:"Y-m-d H:i" }}</span>
+                {% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                  {% comment %} Adjust these URLs to your actual visitor routes {% endcomment %}
+                  {% if v.pk %}
+                    <a class="btn btn-outline-primary" href="{% url 'visitors:visitor_detail' v.pk %}">View</a>
+                    <a class="btn btn-outline-secondary" href="{% url 'visitors:visitor_edit' v.pk %}">Edit</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="text-center text-muted py-4">No visitors found.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if is_paginated %}
+        <nav aria-label="pagination">
+          <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+              <li class="page-item"><a class="page-link" href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">&laquo; First</a></li>
+              <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a></li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">&laquo; First</span></li>
+              <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            {% endif %}
+
+            <li class="page-item active"><span class="page-link">{{ page_obj.number }} / {{ paginator.num_pages }}</span></li>
+
+            {% if page_obj.has_next %}
+              <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a></li>
+              <li class="page-item"><a class="page-link" href="?page={{ paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last &raquo;</a></li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">Next</span></li>
+              <li class="page-item disabled"><span class="page-link">Last &raquo;</span></li>
+            {% endif %}
+          </ul>
+        </nav>
+      {% endif %}
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

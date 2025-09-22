@@ -1,0 +1,145 @@
+{# templates/vehicles/parking_card_list.html #}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Parking Cards • UN Security System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background:#f6f8fb; }
+    .card-rounded { border-radius: 16px; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    .table thead th { white-space: nowrap; }
+    .badge-active { background:#16a34a; }
+    .badge-inactive { background:#6c757d; }
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg bg-white border-bottom">
+  <div class="container">
+    <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
+    <div class="ms-auto d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
+      <a class="btn btn-primary btn-sm" href="{% url 'vehicles:parking_card_create' %}">Create Card</a>
+      <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-4 my-md-5">
+  <div class="card card-rounded shadow-soft">
+    <div class="card-body p-3 p-md-4">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h4 class="mb-0">Parking Cards</h4>
+        <form class="d-flex gap-2" method="get">
+          <input type="text" class="form-control" name="search" placeholder="Search card/owner/plate…"
+                 value="{{ request.GET.search|default_if_none:'' }}">
+          <button class="btn btn-primary" type="submit">Search</button>
+          <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_list' %}">Reset</a>
+        </form>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Card #</th>
+              <th>Owner</th>
+              <th>Employee ID</th>
+              <th>Phone</th>
+              <th>Department</th>
+              <th>Vehicle</th>
+              <th>Plate</th>
+              <th>Colour</th>
+              <th>Expiry</th>
+              <th>Status</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for c in cards %}
+            <tr>
+              <td>{{ c.id }}</td>
+              <td class="fw-semibold">{{ c.card_number }}</td>
+              <td>{{ c.owner_name|default:"—" }}</td>
+              <td>{{ c.owner_id|default:"—" }}</td>
+              <td>{{ c.phone|default:"—" }}</td>
+              <td>{{ c.department|default:"—" }}</td>
+              <td>
+                {% if c.vehicle_make or c.vehicle_model %}
+                  {{ c.vehicle_make|default:"" }}{% if c.vehicle_model %} / {{ c.vehicle_model }}{% endif %}
+                {% else %}—{% endif %}
+              </td>
+              <td>{{ c.vehicle_plate|default:"—" }}</td>
+              <td>{{ c.vehicle_color|default:"—" }}</td>
+              <td>
+                {% if c.expiry_date %}
+                  <span title="{{ c.expiry_date }}">{{ c.expiry_date|date:"Y-m-d" }}</span>
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                {% if c.is_active %}
+                  <span class="badge badge-active">Active</span>
+                {% else %}
+                  <span class="badge badge-inactive">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                  <a class="btn btn-outline-primary" href="{% url 'vehicles:parking_card_detail' c.pk %}">View</a>
+                  <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_edit' c.pk %}">Edit</a>
+                  {% if c.is_active %}
+                    <a class="btn btn-outline-warning" href="{% url 'vehicles:parking_card_deactivate' c.pk %}">Deactivate</a>
+                  {% else %}
+                    <a class="btn btn-outline-success" href="{% url 'vehicles:parking_card_reactivate' c.pk %}">Reactivate</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="12" class="text-center text-muted py-4">No parking cards found.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if is_paginated %}
+        <nav aria-label="pagination">
+          <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+              <li class="page-item"><a class="page-link" href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">&laquo; First</a></li>
+              <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a></li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">&laquo; First</span></li>
+              <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            {% endif %}
+
+            <li class="page-item active"><span class="page-link">{{ page_obj.number }} / {{ paginator.num_pages }}</span></li>
+
+            {% if page_obj.has_next %}
+              <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a></li>
+              <li class="page-item"><a class="page-link" href="?page={{ paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last &raquo;</a></li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">Next</span></li>
+              <li class="page-item disabled"><span class="page-link">Last &raquo;</span></li>
+            {% endif %}
+          </ul>
+        </nav>
+      {% endif %}
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

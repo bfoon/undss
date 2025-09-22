@@ -1,0 +1,113 @@
+{# templates/accounts/profile.html #}
+{% load crispy_forms_tags %}
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Profile • UN Security System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f6f8fb; }
+    .card-rounded { border-radius: 16px; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    .muted { color:#6c757d; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg bg-white border-bottom">
+    <div class="container">
+      <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
+      <div class="ms-auto d-flex gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container my-5">
+    <div class="row g-4">
+      <!-- Left: Profile summary -->
+      <div class="col-12 col-lg-4">
+        <div class="card card-rounded shadow-soft">
+          <div class="card-body">
+            <div class="d-flex align-items-center gap-3">
+              <img src="{% static 'img/avatar.png' %}" alt="Avatar" width="64" height="64" class="rounded-circle border"
+                   onerror="this.style.display='none'">
+              <div>
+                <h5 class="mb-0">{{ request.user.first_name }} {{ request.user.last_name }}</h5>
+                <div class="muted">@{{ request.user.username }}</div>
+              </div>
+            </div>
+
+            <hr class="my-3">
+
+            <dl class="row mb-0 small">
+              <dt class="col-5">Role</dt>
+              <dd class="col-7 text-capitalize">{{ request.user.get_role_display }}</dd>
+
+              <dt class="col-5">Email</dt>
+              <dd class="col-7">{{ request.user.email }}</dd>
+
+              <dt class="col-5">Phone</dt>
+              <dd class="col-7">{{ request.user.phone|default:"—" }}</dd>
+
+              <dt class="col-5">Employee ID</dt>
+              <dd class="col-7">{{ request.user.employee_id|default:"—" }}</dd>
+
+              <dt class="col-5">Status</dt>
+              <dd class="col-7">
+                {% if request.user.is_active %}
+                  <span class="badge text-bg-success">Active</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">Inactive</span>
+                {% endif %}
+              </dd>
+            </dl>
+
+            <div class="d-grid gap-2 mt-3">
+              <a class="btn btn-outline-primary" href="{% url 'accounts:change_password' %}">Change Password</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Edit form -->
+      <div class="col-12 col-lg-8">
+        <div class="card card-rounded shadow-soft">
+          <div class="card-body">
+            <h5 class="mb-3">Update Profile</h5>
+
+            {# Django messages #}
+            {% if messages %}
+              <div class="mb-3">
+                {% for message in messages %}
+                  <div class="alert alert-{{ message.tags|default:'info' }} mb-2" role="alert">
+                    {{ message }}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            <form method="post" novalidate>
+              {% csrf_token %}
+              {{ form|crispy }}
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <a href="{% url 'dashboard:dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
