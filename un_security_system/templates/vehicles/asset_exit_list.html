@@ -1,0 +1,646 @@
+<!-- templates/vehicles/asset_exit_list.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}My Asset Exit Requests - UN Security Management System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .request-card {
+        border-left: 4px solid var(--un-blue);
+    }
+
+    .status-pending {
+        background-color: var(--warning-color);
+        color: white;
+    }
+
+    .status-lsa-cleared {
+        background-color: var(--info-color, #0dcaf0);
+        color: white;
+    }
+
+    .status-signed-out {
+        background-color: var(--un-blue);
+        color: white;
+    }
+
+    .status-completed {
+        background-color: var(--success-color);
+        color: white;
+    }
+
+    .status-rejected {
+        background-color: var(--danger-color);
+        color: white;
+    }
+
+    .status-cancelled {
+        background-color: var(--un-gray);
+        color: white;
+    }
+
+    .request-code {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        letter-spacing: 1px;
+        background: var(--un-light-blue);
+        color: var(--un-dark-blue);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    .timeline-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+    }
+
+    .summary-card {
+        background: linear-gradient(135deg, var(--un-light-blue) 0%, #f8f9fa 100%);
+        border: 1px solid var(--un-blue);
+        border-radius: 12px;
+    }
+
+    .quick-actions {
+        background: white;
+        border: 2px dashed var(--un-blue);
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+
+    .quick-actions:hover {
+        background: var(--un-light-blue);
+        transform: translateY(-2px);
+    }
+
+    .filter-badge {
+        background: var(--un-blue);
+        color: white;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4">
+            <div>
+                <h1 class="h3 mb-2">
+                    <i class="bi bi-file-text text-un-primary me-2"></i>
+                    My Asset Exit Requests
+                </h1>
+                <p class="text-muted mb-0">Track and manage your submitted asset removal requests</p>
+            </div>
+            <div class="mt-3 mt-lg-0">
+                <div class="d-flex gap-2">
+                    <a class="btn btn-outline-secondary" href="{% url 'vehicles:asset_exit_verify_page' %}">
+                        <i class="bi bi-shield-check me-1"></i>Gate Verification
+                    </a>
+                    <a class="btn btn-un-primary" href="{% url 'vehicles:asset_exit_new' %}">
+                        <i class="bi bi-plus-circle me-2"></i>New Request
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Request Summary -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="summary-card p-3">
+            <div class="row g-3 text-center">
+                <div class="col-md-2">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-file-text text-un-primary me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5">{{ total_requests|default:0 }}</div>
+                            <small class="text-muted">Total Requests</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-clock text-warning me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-warning">{{ pending_count|default:0 }}</div>
+                            <small class="text-muted">Pending</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-check-circle text-info me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-info">{{ approved_count|default:0 }}</div>
+                            <small class="text-muted">LSA Cleared</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-box-arrow-right text-primary me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-primary">{{ signed_out_count|default:0 }}</div>
+                            <small class="text-muted">Signed Out</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-check-square text-success me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-success">{{ completed_count|default:0 }}</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-x-circle text-danger me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-danger">{{ rejected_count|default:0 }}</div>
+                            <small class="text-muted">Rejected</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters and Search -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="search-input" class="form-label">
+                            <i class="bi bi-search me-1"></i>Search Requests
+                        </label>
+                        <input type="text"
+                               class="form-control"
+                               id="search-input"
+                               name="search"
+                               placeholder="Search by code, agency, destination..."
+                               value="{{ request.GET.search|default:'' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status-filter" class="form-label">
+                            <i class="bi bi-funnel me-1"></i>Status
+                        </label>
+                        <select class="form-select" id="status-filter" name="status">
+                            <option value="">All Status</option>
+                            <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>
+                                Pending LSA Review
+                            </option>
+                            <option value="lsa_cleared" {% if request.GET.status == 'lsa_cleared' %}selected{% endif %}>
+                                LSA Cleared
+                            </option>
+                            <option value="signed_out" {% if request.GET.status == 'signed_out' %}selected{% endif %}>
+                                Assets Signed Out
+                            </option>
+                            <option value="completed" {% if request.GET.status == 'completed' %}selected{% endif %}>
+                                Completed
+                            </option>
+                            <option value="rejected" {% if request.GET.status == 'rejected' %}selected{% endif %}>
+                                Rejected
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="date-filter" class="form-label">
+                            <i class="bi bi-calendar3 me-1"></i>Date Range
+                        </label>
+                        <select class="form-select" id="date-filter" name="date_range">
+                            <option value="">All Time</option>
+                            <option value="today" {% if request.GET.date_range == 'today' %}selected{% endif %}>
+                                Today
+                            </option>
+                            <option value="week" {% if request.GET.date_range == 'week' %}selected{% endif %}>
+                                This Week
+                            </option>
+                            <option value="month" {% if request.GET.date_range == 'month' %}selected{% endif %}>
+                                This Month
+                            </option>
+                            <option value="quarter" {% if request.GET.date_range == 'quarter' %}selected{% endif %}>
+                                Last 3 Months
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-funnel me-1"></i>Filter
+                            </button>
+                            <a href="{% url 'vehicles:my_asset_exits' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Reset
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Requests Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card request-card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="bi bi-table me-2"></i>
+                        Asset Exit Requests
+                        {% if items %}
+                            <span class="badge bg-light text-dark ms-2">{{ items.count }} request{{ items.count|pluralize }}</span>
+                        {% endif %}
+                        {% if request.GET.status %}
+                            <span class="filter-badge ms-2">{{ request.GET.status|title }}</span>
+                        {% endif %}
+                    </h6>
+                    {% if items %}
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-three-dots me-1"></i>Actions
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="exportRequests()">
+                                <i class="bi bi-download me-2"></i>Export to PDF
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="printTable()">
+                                <i class="bi bi-printer me-2"></i>Print List
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
+                                <i class="bi bi-plus-circle me-2"></i>New Request
+                            </a></li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if items %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="requests-table">
+                        <thead>
+                            <tr>
+                                <th>Request Code</th>
+                                <th>UN Agency</th>
+                                <th>Destination</th>
+                                <th>Expected Return</th>
+                                <th>Assets</th>
+                                <th>Status</th>
+                                <th>Submitted</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for request in items %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-file-earmark-text text-un-primary me-2"></i>
+                                        <span class="request-code">{{ request.code }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-medium">{{ request.agency_name }}</div>
+                                    {% if request.requester %}
+                                        <small class="text-muted">by {{ request.requester.get_full_name|default:request.requester.username }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-geo-alt text-muted me-1"></i>
+                                        <span title="{{ request.destination }}">{{ request.destination|truncatechars:25 }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-calendar-event text-muted me-1"></i>
+                                        <div>
+                                            <div class="fw-medium">{{ request.expected_date|date:"M j, Y" }}</div>
+                                            {% if request.expected_date %}
+                                                {% now "Y-m-d" as today %}
+                                                {% if request.expected_date|date:"Y-m-d" < today %}
+                                                    <small class="text-danger">Overdue</small>
+                                                {% elif request.expected_date|date:"Y-m-d" == today %}
+                                                    <small class="text-warning">Due Today</small>
+                                                {% else %}
+                                                    <small class="text-muted">{{ request.expected_date|timeuntil }} remaining</small>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-box-seam text-muted me-1"></i>
+                                        <span class="badge bg-primary">{{ request.items.count }} item{{ request.items.count|pluralize }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge status-{{ request.status }}">
+                                        {% if request.status == 'pending' %}
+                                            <span class="timeline-indicator bg-warning"></span>
+                                            <i class="bi bi-clock me-1"></i>Pending Review
+                                        {% elif request.status == 'lsa_cleared' %}
+                                            <span class="timeline-indicator bg-info"></span>
+                                            <i class="bi bi-check-circle me-1"></i>LSA Cleared
+                                        {% elif request.status == 'signed_out' %}
+                                            <span class="timeline-indicator bg-primary"></span>
+                                            <i class="bi bi-box-arrow-right me-1"></i>Signed Out
+                                        {% elif request.status == 'completed' %}
+                                            <span class="timeline-indicator bg-success"></span>
+                                            <i class="bi bi-check-square me-1"></i>Completed
+                                        {% elif request.status == 'rejected' %}
+                                            <span class="timeline-indicator bg-danger"></span>
+                                            <i class="bi bi-x-circle me-1"></i>Rejected
+                                        {% elif request.status == 'cancelled' %}
+                                            <span class="timeline-indicator bg-secondary"></span>
+                                            <i class="bi bi-dash-circle me-1"></i>Cancelled
+                                        {% else %}
+                                            <span class="timeline-indicator bg-secondary"></span>
+                                            {{ request.get_status_display }}
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-clock-history text-muted me-1"></i>
+                                        <div>
+                                            <div class="fw-medium">{{ request.created_at|date:"M j, Y" }}</div>
+                                            <small class="text-muted">{{ request.created_at|time:"H:i" }}</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <a class="btn btn-outline-primary"
+                                           href="{% url 'vehicles:asset_exit_detail' request.pk %}"
+                                           title="View Details">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% if request.status == 'pending' %}
+                                            <a class="btn btn-outline-secondary"
+                                               href="{% url 'vehicles:asset_exit_edit' request.pk %}"
+                                               title="Edit Request">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a class="btn btn-outline-danger"
+                                               href="{% url 'vehicles:asset_exit_cancel' request.pk %}"
+                                               title="Cancel Request"
+                                               onclick="return confirm('Cancel this asset exit request?')">
+                                                <i class="bi bi-x-lg"></i>
+                                            </a>
+                                        {% endif %}
+                                        <div class="dropdown">
+                                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                <i class="bi bi-three-dots"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_print' request.pk %}">
+                                                    <i class="bi bi-printer me-2"></i>Print Request
+                                                </a></li>
+                                                <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_duplicate' request.pk %}">
+                                                    <i class="bi bi-files me-2"></i>Duplicate Request
+                                                </a></li>
+                                                {% if request.status == 'lsa_cleared' %}
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_qr_code' request.pk %}">
+                                                    <i class="bi bi-qr-code me-2"></i>Show QR Code
+                                                </a></li>
+                                                {% endif %}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                {% if is_paginated %}
+                <div class="card-footer">
+                    <nav aria-label="Asset exit requests pagination">
+                        <ul class="pagination justify-content-center mb-0">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}">
+                                        <i class="bi bi-chevron-double-left"></i> First
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}">
+                                        <i class="bi bi-chevron-left"></i> Previous
+                                    </a>
+                                </li>
+                            {% endif %}
+
+                            <li class="page-item active">
+                                <span class="page-link">
+                                    Page {{ page_obj.number }} of {{ paginator.num_pages }}
+                                </span>
+                            </li>
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}">
+                                        Next <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}">
+                                        Last <i class="bi bi-chevron-double-right"></i>
+                                    </a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+                {% else %}
+                <!-- Empty State -->
+                <div class="text-center py-5">
+                    {% if request.GET.search or request.GET.status or request.GET.date_range %}
+                        <i class="bi bi-search display-1 text-muted mb-3"></i>
+                        <h4 class="text-muted">No Matching Requests</h4>
+                        <p class="text-muted mb-4">No asset exit requests match your current search criteria.</p>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a class="btn btn-outline-secondary" href="{% url 'vehicles:my_asset_exits' %}">
+                                <i class="bi bi-arrow-clockwise me-2"></i>Clear Filters
+                            </a>
+                            <a class="btn btn-un-primary" href="{% url 'vehicles:asset_exit_new' %}">
+                                <i class="bi bi-plus-circle me-2"></i>New Request
+                            </a>
+                        </div>
+                    {% else %}
+                        <i class="bi bi-file-text display-1 text-muted mb-3"></i>
+                        <h4 class="text-muted">No Asset Exit Requests</h4>
+                        <p class="text-muted mb-4">You haven't submitted any asset exit requests yet.</p>
+
+                        <!-- Quick Action Guide -->
+                        <div class="row justify-content-center mb-4">
+                            <div class="col-md-8">
+                                <div class="quick-actions p-4">
+                                    <h6 class="text-un-primary mb-3">Ready to request asset removal?</h6>
+                                    <div class="row g-3 text-start">
+                                        <div class="col-md-6">
+                                            <div class="d-flex align-items-start">
+                                                <i class="bi bi-1-circle text-primary me-2 mt-1"></i>
+                                                <div class="small">
+                                                    <strong>Prepare Details</strong><br>
+                                                    Gather asset information and destination details
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="d-flex align-items-start">
+                                                <i class="bi bi-2-circle text-info me-2 mt-1"></i>
+                                                <div class="small">
+                                                    <strong>Submit Request</strong><br>
+                                                    Fill out the asset exit form with all required information
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="d-flex align-items-start">
+                                                <i class="bi bi-3-circle text-warning me-2 mt-1"></i>
+                                                <div class="small">
+                                                    <strong>LSA Review</strong><br>
+                                                    Wait for Local Security Assistant approval
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="d-flex align-items-start">
+                                                <i class="bi bi-4-circle text-success me-2 mt-1"></i>
+                                                <div class="small">
+                                                    <strong>Gate Clearance</strong><br>
+                                                    Present authorization code at security gate
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <a class="btn btn-un-primary btn-lg" href="{% url 'vehicles:asset_exit_new' %}">
+                            <i class="bi bi-plus-circle me-2"></i>Submit First Request
+                        </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit search form on Enter
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                this.form.submit();
+            }
+        });
+    }
+
+    // Enhance table with sorting (if needed)
+    const table = document.getElementById('requests-table');
+    if (table) {
+        // Add any table enhancements here
+        enhanceTableAccessibility();
+    }
+});
+
+function enhanceTableAccessibility() {
+    // Add keyboard navigation and screen reader support
+    const table = document.getElementById('requests-table');
+    if (table) {
+        table.setAttribute('role', 'table');
+        table.setAttribute('aria-label', 'Asset exit requests');
+    }
+}
+
+// Export functions
+function exportRequests() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('export', 'pdf');
+    window.open(`${window.location.pathname}?${params.toString()}`, '_blank');
+}
+
+function printTable() {
+    // Create print-friendly version
+    const printWindow = window.open('', '_blank');
+    const tableHTML = document.getElementById('requests-table').outerHTML;
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Asset Exit Requests - ${new Date().toLocaleDateString()}</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+            <style>
+                @media print {
+                    .btn, .dropdown { display: none !important; }
+                    .table { font-size: 12px; }
+                    .request-code { background: #f8f9fa !important; }
+                }
+                body { font-family: Arial, sans-serif; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #009edb; padding-bottom: 10px; }
+                .table { margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>UN Security Management System</h2>
+                    <h4>Asset Exit Requests Report</h4>
+                    <p>Generated on ${new Date().toLocaleString()}</p>
+                </div>
+                ${tableHTML}
+            </div>
+        </body>
+        </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+    }, 250);
+}
+
+// Status badge click handlers for quick filtering
+document.querySelectorAll('.badge[class*="status-"]').forEach(badge => {
+    badge.style.cursor = 'pointer';
+    badge.title = 'Click to filter by this status';
+    badge.addEventListener('click', function() {
+        const status = this.classList[1].replace('status-', '');
+        const url = new URL(window.location);
+        url.searchParams.set('status', status);
+        window.location.href = url.toString();
+    });
+});
+</script>
+{% endblock %}

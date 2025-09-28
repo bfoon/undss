@@ -1,140 +1,432 @@
 {# templates/visitors/visitor_list.html #}
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Visitors • UN Security System</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Bootstrap -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body { background:#f6f8fb; }
-    .card-rounded { border-radius: 16px; }
-    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
-    .table thead th { white-space: nowrap; }
-    .status-badge { text-transform: capitalize; }
-  </style>
-</head>
-<body>
-<nav class="navbar navbar-expand-lg bg-white border-bottom">
-  <div class="container">
-    <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
-    <div class="ms-auto d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
-      {% comment %} If you have a "create visitor" route, add it here {% endcomment %}
-      {# <a class="btn btn-primary btn-sm" href="{% url 'visitors:visitor_create' %}">Register Visitor</a> #}
-      <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
-    </div>
-  </div>
-</nav>
 
-<main class="container my-4 my-md-5">
-  <div class="card card-rounded shadow-soft">
-    <div class="card-body p-3 p-md-4">
-      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <h4 class="mb-0">Visitors</h4>
-        <form class="d-flex gap-2" method="get">
-          <input type="text" class="form-control" name="search" placeholder="Search name/ID/host…"
-                 value="{{ request.GET.search|default_if_none:'' }}">
-          <button class="btn btn-primary" type="submit">Search</button>
-          <a class="btn btn-outline-secondary" href="{% url 'visitors:visitor_list' %}">Reset</a>
-        </form>
-      </div>
+{% block title %}Visitors · UN Security Management System{% endblock %}
 
-      {% if messages %}
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
+{% block extra_css %}
+<style>
+    .table thead th {
+        background-color: var(--un-light-blue, #e6f7ff);
+        color: var(--un-dark-blue, #1f4788);
+        font-weight: 600;
+        border: none;
+        white-space: nowrap;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
 
-      <div class="table-responsive">
-        <table class="table align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>#</th>
-              <th>Full Name</th>
-              <th>ID Number</th>
-              <th>Host</th>
-              <th>Purpose</th>
-              <th>Status</th>
-              <th>Registered</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for v in visitors %}
-            <tr>
-              <td>{{ v.id }}</td>
-              <td class="fw-semibold">{{ v.name|default:v.full_name }}</td>
-              <td>{{ v.id_number|default:"—" }}</td>
-              <td>
-                {% if v.host %}
-                  {{ v.host.get_full_name|default:v.host.username }}
-                {% else %}—{% endif %}
-              </td>
-              <td class="text-truncate" style="max-width: 240px;">{{ v.purpose|default:"—" }}</td>
-              <td>
-                {% if v.status %}
-                  <span class="badge text-bg-{% if v.status == 'pending' %}warning{% elif v.status == 'approved' %}success{% elif v.status == 'rejected' %}danger{% else %}secondary{% endif %} status-badge">
-                    {{ v.status }}
-                  </span>
-                {% else %}
-                  {% if v.is_approved %}<span class="badge text-bg-success">approved</span>
-                  {% else %}<span class="badge text-bg-warning">pending</span>{% endif %}
-                {% endif %}
-              </td>
-              <td>
-                {% if v.created_at %}
-                  <span title="{{ v.created_at }}">{{ v.created_at|date:"Y-m-d H:i" }}</span>
-                {% elif v.registered_at %}
-                  <span title="{{ v.registered_at }}">{{ v.registered_at|date:"Y-m-d H:i" }}</span>
-                {% else %}—{% endif %}
-              </td>
-              <td class="text-end">
-                <div class="btn-group btn-group-sm">
-                  {% comment %} Adjust these URLs to your actual visitor routes {% endcomment %}
-                  {% if v.pk %}
-                    <a class="btn btn-outline-primary" href="{% url 'visitors:visitor_detail' v.pk %}">View</a>
-                    <a class="btn btn-outline-secondary" href="{% url 'visitors:visitor_edit' v.pk %}">Edit</a>
-                  {% endif %}
+    .table tbody tr {
+        border-bottom: 1px solid #e9ecef;
+        transition: background-color 0.2s ease;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .status-badge {
+        text-transform: capitalize;
+        font-weight: 500;
+    }
+
+    .search-form {
+        background: white;
+        border-radius: 12px;
+        padding: 1rem;
+        border: 1px solid #e9ecef;
+    }
+
+    .btn-group-sm .btn {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .visitor-id {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: var(--un-gray, #6c757d);
+    }
+
+    .empty-state {
+        padding: 3rem 1rem;
+        text-align: center;
+        color: var(--un-gray, #6c757d);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+
+        .btn-group-sm .btn {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <!-- Page Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="mb-1">
+                        <i class="bi bi-people me-2"></i>
+                        Visitor Management
+                    </h4>
+                    <p class="text-muted mb-0">Manage and monitor all registered visitors</p>
                 </div>
-              </td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="8" class="text-center text-muted py-4">No visitors found.</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
+                <div class="d-flex gap-2">
+                    {% comment %} Add when visitor create route is available {% endcomment %}
+                    {% url 'visitors:visitor_create' as visitor_create_url %}
+                    {% if visitor_create_url %}
+                        <a class="btn btn-primary" href="{{ visitor_create_url }}">
+                            <i class="bi bi-person-plus me-1"></i>Register Visitor
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
 
-      {% if is_paginated %}
-        <nav aria-label="pagination">
-          <ul class="pagination justify-content-center">
-            {% if page_obj.has_previous %}
-              <li class="page-item"><a class="page-link" href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">&laquo; First</a></li>
-              <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a></li>
-            {% else %}
-              <li class="page-item disabled"><span class="page-link">&laquo; First</span></li>
-              <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            <!-- Search Form -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <form method="get" class="row g-3 align-items-end">
+                        <div class="col-md-8">
+                            <label for="search" class="form-label">Search Visitors</label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="search"
+                                   name="search"
+                                   placeholder="Enter name, ID number, or host name..."
+                                   value="{{ request.GET.search|default_if_none:'' }}">
+                            <div class="form-text">Search by visitor name, ID number, or host name</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary flex-fill" type="submit">
+                                    <i class="bi bi-search me-1"></i>Search
+                                </button>
+                                <a class="btn btn-outline-secondary"
+                                   href="{% url 'visitors:visitor_list' %}"
+                                   title="Clear search">
+                                    <i class="bi bi-x-lg"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                        <i class="bi bi-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' %}exclamation-triangle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
             {% endif %}
 
-            <li class="page-item active"><span class="page-link">{{ page_obj.number }} / {{ paginator.num_pages }}</span></li>
+            <!-- Visitors Table -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-list-ul me-2"></i>
+                            Registered Visitors
+                            {% if visitors %}
+                                <span class="badge bg-primary ms-2">{{ visitors|length }}</span>
+                            {% endif %}
+                        </h5>
+                        {% if request.GET.search %}
+                            <small class="text-muted">
+                                <i class="bi bi-funnel me-1"></i>
+                                Filtered by: "{{ request.GET.search }}"
+                            </small>
+                        {% endif %}
+                    </div>
+                </div>
 
-            {% if page_obj.has_next %}
-              <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a></li>
-              <li class="page-item"><a class="page-link" href="?page={{ paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last &raquo;</a></li>
-            {% else %}
-              <li class="page-item disabled"><span class="page-link">Next</span></li>
-              <li class="page-item disabled"><span class="page-link">Last &raquo;</span></li>
-            {% endif %}
-          </ul>
-        </nav>
-      {% endif %}
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">ID</th>
+                                    <th>Full Name</th>
+                                    <th>ID Number</th>
+                                    <th>Host</th>
+                                    <th>Purpose</th>
+                                    <th>Status</th>
+                                    <th>Registered</th>
+                                    <th class="text-end pe-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for visitor in visitors %}
+                                    <tr>
+                                        <td class="ps-4">
+                                            <span class="visitor-id">#{{ visitor.id }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold">
+                                                {{ visitor.name|default:visitor.full_name|default:"N/A" }}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {% if visitor.id_number %}
+                                                <code class="bg-light px-2 py-1 rounded">{{ visitor.id_number }}</code>
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if visitor.person_to_visit %}
+                                                <div class="d-flex align-items-center">
+                                                    <i class="bi bi-person-circle me-2 text-muted"></i>
+                                                    {{ visitor.person_to_visit|default:visitor.person_to_visit }}
+                                                </div>
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="text-truncate" style="max-width: 200px;" title="{{ visitor.purpose|default:'No purpose specified' }}">
+                                                {{ visitor.purpose_of_visit|default:"—" }}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {% if visitor.status %}
+                                                {% if visitor.status == 'pending' %}
+                                                    <span class="badge bg-warning text-dark status-badge">
+                                                        <i class="bi bi-clock me-1"></i>{{ visitor.status }}
+                                                    </span>
+                                                {% elif visitor.status == 'approved' %}
+                                                    <span class="badge bg-success status-badge">
+                                                        <i class="bi bi-check-circle me-1"></i>{{ visitor.status }}
+                                                    </span>
+                                                {% elif visitor.status == 'rejected' %}
+                                                    <span class="badge bg-danger status-badge">
+                                                        <i class="bi bi-x-circle me-1"></i>{{ visitor.status }}
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary status-badge">
+                                                        {{ visitor.status }}
+                                                    </span>
+                                                {% endif %}
+                                            {% else %}
+                                                {% if visitor.is_approved %}
+                                                    <span class="badge bg-success status-badge">
+                                                        <i class="bi bi-check-circle me-1"></i>approved
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge bg-warning text-dark status-badge">
+                                                        <i class="bi bi-clock me-1"></i>pending
+                                                    </span>
+                                                {% endif %}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if visitor.created_at %}
+                                                <div class="small">
+                                                    <div class="fw-medium">{{ visitor.created_at|date:"M j, Y" }}</div>
+                                                    <div class="text-muted">{{ visitor.created_at|date:"H:i" }}</div>
+                                                </div>
+                                            {% elif visitor.registered_at %}
+                                                <div class="small">
+                                                    <div class="fw-medium">{{ visitor.registered_at|date:"M j, Y" }}</div>
+                                                    <div class="text-muted">{{ visitor.registered_at|date:"H:i" }}</div>
+                                                </div>
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            {% if visitor.pk %}
+                                                <div class="btn-group btn-group-sm">
+                                                    <a class="btn btn-outline-primary"
+                                                       href="{% url 'visitors:visitor_detail' visitor.pk %}"
+                                                       title="View visitor details">
+                                                        <i class="bi bi-eye"></i>
+                                                        <span class="d-none d-md-inline ms-1">View</span>
+                                                    </a>
+                                                    <a class="btn btn-outline-secondary"
+                                                       href="{% url 'visitors:visitor_edit' visitor.pk %}"
+                                                       title="Edit visitor information">
+                                                        <i class="bi bi-pencil"></i>
+                                                        <span class="d-none d-md-inline ms-1">Edit</span>
+                                                    </a>
+                                                </div>
+                                            {% else %}
+                                                <span class="text-muted small">No actions</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="8" class="text-center py-5">
+                                            <div class="empty-state">
+                                                <i class="bi bi-people text-muted"></i>
+                                                <h6 class="text-muted mb-2">No visitors found</h6>
+                                                {% if request.GET.search %}
+                                                    <p class="mb-3">No visitors match your search criteria.</p>
+                                                    <a href="{% url 'visitors:visitor_list' %}" class="btn btn-outline-primary btn-sm">
+                                                        <i class="bi bi-arrow-left me-1"></i>Show all visitors
+                                                    </a>
+                                                {% else %}
+                                                    <p class="mb-3">No visitors have been registered yet.</p>
+                                                    {% url 'visitors:visitor_create' as visitor_create_url %}
+                                                    {% if visitor_create_url %}
+                                                        <a href="{{ visitor_create_url }}" class="btn btn-primary btn-sm">
+                                                            <i class="bi bi-person-plus me-1"></i>Register first visitor
+                                                        </a>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                {% if is_paginated and visitors %}
+                    <div class="card-footer bg-white border-0 py-3">
+                        <nav aria-label="Visitors pagination">
+                            <ul class="pagination justify-content-center mb-0">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link"
+                                           href="?page=1{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}">
+                                            <i class="bi bi-chevron-double-left"></i>
+                                            <span class="d-none d-md-inline ms-1">First</span>
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link"
+                                           href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}">
+                                            <i class="bi bi-chevron-left"></i>
+                                            <span class="d-none d-md-inline ms-1">Previous</span>
+                                        </a>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">
+                                            <i class="bi bi-chevron-double-left"></i>
+                                            <span class="d-none d-md-inline ms-1">First</span>
+                                        </span>
+                                    </li>
+                                    <li class="page-item disabled">
+                                        <span class="page-link">
+                                            <i class="bi bi-chevron-left"></i>
+                                            <span class="d-none d-md-inline ms-1">Previous</span>
+                                        </span>
+                                    </li>
+                                {% endif %}
+
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        Page {{ page_obj.number }} of {{ paginator.num_pages }}
+                                    </span>
+                                </li>
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link"
+                                           href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}">
+                                            <span class="d-none d-md-inline me-1">Next</span>
+                                            <i class="bi bi-chevron-right"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link"
+                                           href="?page={{ paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}">
+                                            <span class="d-none d-md-inline me-1">Last</span>
+                                            <i class="bi bi-chevron-double-right"></i>
+                                        </a>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">
+                                            <span class="d-none d-md-inline me-1">Next</span>
+                                            <i class="bi bi-chevron-right"></i>
+                                        </span>
+                                    </li>
+                                    <li class="page-item disabled">
+                                        <span class="page-link">
+                                            <span class="d-none d-md-inline me-1">Last</span>
+                                            <i class="bi bi-chevron-double-right"></i>
+                                        </span>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+
+                        <div class="text-center mt-3">
+                            <small class="text-muted">
+                                Showing {{ page_obj.start_index }} to {{ page_obj.end_index }}
+                                of {{ paginator.count }} visitor{{ paginator.count|pluralize }}
+                            </small>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Information Alert -->
+            <div class="alert alert-info mt-3 mb-0">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <div>
+                        <strong>Visitor Management:</strong> All visitor activities are logged for security purposes.
+                        Contact security administration for detailed reports.
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
-</main>
+</div>
+{% endblock %}
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-focus search input
+    const searchInput = document.getElementById('search');
+    if (searchInput && !searchInput.value) {
+        searchInput.focus();
+    }
+
+    // Add loading state to search form
+    const searchForm = document.querySelector('form[method="get"]');
+    if (searchForm) {
+        searchForm.addEventListener('submit', function() {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Searching...';
+            }
+        });
+    }
+
+    // Enhanced tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

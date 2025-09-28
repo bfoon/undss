@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Visitor Details · UN Security Management System{% endblock %}
+
+{% block content %}
+{% comment %}
+We normalize context so "visitor" is always available:
+- DetailView default context is "object"
+- Some views may pass "visitor"
+{% endcomment %}
+{% with visitor=visitor|default:object %}
+
+<div class="container" style="max-width: 1100px;">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h3 class="mb-0">
+        <i class="bi bi-person-badge"></i>
+        {{ visitor.full_name|default:visitor.full_name|default:"Visitor" }}
+      </h3>
+      <div class="text-muted small">
+        Registered: {{ visitor.registered_at|date:"M d, Y H:i" }}{% if visitor.created_by %} · by {{ visitor.created_by.username }}{% endif %}
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'visitors:visitor_list' %}">
+        <i class="bi bi-arrow-left"></i> Back to list
+      </a>
+
+      {% if not visitor.approval %}
+        {% if user.is_authenticated %}
+          <a class="btn btn-primary btn-sm" href="#">
+            <i class="bi bi-send-check"></i> Request Clearance
+          </a>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Left column: core info -->
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="mb-3">Visit Information</h5>
+          <dl class="row mb-0">
+            <dt class="col-5 col-md-4">Full name</dt>
+            <dd class="col-7 col-md-8">{{ visitor.full_name|default:visitor.full_name|default:"—" }}</dd>
+
+            <dt class="col-5 col-md-4">Organization / Company</dt>
+            <dd class="col-7 col-md-8">{{ visitor.organization|default:"—" }}</dd>
+
+            <dt class="col-5 col-md-4">Purpose</dt>
+            <dd class="col-7 col-md-8">{{ visitor.purpose_of_visit|default:"—" }}</dd>
+
+            <dt class="col-5 col-md-4">Visit date</dt>
+            <dd class="col-7 col-md-8">
+              {% if visitor.expected_date %}{{ visitor.expected_date|date:"M d, Y" }}{% else %}—{% endif %}
+            </dd>
+
+            <dt class="col-5 col-md-4">Host (Staff)</dt>
+            <dd class="col-7 col-md-8">
+              {% if visitor.person_to_visit %}{{ visitor.person_to_visit|default:visitor.person_to_visit }}{% else %}—{% endif %}
+            </dd>
+
+            <dt class="col-5 col-md-4">Phone</dt>
+            <dd class="col-7 col-md-8">{{ visitor.phone|default:"—" }}</dd>
+
+            <dt class="col-5 col-md-4">Email</dt>
+            <dd class="col-7 col-md-8">{{ visitor.email|default:"—" }}</dd>
+
+            <dt class="col-5 col-md-4">Status</dt>
+            <dd class="col-7 col-md-8">
+              {% if visitor.checked_in and not visitor.checked_out %}
+                <span class="badge text-bg-success">In compound</span>
+              {% elif visitor.checked_out %}
+                <span class="badge text-bg-secondary">Checked out</span>
+              {% else %}
+                <span class="badge text-bg-light border">Not checked in</span>
+              {% endif %}
+            </dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Vehicle (optional) -->
+      <div class="card mt-3 shadow-sm">
+        <div class="card-body">
+          <h5 class="mb-3">Vehicle (if any)</h5>
+          <dl class="row mb-0">
+            <dt class="col-5 col-md-4">Has vehicle</dt>
+            <dd class="col-7 col-md-8">
+              {% if visitor.has_vehicle %}Yes{% else %}No{% endif %}
+            </dd>
+
+            <dt class="col-5 col-md-4">Plate number</dt>
+            <dd class="col-7 col-md-8">{{ visitor.vehicle_plate|default:"—" }}</dd>
+
+            <dt class="col-5 col-md-4">Make / Model</dt>
+            <dd class="col-7 col-md-8">
+              {% if visitor.vehicle_make or visitor.vehicle_model %}
+                {{ visitor.vehicle_make|default:"" }} {{ visitor.vehicle_model|default:"" }}
+              {% else %}—{% endif %}
+            </dd>
+
+            <dt class="col-5 col-md-4">Color</dt>
+            <dd class="col-7 col-md-8">{{ visitor.vehicle_color|default:"—" }}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column: approvals + activity -->
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">Clearance</h5>
+            {% if visitor.approval %}
+              {% if visitor.approval.status == 'pending' %}
+                <span class="badge text-bg-warning">Pending</span>
+              {% elif visitor.approval.status == 'lsa_cleared' %}
+                <span class="badge text-bg-success">LSA Cleared</span>
+              {% elif visitor.approval.status == 'rejected' %}
+                <span class="badge text-bg-danger">Rejected</span>
+              {% elif visitor.approval.status == 'cancelled' %}
+                <span class="badge text-bg-secondary">Cancelled</span>
+              {% else %}
+                <span class="badge text-bg-light border">{{ visitor.approval.status }}</span>
+              {% endif %}
+            {% else %}
+              <span class="badge text-bg-light border">Not requested</span>
+            {% endif %}
+          </div>
+
+          <hr>
+
+          {% if visitor.approval %}
+            <div class="mb-3">
+              <div class="small text-muted">Clearance Code</div>
+              <div class="fw-semibold">{{ visitor.approval.code }}</div>
+            </div>
+
+            <dl class="row mb-3">
+              <dt class="col-5">Requested by</dt>
+              <dd class="col-7">{{ visitor.registered_by.username }}</dd>
+
+              <dt class="col-5">Has vehicle</dt>
+              <dd class="col-7">{% if visitor.approval.has_vehicle %}Yes{% else %}No{% endif %}</dd>
+
+              {% if visitor.approval.vehicle_plate %}
+                <dt class="col-5">Vehicle plate</dt>
+                <dd class="col-7">{{ visitor.approval.vehicle_plate }}</dd>
+              {% endif %}
+
+              {% if visitor.approval.agency_name %}
+                <dt class="col-5">Agency</dt>
+                <dd class="col-7">{{ visitor.approval.agency_name }}</dd>
+              {% endif %}
+
+              {% if visitor.approval.lsa_user %}
+                <dt class="col-5">LSA decision</dt>
+                <dd class="col-7">
+                  {{ visitor.approval.lsa_user.username }}
+                  {% if visitor.approval.lsa_decided_at %} · {{ visitor.approval.lsa_decided_at|date:"M d, Y H:i" }}{% endif %}
+                </dd>
+              {% endif %}
+            </dl>
+
+            <!-- Actions -->
+            <div class="d-flex flex-wrap gap-2">
+              {% if visitor.approval.status == 'pending' and user.is_authenticated and user.role == 'lsa' %}
+                <a class="btn btn-success btn-sm" href="{% url 'visitors:visitor_lsa_clear' visitor.approval.id %}">
+                  <i class="bi bi-check2-circle"></i> LSA Clear
+                </a>
+                <a class="btn btn-outline-danger btn-sm" href="{% url 'visitors:visitor_lsa_reject' visitor.approval.id %}">
+                  <i class="bi bi-x-octagon"></i> Reject
+                </a>
+              {% endif %}
+
+              {% if visitor.approval.status == 'pending' and user.is_authenticated and user.id == visitor.approval.requested_by_id %}
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'visitors:visitor_cancel_request' visitor.approval.id %}">
+                  <i class="bi bi-slash-circle"></i> Cancel Request
+                </a>
+              {% endif %}
+            </div>
+
+          {% else %}
+            <p class="text-muted mb-0">
+              No clearance request has been submitted for this visitor yet.
+              {% if user.is_authenticated %}
+                <a href="#">Request now</a>.
+              {% endif %}
+            </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Recent activity (optional if you track logs) -->
+      {% if visitor.logs.all %}
+      <div class="card mt-3 shadow-sm">
+        <div class="card-body">
+          <h6 class="mb-3">Recent Activity</h6>
+          <div class="list-group list-group-flush">
+            {% for log in visitor.logs.all|slice:":6" %}
+              <div class="list-group-item px-0">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <span class="badge bg-light text-dark border me-2">{{ log.get_action_display|default:log.action }}</span>
+                    {{ log.description|default:"—" }}
+                  </div>
+                  <div class="text-muted small">{{ log.timestamp|date:"M d, Y H:i" }}</div>
+                </div>
+              </div>
+            {% empty %}
+              <div class="text-muted">No activity yet.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endwith %}
+{% endblock %}

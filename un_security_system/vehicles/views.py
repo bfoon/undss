@@ -1,16 +1,18 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.utils import timezone
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.db.models import Q, Count
 import csv
+from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AgencyApprover
+from .forms import VehicleForm, ParkingCardForm, VehicleMovementForm, QuickVehicleCheckForm, AssetExitForm, AssetExitItemFormSet
 
-from .models import Vehicle, VehicleMovement, ParkingCard
-from .forms import VehicleForm, ParkingCardForm, VehicleMovementForm, QuickVehicleCheckForm
+def is_lsa(u): return u.is_authenticated and (getattr(u, 'role', '') == 'lsa' or u.is_superuser)
+def is_data_entry(u): return u.is_authenticated and (getattr(u, 'role', '') == 'data_entry' or u.is_superuser)
 
 
 # ------------ Role helpers (works with either user.role or Django Groups) ------------
@@ -28,6 +30,15 @@ class RoleRequiredMixin(UserPassesTestMixin):
     def test_func(self):
         return user_has_role(self.request.user, *self.required_roles)
 
+
+def is_agency_approver_for(user, agency_name: str) -> bool:
+    if not user.is_authenticated:
+        return False
+    # superusers always allowed
+    if getattr(user, 'is_superuser', False):
+        return True
+    # Designated approver record must exist for the given agency
+    return AgencyApprover.objects.filter(user=user, agency_name=agency_name).exists()
 
 # --------------------------------- Vehicle CRUD -------------------------------------
 
@@ -508,3 +519,177 @@ def export_parking_cards(request):
             ('Yes' if getattr(c, 'is_active', True) else 'No')
         ])
     return response
+
+
+# ---- Create / list / detail ----
+
+@login_required
+def asset_exit_new(request):
+    if request.method == 'POST':
+        form = AssetExitForm(request.POST)
+        formset = AssetExitItemFormSet(request.POST)
+        if form.is_valid() and formset.is_valid():
+            obj = form.save(commit=False)
+            obj.requester = request.user
+            obj.status = 'pending'
+            obj.save()
+            formset.instance = obj
+            formset.save()
+            messages.success(request, 'Asset exit request submitted (awaiting LSA).')
+            return redirect('vehicles:asset_exit_detail', pk=obj.pk)
+    else:
+        form = AssetExitForm()
+        formset = AssetExitItemFormSet()
+    return render(request, 'vehicles/asset_exit_form.html', {'form': form, 'formset': formset})
+
+@login_required
+def my_asset_exits(request):
+    items = AssetExit.objects.filter(requester=request.user).order_by('-created_at')
+    return render(request, 'vehicles/asset_exit_list.html', {'items': items})
+
+@login_required
+def asset_exit_detail(request, pk):
+    obj = get_object_or_404(AssetExit, pk=pk)
+    return render(request, 'vehicles/asset_exit_detail.html', {'obj': obj})
+
+@login_required
+def asset_exit_agency_approve(request, pk):
+    obj = get_object_or_404(AssetExit, pk=pk)
+    if obj.status != 'pending':
+        messages.info(request, 'This request is not pending agency approval.')
+        return redirect('vehicles:asset_exit_detail', pk=pk)
+
+    if not is_agency_approver_for(request.user, obj.agency_name):
+        messages.error(request, "You're not a designated approver for this agency.")
+        return redirect('vehicles:asset_exit_detail', pk=pk)
+
+    obj.approve_by_agency(request.user)
+    messages.success(request, 'Agency approved. Awaiting LSA clearance.')
+    return redirect('vehicles:asset_exit_detail', pk=pk)
+
+
+@login_required
+def asset_exit_edit(request, pk):
+    ax = get_object_or_404(AssetExit, pk=pk)
+    # optional: check ownership/permissions here
+    if request.method == 'POST':
+        form = AssetExitForm(request.POST, instance=ax)
+        if form.is_valid():
+            form.save()
+            return redirect('vehicles:asset_exit_detail', pk=ax.pk)
+    else:
+        form = AssetExitForm(instance=ax)
+    return render(request, 'vehicles/asset_exit_form.html', {'form': form, 'object': ax})
+
+
+@login_required
+def asset_exit_print(request, pk):
+    ax = get_object_or_404(AssetExit, pk=pk)
+    # Render a print-friendly template
+    return render(request, 'vehicles/asset_exit_print.html', {'object': ax})
+
+@login_required
+def asset_exit_duplicate(request, pk):
+    ax = get_object_or_404(AssetExit, pk=pk)
+    # Create a new draft request copying fields; adjust to your model
+    new_ax = AssetExit.objects.create(
+        requested_by=request.user,
+        agency_name=ax.agency_name,
+        items_summary=ax.items_summary,
+        # copy any other safe fields; do NOT copy approval/decision fields
+        status='pending'
+    )
+    # If you have related items, copy them as well here
+    return redirect('vehicles:asset_exit_detail', pk=new_ax.pk)
+
+# ---- LSA actions ----
+
+@login_required
+@user_passes_test(is_lsa)
+def asset_exit_lsa_clear(request, pk):
+    obj = get_object_or_404(AssetExit, pk=pk)
+    if obj.status != 'pending':
+        messages.info(request, 'This request is not pending.')
+        return redirect('vehicles:asset_exit_detail', pk=pk)
+    obj.clear_by_lsa(request.user)
+    messages.success(request, 'Asset exit cleared by LSA.')
+    return redirect('vehicles:asset_exit_detail', pk=pk)
+
+@login_required
+@user_passes_test(is_lsa)
+def asset_exit_lsa_reject(request, pk):
+    obj = get_object_or_404(AssetExit, pk=pk)
+    if obj.status != 'pending':
+        messages.info(request, 'This request is not pending.')
+        return redirect('vehicles:asset_exit_detail', pk=pk)
+    obj.reject_by_lsa(request.user)
+    messages.success(request, 'Asset exit rejected by LSA.')
+    return redirect('vehicles:asset_exit_detail', pk=pk)
+
+# ---- Requester cancel ----
+
+@login_required
+def asset_exit_cancel(request, pk):
+    obj = get_object_or_404(AssetExit, pk=pk)
+    if obj.requester != request.user and not is_lsa(request.user):
+        return HttpResponseForbidden('Not allowed')
+    if obj.status in ['lsa_cleared','rejected','cancelled']:
+        messages.info(request, 'This request cannot be cancelled.')
+    else:
+        obj.status = 'cancelled'
+        obj.save(update_fields=['status'])
+        messages.success(request, 'Request cancelled.')
+    return redirect('vehicles:asset_exit_detail', pk=pk)
+
+# ---- Guard verification (page + API) ----
+
+@login_required
+@user_passes_test(is_data_entry)
+def asset_exit_verify_page(request):
+    return render(request, 'vehicles/verify_asset_exit.html', {})
+
+@login_required
+def asset_exit_lookup_api(request):
+    code = (request.GET.get('code') or '').strip()
+    try:
+        ax = AssetExit.objects.prefetch_related('items').get(code=code)
+        ok = ax.status == 'lsa_cleared'
+        items = [{
+            'description': i.description,
+            'category': i.category,
+            'quantity': i.quantity,
+            'serial_or_tag': i.serial_or_tag,
+        } for i in ax.items.all()]
+        return JsonResponse({
+            'found': True,
+            'ok': ok,
+            'status': ax.status,
+            'agency': ax.agency_name,
+            'destination': ax.destination,
+            'expected_date': ax.expected_date.isoformat(),
+            'items': items,
+            'id': ax.id,
+        })
+    except AssetExit.DoesNotExist:
+        return JsonResponse({'found': False}, status=404)
+
+# ---- Guard mark sign-out / sign-in (optional) ----
+
+@login_required
+@user_passes_test(is_data_entry)
+def asset_exit_mark_signed_out(request, pk):
+    obj = get_object_or_404(AssetExit, pk=pk)
+    if obj.status != 'lsa_cleared':
+        messages.warning(request, 'Cannot sign out assets that are not LSA-cleared.')
+        return redirect('vehicles:asset_exit_detail', pk=pk)
+    obj.mark_signed_out(request.user)
+    messages.success(request, 'Assets marked as signed out.')
+    return redirect('vehicles:asset_exit_detail', pk=pk)
+
+@login_required
+@user_passes_test(is_data_entry)
+def asset_exit_mark_signed_in(request, pk):
+    obj = get_object_or_404(AssetExit, pk=pk)
+    obj.mark_signed_in(request.user)
+    messages.success(request, 'Assets marked as signed in.')
+    return redirect('vehicles:asset_exit_detail', pk=pk)

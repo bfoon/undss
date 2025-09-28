@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Asset Exit Request - UN Security Management System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .formset-table {
+        background: white;
+    }
+
+    .formset-table th {
+        background-color: var(--un-light-blue);
+        color: var(--un-dark-blue);
+        font-weight: 600;
+        border: none;
+    }
+
+    .formset-table td {
+        vertical-align: middle;
+        border-color: #e9ecef;
+    }
+
+    .form-section {
+        border-left: 4px solid var(--un-blue);
+        background: white;
+    }
+
+    .required-field::after {
+        content: " *";
+        color: var(--danger-color);
+    }
+
+    .help-text {
+        background: var(--un-light-blue);
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-top: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4">
+            <div>
+                <h1 class="h3 mb-2">
+                    <i class="bi bi-plus-circle text-un-primary me-2"></i>
+                    New Asset Exit Request
+                </h1>
+                <p class="text-muted mb-0">Submit a request to remove UN assets from the premises</p>
+            </div>
+            <div class="mt-3 mt-lg-0">
+                <a class="btn btn-outline-secondary" href="{% url 'vehicles:my_asset_exits' %}">
+                    <i class="bi bi-arrow-left me-1"></i>My Requests
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    <!-- Request Information -->
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card form-section">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle me-2"></i>Request Information</h5>
+                </div>
+                <div class="card-body">
+                    {{ form|crispy }}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-question-circle me-2"></i>Help & Guidelines</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-un-primary">Before Submitting:</h6>
+                    <ul class="small mb-3">
+                        <li>Ensure all asset details are accurate</li>
+                        <li>Provide clear purpose and destination</li>
+                        <li>Check if security escort is required</li>
+                        <li>Allow 24-48 hours for LSA approval</li>
+                    </ul>
+
+                    <h6 class="text-un-primary">Required Approvals:</h6>
+                    <div class="small">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-1-circle text-warning me-2"></i>
+                            <span>LSA clearance required</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="bi bi-2-circle text-info me-2"></i>
+                            <span>Gate verification needed</span>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-3-circle text-success me-2"></i>
+                            <span>Return confirmation</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assets List -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-box-seam me-2"></i>Assets to be Removed <span class="required-field"></span></h5>
+                </div>
+                <div class="card-body">
+                    {{ formset.management_form }}
+
+                    <div class="table-responsive">
+                        <table class="table formset-table">
+                            <thead>
+                                <tr>
+                                    <th class="required-field">Asset Description</th>
+                                    <th>Category</th>
+                                    <th class="text-center required-field">Quantity</th>
+                                    <th>Serial/Tag Number</th>
+                                    <th class="text-center">Remove</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for form in formset %}
+                                <tr>
+                                    <td style="min-width: 200px;">{{ form.description }}</td>
+                                    <td style="min-width: 120px;">{{ form.category }}</td>
+                                    <td style="width: 100px;" class="text-center">{{ form.quantity }}</td>
+                                    <td style="min-width: 140px;">{{ form.serial_or_tag }}</td>
+                                    <td style="width: 80px;" class="text-center">
+                                        {% if form.instance.pk %}
+                                            {{ form.DELETE }}
+                                            <label for="{{ form.DELETE.id_for_label }}" class="small text-muted">Remove</label>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="help-text">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-lightbulb text-warning me-2 mt-1"></i>
+                            <div class="small">
+                                <strong>Instructions:</strong> Fill in the extra rows to add more assets.
+                                Provide detailed descriptions and accurate quantities. For existing items,
+                                check "Remove" to delete them from the request.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submit Actions -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center">
+                        <div class="mb-3 mb-sm-0">
+                            <div class="small text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Fields marked with <span class="text-danger">*</span> are required
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-un-primary btn-lg">
+                                <i class="bi bi-send me-2"></i>Submit Request
+                            </button>
+                            <a href="{% url 'vehicles:my_asset_exits' %}" class="btn btn-outline-secondary btn-lg">
+                                <i class="bi bi-x-lg me-2"></i>Cancel
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}

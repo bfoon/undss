@@ -40,4 +40,26 @@ urlpatterns = [
     # Bulk Operations
     path('bulk/export-movements/', views.export_movements, name='export_movements'),
     path('bulk/export-parking-cards/', views.export_parking_cards, name='export_parking_cards'),
+
+    # Asset Exit Clearance
+    path('asset-exit/new/', views.asset_exit_new, name='asset_exit_new'),
+    path('asset-exit/my/', views.my_asset_exits, name='my_asset_exits'),
+    path('asset-exit/<int:pk>/', views.asset_exit_detail, name='asset_exit_detail'),
+    path('asset-exit/<int:pk>/lsa-clear/', views.asset_exit_lsa_clear, name='asset_exit_lsa_clear'),
+    path('asset-exit/<int:pk>/lsa-reject/', views.asset_exit_lsa_reject, name='asset_exit_lsa_reject'),
+    path('asset-exit/<int:pk>/cancel/', views.asset_exit_cancel, name='asset_exit_cancel'),
+    path('asset-exit/<int:pk>/agency-approve/', views.asset_exit_agency_approve, name='asset_exit_agency_approve'),
+    path('asset-exit/<int:pk>/edit/', views.asset_exit_edit, name='asset_exit_edit'),
+
+    # add these if you want print/duplicate actions
+    path('asset-exit/<int:pk>/print/', views.asset_exit_print, name='asset_exit_print'),
+    path('asset-exit/<int:pk>/duplicate/', views.asset_exit_duplicate, name='asset_exit_duplicate'),
+
+
+    # Guard verify + sign in/out
+    path('asset-exit/verify/', views.asset_exit_verify_page, name='asset_exit_verify_page'),
+    path('api/asset-exit/lookup/', views.asset_exit_lookup_api, name='asset_exit_lookup_api'),
+    path('asset-exit/<int:pk>/sign-out/', views.asset_exit_mark_signed_out, name='asset_exit_mark_signed_out'),
+    path('asset-exit/<int:pk>/sign-in/', views.asset_exit_mark_signed_in, name='asset_exit_mark_signed_in'),
+
 ]

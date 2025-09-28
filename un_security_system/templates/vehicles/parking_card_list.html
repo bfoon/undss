@@ -1,145 +1,593 @@
-{# templates/vehicles/parking_card_list.html #}
+<!-- templates/vehicles/parking_card_list.html -->
+{% extends 'base.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Parking Cards • UN Security System</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Bootstrap -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body { background:#f6f8fb; }
-    .card-rounded { border-radius: 16px; }
-    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
-    .table thead th { white-space: nowrap; }
-    .badge-active { background:#16a34a; }
-    .badge-inactive { background:#6c757d; }
-  </style>
-</head>
-<body>
-<nav class="navbar navbar-expand-lg bg-white border-bottom">
-  <div class="container">
-    <a class="navbar-brand fw-semibold" href="/">UN House – Security</a>
-    <div class="ms-auto d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
-      <a class="btn btn-primary btn-sm" href="{% url 'vehicles:parking_card_create' %}">Create Card</a>
-      <a class="btn btn-outline-danger btn-sm" href="{% url 'accounts:logout' %}">Logout</a>
-    </div>
-  </div>
-</nav>
 
-<main class="container my-4 my-md-5">
-  <div class="card card-rounded shadow-soft">
-    <div class="card-body p-3 p-md-4">
-      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <h4 class="mb-0">Parking Cards</h4>
-        <form class="d-flex gap-2" method="get">
-          <input type="text" class="form-control" name="search" placeholder="Search card/owner/plate…"
-                 value="{{ request.GET.search|default_if_none:'' }}">
-          <button class="btn btn-primary" type="submit">Search</button>
-          <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_list' %}">Reset</a>
-        </form>
-      </div>
+{% block title %}Parking Card Management - UN Security Management System{% endblock %}
 
-      {% if messages %}
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
+{% block extra_css %}
+<style>
+    .expiry-warning {
+        background: rgba(253, 126, 20, 0.1);
+        border-left: 3px solid var(--warning-color);
+    }
 
-      <div class="table-responsive">
-        <table class="table align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>#</th>
-              <th>Card #</th>
-              <th>Owner</th>
-              <th>Employee ID</th>
-              <th>Phone</th>
-              <th>Department</th>
-              <th>Vehicle</th>
-              <th>Plate</th>
-              <th>Colour</th>
-              <th>Expiry</th>
-              <th>Status</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for c in cards %}
-            <tr>
-              <td>{{ c.id }}</td>
-              <td class="fw-semibold">{{ c.card_number }}</td>
-              <td>{{ c.owner_name|default:"—" }}</td>
-              <td>{{ c.owner_id|default:"—" }}</td>
-              <td>{{ c.phone|default:"—" }}</td>
-              <td>{{ c.department|default:"—" }}</td>
-              <td>
-                {% if c.vehicle_make or c.vehicle_model %}
-                  {{ c.vehicle_make|default:"" }}{% if c.vehicle_model %} / {{ c.vehicle_model }}{% endif %}
-                {% else %}—{% endif %}
-              </td>
-              <td>{{ c.vehicle_plate|default:"—" }}</td>
-              <td>{{ c.vehicle_color|default:"—" }}</td>
-              <td>
-                {% if c.expiry_date %}
-                  <span title="{{ c.expiry_date }}">{{ c.expiry_date|date:"Y-m-d" }}</span>
-                {% else %}—{% endif %}
-              </td>
-              <td>
-                {% if c.is_active %}
-                  <span class="badge badge-active">Active</span>
-                {% else %}
-                  <span class="badge badge-inactive">Inactive</span>
-                {% endif %}
-              </td>
-              <td class="text-end">
-                <div class="btn-group btn-group-sm">
-                  <a class="btn btn-outline-primary" href="{% url 'vehicles:parking_card_detail' c.pk %}">View</a>
-                  <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_edit' c.pk %}">Edit</a>
-                  {% if c.is_active %}
-                    <a class="btn btn-outline-warning" href="{% url 'vehicles:parking_card_deactivate' c.pk %}">Deactivate</a>
-                  {% else %}
-                    <a class="btn btn-outline-success" href="{% url 'vehicles:parking_card_reactivate' c.pk %}">Reactivate</a>
-                  {% endif %}
+    .expiry-expired {
+        background: rgba(220, 53, 69, 0.1);
+        border-left: 3px solid var(--danger-color);
+    }
+
+    .card-number-display {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+
+    .vehicle-info {
+        max-width: 200px;
+    }
+
+    .badge-department {
+        background: var(--un-light-blue);
+        color: var(--un-dark-blue);
+        border: 1px solid var(--un-blue);
+    }
+
+    .status-active {
+        background-color: var(--success-color);
+        color: white;
+    }
+
+    .status-inactive {
+        background-color: var(--un-gray);
+        color: white;
+    }
+
+    .filter-card {
+        border-left: 4px solid var(--un-blue);
+    }
+
+    .summary-stats {
+        background: var(--un-light-blue);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4">
+            <div>
+                <h1 class="h3 mb-2">
+                    <i class="bi bi-credit-card text-un-primary me-2"></i>
+                    Parking Card Management
+                </h1>
+                <p class="text-muted mb-0">Manage and monitor all parking card assignments</p>
+            </div>
+            <div class="mt-3 mt-lg-0">
+                <div class="d-flex gap-2">
+                    <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_create' %}">
+                        <i class="bi bi-download me-1"></i>Export List
+                    </a>
+                    <a class="btn btn-un-primary" href="{% url 'vehicles:parking_card_create' %}">
+                        <i class="bi bi-plus-circle me-2"></i>Issue New Card
+                    </a>
                 </div>
-              </td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="12" class="text-center text-muted py-4">No parking cards found.</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-
-      {% if is_paginated %}
-        <nav aria-label="pagination">
-          <ul class="pagination justify-content-center">
-            {% if page_obj.has_previous %}
-              <li class="page-item"><a class="page-link" href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">&laquo; First</a></li>
-              <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a></li>
-            {% else %}
-              <li class="page-item disabled"><span class="page-link">&laquo; First</span></li>
-              <li class="page-item disabled"><span class="page-link">Previous</span></li>
-            {% endif %}
-
-            <li class="page-item active"><span class="page-link">{{ page_obj.number }} / {{ paginator.num_pages }}</span></li>
-
-            {% if page_obj.has_next %}
-              <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a></li>
-              <li class="page-item"><a class="page-link" href="?page={{ paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last &raquo;</a></li>
-            {% else %}
-              <li class="page-item disabled"><span class="page-link">Next</span></li>
-              <li class="page-item disabled"><span class="page-link">Last &raquo;</span></li>
-            {% endif %}
-          </ul>
-        </nav>
-      {% endif %}
+            </div>
+        </div>
     </div>
-  </div>
-</main>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<!-- Summary Statistics -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="summary-stats">
+            <div class="row g-3 text-center">
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-credit-card text-un-primary me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5">{{ cards.count|default:0 }}</div>
+                            <small class="text-muted">Total Cards</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-check-circle text-success me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-success">{{ active_count|default:0 }}</div>
+                            <small class="text-muted">Active Cards</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-exclamation-triangle text-warning me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-warning">{{ expiring_soon|default:0 }}</div>
+                            <small class="text-muted">Expiring Soon</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <i class="bi bi-x-circle text-danger me-2 fs-4"></i>
+                        <div>
+                            <div class="fw-bold fs-5 text-danger">{{ expired_count|default:0 }}</div>
+                            <small class="text-muted">Expired Cards</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Filters -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card filter-card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-funnel me-2"></i>
+                    Search & Filter Parking Cards
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="search-input" class="form-label">
+                            <i class="bi bi-search me-1"></i>Search Cards
+                        </label>
+                        <input type="text"
+                               class="form-control"
+                               id="search-input"
+                               name="search"
+                               placeholder="Card number, owner name, plate..."
+                               value="{{ request.GET.search|default:'' }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="status-filter" class="form-label">
+                            <i class="bi bi-toggle-on me-1"></i>Status
+                        </label>
+                        <select class="form-select" id="status-filter" name="status">
+                            <option value="">All Status</option>
+                            <option value="active" {% if request.GET.status == 'active' %}selected{% endif %}>
+                                Active Only
+                            </option>
+                            <option value="inactive" {% if request.GET.status == 'inactive' %}selected{% endif %}>
+                                Inactive Only
+                            </option>
+                            <option value="expiring" {% if request.GET.status == 'expiring' %}selected{% endif %}>
+                                Expiring Soon
+                            </option>
+                            <option value="expired" {% if request.GET.status == 'expired' %}selected{% endif %}>
+                                Expired
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="department-filter" class="form-label">
+                            <i class="bi bi-building me-1"></i>Department
+                        </label>
+                        <select class="form-select" id="department-filter" name="department">
+                            <option value="">All Departments</option>
+                            {% for dept in departments %}
+                                <option value="{{ dept }}" {% if request.GET.department == dept %}selected{% endif %}>
+                                    {{ dept }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-funnel me-1"></i>Apply Filters
+                            </button>
+                            <a href="{% url 'vehicles:parking_card_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Reset
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Parking Cards Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="bi bi-table me-2"></i>
+                        Parking Card Registry
+                        {% if cards %}
+                            <span class="badge bg-light text-dark ms-2">{{ cards.count }} record{{ cards.count|pluralize }}</span>
+                        {% endif %}
+                    </h6>
+                    {% if cards %}
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-primary btn-sm" onclick="printTable()">
+                            <i class="bi bi-printer me-1"></i>Print
+                        </button>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots me-1"></i>Actions
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="bulkActivate()">
+                                    <i class="bi bi-check-circle me-2"></i>Bulk Activate
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="bulkDeactivate()">
+                                    <i class="bi bi-pause-circle me-2"></i>Bulk Deactivate
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="exportExpiring()">
+                                    <i class="bi bi-download me-2"></i>Export Expiring Cards
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if cards %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="parking-cards-table">
+                        <thead>
+                            <tr>
+                                <th>
+                                    <input type="checkbox" class="form-check-input" id="select-all">
+                                </th>
+                                <th>Card Number</th>
+                                <th>Owner Details</th>
+                                <th>Department</th>
+                                <th>Vehicle Information</th>
+                                <th>Expiry Date</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for card in cards %}
+                            <tr {% if card.expiry_date|date:"Y-m-d" < today|date:"Y-m-d" %}class="expiry-expired"
+                                {% elif card.expiry_date|date:"Y-m-d" <= future_30_days|date:"Y-m-d" %}class="expiry-warning"{% endif %}>
+                                <td>
+                                    <input type="checkbox" class="form-check-input card-checkbox" value="{{ card.pk }}">
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-credit-card text-un-primary me-2"></i>
+                                        <span class="card-number-display">{{ card.card_number }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div>
+                                        <div class="fw-medium">{{ card.owner_name|default:"—" }}</div>
+                                        {% if card.owner_id %}
+                                            <small class="text-muted">
+                                                <i class="bi bi-person-badge me-1"></i>ID: {{ card.owner_id }}
+                                            </small>
+                                        {% endif %}
+                                        {% if card.phone %}
+                                            <div>
+                                                <small class="text-muted">
+                                                    <i class="bi bi-telephone me-1"></i>{{ card.phone }}
+                                                </small>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if card.department %}
+                                        <span class="badge badge-department">{{ card.department }}</span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="vehicle-info">
+                                        {% if card.vehicle_plate %}
+                                            <div class="fw-medium">
+                                                <i class="bi bi-car-front me-1"></i>{{ card.vehicle_plate }}
+                                            </div>
+                                        {% endif %}
+                                        {% if card.vehicle_make or card.vehicle_model %}
+                                            <small class="text-muted">
+                                                {{ card.vehicle_make|default:"" }}
+                                                {% if card.vehicle_model %}{{ card.vehicle_model }}{% endif %}
+                                            </small>
+                                        {% endif %}
+                                        {% if card.vehicle_color %}
+                                            <div>
+                                                <small class="text-muted">
+                                                    <i class="bi bi-palette me-1"></i>{{ card.vehicle_color }}
+                                                </small>
+                                            </div>
+                                        {% endif %}
+                                        {% if not card.vehicle_plate and not card.vehicle_make and not card.vehicle_model %}
+                                            <span class="text-muted">No vehicle data</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if card.expiry_date %}
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-calendar3 text-muted me-1"></i>
+                                            <div>
+                                                <div class="fw-medium">{{ card.expiry_date|date:"M j, Y" }}</div>
+                                                {% if card.expiry_date|date:"Y-m-d" < today|date:"Y-m-d" %}
+                                                    <small class="text-danger fw-bold">
+                                                        <i class="bi bi-exclamation-triangle me-1"></i>EXPIRED
+                                                    </small>
+                                                {% elif card.expiry_date|date:"Y-m-d" <= future_30_days|date:"Y-m-d" %}
+                                                    <small class="text-warning fw-bold">
+                                                        <i class="bi bi-clock me-1"></i>Expires Soon
+                                                    </small>
+                                                {% else %}
+                                                    <small class="text-success">Valid</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">No expiry set</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if card.is_active %}
+                                        <span class="badge status-active">
+                                            <i class="bi bi-check-circle me-1"></i>Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge status-inactive">
+                                            <i class="bi bi-pause-circle me-1"></i>Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <a class="btn btn-outline-primary"
+                                           href="{% url 'vehicles:parking_card_detail' card.pk %}"
+                                           title="View Details">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a class="btn btn-outline-secondary"
+                                           href="{% url 'vehicles:parking_card_edit' card.pk %}"
+                                           title="Edit Card">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        {% if card.is_active %}
+                                            <a class="btn btn-outline-warning"
+                                               href="{% url 'vehicles:parking_card_deactivate' card.pk %}"
+                                               title="Deactivate Card"
+                                               onclick="return confirm('Deactivate this parking card?')">
+                                                <i class="bi bi-pause-circle"></i>
+                                            </a>
+                                        {% else %}
+                                            <a class="btn btn-outline-success"
+                                               href="{% url 'vehicles:parking_card_reactivate' card.pk %}"
+                                               title="Reactivate Card"
+                                               onclick="return confirm('Reactivate this parking card?')">
+                                                <i class="bi bi-play-circle"></i>
+                                            </a>
+                                        {% endif %}
+                                        <div class="dropdown">
+                                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                <i class="bi bi-three-dots"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_print' card.pk %}">
+                                                    <i class="bi bi-printer me-2"></i>Print Card
+                                                </a></li>
+                                                <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_duplicate' card.pk %}">
+                                                    <i class="bi bi-files me-2"></i>Duplicate
+                                                </a></li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><a class="dropdown-item text-danger" href="{% url 'vehicles:parking_card_delete' card.pk %}"
+                                                       onclick="return confirm('Permanently delete this parking card? This cannot be undone.')">
+                                                    <i class="bi bi-trash me-2"></i>Delete
+                                                </a></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                {% if is_paginated %}
+                <div class="card-footer">
+                    <nav aria-label="Parking card pagination">
+                        <ul class="pagination justify-content-center mb-0">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}">
+                                        <i class="bi bi-chevron-double-left"></i> First
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}">
+                                        <i class="bi bi-chevron-left"></i> Previous
+                                    </a>
+                                </li>
+                            {% endif %}
+
+                            <li class="page-item active">
+                                <span class="page-link">
+                                    Page {{ page_obj.number }} of {{ paginator.num_pages }}
+                                </span>
+                            </li>
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}">
+                                        Next <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}">
+                                        Last <i class="bi bi-chevron-double-right"></i>
+                                    </a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+                {% else %}
+                <!-- Empty State -->
+                <div class="text-center py-5">
+                    <i class="bi bi-credit-card display-1 text-muted mb-3"></i>
+                    <h4 class="text-muted">No Parking Cards Found</h4>
+                    {% if request.GET.search or request.GET.status or request.GET.department %}
+                        <p class="text-muted mb-4">No parking cards match your current search criteria.</p>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_list' %}">
+                                <i class="bi bi-arrow-clockwise me-2"></i>Clear Filters
+                            </a>
+                            <a class="btn btn-un-primary" href="{% url 'vehicles:parking_card_create' %}">
+                                <i class="bi bi-plus-circle me-2"></i>Issue New Card
+                            </a>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-4">No parking cards have been issued yet.</p>
+                        <a class="btn btn-un-primary" href="{% url 'vehicles:parking_card_create' %}">
+                            <i class="bi bi-plus-circle me-2"></i>Issue First Card
+                        </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Select All functionality
+    const selectAllCheckbox = document.getElementById('select-all');
+    const cardCheckboxes = document.querySelectorAll('.card-checkbox');
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            cardCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateBulkActions();
+        });
+    }
+
+    // Individual checkbox handling
+    cardCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateSelectAllState();
+            updateBulkActions();
+        });
+    });
+
+    function updateSelectAllState() {
+        const checkedBoxes = document.querySelectorAll('.card-checkbox:checked').length;
+        const totalBoxes = cardCheckboxes.length;
+
+        if (checkedBoxes === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        } else if (checkedBoxes === totalBoxes) {
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.indeterminate = false;
+        } else {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = true;
+        }
+    }
+
+    function updateBulkActions() {
+        const checkedBoxes = document.querySelectorAll('.card-checkbox:checked');
+        const haselection = checkedBoxes.length > 0;
+
+        // Enable/disable bulk action buttons based on selection
+        // This would be implemented based on your specific bulk action UI
+    }
+
+    // Auto-submit search form on Enter
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                this.form.submit();
+            }
+        });
+    }
+});
+
+// Bulk Actions
+function bulkActivate() {
+    const selectedCards = getSelectedCards();
+    if (selectedCards.length === 0) {
+        alert('Please select parking cards to activate.');
+        return;
+    }
+
+    if (confirm(`Activate ${selectedCards.length} selected parking card(s)?`)) {
+        // Implement bulk activation
+        console.log('Bulk activate:', selectedCards);
+    }
+}
+
+function bulkDeactivate() {
+    const selectedCards = getSelectedCards();
+    if (selectedCards.length === 0) {
+        alert('Please select parking cards to deactivate.');
+        return;
+    }
+
+    if (confirm(`Deactivate ${selectedCards.length} selected parking card(s)?`)) {
+        // Implement bulk deactivation
+        console.log('Bulk deactivate:', selectedCards);
+    }
+}
+
+function getSelectedCards() {
+    const checkboxes = document.querySelectorAll('.card-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+// Print functionality
+function printTable() {
+    window.print();
+}
+
+// Export functions
+function exportExpiring() {
+    window.location.href = '#?status=expiring';
+}
+
+// Add print styles
+const printStyles = `
+    @media print {
+        .btn, .dropdown, .pagination { display: none !important; }
+        .card { border: 1px solid #000 !important; box-shadow: none !important; }
+        .table { font-size: 12px; }
+        .expiry-warning { background: #fff3cd !important; }
+        .expiry-expired { background: #f8d7da !important; }
+    }
+`;
+
+const styleSheet = document.createElement('style');
+styleSheet.textContent = printStyles;
+document.head.appendChild(styleSheet);
+</script>
+{% endblock %}

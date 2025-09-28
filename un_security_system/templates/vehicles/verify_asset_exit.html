@@ -1,0 +1,585 @@
+<!-- templates/vehicles/verify_asset_exit.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Asset Exit Verification - UN Security Management System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .verification-terminal {
+        border-left: 4px solid var(--warning-color);
+        background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+    }
+    
+    .code-input {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 1.125rem;
+        letter-spacing: 2px;
+        text-align: center;
+    }
+    
+    .result-success {
+        border-left: 4px solid var(--success-color);
+        background: rgba(25, 135, 84, 0.05);
+        animation: fadeIn 0.3s ease;
+    }
+    
+    .result-warning {
+        border-left: 4px solid var(--warning-color);
+        background: rgba(253, 126, 20, 0.05);
+        animation: fadeIn 0.3s ease;
+    }
+    
+    .result-error {
+        border-left: 4px solid var(--danger-color);
+        background: rgba(220, 53, 69, 0.05);
+        animation: fadeIn 0.3s ease;
+    }
+    
+    .terminal-status {
+        background: var(--un-light-blue);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .process-step {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        transition: all 0.2s ease;
+    }
+    
+    .process-step:hover {
+        border-color: var(--un-blue);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 158, 219, 0.15);
+    }
+    
+    .verification-code {
+        background: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        font-size: 1.25rem;
+        text-align: center;
+        color: var(--un-dark-blue);
+    }
+    
+    .asset-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    
+    .loading-spinner {
+        display: inline-block;
+        width: 2rem;
+        height: 2rem;
+        border: 0.25rem solid rgba(0, 158, 219, 0.25);
+        border-right-color: var(--un-blue);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .system-online {
+        color: var(--success-color);
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    .quick-scan-hint {
+        background: var(--un-light-blue);
+        border: 1px solid var(--un-blue);
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-top: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4">
+            <div>
+                <h1 class="h3 mb-2">
+                    <i class="bi bi-shield-check text-un-primary me-2"></i>
+                    Asset Exit Gate Verification
+                </h1>
+                <p class="text-muted mb-0">Verify LSA-approved asset exit requests at security checkpoint</p>
+            </div>
+            <div class="mt-3 mt-lg-0">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center">
+                        <span class="status-indicator bg-success system-online" 
+                              style="width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 0.5rem;"></span>
+                        <small class="text-muted">Gate Terminal Online</small>
+                    </div>
+                    <div class="text-muted small" id="current-time">
+                        <!-- Time will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Status -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="terminal-status">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                    <div>
+                        <h6 class="mb-0 text-success">Verification System Active</h6>
+                        <small class="text-muted">Ready to process asset exit requests</small>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="small text-muted">Last sync: <span id="last-sync">Just now</span></div>
+                    <div class="small">
+                        <i class="bi bi-wifi text-success me-1"></i>
+                        Network Connected
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Form -->
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card verification-terminal">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-upc-scan me-2"></i>
+                    Asset Exit Code Verification
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="verification-form" class="mb-4">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="exit-code" class="form-label fw-semibold">
+                                <i class="bi bi-key me-1"></i>
+                                Asset Exit Authorization Code
+                            </label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text">
+                                    <i class="bi bi-upc-scan"></i>
+                                </span>
+                                <input type="text" 
+                                       class="form-control code-input" 
+                                       id="exit-code"
+                                       placeholder="AX-12AB34CD"
+                                       autocomplete="off"
+                                       pattern="[A-Z]{2}-[0-9A-Z]{8}"
+                                       maxlength="11"
+                                       required>
+                                <button type="submit" class="btn btn-un-primary btn-lg">
+                                    <i class="bi bi-search me-2"></i>
+                                    Verify Authorization
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Scan the QR code or manually enter the 11-character authorization code from the LSA-approved request
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Quick Scan Hint -->
+                <div class="quick-scan-hint">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-lightbulb text-warning me-2"></i>
+                        <div class="small">
+                            <strong>Quick Tip:</strong> Position the QR code in front of your scanner or type the code exactly as shown on the asset exit form. 
+                            Press <kbd>Enter</kbd> to verify instantly.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Process Guide -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="bi bi-clipboard-check me-2"></i>
+                    Security Verification Process
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="process-step">
+                            <i class="bi bi-1-circle text-primary fs-2 mb-2"></i>
+                            <h6 class="fw-semibold">Scan/Enter Code</h6>
+                            <small class="text-muted">
+                                Use barcode scanner or manually type the authorization code
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="process-step">
+                            <i class="bi bi-2-circle text-info fs-2 mb-2"></i>
+                            <h6 class="fw-semibold">Verify Request</h6>
+                            <small class="text-muted">
+                                System checks LSA approval and asset details
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="process-step">
+                            <i class="bi bi-3-circle text-warning fs-2 mb-2"></i>
+                            <h6 class="fw-semibold">Check Assets</h6>
+                            <small class="text-muted">
+                                Physically verify items match the approved list
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="process-step">
+                            <i class="bi bi-4-circle text-success fs-2 mb-2"></i>
+                            <h6 class="fw-semibold">Authorize Exit</h6>
+                            <small class="text-muted">
+                                Grant or deny exit permission based on verification
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Results Container -->
+<div class="row">
+    <div class="col-12">
+        <div id="verification-result" class="d-none"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('verification-form');
+    const codeInput = document.getElementById('exit-code');
+    const resultDiv = document.getElementById('verification-result');
+    
+    // Auto-focus the input field for immediate use
+    codeInput.focus();
+    
+    // Real-time clock
+    function updateClock() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+        document.getElementById('current-time').textContent = timeString;
+    }
+    
+    // Update clock every second
+    setInterval(updateClock, 1000);
+    updateClock(); // Initial call
+    
+    // Auto-uppercase and format input
+    codeInput.addEventListener('input', function() {
+        let value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        
+        // Auto-format: AX-12AB34CD
+        if (value.length > 2) {
+            value = value.substring(0, 2) + '-' + value.substring(2, 10);
+        }
+        
+        this.value = value;
+    });
+    
+    // Handle form submission
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const code = codeInput.value.trim();
+        if (!code || code.length < 11) {
+            showResult('error', 'Please enter a complete asset exit code', null);
+            return;
+        }
+        
+        // Show loading state
+        showLoadingState();
+        
+        try {
+            const response = await fetch(`{% url 'vehicles:asset_exit_lookup_api' %}?code=${encodeURIComponent(code)}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.ok) {
+                    showResult('success', 'EXIT AUTHORIZED', data);
+                } else {
+                    showResult('warning', `Request Found - Not Authorized`, data);
+                }
+            } else {
+                showResult('error', 'Asset Exit Request Not Found', null);
+            }
+            
+        } catch (error) {
+            console.error('Verification error:', error);
+            showResult('error', 'Network Error - Unable to Verify', null);
+        }
+    });
+    
+    function showLoadingState() {
+        resultDiv.className = 'card';
+        resultDiv.innerHTML = `
+            <div class="card-body text-center py-5">
+                <div class="loading-spinner mb-3"></div>
+                <h5 class="text-muted">Verifying Asset Exit Code...</h5>
+                <p class="text-muted mb-0">Checking LSA approval status</p>
+            </div>
+        `;
+        resultDiv.classList.remove('d-none');
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    function showResult(type, message, data) {
+        let cardClass = 'card ';
+        let alertClass = 'alert ';
+        let icon = '';
+        let actionButtons = '';
+        
+        switch(type) {
+            case 'success':
+                cardClass += 'result-success';
+                alertClass += 'alert-success';
+                icon = 'bi-check-circle-fill';
+                actionButtons = `
+                    <button type="button" class="btn btn-success me-2" onclick="confirmExit()">
+                        <i class="bi bi-box-arrow-right me-1"></i>Authorize Exit
+                    </button>
+                `;
+                break;
+            case 'warning':
+                cardClass += 'result-warning';
+                alertClass += 'alert-warning';
+                icon = 'bi-exclamation-triangle-fill';
+                break;
+            case 'error':
+                cardClass += 'result-error';
+                alertClass += 'alert-danger';
+                icon = 'bi-x-circle-fill';
+                break;
+        }
+        
+        resultDiv.className = cardClass;
+        
+        let content = `
+            <div class="card-header">
+                <div class="${alertClass} mb-0 d-flex align-items-center">
+                    <i class="bi ${icon} fs-3 me-3"></i>
+                    <div>
+                        <h5 class="mb-0">${message}</h5>
+                        ${data && data.status ? `<small>Status: ${data.status}</small>` : ''}
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+        `;
+        
+        if (data && data.ok) {
+            content += `
+                <!-- Request Information -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 bg-white">
+                            <small class="text-muted d-block">UN Agency</small>
+                            <div class="fw-semibold">${escapeHtml(data.agency || 'Not specified')}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 bg-white">
+                            <small class="text-muted d-block">Destination</small>
+                            <div class="fw-semibold">${escapeHtml(data.destination || 'Not specified')}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 bg-white">
+                            <small class="text-muted d-block">Expected Return</small>
+                            <div class="fw-semibold">${escapeHtml(data.expected_date || 'Not specified')}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Authorization Code Display -->
+                <div class="verification-code mb-4">
+                    Authorization Code: ${escapeHtml(codeInput.value)}
+                </div>
+            `;
+            
+            if (data.items && data.items.length > 0) {
+                content += `
+                    <h6 class="mb-3">
+                        <i class="bi bi-box-seam me-2"></i>
+                        Authorized Assets (${data.items.length} item${data.items.length !== 1 ? 's' : ''})
+                    </h6>
+                    <div class="asset-table">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Asset Description</th>
+                                    <th>Category</th>
+                                    <th class="text-center">Quantity</th>
+                                    <th>Serial/Tag Number</th>
+                                    <th class="text-center">Verified</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                data.items.forEach((item, index) => {
+                    content += `
+                        <tr>
+                            <td class="fw-medium">${escapeHtml(item.description || 'No description')}</td>
+                            <td>
+                                ${item.category ? `<span class="badge bg-light text-dark">${escapeHtml(item.category)}</span>` : '<span class="text-muted">—</span>'}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary fs-6">${item.quantity || 0}</span>
+                            </td>
+                            <td>
+                                ${item.serial_or_tag ? `<code class="bg-light px-2 py-1 rounded">${escapeHtml(item.serial_or_tag)}</code>` : '<span class="text-muted">—</span>'}
+                            </td>
+                            <td class="text-center">
+                                <input type="checkbox" class="form-check-input" id="verify-${index}" 
+                                       onchange="updateVerificationStatus()">
+                                <label for="verify-${index}" class="visually-hidden">Verify item ${index + 1}</label>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                content += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3 p-3 bg-light rounded">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-clipboard-check text-info me-2"></i>
+                            <div class="small">
+                                <strong>Physical Verification Required:</strong> Check each item against this list and mark as verified before authorizing exit.
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        } else if (data && !data.ok) {
+            content += `
+                <div class="alert alert-info">
+                    <h6 class="alert-heading">Request Found</h6>
+                    <p class="mb-0">This asset exit request exists but has not been LSA-approved yet.</p>
+                    <hr>
+                    <small class="mb-0">Current Status: <strong>${data.status || 'Unknown'}</strong></small>
+                </div>
+            `;
+        }
+        
+        content += `
+                <div class="d-flex gap-2 mt-4">
+                    ${actionButtons}
+                    <button type="button" class="btn btn-outline-secondary" onclick="clearResult()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Verify Another Code
+                    </button>
+                    <button type="button" class="btn btn-outline-info" onclick="printVerification()">
+                        <i class="bi bi-printer me-1"></i>Print Record
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        resultDiv.innerHTML = content;
+        resultDiv.classList.remove('d-none');
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    // Global functions for button actions
+    window.clearResult = function() {
+        codeInput.value = '';
+        resultDiv.classList.add('d-none');
+        codeInput.focus();
+    };
+    
+    window.confirmExit = function() {
+        if (confirm('Confirm that all assets have been physically verified and authorize exit?')) {
+            alert('Asset exit authorized successfully. Exit granted.');
+            clearResult();
+        }
+    };
+    
+    window.printVerification = function() {
+        window.print();
+    };
+    
+    window.updateVerificationStatus = function() {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="verify-"]');
+        const authorizeBtn = document.querySelector('button[onclick="confirmExit()"]');
+        
+        if (authorizeBtn) {
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            authorizeBtn.disabled = !allChecked;
+            
+            if (allChecked) {
+                authorizeBtn.classList.remove('btn-success');
+                authorizeBtn.classList.add('btn-success');
+            } else {
+                authorizeBtn.classList.remove('btn-success');
+                authorizeBtn.classList.add('btn-outline-success');
+            }
+        }
+    };
+    
+    // Escape HTML for security
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+});
+</script>
+{% endblock %}

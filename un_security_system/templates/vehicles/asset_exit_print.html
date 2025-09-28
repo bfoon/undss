@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Print Asset Exit · UN Security{% endblock %}
+{% block content %}
+<div class="container" style="max-width:800px;">
+  <div class="d-print-none text-end mb-3">
+    <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+    <a class="btn btn-outline-secondary" href="{% url 'vehicles:asset_exit_detail' object.pk %}">Back</a>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h4 class="mb-0">Asset Exit Request</h4>
+      <div class="text-muted">Code: {{ object.code|default:"—" }}</div>
+      <hr>
+      <dl class="row">
+        <dt class="col-4">Requested by</dt>
+        <dd class="col-8">{% firstof object.requested_by.get_full_name object.requested_by.username %}</dd>
+        <dt class="col-4">Agency</dt>
+        <dd class="col-8">{{ object.agency_name|default:"—" }}</dd>
+        <dt class="col-4">Status</dt>
+        <dd class="col-8">{{ object.status }}</dd>
+        <dt class="col-4">Items</dt>
+        <dd class="col-8">{{ object.items_summary|default:"—" }}</dd>
+        <dt class="col-4">Created</dt>
+        <dd class="col-8">{{ object.created_at|date:"M d, Y H:i" }}</dd>
+      </dl>
+      <hr>
+      <div class="row">
+        <div class="col-6">
+          <div class="border p-3" style="height:120px;">
+            <strong>LSA Signature</strong>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="border p-3" style="height:120px;">
+            <strong>Guard (Out) Signature</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

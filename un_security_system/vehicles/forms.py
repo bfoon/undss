@@ -1,8 +1,9 @@
 from django import forms
 from django.utils import timezone
 from crispy_forms.helper import FormHelper
+from django.forms import inlineformset_factory
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column, HTML
-from .models import Vehicle, VehicleMovement, ParkingCard
+from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AssetExitItem
 
 
 class VehicleForm(forms.ModelForm):
@@ -227,3 +228,49 @@ class QuickVehicleCheckForm(forms.Form):
             'card_number',
             Submit('check', 'Validate Card', css_class='btn btn-primary btn-lg')
         )
+
+class AssetExitForm(forms.ModelForm):
+    class Meta:
+        model = AssetExit
+        fields = [
+            'agency_name', 'reason', 'destination', 'expected_date',
+            'escort_required', 'notes'
+        ]
+        widgets = {
+            'expected_date': forms.DateInput(attrs={'type': 'date'}),
+            'notes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_method = 'post'
+        self.helper.layout = Layout(
+            Fieldset('Request Details',
+                'agency_name', 'reason',
+                Row(
+                    Column('destination', css_class='col-md-6'),
+                    Column('expected_date', css_class='col-md-6'),
+                ),
+                Row(
+                    Column('escort_required', css_class='col-md-4'),
+                ),
+                'notes',
+            ),
+        )
+
+class AssetExitItemForm(forms.ModelForm):
+    class Meta:
+        model = AssetExitItem
+        fields = ['description', 'category', 'quantity', 'serial_or_tag']
+
+AssetExitItemFormSet = inlineformset_factory(
+    parent_model=AssetExit,
+    model=AssetExitItem,
+    form=AssetExitItemForm,
+    fields=['description','category','quantity','serial_or_tag'],
+    extra=2,
+    can_delete=True,
+    min_num=1,
+    validate_min=True,
+)
