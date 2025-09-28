@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Create Parking Card · UN Security{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 900px;">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h3 class="mb-0">
+        <i class="bi bi-credit-card-2-front"></i> Create Parking Card
+      </h3>
+      <div class="text-muted small">Only LSA can create parking cards.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_list' %}">
+      <i class="bi bi-arrow-left"></i> Back to Cards
+    </a>
+  </div>
+
+  {% if active_cards_count is not None %}
+  <div class="alert alert-info">
+    Active cards in system: <strong>{{ active_cards_count }}</strong>
+  </div>
+  {% endif %}
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {# Your ParkingCardForm already uses crispy layout; this renders it nicely #}
+        {{ form|crispy }}
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2-circle"></i> Create Parking Card
+          </button>
+          <a href="{% url 'vehicles:parking_card_list' %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="alert alert-warning mt-3 mb-0">
+    <i class="bi bi-exclamation-triangle"></i>
+    Ensure vehicle plate and card number are correct before saving.
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Small UX touches: uppercase vehicle plate & card number as the user types
+  (function () {
+    const up = (el) => el && el.addEventListener('input', () => { el.value = (el.value || '').toUpperCase(); });
+    up(document.getElementById('id_vehicle_plate'));
+    up(document.getElementById('id_card_number'));
+  })();
+</script>
+{% endblock %}

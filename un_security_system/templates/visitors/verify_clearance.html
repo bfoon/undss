@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Verify Visitor Clearance · UN Security{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 900px;">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3 class="mb-0">
+      <i class="bi bi-check-circle"></i> Verify Visitor Clearance
+    </h3>
+    <a class="btn btn-outline-secondary" href="{% url 'visitors:visitor_list' %}">
+      <i class="bi bi-list-ul"></i> All Visitors
+    </a>
+  </div>
+
+  {% if forbidden %}
+    <div class="alert alert-danger">
+      You don’t have permission to verify clearances. Please contact the LSA.
+    </div>
+  {% else %}
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="get" class="row g-3" autocomplete="off">
+          <div class="col-md-9">
+            <label class="form-label" for="q">Search by Visitor ID, Full Name, or Vehicle Plate</label>
+            <input type="text" id="q" name="q" value="{{ q }}" class="form-control form-control-lg"
+                   placeholder="e.g., 123 or Ebrima Njie or BJL-1234">
+          </div>
+          <div class="col-md-3 d-flex align-items-end">
+            <button class="btn btn-primary btn-lg w-100" type="submit">
+              <i class="bi bi-search"></i> Search
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if q %}
+      {% if result %}
+        <div class="card shadow-sm mt-3">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <!-- FIXED: no __str__ access -->
+              <h5 class="mb-0">{% firstof result.full_name result "Visitor" %}</h5>
+              {% if is_cleared %}
+                <span class="badge text-bg-success">LSA Cleared</span>
+              {% else %}
+                <span class="badge text-bg-warning">{{ status_label|default:"Pending / Not Cleared" }}</span>
+              {% endif %}
+            </div>
+            <hr>
+            <div class="row">
+              <div class="col-md-6">
+                <dl class="row mb-0">
+                  <dt class="col-5">Organization</dt>
+                  <dd class="col-7">{{ result.organization|default:"—" }}</dd>
+
+                  <dt class="col-5">Vehicle plate</dt>
+                  <dd class="col-7">{{ result.vehicle_plate|default:"—" }}</dd>
+
+                  <dt class="col-5">Checked in</dt>
+                  <dd class="col-7">
+                    {% if result.checked_in and not result.checked_out %}
+                      <span class="badge text-bg-success">In compound</span>
+                    {% elif result.checked_out %}
+                      <span class="badge text-bg-secondary">Checked out</span>
+                    {% else %}
+                      <span class="badge text-bg-light border">Not in compound</span>
+                    {% endif %}
+                  </dd>
+                </dl>
+              </div>
+              <div class="col-md-6">
+                <dl class="row mb-0">
+                  <dt class="col-5">Approval code</dt>
+                  <dd class="col-7">
+                    {% if result.approval and result.approval.code %}
+                      {{ result.approval.code }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </dd>
+
+                  <dt class="col-5">Status</dt>
+                  <dd class="col-7">{{ status_label|default:"—" }}</dd>
+                </dl>
+              </div>
+            </div>
+            <div class="mt-3">
+              <a class="btn btn-outline-primary btn-sm" href="{% url 'visitors:visitor_detail' result.pk %}">
+                <i class="bi bi-eye"></i> View visitor details
+              </a>
+            </div>
+          </div>
+        </div>
+
+      {% elif matches %}
+        <div class="card shadow-sm mt-3">
+          <div class="card-body">
+            <h6 class="mb-3">Multiple matches</h6>
+            <div class="list-group list-group-flush">
+              {% for v in matches %}
+                <!-- FIXED: no __str__ access -->
+                <a class="list-group-item list-group-item-action" href="?q={{ v.id }}">
+                  <div class="d-flex justify-content-between">
+                    <div>{% firstof v.full_name v "Visitor" %}</div>
+                    <div class="text-muted small">ID: {{ v.id }}</div>
+                  </div>
+                  <div class="small text-muted">
+                    Plate: {{ v.vehicle_plate|default:"—" }} · Org: {{ v.organization|default:"—" }}
+                  </div>
+                </a>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+      {% else %}
+        <div class="alert alert-warning mt-3">
+          No visitor found matching “<strong>{{ q }}</strong>”.
+        </div>
+      {% endif %}
+    {% endif %}
+
+  {% endif %}
+
+</div>
+{% endblock %}

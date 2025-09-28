@@ -35,4 +35,8 @@ urlpatterns = [
     # Bulk Operations
     path('bulk/approve/', views.bulk_approve_visitors, name='bulk_approve'),
     path('bulk/export/', views.export_visitors, name='export_visitors'),
+
+    # Verify (Gate) — used by base.html
+    path('verify/', views.visitor_verify_page, name='visitor_verify_page'),
+    path('api/verify-lookup/', views.visitor_verify_lookup_api, name='visitor_verify_lookup_api'),
 ]

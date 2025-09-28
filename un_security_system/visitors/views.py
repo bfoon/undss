@@ -25,6 +25,13 @@ def is_lsa_or_soc(user):
     return user.is_authenticated and user.role in ['lsa', 'soc']
 
 
+def _gate_role(user):
+    # Guards (data_entry), LSA, SOC, and superusers can verify at the gate
+    return user.is_authenticated and (
+        getattr(user, 'role', None) in ('data_entry', 'lsa', 'soc') or user.is_superuser
+    )
+
+
 class VisitorListView(LoginRequiredMixin, ListView):
     model = Visitor
     template_name = 'visitors/visitor_list.html'
@@ -490,3 +497,94 @@ def export_visitors(request):
         ])
 
     return response
+
+@login_required
+def visitor_verify_page(request):
+    if not _gate_role(request.user):
+        # Show a friendly 403 page or message on the template instead of raising
+        return render(request, "visitors/verify_clearance.html", {"forbidden": True}, status=403)
+
+    q = (request.GET.get("q") or "").strip()
+    result = None
+    matches = []
+
+    if q:
+        # Try by numeric id first
+        if q.isdigit():
+            try:
+                result = Visitor.objects.select_related().get(pk=int(q))
+            except Visitor.DoesNotExist:
+                result = None
+
+        if not result:
+            # Try by full name or vehicle plate (if your model has those fields)
+            matches = list(
+                Visitor.objects.filter(
+                    Q(full_name__icontains=q) |
+                    Q(vehicle_plate__icontains=q)
+                ).order_by("-id")[:20]
+            )
+            if len(matches) == 1:
+                result = matches[0]
+
+    # Determine clearance status if we have a single result and it has .approval
+    is_cleared = False
+    status_label = None
+    if result and hasattr(result, "approval") and result.approval:
+        status_label = getattr(result.approval, "status", None)
+        is_cleared = (status_label == "lsa_cleared")
+
+    context = {
+        "q": q,
+        "result": result,
+        "matches": matches,
+        "is_cleared": is_cleared,
+        "status_label": status_label,
+        "forbidden": False,
+    }
+    return render(request, "visitors/verify_clearance.html", context)
+
+@login_required
+def visitor_verify_lookup_api(request):
+    if not _gate_role(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+
+    q = (request.GET.get("q") or "").strip()
+    if not q:
+        return JsonResponse({"ok": False, "error": "missing_query"}, status=400)
+
+    visitor = None
+    if q.isdigit():
+        visitor = Visitor.objects.filter(pk=int(q)).first()
+
+    if not visitor:
+        visitor = Visitor.objects.filter(
+            Q(full_name__iexact=q) | Q(vehicle_plate__iexact=q)
+        ).order_by("-id").first()
+
+    if not visitor:
+        return JsonResponse({"ok": False, "found": False})
+
+    status = None
+    is_cleared = False
+    if hasattr(visitor, "approval") and visitor.approval:
+        status = getattr(visitor.approval, "status", None)
+        is_cleared = (status == "lsa_cleared")
+
+    data = {
+        "ok": True,
+        "found": True,
+        "visitor": {
+            "id": visitor.pk,
+            "full_name": getattr(visitor, "full_name", str(visitor)),
+            "organization": getattr(visitor, "organization", None),
+            "vehicle_plate": getattr(visitor, "vehicle_plate", None),
+        },
+        "approval": {
+            "status": status,
+            "is_cleared": is_cleared,
+            "code": getattr(getattr(visitor, "approval", None), "code", None),
+        }
+    }
+    return JsonResponse(data)
+

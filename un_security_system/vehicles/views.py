@@ -693,3 +693,66 @@ def asset_exit_mark_signed_in(request, pk):
     obj.mark_signed_in(request.user)
     messages.success(request, 'Assets marked as signed in.')
     return redirect('vehicles:asset_exit_detail', pk=pk)
+
+def _is_lsa(user):
+    return getattr(user, "role", None) == "lsa" or user.is_superuser
+
+
+@login_required
+def parking_card_print(request, pk):
+    card = get_object_or_404(ParkingCard, pk=pk)
+    # Optional: require at least data_entry/lsa/soc
+    if not (getattr(request.user, "role", None) in ("data_entry", "lsa", "soc") or request.user.is_superuser):
+        messages.error(request, "You do not have permission to print parking cards.")
+        return redirect("vehicles:parking_card_list")
+    return render(request, "vehicles/parking_card_print.html", {"card": card})
+
+@login_required
+def parking_card_duplicate(request, pk):
+    if not _is_lsa(request.user):
+        messages.error(request, "Only LSA can duplicate parking cards.")
+        return redirect("vehicles:parking_card_list")
+
+    card = get_object_or_404(ParkingCard, pk=pk)
+
+    # Generate a unique card_number suggestion based on original
+    base = f"{card.card_number}-COPY" if card.card_number else "PC-COPY"
+    new_number = base
+    i = 2
+    while ParkingCard.objects.filter(card_number=new_number).exists():
+        new_number = f"{base}-{i}"
+        i += 1
+
+    dup = ParkingCard.objects.create(
+        card_number=new_number,
+        owner_name=card.owner_name,
+        owner_id=card.owner_id,
+        phone=card.phone,
+        department=card.department,
+        vehicle_make=card.vehicle_make,
+        vehicle_model=card.vehicle_model,
+        vehicle_plate=card.vehicle_plate,
+        vehicle_color=card.vehicle_color,
+        expiry_date=card.expiry_date,
+        is_active=False,               # keep inactive until reviewed
+        # created_by left null if your model has it, or set:
+        # created_by=request.user,
+    )
+    messages.success(request, f"Duplicated card as {dup.card_number}. It is inactive until you activate it.")
+    return redirect("vehicles:parking_card_detail", pk=dup.pk)
+
+@login_required
+def parking_card_delete(request, pk):
+    card = get_object_or_404(ParkingCard, pk=pk)
+    if not _is_lsa(request.user):
+        messages.error(request, "Only LSA can delete parking cards.")
+        return redirect('vehicles:parking_card_list')
+
+    if request.method == "POST":
+        number = card.card_number
+        card.delete()
+        messages.success(request, f"Parking card {number} deleted.")
+        return redirect('vehicles:parking_card_list')
+
+    # GET: show confirm page
+    return render(request, 'vehicles/parking_card_confirm_delete.html', {'card': card})

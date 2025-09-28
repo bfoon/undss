@@ -55,6 +55,11 @@ urlpatterns = [
     path('asset-exit/<int:pk>/print/', views.asset_exit_print, name='asset_exit_print'),
     path('asset-exit/<int:pk>/duplicate/', views.asset_exit_duplicate, name='asset_exit_duplicate'),
 
+    # Parking card actions
+    path('parking-cards/<int:pk>/print/', views.parking_card_print, name='parking_card_print'),
+    path('parking-cards/<int:pk>/duplicate/', views.parking_card_duplicate, name='parking_card_duplicate'),
+    path('parking-cards/<int:pk>/delete/', views.parking_card_delete, name='parking_card_delete'),
+
 
     # Guard verify + sign in/out
     path('asset-exit/verify/', views.asset_exit_verify_page, name='asset_exit_verify_page'),

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Print Parking Card · UN Security{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 800px;">
+  <div class="d-print-none d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-printer"></i> Parking Card</h4>
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+      <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_detail' card.pk %}">Back</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="row mb-3">
+        <div class="col-6">
+          <h5 class="mb-1">Card: {{ card.card_number }}</h5>
+          <div class="text-muted">Department: {{ card.department|default:"—" }}</div>
+          <div class="text-muted">Expiry: {{ card.expiry_date|date:"M d, Y" }}</div>
+          <div class="text-muted">Status: {% if card.is_active %}Active{% else %}Inactive{% endif %}</div>
+        </div>
+        <div class="col-6">
+          <h6 class="mb-1">Owner</h6>
+          <div>{{ card.owner_name|default:"—" }}</div>
+          <div>ID: {{ card.owner_id|default:"—" }}</div>
+          <div>Phone: {{ card.phone|default:"—" }}</div>
+        </div>
+      </div>
+
+      <hr>
+
+      <h6 class="mb-2">Vehicle</h6>
+      <div>Plate: <strong>{{ card.vehicle_plate|default:"—" }}</strong></div>
+      <div>Make/Model: {{ card.vehicle_make|default:"—" }} {{ card.vehicle_model|default:"" }}</div>
+      <div>Color: {{ card.vehicle_color|default:"—" }}</div>
+
+      <hr class="my-4">
+
+      <div class="row">
+        <div class="col-6">
+          <div class="border p-4" style="height: 120px;">
+            <strong>Authorized by (LSA)</strong>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="border p-4" style="height: 120px;">
+            <strong>Issued to</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+@media print {
+  .navbar, .btn, .d-print-none { display: none !important; }
+  .card { border: none; box-shadow: none; }
+}
+</style>
+{% endblock %}
