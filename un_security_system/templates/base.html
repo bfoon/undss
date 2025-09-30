@@ -272,6 +272,10 @@
                                 <li><a class="dropdown-item" href="{% url 'visitors:visitor_create' %}">
                                     <i class="bi bi-person-plus me-2" aria-hidden="true"></i>Register New Visitor
                                 </a></li>
+                                <!-- NEW: Visitor Cards inventory/list -->
+                                <li><a class="dropdown-item" href="{% url 'visitors:visitor_card_list' %}">
+                                    <i class="bi bi-credit-card-2-front me-2" aria-hidden="true"></i>Visitor Cards
+                                </a></li>
                                 {% if user.role == 'lsa' %}
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{% url 'visitors:visitor_verify_page' %}">

@@ -11,6 +11,12 @@ urlpatterns = [
     path('<int:pk>/edit/', views.VisitorUpdateView.as_view(), name='visitor_edit'),
     path('<int:visitor_id>/approve/', views.approve_visitor, name='approve_visitor'),
 
+    # actions from the detail page
+    path('<int:pk>/request-clearance/', views.visitor_request_clearance, name='visitor_request_clearance'),
+    path('<int:pk>/lsa-approve/', views.visitor_lsa_approve, name='visitor_lsa_approve'),
+    path('<int:pk>/lsa-reject/', views.visitor_lsa_reject, name='visitor_lsa_reject'),
+    path('<int:pk>/cancel-request/', views.visitor_cancel_request, name='visitor_cancel_request'),
+
     # Check-in/Check-out
     path('<int:visitor_id>/check-in/', views.check_in_visitor, name='check_in_visitor'),
     path('<int:visitor_id>/check-out/', views.check_out_visitor, name='check_out_visitor'),
@@ -37,6 +43,10 @@ urlpatterns = [
     path('bulk/export/', views.export_visitors, name='export_visitors'),
 
     # Verify (Gate) — used by base.html
+    path('gate/<int:pk>/', views.gate_check_view, name='gate_check'),
     path('verify/', views.visitor_verify_page, name='visitor_verify_page'),
     path('api/verify-lookup/', views.visitor_verify_lookup_api, name='visitor_verify_lookup_api'),
+
+    path('cards/', views.visitor_card_list, name='visitor_card_list'),                 # optional list
+    path('api/cards/check/', views.visitor_card_check_api, name='visitor_card_check'),
 ]

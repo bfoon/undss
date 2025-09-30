@@ -1,6 +1,6 @@
 # visitors/admin.py
 from django.contrib import admin
-from .models import Visitor, VisitorLog
+from .models import Visitor, VisitorLog, VisitorCard
 from django.http import HttpResponse
 import csv
 
@@ -114,3 +114,9 @@ class VisitorLogAdmin(admin.ModelAdmin):
     list_filter = ("action",) if hasattr(VisitorLog, "action") else ()
     search_fields = ()
     date_hierarchy = "timestamp" if hasattr(VisitorLog, "_meta") and "timestamp" in [f.name for f in VisitorLog._meta.get_fields() if hasattr(f, "name")] else None
+
+@admin.register(VisitorCard)
+class VisitorCardAdmin(admin.ModelAdmin):
+    list_display = ('number', 'is_active', 'in_use', 'issued_to', 'issued_at', 'returned_at')
+    list_filter = ('is_active', 'in_use')
+    search_fields = ('number', 'issued_to__full_name')

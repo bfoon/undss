@@ -170,3 +170,31 @@ class QuickVisitorCheckForm(forms.Form):
             Submit('check_in', 'Check In', css_class='btn btn-success me-2'),
             Submit('check_out', 'Check Out', css_class='btn btn-warning')
         )
+
+
+GATE_ACTIONS = (
+    ('check_in', 'Check In'),
+    ('check_out', 'Check Out'),
+)
+
+class GateCheckForm(forms.Form):
+    action = forms.ChoiceField(choices=GATE_ACTIONS)
+    gate = forms.ChoiceField(choices=(('front', 'Front Gate'), ('back', 'Back Gate')), initial='front')
+    id_number = forms.CharField(max_length=50, required=False,
+                                help_text="Required if missing for check-in.")
+    card_number = forms.CharField(max_length=20, required=False,
+                                  help_text="Required for check-in to issue a visitor card.")
+
+    def clean(self):
+        cleaned = super().clean()
+        action = cleaned.get('action')
+        id_number = cleaned.get('id_number')
+        card_number = cleaned.get('card_number')
+        if action == 'check_in':
+            # require a card and ID
+            if not card_number:
+                self.add_error('card_number', 'Card number is required for check-in.')
+            if not id_number:
+                self.add_error('id_number', 'Visitor ID is required for check-in.')
+        return cleaned
+

@@ -1,224 +1,536 @@
 {% extends "base.html" %}
 
-{% block title %}Visitor Details · UN Security Management System{% endblock %}
+{% block title %}{{ visitor.full_name|default:"Visitor" }} · UN Security Management System{% endblock %}
+
+{% block extra_css %}
+<style>
+  .status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .status-pending { background: #fff3cd; color: #856404; border: 2px solid #ffc107; }
+  .status-approved { background: #d1e7dd; color: #0f5132; border: 2px solid #198754; }
+  .status-rejected { background: #f8d7da; color: #842029; border: 2px solid #dc3545; }
+  .status-cancelled { background: #e2e3e5; color: #41464b; border: 2px solid #6c757d; }
+  .status-in-compound { background: #d1f4e0; color: #0f5132; border: 2px solid #20c997; }
+  .status-checked-out { background: #cfe2ff; color: #084298; border: 2px solid #0d6efd; }
+  .status-not-checked { background: #f8f9fa; color: #495057; border: 2px solid #dee2e6; }
+
+  .header-card {
+    background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%);
+    color: white;
+    border: none;
+    margin-bottom: 1.5rem;
+  }
+
+  .info-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .info-item {
+    display: flex;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: #f8f9fa;
+    transition: all 0.2s;
+  }
+
+  .info-item:hover {
+    background: #e9ecef;
+  }
+
+  .info-label {
+    font-weight: 600;
+    color: #6c757d;
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .info-value {
+    color: #212529;
+    flex: 1;
+  }
+
+  .action-card {
+    border-left: 4px solid #0d6efd;
+    background: #f8f9fa;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-left: 2rem;
+    padding-bottom: 1.5rem;
+    border-left: 2px solid #dee2e6;
+  }
+
+  .timeline-item:last-child {
+    border-left: 2px solid transparent;
+    padding-bottom: 0;
+  }
+
+  .timeline-dot {
+    position: absolute;
+    left: -0.5rem;
+    top: 0.25rem;
+    width: 1rem;
+    height: 1rem;
+    background: #0d6efd;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px #0d6efd;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+  }
+
+  .quick-action-btn {
+    transition: all 0.2s;
+  }
+
+  .quick-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+
+  .alert-gate-status {
+    border-left: 4px solid;
+    background: #f8f9fa;
+  }
+
+  .alert-gate-status.can-checkin {
+    border-color: #198754;
+  }
+
+  .alert-gate-status.in-compound {
+    border-color: #20c997;
+  }
+
+  .alert-gate-status.no-action {
+    border-color: #6c757d;
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-{% comment %}
-We normalize context so "visitor" is always available:
-- DetailView default context is "object"
-- Some views may pass "visitor"
-{% endcomment %}
 {% with visitor=visitor|default:object %}
 
-<div class="container" style="max-width: 1100px;">
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <div>
-      <h3 class="mb-0">
-        <i class="bi bi-person-badge"></i>
-        {{ visitor.full_name|default:visitor.full_name|default:"Visitor" }}
-      </h3>
-      <div class="text-muted small">
-        Registered: {{ visitor.registered_at|date:"M d, Y H:i" }}{% if visitor.created_by %} · by {{ visitor.created_by.username }}{% endif %}
-      </div>
-    </div>
+<div class="container" style="max-width: 1200px;">
 
-    <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'visitors:visitor_list' %}">
-        <i class="bi bi-arrow-left"></i> Back to list
-      </a>
+  <!-- Header Card -->
+  <div class="card header-card shadow-sm">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+        <div>
+          <h2 class="mb-2">
+            <i class="bi bi-person-badge-fill"></i>
+            {{ visitor.full_name|default:"Visitor" }}
+          </h2>
+          <div class="opacity-75">
+            <i class="bi bi-calendar-check"></i> Registered {{ visitor.registered_at|date:"M d, Y" }} at {{ visitor.registered_at|date:"H:i" }}
+            {% if visitor.registered_by %}
+              <span class="mx-2">·</span>
+              <i class="bi bi-person"></i> by {{ visitor.registered_by.username }}
+            {% endif %}
+          </div>
+          {% if visitor.organization %}
+            <div class="opacity-75 mt-1">
+              <i class="bi bi-building"></i> {{ visitor.organization }}
+            </div>
+          {% endif %}
+        </div>
 
-      {% if not visitor.approval %}
-        {% if user.is_authenticated %}
-          <a class="btn btn-primary btn-sm" href="#">
-            <i class="bi bi-send-check"></i> Request Clearance
+        <div class="d-flex gap-2 align-items-start">
+          {% if visitor.checked_in and not visitor.checked_out %}
+            <span class="status-badge status-in-compound">
+              <i class="bi bi-geo-alt-fill"></i> In Compound
+            </span>
+          {% elif visitor.checked_out %}
+            <span class="status-badge status-checked-out">
+              <i class="bi bi-check-circle-fill"></i> Checked Out
+            </span>
+          {% else %}
+            <span class="status-badge status-not-checked">
+              <i class="bi bi-dash-circle"></i> Not Checked In
+            </span>
+          {% endif %}
+
+          <a class="btn btn-light" href="{% url 'visitors:visitor_list' %}" title="Back to visitor list">
+            <i class="bi bi-arrow-left"></i> Back
           </a>
-        {% endif %}
-      {% endif %}
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="row g-3">
-    <!-- Left column: core info -->
-    <div class="col-lg-7">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h5 class="mb-3">Visit Information</h5>
-          <dl class="row mb-0">
-            <dt class="col-5 col-md-4">Full name</dt>
-            <dd class="col-7 col-md-8">{{ visitor.full_name|default:visitor.full_name|default:"—" }}</dd>
+  <div class="row g-4">
 
-            <dt class="col-5 col-md-4">Organization / Company</dt>
-            <dd class="col-7 col-md-8">{{ visitor.organization|default:"—" }}</dd>
+    <!-- Left Column: Visitor & Vehicle Info -->
+    <div class="col-lg-8">
 
-            <dt class="col-5 col-md-4">Purpose</dt>
-            <dd class="col-7 col-md-8">{{ visitor.purpose_of_visit|default:"—" }}</dd>
+      <!-- Visit Information -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-body p-4">
+          <div class="section-header">
+            <i class="bi bi-info-circle-fill text-primary"></i>
+            <span>Visit Information</span>
+          </div>
 
-            <dt class="col-5 col-md-4">Visit date</dt>
-            <dd class="col-7 col-md-8">
-              {% if visitor.expected_date %}{{ visitor.expected_date|date:"M d, Y" }}{% else %}—{% endif %}
-            </dd>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">
+                <i class="bi bi-person"></i> Full Name
+              </div>
+              <div class="info-value">{{ visitor.full_name|default:"—" }}</div>
+            </div>
 
-            <dt class="col-5 col-md-4">Host (Staff)</dt>
-            <dd class="col-7 col-md-8">
-              {% if visitor.person_to_visit %}{{ visitor.person_to_visit|default:visitor.person_to_visit }}{% else %}—{% endif %}
-            </dd>
+            <div class="info-item">
+              <div class="info-label">
+                <i class="bi bi-building"></i> Organization
+              </div>
+              <div class="info-value">{{ visitor.organization|default:"—" }}</div>
+            </div>
 
-            <dt class="col-5 col-md-4">Phone</dt>
-            <dd class="col-7 col-md-8">{{ visitor.phone|default:"—" }}</dd>
+            <div class="info-item">
+              <div class="info-label">
+                <i class="bi bi-journal-text"></i> Purpose
+              </div>
+              <div class="info-value">{{ visitor.purpose_of_visit|default:"—" }}</div>
+            </div>
 
-            <dt class="col-5 col-md-4">Email</dt>
-            <dd class="col-7 col-md-8">{{ visitor.email|default:"—" }}</dd>
+            <div class="info-item">
+              <div class="info-label">
+                <i class="bi bi-calendar-event"></i> Visit Date
+              </div>
+              <div class="info-value">
+                {% if visitor.expected_date %}{{ visitor.expected_date|date:"l, F d, Y" }}{% else %}—{% endif %}
+              </div>
+            </div>
 
-            <dt class="col-5 col-md-4">Status</dt>
-            <dd class="col-7 col-md-8">
-              {% if visitor.checked_in and not visitor.checked_out %}
-                <span class="badge text-bg-success">In compound</span>
-              {% elif visitor.checked_out %}
-                <span class="badge text-bg-secondary">Checked out</span>
-              {% else %}
-                <span class="badge text-bg-light border">Not checked in</span>
-              {% endif %}
-            </dd>
-          </dl>
+            <div class="info-item">
+              <div class="info-label">
+                <i class="bi bi-person-check"></i> Host Staff
+              </div>
+              <div class="info-value">{{ visitor.person_to_visit|default:"—" }}</div>
+            </div>
+
+            <div class="row g-0">
+              <div class="col-md-6">
+                <div class="info-item me-md-2">
+                  <div class="info-label">
+                    <i class="bi bi-telephone"></i> Phone
+                  </div>
+                  <div class="info-value">{{ visitor.phone|default:"—" }}</div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="info-item ms-md-2 mt-3 mt-md-0">
+                  <div class="info-label">
+                    <i class="bi bi-envelope"></i> Email
+                  </div>
+                  <div class="info-value">{{ visitor.email|default:"—" }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Vehicle (optional) -->
-      <div class="card mt-3 shadow-sm">
-        <div class="card-body">
-          <h5 class="mb-3">Vehicle (if any)</h5>
-          <dl class="row mb-0">
-            <dt class="col-5 col-md-4">Has vehicle</dt>
-            <dd class="col-7 col-md-8">
-              {% if visitor.has_vehicle %}Yes{% else %}No{% endif %}
-            </dd>
+      <!-- Vehicle Information -->
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <div class="section-header">
+            <i class="bi bi-car-front-fill text-primary"></i>
+            <span>Vehicle Information</span>
+            {% if visitor.has_vehicle %}
+              <span class="badge bg-primary ms-auto">Has Vehicle</span>
+            {% else %}
+              <span class="badge bg-secondary ms-auto">No Vehicle</span>
+            {% endif %}
+          </div>
 
-            <dt class="col-5 col-md-4">Plate number</dt>
-            <dd class="col-7 col-md-8">{{ visitor.vehicle_plate|default:"—" }}</dd>
+          {% if visitor.has_vehicle %}
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-tag"></i> Plate Number
+                </div>
+                <div class="info-value fw-bold">{{ visitor.vehicle_plate|default:"—" }}</div>
+              </div>
 
-            <dt class="col-5 col-md-4">Make / Model</dt>
-            <dd class="col-7 col-md-8">
-              {% if visitor.vehicle_make or visitor.vehicle_model %}
-                {{ visitor.vehicle_make|default:"" }} {{ visitor.vehicle_model|default:"" }}
-              {% else %}—{% endif %}
-            </dd>
-
-            <dt class="col-5 col-md-4">Color</dt>
-            <dd class="col-7 col-md-8">{{ visitor.vehicle_color|default:"—" }}</dd>
-          </dl>
+              <div class="row g-0">
+                <div class="col-md-6">
+                  <div class="info-item me-md-2">
+                    <div class="info-label">
+                      <i class="bi bi-car-front"></i> Make/Model
+                    </div>
+                    <div class="info-value">
+                      {% if visitor.vehicle_make or visitor.vehicle_model %}
+                        {{ visitor.vehicle_make|default:"" }} {{ visitor.vehicle_model|default:"" }}
+                      {% else %}—{% endif %}
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="info-item ms-md-2 mt-3 mt-md-0">
+                    <div class="info-label">
+                      <i class="bi bi-palette"></i> Color
+                    </div>
+                    <div class="info-value">{{ visitor.vehicle_color|default:"—" }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">This visitor has not registered a vehicle.</p>
+          {% endif %}
         </div>
       </div>
     </div>
 
-    <!-- Right column: approvals + activity -->
-    <div class="col-lg-5">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <div class="d-flex align-items-center justify-content-between">
-            <h5 class="mb-0">Clearance</h5>
-            {% if visitor.approval %}
-              {% if visitor.approval.status == 'pending' %}
-                <span class="badge text-bg-warning">Pending</span>
-              {% elif visitor.approval.status == 'lsa_cleared' %}
-                <span class="badge text-bg-success">LSA Cleared</span>
-              {% elif visitor.approval.status == 'rejected' %}
-                <span class="badge text-bg-danger">Rejected</span>
-              {% elif visitor.approval.status == 'cancelled' %}
-                <span class="badge text-bg-secondary">Cancelled</span>
-              {% else %}
-                <span class="badge text-bg-light border">{{ visitor.approval.status }}</span>
-              {% endif %}
+    <!-- Right Column: Clearance, Gate Actions & Activity -->
+    <div class="col-lg-4">
+
+      <!-- Clearance Status -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="section-header mb-0 pb-0 border-0">
+              <i class="bi bi-shield-check text-primary"></i>
+              <span>Clearance Status</span>
+            </div>
+            {% if visitor.status == 'pending' %}
+              <span class="status-badge status-pending">
+                <i class="bi bi-clock-fill"></i> Pending
+              </span>
+            {% elif visitor.status == 'approved' %}
+              <span class="status-badge status-approved">
+                <i class="bi bi-check-circle-fill"></i> Cleared
+              </span>
+            {% elif visitor.status == 'rejected' %}
+              <span class="status-badge status-rejected">
+                <i class="bi bi-x-circle-fill"></i> Rejected
+              </span>
+            {% elif visitor.status == 'cancelled' %}
+              <span class="status-badge status-cancelled">
+                <i class="bi bi-slash-circle"></i> Cancelled
+              </span>
             {% else %}
-              <span class="badge text-bg-light border">Not requested</span>
+              <span class="status-badge status-not-checked">{{ visitor.status }}</span>
             {% endif %}
           </div>
 
-          <hr>
-
-          {% if visitor.approval %}
-            <div class="mb-3">
-              <div class="small text-muted">Clearance Code</div>
-              <div class="fw-semibold">{{ visitor.approval.code }}</div>
+          <div class="info-grid mb-3">
+            <div class="info-item">
+              <div class="info-label">Requested By</div>
+              <div class="info-value">
+                {% if visitor.registered_by %}{{ visitor.registered_by.username }}{% else %}—{% endif %}
+              </div>
             </div>
 
-            <dl class="row mb-3">
-              <dt class="col-5">Requested by</dt>
-              <dd class="col-7">{{ visitor.registered_by.username }}</dd>
+            {% if visitor.agency_name %}
+              <div class="info-item">
+                <div class="info-label">Agency</div>
+                <div class="info-value">{{ visitor.agency_name }}</div>
+              </div>
+            {% endif %}
 
-              <dt class="col-5">Has vehicle</dt>
-              <dd class="col-7">{% if visitor.approval.has_vehicle %}Yes{% else %}No{% endif %}</dd>
+            {% if visitor.approved_by %}
+              <div class="info-item">
+                <div class="info-label">LSA Decision</div>
+                <div class="info-value">
+                  {{ visitor.approved_by.username }}
+                  {% if visitor.approval_date %}
+                    <div class="small text-muted">{{ visitor.approval_date|date:"M d, Y H:i" }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
+          </div>
 
-              {% if visitor.approval.vehicle_plate %}
-                <dt class="col-5">Vehicle plate</dt>
-                <dd class="col-7">{{ visitor.approval.vehicle_plate }}</dd>
+          <!-- Clearance Actions -->
+          {% if user.is_authenticated %}
+            <div class="d-flex flex-column gap-2">
+              <!-- LSA Actions -->
+              {% if user.role == 'lsa' and visitor.status == 'pending' %}
+                <form method="post" action="{% url 'visitors:visitor_lsa_approve' visitor.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-success w-100 quick-action-btn" type="submit">
+                    <i class="bi bi-check-circle-fill"></i> LSA Clear Visitor
+                  </button>
+                </form>
+                <form method="post" action="{% url 'visitors:visitor_lsa_reject' visitor.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-outline-danger w-100 quick-action-btn" type="submit">
+                    <i class="bi bi-x-octagon"></i> Reject Request
+                  </button>
+                </form>
               {% endif %}
 
-              {% if visitor.approval.agency_name %}
-                <dt class="col-5">Agency</dt>
-                <dd class="col-7">{{ visitor.approval.agency_name }}</dd>
+              <!-- Cancel Request -->
+              {% if visitor.status == 'pending' and visitor.registered_by and user.id == visitor.registered_by.id %}
+                <form method="post" action="{% url 'visitors:visitor_cancel_request' visitor.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-outline-secondary w-100 quick-action-btn" type="submit">
+                    <i class="bi bi-slash-circle"></i> Cancel Request
+                  </button>
+                </form>
               {% endif %}
 
-              {% if visitor.approval.lsa_user %}
-                <dt class="col-5">LSA decision</dt>
-                <dd class="col-7">
-                  {{ visitor.approval.lsa_user.username }}
-                  {% if visitor.approval.lsa_decided_at %} · {{ visitor.approval.lsa_decided_at|date:"M d, Y H:i" }}{% endif %}
-                </dd>
-              {% endif %}
-            </dl>
-
-            <!-- Actions -->
-            <div class="d-flex flex-wrap gap-2">
-              {% if visitor.approval.status == 'pending' and user.is_authenticated and user.role == 'lsa' %}
-                <a class="btn btn-success btn-sm" href="{% url 'visitors:visitor_lsa_clear' visitor.approval.id %}">
-                  <i class="bi bi-check2-circle"></i> LSA Clear
-                </a>
-                <a class="btn btn-outline-danger btn-sm" href="{% url 'visitors:visitor_lsa_reject' visitor.approval.id %}">
-                  <i class="bi bi-x-octagon"></i> Reject
-                </a>
-              {% endif %}
-
-              {% if visitor.approval.status == 'pending' and user.is_authenticated and user.id == visitor.approval.requested_by_id %}
-                <a class="btn btn-outline-secondary btn-sm" href="{% url 'visitors:visitor_cancel_request' visitor.approval.id %}">
-                  <i class="bi bi-slash-circle"></i> Cancel Request
-                </a>
+              <!-- Request/Re-request Clearance -->
+              {% if visitor.status != 'pending' %}
+                <form method="post" action="{% url 'visitors:visitor_request_clearance' visitor.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-primary w-100 quick-action-btn" type="submit">
+                    <i class="bi bi-send-check"></i>
+                    {% if visitor.status == 'approved' or visitor.status == 'rejected' or visitor.status == 'cancelled' %}
+                      Re-request Clearance
+                    {% else %}
+                      Request Clearance
+                    {% endif %}
+                  </button>
+                </form>
               {% endif %}
             </div>
-
-          {% else %}
-            <p class="text-muted mb-0">
-              No clearance request has been submitted for this visitor yet.
-              {% if user.is_authenticated %}
-                <a href="#">Request now</a>.
-              {% endif %}
-            </p>
           {% endif %}
         </div>
       </div>
 
-      <!-- Recent activity (optional if you track logs) -->
-      {% if visitor.logs.all %}
-      <div class="card mt-3 shadow-sm">
-        <div class="card-body">
-          <h6 class="mb-3">Recent Activity</h6>
-          <div class="list-group list-group-flush">
-            {% for log in visitor.logs.all|slice:":6" %}
-              <div class="list-group-item px-0">
-                <div class="d-flex justify-content-between">
-                  <div>
-                    <span class="badge bg-light text-dark border me-2">{{ log.get_action_display|default:log.action }}</span>
-                    {{ log.description|default:"—" }}
-                  </div>
-                  <div class="text-muted small">{{ log.timestamp|date:"M d, Y H:i" }}</div>
-                </div>
-              </div>
-            {% empty %}
-              <div class="text-muted">No activity yet.</div>
-            {% endfor %}
+      <!-- Gate Actions -->
+      <div class="card shadow-sm mb-4 action-card">
+        <div class="card-body p-4">
+          <div class="section-header">
+            <i class="bi bi-door-open-fill text-primary"></i>
+            <span>Gate Actions</span>
           </div>
+
+          {% if user.is_authenticated %}
+            {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' or user.is_superuser %}
+
+              {% if visitor.status == 'approved' and not visitor.checked_in %}
+                <div class="alert alert-gate-status can-checkin mb-3">
+                  <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-info-circle-fill text-success"></i>
+                    <strong>Ready for Check-in</strong>
+                  </div>
+                  <small class="text-muted">Visitor has been cleared and can enter the compound.</small>
+                </div>
+
+                <a class="btn btn-success w-100 quick-action-btn mb-2" href="{% url 'visitors:gate_check' visitor.pk %}?action=check_in">
+                  <i class="bi bi-box-arrow-in-right"></i> Check In at Gate
+                </a>
+
+                {% if not visitor.id_number %}
+                  <div class="alert alert-warning py-2 px-3 mb-0">
+                    <small>
+                      <i class="bi bi-exclamation-triangle-fill"></i>
+                      <strong>ID Number Required</strong> - Visitor ID must be collected during check-in.
+                    </small>
+                  </div>
+                {% endif %}
+
+              {% elif visitor.checked_in and not visitor.checked_out %}
+                <div class="alert alert-gate-status in-compound mb-3">
+                  <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-geo-alt-fill text-info"></i>
+                    <strong>Visitor In Compound</strong>
+                  </div>
+                  <small class="text-muted">Visitor is currently inside. Ready for check-out.</small>
+                </div>
+
+                <a class="btn btn-dark w-100 quick-action-btn" href="{% url 'visitors:gate_check' visitor.pk %}?action=check_out">
+                  <i class="bi bi-box-arrow-right"></i> Check Out at Gate
+                </a>
+
+              {% else %}
+                <div class="alert alert-gate-status no-action mb-0">
+                  <small class="text-muted">
+                    <i class="bi bi-info-circle"></i>
+                    {% if visitor.status != 'approved' %}
+                      Visitor must be cleared before check-in.
+                    {% elif visitor.checked_out %}
+                      Visitor has already checked out.
+                    {% else %}
+                      No gate action available at this time.
+                    {% endif %}
+                  </small>
+                </div>
+              {% endif %}
+
+            {% else %}
+              <div class="alert alert-gate-status no-action mb-0">
+                <small class="text-muted">
+                  <i class="bi bi-lock-fill"></i>
+                  Gate actions are available to authorized personnel (Guards, LSA, SOC).
+                </small>
+              </div>
+            {% endif %}
+          {% else %}
+            <div class="alert alert-gate-status no-action mb-0">
+              <small class="text-muted">
+                <i class="bi bi-person-fill"></i>
+                Please sign in to perform gate actions.
+              </small>
+            </div>
+          {% endif %}
         </div>
       </div>
+
+      <!-- Recent Activity Timeline -->
+      {% if visitor.logs.all %}
+        <div class="card shadow-sm">
+          <div class="card-body p-4">
+            <div class="section-header">
+              <i class="bi bi-clock-history text-primary"></i>
+              <span>Recent Activity</span>
+            </div>
+
+            <div class="timeline">
+              {% for log in visitor.logs.all|slice:":8" %}
+                <div class="timeline-item">
+                  <div class="timeline-dot"></div>
+                  <div>
+                    <div class="fw-semibold mb-1">
+                      {{ log.get_action_display|default:log.action }}
+                    </div>
+                    {% if log.description %}
+                      <div class="text-muted small mb-1">{{ log.description }}</div>
+                    {% endif %}
+                    <div class="text-muted small">
+                      <i class="bi bi-clock"></i> {{ log.timestamp|date:"M d, Y" }} at {{ log.timestamp|date:"H:i" }}
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+
+            {% if visitor.logs.count > 8 %}
+              <div class="text-center mt-3">
+                <small class="text-muted">
+                  Showing 8 of {{ visitor.logs.count }} activities
+                </small>
+              </div>
+            {% endif %}
+          </div>
+        </div>
       {% endif %}
+
     </div>
   </div>
 </div>

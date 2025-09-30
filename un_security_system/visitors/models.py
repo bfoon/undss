@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -57,6 +58,11 @@ class Visitor(models.Model):
     checked_out = models.BooleanField(default=False)
     check_out_time = models.DateTimeField(null=True, blank=True)
 
+    visitor_card = models.ForeignKey('VisitorCard', null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name='current_holder')
+    card_issued_at = models.DateTimeField(null=True, blank=True)
+    card_returned_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ['-registered_at']
 
@@ -81,3 +87,22 @@ class VisitorLog(models.Model):
 
     class Meta:
         ordering = ['-timestamp']
+
+class VisitorCard(models.Model):
+    number = models.CharField(max_length=20, unique=True)
+    is_active = models.BooleanField(default=True)       # card exists/usable
+    in_use = models.BooleanField(default=False)         # currently issued
+    issued_to = models.ForeignKey('Visitor', null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name='issued_card_history')
+    issued_at = models.DateTimeField(null=True, blank=True)
+    returned_at = models.DateTimeField(null=True, blank=True)
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name='visitor_cards_issued')
+    returned_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name='visitor_cards_returned')
+
+    class Meta:
+        ordering = ['number']
+
+    def __str__(self):
+        return self.number

@@ -7,13 +7,15 @@ from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count
+from django.db import transaction
+from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
 from django.utils.decorators import method_decorator
 from datetime import timedelta
 import csv
 
-from .models import Visitor, VisitorLog
-from .forms import VisitorForm, VisitorApprovalForm, QuickVisitorCheckForm
+from .models import Visitor, VisitorLog, VisitorCard
+from .forms import VisitorForm, VisitorApprovalForm, QuickVisitorCheckForm,GateCheckForm
 
 
 # Helper functions
@@ -501,7 +503,6 @@ def export_visitors(request):
 @login_required
 def visitor_verify_page(request):
     if not _gate_role(request.user):
-        # Show a friendly 403 page or message on the template instead of raising
         return render(request, "visitors/verify_clearance.html", {"forbidden": True}, status=403)
 
     q = (request.GET.get("q") or "").strip()
@@ -509,15 +510,10 @@ def visitor_verify_page(request):
     matches = []
 
     if q:
-        # Try by numeric id first
         if q.isdigit():
-            try:
-                result = Visitor.objects.select_related().get(pk=int(q))
-            except Visitor.DoesNotExist:
-                result = None
+            result = Visitor.objects.filter(pk=int(q)).first()
 
         if not result:
-            # Try by full name or vehicle plate (if your model has those fields)
             matches = list(
                 Visitor.objects.filter(
                     Q(full_name__icontains=q) |
@@ -527,12 +523,12 @@ def visitor_verify_page(request):
             if len(matches) == 1:
                 result = matches[0]
 
-    # Determine clearance status if we have a single result and it has .approval
+    # Use Visitor.status directly
     is_cleared = False
     status_label = None
-    if result and hasattr(result, "approval") and result.approval:
-        status_label = getattr(result.approval, "status", None)
-        is_cleared = (status_label == "lsa_cleared")
+    if result:
+        status_label = getattr(result, "status", None)
+        is_cleared = (status_label == "approved")
 
     context = {
         "q": q,
@@ -543,6 +539,7 @@ def visitor_verify_page(request):
         "forbidden": False,
     }
     return render(request, "visitors/verify_clearance.html", context)
+
 
 @login_required
 def visitor_verify_lookup_api(request):
@@ -556,7 +553,6 @@ def visitor_verify_lookup_api(request):
     visitor = None
     if q.isdigit():
         visitor = Visitor.objects.filter(pk=int(q)).first()
-
     if not visitor:
         visitor = Visitor.objects.filter(
             Q(full_name__iexact=q) | Q(vehicle_plate__iexact=q)
@@ -565,11 +561,8 @@ def visitor_verify_lookup_api(request):
     if not visitor:
         return JsonResponse({"ok": False, "found": False})
 
-    status = None
-    is_cleared = False
-    if hasattr(visitor, "approval") and visitor.approval:
-        status = getattr(visitor.approval, "status", None)
-        is_cleared = (status == "lsa_cleared")
+    status = getattr(visitor, "status", None)
+    is_cleared = (status == "approved")
 
     data = {
         "ok": True,
@@ -583,8 +576,255 @@ def visitor_verify_lookup_api(request):
         "approval": {
             "status": status,
             "is_cleared": is_cleared,
-            "code": getattr(getattr(visitor, "approval", None), "code", None),
+            "code": None,  # you’re not using separate approval codes anymore
         }
     }
     return JsonResponse(data)
 
+# --- Lightweight approval actions to use on the Visitor detail page ---
+
+@login_required
+def visitor_request_clearance(request, pk):
+    """
+    Any authenticated user can (re-)request clearance by setting status to 'pending'.
+    Useful if a request was cancelled/rejected and needs re-submission.
+    """
+    visitor = get_object_or_404(Visitor, pk=pk)
+    if request.method == "POST":
+        visitor.status = "pending"
+        visitor.save(update_fields=["status"])
+        VisitorLog.objects.create(
+            visitor=visitor,
+            action="request",
+            performed_by=request.user,
+            notes="Clearance (re)requested."
+        )
+        messages.success(request, "Clearance requested from LSA.")
+    return redirect("visitors:visitor_detail", pk=pk)
+
+
+@login_required
+@user_passes_test(is_lsa)
+def visitor_lsa_approve(request, pk):
+    """
+    LSA approves the visitor. Uses your existing model fields: status, approved_by, approval_date.
+    """
+    visitor = get_object_or_404(Visitor, pk=pk)
+    if request.method == "POST":
+        visitor.status = "approved"
+        visitor.approved_by = request.user
+        visitor.approval_date = timezone.now()
+        visitor.save(update_fields=["status", "approved_by", "approval_date"])
+
+        VisitorLog.objects.create(
+            visitor=visitor,
+            action="approval",
+            performed_by=request.user,
+            notes="Approved on visitor detail page."
+        )
+        messages.success(request, f"Visitor {visitor.full_name} approved.")
+    return redirect("visitors:visitor_detail", pk=pk)
+
+
+@login_required
+@user_passes_test(is_lsa)
+def visitor_lsa_reject(request, pk):
+    """
+    LSA rejects the visitor. If you have a rejection reason in a form, you can pass it in POST['notes'].
+    """
+    visitor = get_object_or_404(Visitor, pk=pk)
+    if request.method == "POST":
+        note = request.POST.get("notes", "").strip()
+        visitor.status = "rejected"
+        # If you have a field 'rejection_reason' on Visitor, set it too:
+        if hasattr(visitor, "rejection_reason"):
+            visitor.rejection_reason = note
+            visitor.save(update_fields=["status", "rejection_reason"])
+        else:
+            visitor.save(update_fields=["status"])
+
+        VisitorLog.objects.create(
+            visitor=visitor,
+            action="rejection",
+            performed_by=request.user,
+            notes=note or "Rejected on visitor detail page."
+        )
+        messages.warning(request, f"Visitor {visitor.full_name} rejected.")
+    return redirect("visitors:visitor_detail", pk=pk)
+
+
+@login_required
+def visitor_cancel_request(request, pk):
+    """
+    Allow the original requester, LSA, or superuser to cancel a pending request.
+    Assumes you track the creator on Visitor as 'registered_by' (you already use it).
+    """
+    visitor = get_object_or_404(Visitor, pk=pk)
+    can_cancel = (
+        request.user.is_superuser
+        or getattr(request.user, "role", None) == "lsa"
+        or (visitor.registered_by_id and visitor.registered_by_id == request.user.id)
+    )
+    if not can_cancel:
+        messages.error(request, "You cannot cancel this request.")
+        return redirect("visitors:visitor_detail", pk=pk)
+
+    if request.method == "POST":
+        visitor.status = "cancelled"
+        visitor.save(update_fields=["status"])
+        VisitorLog.objects.create(
+            visitor=visitor,
+            action="cancel",
+            performed_by=request.user,
+            notes="Request cancelled."
+        )
+        messages.info(request, "Visitor request cancelled.")
+    return redirect("visitors:visitor_detail", pk=pk)
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def gate_check_view(request, pk):
+    """
+    Gate workflow:
+      - Only guards/LSA/SOC/superuser can access (_gate_role)
+      - If visitor missing id_number and action=check_in => require it
+      - Enforces status rules: must be 'approved' to check in
+    """
+    if not _gate_role(request.user):
+        messages.error(request, "You don’t have permission to perform gate actions.")
+        return redirect('visitors:visitor_detail', pk=pk)
+
+    visitor = get_object_or_404(Visitor, pk=pk)
+    initial_action = request.GET.get('action')  # optional shortcut from link
+    form = GateCheckForm(request.POST or None, initial={'action': initial_action} if initial_action else None)
+
+    if request.method == 'POST' and form.is_valid():
+        action = form.cleaned_data['action']
+        gate = form.cleaned_data['gate']
+        id_number = form.cleaned_data['id_number']
+        card_number = form.cleaned_data['card_number']
+
+        # for check-in, enforce approval
+        if action == 'check_in':
+            if visitor.status != 'approved':
+                messages.error(request, "Visitor is not approved by LSA.")
+                return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+            # set id_number if missing
+            if not visitor.id_number:
+                visitor.id_number = id_number
+
+            # assign/issue card
+            try:
+                with transaction.atomic():
+                    card = VisitorCard.objects.select_for_update().get(number__iexact=card_number)
+                    if not card.is_active:
+                        messages.error(request, f"Card {card.number} is inactive.")
+                        return redirect('visitors:visitor_detail', pk=visitor.pk)
+                    if card.in_use:
+                        messages.error(request, f"Card {card.number} is already in use.")
+                        return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+                    # issue
+                    card.in_use = True
+                    card.issued_to = visitor
+                    card.issued_at = timezone.now()
+                    card.issued_by = request.user
+                    card.returned_at = None
+                    card.returned_by = None
+                    card.save()
+
+                    visitor.visitor_card = card
+                    visitor.card_issued_at = card.issued_at
+                    visitor.checked_in = True
+                    visitor.check_in_time = timezone.now()
+                    visitor.save()
+
+                # log
+                VisitorLog.objects.create(
+                    visitor=visitor, action='check_in', performed_by=request.user,
+                    gate=gate, notes=f"Issued card {card.number}"
+                )
+                messages.success(request, f"Checked in. Card {card.number} issued.")
+                return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+            except VisitorCard.DoesNotExist:
+                messages.error(request, "Card number not found.")
+                return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+        elif action == 'check_out':
+            # must have been checked in
+            if not visitor.checked_in or visitor.checked_out:
+                messages.error(request, "Visitor not currently in compound.")
+                return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+            # must have a card to collect
+            if not visitor.visitor_card:
+                # still allow checkout, but warn
+                messages.warning(request, "Visitor had no card assigned — checking out anyway.")
+                visitor.checked_out = True
+                visitor.check_out_time = timezone.now()
+                visitor.save()
+                VisitorLog.objects.create(
+                    visitor=visitor, action='check_out', performed_by=request.user,
+                    gate=gate, notes="Checked out (no card on file)"
+                )
+                return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+            # return the card
+            with transaction.atomic():
+                card = VisitorCard.objects.select_for_update().get(pk=visitor.visitor_card_id)
+                card.in_use = False
+                card.returned_at = timezone.now()
+                card.returned_by = request.user
+                card.issued_to = None
+                card.save()
+
+                visitor.card_returned_at = card.returned_at
+                visitor.visitor_card = None
+                visitor.checked_out = True
+                visitor.check_out_time = timezone.now()
+                visitor.save()
+
+            VisitorLog.objects.create(
+                visitor=visitor, action='check_out', performed_by=request.user,
+                gate=gate, notes=f"Collected card {card.number}"
+            )
+            messages.success(request, f"Checked out. Card {card.number} collected.")
+            return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+        else:
+            messages.error(request, "Unknown gate action.")
+            return redirect('visitors:visitor_detail', pk=visitor.pk)
+
+    # GET or invalid POST
+    return render(request, 'visitors/gate_check.html', {
+        'visitor': visitor,
+        'form': form,
+    })
+
+@login_required
+def visitor_card_list(request):
+    # simple view to see cards
+    qs = VisitorCard.objects.all().order_by('number')
+    q = (request.GET.get('q') or '').strip()
+    if q:
+        qs = qs.filter(number__icontains=q)
+    return render(request, 'visitors/card_list.html', {'cards': qs, 'q': q})
+
+@login_required
+def visitor_card_check_api(request):
+    number = (request.GET.get('number') or '').strip()
+    if not number:
+        return JsonResponse({'ok': False, 'error': 'missing_number'}, status=400)
+    try:
+        card = VisitorCard.objects.get(number__iexact=number)
+        return JsonResponse({
+            'ok': True,
+            'exists': True,
+            'is_active': card.is_active,
+            'in_use': card.in_use,
+            'available': card.is_active and not card.in_use,
+        })
+    except VisitorCard.DoesNotExist:
+        return JsonResponse({'ok': True, 'exists': False, 'available': False})

@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Gate Action · {{ visitor.full_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .status-in { background-color: #d1f4e0; color: #0f5132; }
+  .status-out { background-color: #e2e3e5; color: #41464b; }
+  .status-pending { background-color: #fff3cd; color: #664d03; }
+
+  .info-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-section {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .conditional-field {
+    display: none;
+  }
+
+  .conditional-field.show {
+    display: block;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 800px;">
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="mb-1"><i class="bi bi-door-open-fill"></i> Gate Action</h3>
+      <p class="text-muted mb-0">Record visitor entry or exit</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'visitors:visitor_detail' visitor.pk %}">
+      <i class="bi bi-arrow-left"></i> Back to Visitor
+    </a>
+  </div>
+
+  <!-- Visitor Info Card -->
+  <div class="card info-card shadow-sm">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <h5 class="mb-2">{{ visitor.full_name }}</h5>
+          <div class="opacity-75">
+            {% if visitor.company %}
+              <i class="bi bi-building"></i> {{ visitor.company }}
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          {% if visitor.checked_in and not visitor.checked_out %}
+            <span class="status-badge status-in">
+              <i class="bi bi-check-circle-fill"></i> In Compound
+            </span>
+          {% elif visitor.checked_out %}
+            <span class="status-badge status-out">
+              <i class="bi bi-dash-circle-fill"></i> Checked Out
+            </span>
+          {% else %}
+            <span class="status-badge status-pending">
+              <i class="bi bi-clock-fill"></i> Pending Check-in
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card shadow-sm">
+    <div class="card-body p-4">
+      {% if form.errors %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <strong>Please correct the following errors:</strong>
+          <ul class="mb-0 mt-2">
+            {% for field in form %}
+              {% for error in field.errors %}
+                <li>{{ field.label }}: {{ error }}</li>
+              {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endif %}
+
+      <form method="post" novalidate id="gateActionForm">
+        {% csrf_token %}
+
+        <!-- Primary Action -->
+        <div class="form-section">
+          <h6 class="mb-3"><i class="bi bi-lightning-charge-fill"></i> Action Details</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.action.id_for_label }}" class="form-label fw-semibold">
+                Action Type <span class="text-danger">*</span>
+              </label>
+              {{ form.action }}
+              {% if form.action.help_text %}
+                <div class="form-text">{{ form.action.help_text }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.gate.id_for_label }}" class="form-label fw-semibold">
+                Gate <span class="text-danger">*</span>
+              </label>
+              {{ form.gate }}
+              {% if form.gate.help_text %}
+                <div class="form-text">{{ form.gate.help_text }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Check-in Requirements -->
+        <div class="form-section conditional-field" id="checkinFields">
+          <h6 class="mb-3"><i class="bi bi-person-badge-fill"></i> Check-in Requirements</h6>
+          <div class="alert alert-info mb-3">
+            <i class="bi bi-info-circle-fill"></i>
+            <small>The following information is required for check-in if not already provided.</small>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.id_number.id_for_label }}" class="form-label fw-semibold">
+                Visitor ID Number
+                {% if not visitor.id_number %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              {{ form.id_number }}
+              <div class="form-text">
+                {% if visitor.id_number %}
+                  Current: {{ visitor.id_number }}
+                {% else %}
+                  Required for first check-in
+                {% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.card_number.id_for_label }}" class="form-label fw-semibold">
+                Access Card Number <span class="text-danger">*</span>
+              </label>
+              {{ form.card_number }}
+              <div class="form-text">Assign an available access card</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-primary btn-lg" type="submit">
+            <i class="bi bi-check-circle-fill"></i> Process Action
+          </button>
+          <a class="btn btn-outline-secondary btn-lg" href="{% url 'visitors:visitor_detail' visitor.pk %}">
+            <i class="bi bi-x-circle"></i> Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Help Text -->
+  <div class="card border-0 bg-light mt-3">
+    <div class="card-body">
+      <small class="text-muted">
+        <i class="bi bi-lightbulb-fill"></i>
+        <strong>Tip:</strong> Use the quick action buttons on the visitor detail page to pre-fill check-in or check-out actions automatically.
+      </small>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Dynamic form field visibility based on action
+  document.addEventListener('DOMContentLoaded', function() {
+    const actionSelect = document.getElementById('{{ form.action.id_for_label }}');
+    const checkinFields = document.getElementById('checkinFields');
+
+    function toggleCheckinFields() {
+      if (actionSelect && checkinFields) {
+        const selectedAction = actionSelect.value;
+        if (selectedAction === 'checkin' || selectedAction === 'check_in') {
+          checkinFields.classList.add('show');
+        } else {
+          checkinFields.classList.remove('show');
+        }
+      }
+    }
+
+    if (actionSelect) {
+      actionSelect.addEventListener('change', toggleCheckinFields);
+      toggleCheckinFields(); // Initial check
+    }
+  });
+</script>
+{% endblock %}
