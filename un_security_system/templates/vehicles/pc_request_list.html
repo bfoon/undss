@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if mine|default:False %}My Parking Card Requests
+  {% elif pending|default:False %}Pending Parking Card Requests
+  {% else %}Parking Card Requests{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  {# Header #}
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="mb-1">
+        <i class="bi bi-{% if mine|default:False %}person-badge{% elif pending|default:False %}clock-history{% else %}list-check{% endif %} text-primary me-2"></i>
+        {% if mine|default:False %}
+          My Parking Card Requests
+        {% elif pending|default:False %}
+          Pending Parking Card Requests
+        {% else %}
+          Parking Card Requests
+        {% endif %}
+      </h3>
+      <p class="text-muted mb-0 small">
+        {% if mine|default:False %}
+          Track the status of your parking card applications
+        {% elif pending|default:False %}
+          Review and process pending requests
+        {% else %}
+          View all parking card requests
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      {% if mine|default:False %}
+        <a class="btn btn-primary" href="{% url 'vehicles:pc_request_new' %}">
+          <i class="bi bi-plus-circle me-2"></i>New Request
+        </a>
+      {% endif %}
+      {% if pending|default:False %}
+        <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_list' %}">
+          <i class="bi bi-credit-card me-2"></i>Issued Cards
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Flash messages #}
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <i class="bi bi-{% if message.tags == 'success' %}check-circle{% else %}exclamation-triangle{% endif %} me-2"></i>
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {# Filters #}
+  <div class="card shadow-sm mb-3 border-0">
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-6">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control border-start-0" id="searchInput"
+                   placeholder="Search by owner, plate, or department...">
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="d-flex gap-2 justify-content-md-end">
+            <select class="form-select form-select-sm" id="statusFilter" style="width:auto;">
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearFilters()">
+              <i class="bi bi-arrow-counterclockwise"></i> Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Table #}
+  <div class="card shadow-sm border-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="requestsTable">
+        <thead class="table-light">
+          <tr>
+            <th class="px-3">ID</th>
+            <th>Owner Details</th>
+            <th>Vehicle Info</th>
+            <th>Department</th>
+            <th>Requested</th>
+            <th>Expiry</th>
+            <th>Status</th>
+            <th class="text-end px-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in requests %}
+            <tr class="request-row"
+                data-status="{{ r.status|default_if_none:'' }}"
+                data-search="{{ r.owner_name|default_if_none:''|lower }} {{ r.vehicle_plate|default_if_none:''|lower }} {{ r.department|default_if_none:''|lower }}">
+              <td class="px-3">
+                <span class="badge bg-light text-dark border">#{{ r.id }}</span>
+              </td>
+              <td>
+                <div class="fw-semibold">{{ r.owner_name|default:"—" }}</div>
+                <small class="text-muted">
+                  <i class="bi bi-person-vcard me-1"></i>{{ r.owner_id|default:"—" }}
+                </small>
+                {% if r.phone %}
+                  <br><small class="text-muted">
+                    <i class="bi bi-telephone me-1"></i>{{ r.phone }}
+                  </small>
+                {% endif %}
+              </td>
+              <td>
+                <div class="fw-semibold">{{ r.vehicle_plate|default:"—" }}</div>
+                <small class="text-muted">
+                  {{ r.vehicle_make|default:"" }} {{ r.vehicle_model|default:"" }}
+                  {% if r.vehicle_color %}
+                    <br><i class="bi bi-palette me-1"></i>{{ r.vehicle_color }}
+                  {% endif %}
+                </small>
+              </td>
+              <td>
+                {% if r.department %}
+                  <span class="badge bg-secondary bg-opacity-10 text-dark">{{ r.department }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <small>
+                  {{ r.requested_at|date:"M d, Y" }}<br>
+                  <span class="text-muted">{{ r.requested_at|date:"g:i A" }}</span>
+                </small>
+              </td>
+              <td>
+                {% if r.requested_expiry %}
+                  <small>{{ r.requested_expiry|date:"M d, Y" }}</small>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if r.status == 'pending' %}
+                  <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Pending</span>
+                {% elif r.status == 'approved' %}
+                  <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Approved</span>
+                {% elif r.status == 'rejected' %}
+                  <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Rejected</span>
+                {% else %}
+                  <span class="badge bg-secondary"><i class="bi bi-archive me-1"></i>Cancelled</span>
+                {% endif %}
+              </td>
+              <td class="text-end px-3">
+                <div class="btn-group btn-group-sm">
+                  <button
+                  class="btn btn-outline-primary btn-sm"
+                  data-bs-toggle="modal"
+                  data-bs-target="#requestDetailsModal"
+                  title="View Details"
+                  data-id="{{ r.id }}"
+                  data-owner_name="{{ r.owner_name|default:'' }}"
+                  data-owner_id="{{ r.owner_id|default:'' }}"
+                  data-phone="{{ r.phone|default:'' }}"
+                  data-department="{{ r.department|default:'' }}"
+                  data-plate="{{ r.vehicle_plate|default:'' }}"
+                  data-make="{{ r.vehicle_make|default:'' }}"
+                  data-model="{{ r.vehicle_model|default:'' }}"
+                  data-color="{{ r.vehicle_color|default:'' }}"
+                  data-status="{{ r.status }}"
+                  data-requested_at="{{ r.requested_at|date:'F j, Y g:i A' }}"
+                  data-requested_expiry="{{ r.requested_expiry|date:'F j, Y'|default:'Not specified' }}"
+                >
+                  <i class="bi bi-eye"></i>
+                </button>
+
+                  {% if mine|default:False and r.status == 'pending' %}
+                    <a class="btn btn-outline-danger btn-sm"
+                       href="{% url 'vehicles:pc_request_cancel' r.pk %}"
+                       onclick="return confirm('Are you sure you want to cancel this request?')"
+                       title="Cancel Request">
+                      <i class="bi bi-x-circle"></i>
+                    </a>
+                  {% endif %}
+                </div>
+
+                {% if pending|default:False and r.status == 'pending' and user.is_authenticated and user.role == 'lsa' %}
+                  <div class="btn-group btn-group-sm ms-2">
+                    <form method="post" action="{% url 'vehicles:pc_request_approve' r.pk %}" class="d-inline">
+                      {% csrf_token %}
+                      <button class="btn btn-success btn-sm"
+                              onclick="return confirm('Approve this request?')"
+                              title="Approve">
+                        <i class="bi bi-check-circle"></i>
+                      </button>
+                    </form>
+                    <form method="post" action="{% url 'vehicles:pc_request_reject' r.pk %}" class="d-inline">
+                      {% csrf_token %}
+                      <button class="btn btn-danger btn-sm"
+                              onclick="return confirm('Reject this request?')"
+                              title="Reject">
+                        <i class="bi bi-x-octagon"></i>
+                      </button>
+                    </form>
+                  </div>
+                {% endif %}
+              </td>
+            </tr>
+
+
+          {% empty %}
+            <tr>
+              <td colspan="8" class="text-center py-5">
+                <div class="text-muted">
+                  <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                  <h5>No Requests Found</h5>
+                  <p class="mb-3">
+                    {% if mine|default:False %}
+                      You haven't submitted any parking card requests yet.
+                    {% else %}
+                      There are no parking card requests to display.
+                    {% endif %}
+                  </p>
+                  {% if mine|default:False %}
+                    <a href="{% url 'vehicles:pc_request_new' %}" class="btn btn-primary">
+                      <i class="bi bi-plus-circle me-2"></i>Create New Request
+                    </a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+
+
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
+  <div class="mt-3 text-muted small">
+    Showing <span id="resultCount">{{ requests|length }}</span> of {{ requests|length }} requests
+  </div>
+</div>
+
+
+
+<style>
+  .table > :not(caption) > * > * { padding: 1rem 0.75rem; }
+  .table-hover tbody tr:hover { background-color: rgba(13,110,253,.05); transition: background-color .2s; }
+  .btn-group-sm > .btn { padding: .25rem .5rem; }
+  .card { border-radius: .5rem; overflow: hidden; }
+  .badge { padding: .35em .65em; font-weight: 500; }
+  .modal-content { border: none; box-shadow: 0 .5rem 1rem rgba(0,0,0,.15); }
+  .form-control:focus, .form-select:focus { border-color: #86b7fe; box-shadow: 0 0 0 .25rem rgba(13,110,253,.15); }
+  .input-group-text { background-color: transparent; }
+</style>
+
+<script>
+  (function() {
+    const searchInput = document.getElementById('searchInput');
+    const statusFilter = document.getElementById('statusFilter');
+    const tableRows = document.querySelectorAll('.request-row');
+    const resultCount = document.getElementById('resultCount');
+
+    function filterTable() {
+      const searchTerm = (searchInput.value || '').toLowerCase();
+      const statusValue = (statusFilter.value || '').toLowerCase();
+      let visible = 0;
+
+      tableRows.forEach(row => {
+        const searchData = (row.getAttribute('data-search') || '');
+        const rowStatus = (row.getAttribute('data-status') || '');
+
+        const matchesSearch = !searchTerm || searchData.includes(searchTerm);
+        const matchesStatus = !statusValue || rowStatus === statusValue;
+
+        if (matchesSearch && matchesStatus) {
+          row.style.display = '';
+          visible++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      resultCount.textContent = visible;
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterTable);
+    if (statusFilter) statusFilter.addEventListener('change', filterTable);
+
+    window.clearFilters = function() {
+      if (searchInput) searchInput.value = '';
+      if (statusFilter) statusFilter.value = '';
+      filterTable();
+    };
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Request Parking Card{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+  <!-- Success/Error Messages -->
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <i class="bi bi-{% if message.tags == 'success' %}check-circle{% else %}exclamation-triangle{% endif %} me-2"></i>
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-primary text-white py-3">
+      <div class="d-flex align-items-center">
+        <i class="bi bi-credit-card-2-front fs-4 me-2"></i>
+        <h4 class="mb-0">Request Parking Card</h4>
+      </div>
+      <small class="text-white-50">Fill out the form below to request a new parking card</small>
+    </div>
+
+    <div class="card-body p-4">
+      <form method="post" id="parkingCardForm" class="needs-validation" novalidate>
+        {% csrf_token %}
+
+        <!-- Personal Information Section -->
+        <div class="mb-4">
+          <h5 class="border-bottom pb-2 mb-3">
+            <i class="bi bi-person-circle text-primary me-2"></i>Personal Information
+          </h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.owner_name.id_for_label }}" class="form-label fw-semibold">
+                Owner Name <span class="text-danger">*</span>
+              </label>
+              {{ form.owner_name }}
+              {% if form.owner_name.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.owner_name.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">Full legal name</small>
+            </div>
+
+            <div class="col-md-6">
+              <label for="{{ form.owner_id.id_for_label }}" class="form-label fw-semibold">
+                Owner ID <span class="text-danger">*</span>
+              </label>
+              {{ form.owner_id }}
+              {% if form.owner_id.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.owner_id.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">Employee or student ID number</small>
+            </div>
+
+            <div class="col-md-6">
+              <label for="{{ form.phone.id_for_label }}" class="form-label fw-semibold">
+                Phone Number <span class="text-danger">*</span>
+              </label>
+              {{ form.phone }}
+              {% if form.phone.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.phone.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">Contact number</small>
+            </div>
+
+            <div class="col-md-6">
+              <label for="{{ form.department.id_for_label }}" class="form-label fw-semibold">
+                Department <span class="text-danger">*</span>
+              </label>
+              {{ form.department }}
+              {% if form.department.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.department.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">Your department or faculty</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vehicle Information Section -->
+        <div class="mb-4">
+          <h5 class="border-bottom pb-2 mb-3">
+            <i class="bi bi-car-front text-primary me-2"></i>Vehicle Information
+          </h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.vehicle_make.id_for_label }}" class="form-label fw-semibold">
+                Vehicle Make <span class="text-danger">*</span>
+              </label>
+              {{ form.vehicle_make }}
+              {% if form.vehicle_make.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.vehicle_make.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">e.g., Toyota, Ford, Honda</small>
+            </div>
+
+            <div class="col-md-6">
+              <label for="{{ form.vehicle_model.id_for_label }}" class="form-label fw-semibold">
+                Vehicle Model <span class="text-danger">*</span>
+              </label>
+              {{ form.vehicle_model }}
+              {% if form.vehicle_model.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.vehicle_model.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">e.g., Camry, F-150, Civic</small>
+            </div>
+
+            <div class="col-md-6">
+              <label for="{{ form.vehicle_plate.id_for_label }}" class="form-label fw-semibold">
+                License Plate <span class="text-danger">*</span>
+              </label>
+              {{ form.vehicle_plate }}
+              {% if form.vehicle_plate.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.vehicle_plate.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">Vehicle registration number</small>
+            </div>
+
+            <div class="col-md-6">
+              <label for="{{ form.vehicle_color.id_for_label }}" class="form-label fw-semibold">
+                Vehicle Color <span class="text-danger">*</span>
+              </label>
+              {{ form.vehicle_color }}
+              {% if form.vehicle_color.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.vehicle_color.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">Primary color of the vehicle</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Request Details Section -->
+        <div class="mb-4">
+          <h5 class="border-bottom pb-2 mb-3">
+            <i class="bi bi-calendar-check text-primary me-2"></i>Request Details
+          </h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.requested_expiry.id_for_label }}" class="form-label fw-semibold">
+                Requested Expiry Date <span class="text-danger">*</span>
+              </label>
+              {{ form.requested_expiry }}
+              {% if form.requested_expiry.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.requested_expiry.errors.0 }}
+                </div>
+              {% endif %}
+              <small class="form-text text-muted">When should this card expire?</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Non-field errors -->
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <!-- Action Buttons -->
+        <div class="d-flex gap-2 pt-3 border-top">
+          <button class="btn btn-primary px-4" type="submit">
+            <i class="bi bi-send me-2"></i>Submit Request
+          </button>
+          <a class="btn btn-outline-secondary px-4" href="{% url 'vehicles:my_pc_requests' %}">
+            <i class="bi bi-list-ul me-2"></i>My Requests
+          </a>
+          <a class="btn btn-outline-secondary ms-auto" href="#">
+            <i class="bi bi-x-circle me-2"></i>Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Info Card -->
+  <div class="card mt-4 border-info">
+    <div class="card-body">
+      <h6 class="card-title text-info">
+        <i class="bi bi-info-circle me-2"></i>Important Information
+      </h6>
+      <ul class="mb-0 small">
+        <li>All fields marked with <span class="text-danger">*</span> are required</li>
+        <li>Processing typically takes 3-5 business days</li>
+        <li>You'll receive an email notification when your card is ready</li>
+        <li>Ensure all vehicle information is accurate to avoid delays</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<style>
+  .form-control, .form-select {
+    border-radius: 0.375rem;
+    border: 1px solid #dee2e6;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+
+  .form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  }
+
+  .card {
+    border-radius: 0.5rem;
+  }
+
+  .card-header {
+    border-radius: 0.5rem 0.5rem 0 0 !important;
+  }
+
+  .btn {
+    transition: all 0.2s ease-in-out;
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+</style>
+
+<script>
+  // Form validation
+  (function() {
+    'use strict';
+    const form = document.getElementById('parkingCardForm');
+
+    form.addEventListener('submit', function(event) {
+      if (!form.checkValidity()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      form.classList.add('was-validated');
+    }, false);
+  })();
+</script>
+{% endblock %}

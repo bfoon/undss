@@ -178,3 +178,49 @@ class AssetExitItem(models.Model):
 
     def __str__(self):
         return f"{self.description} x{self.quantity}"
+
+
+class ParkingCardRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    # who is requesting (usually a staff member)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='parking_card_requests'
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+
+    # decision
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='parking_card_request_decisions'
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_notes = models.TextField(blank=True)
+
+    # card holder details (often same as requester, but editable)
+    owner_name = models.CharField(max_length=150)
+    owner_id = models.CharField(max_length=50, help_text="Employee ID or National ID")
+    phone = models.CharField(max_length=30, blank=True)
+    department = models.CharField(max_length=100, blank=True)
+
+    # vehicle details
+    vehicle_make = models.CharField(max_length=100, blank=True)
+    vehicle_model = models.CharField(max_length=100, blank=True)
+    vehicle_plate = models.CharField(max_length=30)
+    vehicle_color = models.CharField(max_length=50, blank=True)
+
+    # desired expiry
+    requested_expiry = models.DateField()
+
+    def __str__(self):
+        return f"PC Request #{self.id} - {self.owner_name} ({self.vehicle_plate}) - {self.get_status_display()}"

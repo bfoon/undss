@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
 import csv
-from .models import Vehicle, VehicleMovement, ParkingCard
+from .models import Vehicle, VehicleMovement, ParkingCard, ParkingCardRequest
 
 # Try to import optional models without crashing
 try:
@@ -170,3 +170,10 @@ if AssetExit:
                     _get(ax, "signed_in_at", default=""),
                 ])
             return resp
+
+@admin.register(ParkingCardRequest)
+class ParkingCardRequestAdmin(admin.ModelAdmin):
+    list_display = ('id','owner_name','vehicle_plate','status','requested_by','requested_at','decided_by','decided_at')
+    list_filter = ('status','requested_at','decided_at','department')
+    search_fields = ('owner_name','owner_id','vehicle_plate','requested_by__username','department')
+    date_hierarchy = 'requested_at'

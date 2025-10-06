@@ -4,12 +4,13 @@ from django.db import models
 
 class User(AbstractUser):
     ROLE_CHOICES = [
+        ('requester', 'Requester (Staff)'),  # <-- NEW
         ('data_entry', 'Data Entry (Security Guard)'),
         ('lsa', 'Local Security Associate'),
         ('soc', 'Security Operations Center'),
     ]
 
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='data_entry')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='requester')
     phone = models.CharField(max_length=20, blank=True)
     employee_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
 

@@ -3,7 +3,7 @@ from django.utils import timezone
 from crispy_forms.helper import FormHelper
 from django.forms import inlineformset_factory
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column, HTML
-from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AssetExitItem
+from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AssetExitItem, ParkingCardRequest
 
 
 class VehicleForm(forms.ModelForm):
@@ -274,3 +274,26 @@ AssetExitItemFormSet = inlineformset_factory(
     min_num=1,
     validate_min=True,
 )
+
+class ParkingCardRequestForm(forms.ModelForm):
+    class Meta:
+        model = ParkingCardRequest
+        fields = [
+            'owner_name', 'owner_id', 'phone', 'department',
+            'vehicle_make', 'vehicle_model', 'vehicle_plate', 'vehicle_color',
+            'requested_expiry'
+        ]
+        widgets = {
+            'requested_expiry': forms.DateInput(attrs={'type': 'date'}),
+            'vehicle_plate': forms.TextInput(attrs={'style': 'text-transform: uppercase;'}),
+        }
+
+    def clean_vehicle_plate(self):
+        p = self.cleaned_data.get('vehicle_plate', '')
+        return p.upper().strip()
+
+    def clean_requested_expiry(self):
+        d = self.cleaned_data.get('requested_expiry')
+        if d and d <= timezone.now().date():
+            raise forms.ValidationError("Expiry must be a future date.")
+        return d

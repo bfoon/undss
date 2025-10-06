@@ -60,6 +60,13 @@ urlpatterns = [
     path('parking-cards/<int:pk>/duplicate/', views.parking_card_duplicate, name='parking_card_duplicate'),
     path('parking-cards/<int:pk>/delete/', views.parking_card_delete, name='parking_card_delete'),
 
+    # Parking Card Requests (staff → LSA)
+    path('parking-cards/request/new/', views.pc_request_new, name='pc_request_new'),
+    path('parking-cards/request/my/', views.my_pc_requests, name='my_pc_requests'),
+    path('parking-cards/requests/pending/', views.pc_requests_pending, name='pc_requests_pending'),   # LSA
+    path('parking-cards/request/<int:pk>/approve/', views.pc_request_approve, name='pc_request_approve'),  # LSA
+    path('parking-cards/request/<int:pk>/reject/', views.pc_request_reject, name='pc_request_reject'),     # LSA
+    path('parking-cards/request/<int:pk>/cancel/', views.pc_request_cancel, name='pc_request_cancel'),
 
     # Guard verify + sign in/out
     path('asset-exit/verify/', views.asset_exit_verify_page, name='asset_exit_verify_page'),

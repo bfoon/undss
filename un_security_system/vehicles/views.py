@@ -8,8 +8,8 @@ from django.utils import timezone
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.db.models import Q, Count
 import csv
-from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AgencyApprover
-from .forms import VehicleForm, ParkingCardForm, VehicleMovementForm, QuickVehicleCheckForm, AssetExitForm, AssetExitItemFormSet
+from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AgencyApprover, ParkingCardRequest
+from .forms import VehicleForm, ParkingCardForm, VehicleMovementForm, QuickVehicleCheckForm, AssetExitForm, AssetExitItemFormSet, ParkingCardRequestForm
 
 def is_lsa(u): return u.is_authenticated and (getattr(u, 'role', '') == 'lsa' or u.is_superuser)
 def is_data_entry(u): return u.is_authenticated and (getattr(u, 'role', '') == 'data_entry' or u.is_superuser)
@@ -756,3 +756,97 @@ def parking_card_delete(request, pk):
 
     # GET: show confirm page
     return render(request, 'vehicles/parking_card_confirm_delete.html', {'card': card})
+
+
+@login_required
+def pc_request_new(request):
+    """Requester creates a new Parking Card request"""
+    if request.method == 'POST':
+        form = ParkingCardRequestForm(request.POST)
+        if form.is_valid():
+            req = form.save(commit=False)
+            req.requested_by = request.user
+            req.status = 'pending'
+            req.save()
+            messages.success(request, "Parking card request submitted. Awaiting LSA approval.")
+            return redirect('vehicles:my_pc_requests')
+    else:
+        # prefill with requester data
+        initial = {
+            'owner_name': request.user.get_full_name() or request.user.username,
+            'owner_id': getattr(request.user, 'employee_id', '') or '',
+            'phone': getattr(request.user, 'phone', '') or '',
+            'department': '',
+        }
+        form = ParkingCardRequestForm(initial=initial)
+
+    return render(request, 'vehicles/pc_request_form.html', {'form': form})
+
+
+@login_required
+def my_pc_requests(request):
+    """Requester can see his/her own requests"""
+    qs = ParkingCardRequest.objects.filter(requested_by=request.user).order_by('-requested_at')
+    return render(request, 'vehicles/pc_request_list.html', {'requests': qs, 'mine': True})
+
+
+@user_passes_test(is_lsa)
+def pc_requests_pending(request):
+    """LSA dashboard: all pending requests"""
+    qs = ParkingCardRequest.objects.filter(status='pending').order_by('requested_at')
+    return render(request, 'vehicles/pc_request_list.html', {'requests': qs, 'pending': True})
+
+
+@user_passes_test(is_lsa)
+def pc_request_approve(request, pk):
+    req = get_object_or_404(ParkingCardRequest, pk=pk, status='pending')
+    # Create a ParkingCard on approve
+    card = ParkingCard.objects.create(
+        card_number=f"PC-{req.id:05d}",
+        owner_name=req.owner_name,
+        owner_id=req.owner_id,
+        phone=req.phone,
+        department=req.department,
+        vehicle_make=req.vehicle_make,
+        vehicle_model=req.vehicle_model,
+        vehicle_plate=req.vehicle_plate,
+        vehicle_color=req.vehicle_color,
+        expiry_date=req.requested_expiry,
+        created_by=request.user,                         # LSA issuing the card
+        issued_date=timezone.now().date(),
+        is_active=True,
+    )
+    # mark request
+    req.status = 'approved'
+    req.decided_by = request.user
+    req.decided_at = timezone.now()
+    req.decision_notes = f"Issued card {card.card_number}"
+    req.save()
+
+    messages.success(request, f"Request approved. Card {card.card_number} issued.")
+    return redirect('vehicles:pc_requests_pending')
+
+
+@user_passes_test(is_lsa)
+def pc_request_reject(request, pk):
+    req = get_object_or_404(ParkingCardRequest, pk=pk, status='pending')
+    req.status = 'rejected'
+    req.decided_by = request.user
+    req.decided_at = timezone.now()
+    req.decision_notes = request.POST.get('reason', '')[:500]
+    req.save()
+    messages.warning(request, "Request rejected.")
+    return redirect('vehicles:pc_requests_pending')
+
+
+@login_required
+def pc_request_cancel(request, pk):
+    req = get_object_or_404(ParkingCardRequest, pk=pk, requested_by=request.user)
+    if req.status == 'pending':
+        req.status = 'cancelled'
+        req.decided_by = request.user
+        req.decided_at = timezone.now()
+        req.decision_notes = 'Cancelled by requester'
+        req.save()
+        messages.info(request, "Request cancelled.")
+    return redirect('vehicles:my_pc_requests')
