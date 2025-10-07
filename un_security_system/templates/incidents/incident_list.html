@@ -1,0 +1,735 @@
+{% extends "base.html" %}
+{% block title %}My Security Incidents - Incident Management{% endblock %}
+
+{% block content %}
+<div class="incidents-list-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 1400px;">
+
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+              <li class="breadcrumb-item"><a href="/">Home</a></li>
+              <li class="breadcrumb-item active" aria-current="page">My Incidents</li>
+            </ol>
+          </nav>
+          <h2 class="page-title mb-1">
+            <i class="bi bi-clipboard-pulse text-primary me-2"></i>
+            My Security Incidents
+          </h2>
+          <p class="text-muted mb-0">Track and manage your reported security incidents</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+          <a class="btn btn-primary" href="{% url 'incidents:new' %}">
+            <i class="bi bi-plus-circle me-2"></i>Report New Incident
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-primary">
+            <i class="bi bi-clipboard-data"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Total Incidents</div>
+            <div class="stat-value">{{ incidents|length }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-warning">
+            <i class="bi bi-exclamation-circle"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">New</div>
+            <div class="stat-value">0</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-info">
+            <i class="bi bi-hourglass-split"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">In Review</div>
+            <div class="stat-value">0</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-success">
+            <i class="bi bi-check-circle"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Resolved</div>
+            <div class="stat-value">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="card filter-card shadow-sm mb-4">
+      <div class="card-body p-3">
+        <form method="get" id="filterForm" class="row g-3 align-items-end">
+          <div class="col-lg-4 col-md-6">
+            <label class="form-label small fw-semibold mb-2">
+              <i class="bi bi-search me-1"></i>Search
+            </label>
+            <input type="text"
+                   name="q"
+                   value="{{ request.GET.q }}"
+                   class="form-control"
+                   placeholder="Search by title or ID..."
+                   id="searchInput">
+          </div>
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label small fw-semibold mb-2">
+              <i class="bi bi-flag me-1"></i>Severity
+            </label>
+            <select name="severity" class="form-select" id="severityFilter">
+              <option value="">All Severity</option>
+              <option value="low" {% if request.GET.severity == 'low' %}selected{% endif %}>Low</option>
+              <option value="medium" {% if request.GET.severity == 'medium' %}selected{% endif %}>Medium</option>
+              <option value="high" {% if request.GET.severity == 'high' %}selected{% endif %}>High</option>
+              <option value="critical" {% if request.GET.severity == 'critical' %}selected{% endif %}>Critical</option>
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label small fw-semibold mb-2">
+              <i class="bi bi-toggle-on me-1"></i>Status
+            </label>
+            <select name="status" class="form-select" id="statusFilter">
+              <option value="">All Status</option>
+              <option value="new" {% if request.GET.status == 'new' %}selected{% endif %}>New</option>
+              <option value="in_review" {% if request.GET.status == 'in_review' %}selected{% endif %}>In Review</option>
+              <option value="resolved" {% if request.GET.status == 'resolved' %}selected{% endif %}>Resolved</option>
+              <option value="dismissed" {% if request.GET.status == 'dismissed' %}selected{% endif %}>Dismissed</option>
+            </select>
+          </div>
+          <div class="col-lg-4 col-md-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-grow-1">
+              <i class="bi bi-funnel me-2"></i>Apply Filters
+            </button>
+            <a href="{% url 'incidents:my_incidents' %}" class="btn btn-outline-secondary">
+              <i class="bi bi-x-circle"></i>
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Incidents Table Card -->
+    <div class="card table-card shadow-sm">
+      <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-list-ul me-2"></i>All Incidents
+          </h5>
+          <span class="badge bg-primary">
+            {{ incidents|length }} Incident{{ incidents|length|pluralize }}
+          </span>
+        </div>
+      </div>
+
+      {% if incidents %}
+        <div class="table-responsive">
+          <table class="table incidents-table mb-0">
+            <thead>
+              <tr>
+                <th style="width: 8%;">ID</th>
+                <th style="width: 35%;">Title</th>
+                <th style="width: 12%;">Severity</th>
+                <th style="width: 15%;">Status</th>
+                <th style="width: 18%;">Created</th>
+                <th style="width: 12%;" class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in incidents %}
+                <tr class="incident-row">
+                  <td>
+                    <span class="incident-id">
+                      <i class="bi bi-hash text-muted"></i>{{ i.id }}
+                    </span>
+                  </td>
+                  <td>
+                    <a href="{% url 'incidents:incident_detail' i.pk %}" class="incident-title-link">
+                      <strong>{{ i.title|truncatewords:10 }}</strong>
+                    </a>
+                  </td>
+                  <td>
+                    {% if i.severity == 'critical' %}
+                      <span class="severity-badge severity-critical">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Critical
+                      </span>
+                    {% elif i.severity == 'high' %}
+                      <span class="severity-badge severity-high">
+                        <i class="bi bi-exclamation-circle-fill me-1"></i>High
+                      </span>
+                    {% elif i.severity == 'medium' %}
+                      <span class="severity-badge severity-medium">
+                        <i class="bi bi-info-circle-fill me-1"></i>Medium
+                      </span>
+                    {% else %}
+                      <span class="severity-badge severity-low">
+                        <i class="bi bi-dash-circle-fill me-1"></i>Low
+                      </span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if i.status == 'new' %}
+                      <span class="status-badge status-new">
+                        <i class="bi bi-circle-fill me-1"></i>New
+                      </span>
+                    {% elif i.status == 'in_review' %}
+                      <span class="status-badge status-review">
+                        <i class="bi bi-hourglass-split me-1"></i>In Review
+                      </span>
+                    {% elif i.status == 'resolved' %}
+                      <span class="status-badge status-resolved">
+                        <i class="bi bi-check-circle-fill me-1"></i>Resolved
+                      </span>
+                    {% else %}
+                      <span class="status-badge status-dismissed">
+                        <i class="bi bi-x-circle-fill me-1"></i>Dismissed
+                      </span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="date-info">
+                      <div class="date-primary">{{ i.created_at|date:"M d, Y" }}</div>
+                      <div class="date-time">{{ i.created_at|date:"g:i A" }}</div>
+                    </div>
+                  </td>
+                  <td class="text-end">
+                    <a href="{% url 'incidents:incident_detail' i.pk %}"
+                       class="btn btn-sm btn-outline-primary"
+                       data-bs-toggle="tooltip"
+                       title="View Details">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card-body empty-state text-center py-5">
+          <div class="empty-icon mb-3">
+            <i class="bi bi-clipboard-pulse"></i>
+          </div>
+          <h5 class="empty-title">No Incidents Found</h5>
+          <p class="empty-text text-muted mb-4">
+            {% if request.GET.q or request.GET.severity or request.GET.status %}
+              No incidents match your search criteria. Try adjusting your filters.
+            {% else %}
+              You haven't reported any security incidents yet.
+            {% endif %}
+          </p>
+          {% if not request.GET.q and not request.GET.severity and not request.GET.status %}
+            <a href="{% url 'incidents:new' %}" class="btn btn-primary">
+              <i class="bi bi-plus-circle me-2"></i>Report First Incident
+            </a>
+          {% else %}
+            <a href="{% url 'incidents:my_incidents' %}" class="btn btn-outline-secondary">
+              <i class="bi bi-x-circle me-2"></i>Clear Filters
+            </a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Info Card -->
+    <div class="card info-help-card shadow-sm mt-4">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <h6 class="mb-3 fw-semibold">
+              <i class="bi bi-info-circle me-2"></i>Understanding Incident Status
+            </h6>
+            <div class="d-flex flex-wrap gap-3">
+              <div class="status-legend-item">
+                <span class="status-badge status-new me-2">New</span>
+                <span class="small">Reported, awaiting review</span>
+              </div>
+              <div class="status-legend-item">
+                <span class="status-badge status-review me-2">In Review</span>
+                <span class="small">Under investigation</span>
+              </div>
+              <div class="status-legend-item">
+                <span class="status-badge status-resolved me-2">Resolved</span>
+                <span class="small">Issue addressed</span>
+              </div>
+              <div class="status-legend-item">
+                <span class="status-badge status-dismissed me-2">Dismissed</span>
+                <span class="small">Not actionable</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <a href="{% url 'incidents:new' %}" class="btn btn-success">
+              <i class="bi bi-shield-exclamation me-2"></i>Report Incident
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Layout & Container */
+  .incidents-list-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Statistics Cards */
+  .stat-card {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    border: 2px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.3s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    border-color: #667eea;
+  }
+
+  .stat-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .stat-icon-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+
+  .stat-icon-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+    color: white;
+  }
+
+  .stat-icon-info {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+  }
+
+  .stat-icon-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+  }
+
+  .stat-content {
+    flex: 1;
+  }
+
+  .stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #212529;
+    line-height: 1;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .filter-card,
+  .table-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .card-header {
+    background: white;
+    border-bottom: 2px solid #f0f0f0;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  /* Form Controls */
+  .form-label {
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-control,
+  .form-select {
+    border: 2px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+    outline: none;
+  }
+
+  /* Table Styling */
+  .incidents-table {
+    font-size: 0.95rem;
+  }
+
+  .incidents-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .incidents-table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 1rem 1rem;
+    border: none;
+  }
+
+  .incidents-table td {
+    padding: 1rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .incidents-table tbody tr {
+    transition: all 0.2s;
+  }
+
+  .incidents-table tbody tr:hover {
+    background-color: #f8f9fa;
+    transform: scale(1.005);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .incident-id {
+    font-family: monospace;
+    font-weight: 600;
+    color: #6c757d;
+    font-size: 0.95rem;
+  }
+
+  .incident-title-link {
+    color: #212529;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .incident-title-link:hover {
+    color: #667eea;
+  }
+
+  /* Severity Badges */
+  .severity-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .severity-critical {
+    background: #fee;
+    color: #c00;
+  }
+
+  .severity-high {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .severity-medium {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .severity-low {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  /* Status Badges */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .status-new {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .status-review {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-resolved {
+    background: #d1e7dd;
+    color: #0f5132;
+  }
+
+  .status-dismissed {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  /* Date Info */
+  .date-info {
+    line-height: 1.4;
+  }
+
+  .date-primary {
+    font-weight: 500;
+    color: #212529;
+  }
+
+  .date-time {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+
+  /* Empty State */
+  .empty-state {
+    padding: 4rem 2rem;
+  }
+
+  .empty-icon {
+    font-size: 4rem;
+    color: #dee2e6;
+  }
+
+  .empty-title {
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-text {
+    font-size: 0.95rem;
+  }
+
+  /* Info Help Card */
+  .info-help-card {
+    background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%);
+    border: 2px solid #bbdefb;
+  }
+
+  .info-help-card .card-body {
+    padding: 1.25rem;
+  }
+
+  .info-help-card h6 {
+    color: #1565c0;
+  }
+
+  .status-legend-item {
+    display: flex;
+    align-items: center;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  .btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border-color: #28a745;
+  }
+
+  .btn-success:hover {
+    background: linear-gradient(135deg, #218838 0%, #1ba57b 100%);
+    border-color: #218838;
+  }
+
+  .btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  /* Badges */
+  .badge {
+    font-weight: 500;
+    padding: 0.375rem 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 991px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .stat-card {
+      padding: 1rem;
+    }
+
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      font-size: 1.25rem;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .incidents-table {
+      font-size: 0.875rem;
+    }
+
+    .incidents-table th,
+    .incidents-table td {
+      padding: 0.75rem 0.5rem;
+    }
+  }
+
+  /* Animation */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .stat-card,
+  .table-card,
+  .filter-card {
+    animation: fadeIn 0.4s ease-out;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Search input enhancement
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+      searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('filterForm').submit();
+        }
+      });
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+      // Ctrl/Cmd + K to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInput) searchInput.focus();
+      }
+    });
+  });
+</script>
+{% endblock %}

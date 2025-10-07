@@ -1,0 +1,780 @@
+{# templates/incidents/incident_detail.html #}
+{% extends "base.html" %}
+
+{% block title %}Incident #{{ incident.pk }} - Incident Management{% endblock %}
+
+{% block content %}
+<div class="incident-detail-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 1400px;">
+
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+              <li class="breadcrumb-item"><a href="/">Home</a></li>
+              <li class="breadcrumb-item"><a href="{% url 'incidents:my_incidents' %}">My Incidents</a></li>
+              <li class="breadcrumb-item active" aria-current="page">Incident #{{ incident.pk }}</li>
+            </ol>
+          </nav>
+          <h2 class="page-title mb-2">
+            <i class="bi bi-shield-exclamation text-danger me-2"></i>
+            {{ incident.title }}
+          </h2>
+          <div class="incident-meta">
+            <span class="meta-item">
+              <i class="bi bi-person-circle me-1"></i>
+              <strong>{{ incident.reported_by.username }}</strong>
+            </span>
+            <span class="meta-separator">•</span>
+            <span class="meta-item">
+              <i class="bi bi-calendar-event me-1"></i>
+              {{ incident.created_at|date:"F j, Y" }} at {{ incident.created_at|date:"g:i A" }}
+            </span>
+            <span class="meta-separator">•</span>
+            <span class="meta-item">
+              <i class="bi bi-hash me-1"></i>
+              ID: {{ incident.pk }}
+            </span>
+          </div>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+          <a class="btn btn-outline-secondary" href="{% url 'incidents:my_incidents' %}">
+            <i class="bi bi-arrow-left me-2"></i>Back to List
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Messages -->
+    {% if messages %}
+      <div class="alerts-container mb-4">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-{% if message.tags == 'success' %}check-circle-fill{% elif message.tags == 'danger' %}exclamation-circle-fill{% else %}info-circle-fill{% endif %} me-2"></i>
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="row g-4">
+      <!-- Main Content Column -->
+      <div class="col-lg-8">
+
+        <!-- Incident Details Card -->
+        <div class="card detail-card shadow-sm mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-file-text me-2"></i>Incident Details
+            </h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="detail-list">
+
+              <div class="detail-item">
+                <div class="detail-label">
+                  <i class="bi bi-flag-fill"></i>
+                  <span>Severity</span>
+                </div>
+                <div class="detail-value">
+                  {% if incident.severity == 'critical' %}
+                    <span class="severity-badge severity-critical">
+                      <i class="bi bi-exclamation-triangle-fill me-1"></i>Critical
+                    </span>
+                  {% elif incident.severity == 'high' %}
+                    <span class="severity-badge severity-high">
+                      <i class="bi bi-exclamation-circle-fill me-1"></i>High
+                    </span>
+                  {% elif incident.severity == 'medium' %}
+                    <span class="severity-badge severity-medium">
+                      <i class="bi bi-info-circle-fill me-1"></i>Medium
+                    </span>
+                  {% else %}
+                    <span class="severity-badge severity-low">
+                      <i class="bi bi-dash-circle-fill me-1"></i>Low
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="detail-item">
+                <div class="detail-label">
+                  <i class="bi bi-folder-fill"></i>
+                  <span>Category</span>
+                </div>
+                <div class="detail-value">
+                  {% if incident.category %}
+                    <span class="badge bg-light text-dark border">{{ incident.category }}</span>
+                  {% else %}
+                    <span class="text-muted fst-italic">Not specified</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="detail-item">
+                <div class="detail-label">
+                  <i class="bi bi-geo-alt-fill"></i>
+                  <span>Location</span>
+                </div>
+                <div class="detail-value">
+                  {% if incident.location %}
+                    {{ incident.location }}
+                  {% else %}
+                    <span class="text-muted fst-italic">Not specified</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="detail-item">
+                <div class="detail-label">
+                  <i class="bi bi-clock-history"></i>
+                  <span>Occurred At</span>
+                </div>
+                <div class="detail-value">
+                  {{ incident.occurred_at|date:"F j, Y" }} at {{ incident.occurred_at|date:"g:i A" }}
+                </div>
+              </div>
+
+              <div class="detail-item border-0">
+                <div class="detail-label">
+                  <i class="bi bi-text-paragraph"></i>
+                  <span>Description</span>
+                </div>
+                <div class="detail-value">
+                  <div class="description-box">
+                    {{ incident.description|linebreaks }}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Attachment Card -->
+        {% if incident.attachment %}
+          <div class="card attachment-card shadow-sm">
+            <div class="card-header">
+              <h5 class="card-title mb-0">
+                <i class="bi bi-paperclip me-2"></i>Attachment
+              </h5>
+            </div>
+            <div class="card-body">
+              <div class="attachment-info">
+                <div class="attachment-icon">
+                  <i class="bi bi-file-earmark-arrow-down"></i>
+                </div>
+                <div class="attachment-details">
+                  <div class="attachment-name">{{ incident.attachment.name|default:"Attached File" }}</div>
+                  <div class="attachment-meta text-muted small">Click to download or view</div>
+                </div>
+                <a href="{{ incident.attachment.url }}" target="_blank" class="btn btn-outline-primary">
+                  <i class="bi bi-download me-2"></i>Download
+                </a>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Sidebar Column -->
+      <div class="col-lg-4">
+
+        <!-- Status Card -->
+        <div class="card status-card shadow-sm mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-toggle-on me-2"></i>Status
+            </h5>
+          </div>
+          <div class="card-body text-center p-4">
+            <div class="status-display mb-4">
+              {% if incident.status == 'new' %}
+                <div class="status-icon status-icon-new">
+                  <i class="bi bi-circle-fill"></i>
+                </div>
+                <h4 class="status-title text-warning mt-3">New</h4>
+                <p class="status-description">Awaiting review</p>
+              {% elif incident.status == 'in_review' %}
+                <div class="status-icon status-icon-review">
+                  <i class="bi bi-hourglass-split"></i>
+                </div>
+                <h4 class="status-title text-info mt-3">In Review</h4>
+                <p class="status-description">Under investigation</p>
+              {% elif incident.status == 'resolved' %}
+                <div class="status-icon status-icon-resolved">
+                  <i class="bi bi-check-circle-fill"></i>
+                </div>
+                <h4 class="status-title text-success mt-3">Resolved</h4>
+                <p class="status-description">Issue has been addressed</p>
+              {% else %}
+                <div class="status-icon status-icon-dismissed">
+                  <i class="bi bi-x-circle-fill"></i>
+                </div>
+                <h4 class="status-title text-secondary mt-3">Dismissed</h4>
+                <p class="status-description">Not actionable</p>
+              {% endif %}
+            </div>
+
+            {% if can_triage %}
+              <div class="status-update-form">
+                <hr class="my-4">
+                <h6 class="mb-3">Update Status</h6>
+                <form method="post" action="{% url 'incidents:change_status' incident.pk %}">
+                  {% csrf_token %}
+                  <div class="mb-3">
+                    <select name="status" class="form-select">
+                      {% for k, v in status_choices %}
+                        <option value="{{ k }}" {% if k == incident.status %}selected{% endif %}>{{ v }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <button class="btn btn-primary w-100" type="submit">
+                    <i class="bi bi-arrow-repeat me-2"></i>Update Status
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Reporter Info Card -->
+        <div class="card reporter-card shadow-sm mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-person-circle me-2"></i>Reporter
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="reporter-info">
+              <div class="reporter-avatar">
+                <i class="bi bi-person-circle"></i>
+              </div>
+              <div class="reporter-details">
+                <div class="reporter-name">{{ incident.reported_by.get_full_name|default:incident.reported_by.username }}</div>
+                <div class="reporter-username text-muted">@{{ incident.reported_by.username }}</div>
+                {% if incident.reported_by.email %}
+                  <div class="reporter-email mt-2">
+                    <a href="mailto:{{ incident.reported_by.email }}" class="text-decoration-none">
+                      <i class="bi bi-envelope me-1"></i>{{ incident.reported_by.email }}
+                    </a>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timeline Card -->
+        <div class="card timeline-card shadow-sm">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-clock-history me-2"></i>Timeline
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="timeline">
+              <div class="timeline-item">
+                <div class="timeline-icon timeline-icon-created">
+                  <i class="bi bi-plus-circle"></i>
+                </div>
+                <div class="timeline-content">
+                  <div class="timeline-title">Incident Reported</div>
+                  <div class="timeline-date">{{ incident.created_at|date:"M d, Y" }} at {{ incident.created_at|date:"g:i A" }}</div>
+                  <div class="timeline-user">by {{ incident.reported_by.username }}</div>
+                </div>
+              </div>
+
+              {% if incident.updated_at != incident.created_at %}
+                <div class="timeline-item">
+                  <div class="timeline-icon timeline-icon-updated">
+                    <i class="bi bi-pencil"></i>
+                  </div>
+                  <div class="timeline-content">
+                    <div class="timeline-title">Last Updated</div>
+                    <div class="timeline-date">{{ incident.updated_at|date:"M d, Y" }} at {{ incident.updated_at|date:"g:i A" }}</div>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Layout & Container */
+  .incident-detail-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .incident-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+  }
+
+  .meta-separator {
+    color: #dee2e6;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .detail-card,
+  .attachment-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .card-header {
+    background: white;
+    border-bottom: 2px solid #f0f0f0;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  /* Detail List */
+  .detail-list {
+    padding: 0;
+    margin: 0;
+  }
+
+  .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+  }
+
+  .detail-item:last-child {
+    border-bottom: none;
+  }
+
+  .detail-item:hover {
+    background-color: #f8f9fa;
+  }
+
+  .detail-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #6c757d;
+    min-width: 150px;
+  }
+
+  .detail-label i {
+    font-size: 1rem;
+    color: #adb5bd;
+  }
+
+  .detail-value {
+    flex: 1;
+    text-align: right;
+    font-size: 0.95rem;
+    color: #212529;
+  }
+
+  .description-box {
+    background: #f8f9fa;
+    border-left: 4px solid #dc3545;
+    padding: 1rem;
+    border-radius: 0.375rem;
+    color: #495057;
+    text-align: left;
+    margin-top: 0.5rem;
+  }
+
+  /* Severity Badges */
+  .severity-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .severity-critical {
+    background: #fee;
+    color: #c00;
+  }
+
+  .severity-high {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .severity-medium {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .severity-low {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  /* Attachment Card */
+  .attachment-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .attachment-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    flex-shrink: 0;
+  }
+
+  .attachment-details {
+    flex: 1;
+  }
+
+  .attachment-name {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+  }
+
+  /* Status Card */
+  .status-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .status-display {
+    padding: 1rem 0;
+  }
+
+  .status-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+  }
+
+  .status-icon-new {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+    color: #ffc107;
+    border: 4px solid #ffc107;
+  }
+
+  .status-icon-review {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    color: #17a2b8;
+    border: 4px solid #17a2b8;
+  }
+
+  .status-icon-resolved {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #28a745;
+    border: 4px solid #28a745;
+  }
+
+  .status-icon-dismissed {
+    background: linear-gradient(135deg, #e2e3e5 0%, #d6d8db 100%);
+    color: #6c757d;
+    border: 4px solid #6c757d;
+  }
+
+  .status-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 0;
+  }
+
+  /* Reporter Card */
+  .reporter-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .reporter-info {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .reporter-avatar {
+    font-size: 3rem;
+    color: #667eea;
+    flex-shrink: 0;
+  }
+
+  .reporter-details {
+    flex: 1;
+  }
+
+  .reporter-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #212529;
+  }
+
+  .reporter-username {
+    font-size: 0.9rem;
+  }
+
+  .reporter-email {
+    font-size: 0.875rem;
+  }
+
+  /* Timeline Card */
+  .timeline-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .timeline {
+    position: relative;
+    padding-left: 2rem;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 1rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+  }
+
+  .timeline-item:last-child {
+    padding-bottom: 0;
+  }
+
+  .timeline-icon {
+    position: absolute;
+    left: -1.5rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    color: white;
+  }
+
+  .timeline-icon-created {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  }
+
+  .timeline-icon-updated {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  .timeline-content {
+    padding-left: 1.5rem;
+  }
+
+  .timeline-title {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+  }
+
+  .timeline-date {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+
+  .timeline-user {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-style: italic;
+  }
+
+  /* Forms */
+  .form-select {
+    border: 2px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+    outline: none;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  /* Badges */
+  .badge {
+    font-weight: 500;
+    padding: 0.375rem 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 991px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .incident-meta {
+      font-size: 0.85rem;
+    }
+
+    .detail-item {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .detail-value {
+      text-align: left;
+    }
+
+    .status-icon {
+      width: 60px;
+      height: 60px;
+      font-size: 2rem;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .attachment-info {
+      flex-direction: column;
+      text-align: center;
+    }
+
+    .attachment-icon {
+      margin: 0 auto;
+    }
+  }
+
+  /* Animation */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .detail-card,
+  .status-card,
+  .reporter-card,
+  .timeline-card {
+    animation: slideIn 0.3s ease-out;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Auto-dismiss alerts
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function(alert) {
+      setTimeout(function() {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+      }, 5000);
+    });
+  });
+</script>
+{% endblock %}

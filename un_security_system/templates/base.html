@@ -350,6 +350,10 @@
             <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_verify_page' %}">
               <i class="bi bi-shield-check me-2"></i>Verify Asset Exit
             </a></li>
+              <li><a class="dropdown-item" href="{% url 'incidents:triage' %}">
+                <i class="bi bi-life-preserver"></i> Incident Triage
+              </a>
+            </li>
           </ul>
         </li>
       {% endif %}
@@ -394,8 +398,21 @@
             <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
               <i class="bi bi-file-text me-2"></i>My Asset Requests
             </a></li>
+
+              <li><hr class="dropdown-divider"></li>
+
+            <li class="dropdown-header">Incident</li>
+              <li><a class="dropdown-item" href="{% url 'incidents:new' %}">
+                <i class="bi bi-shield-exclamation"></i> Report Incident</a>
+              </li>
+            <li>
+              <a class="dropdown-item" href="{% url 'incidents:my_incidents' %}">
+                <i class="bi bi-clipboard-pulse"></i> My Incidents
+              </a>
+            </li>
           </ul>
         </li>
+
       {% endif %}
 
     {% endif %}
