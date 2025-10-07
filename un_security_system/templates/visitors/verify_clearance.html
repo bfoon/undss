@@ -1,35 +1,683 @@
 {% extends "base.html" %}
 {% block title %}Verify Visitor Clearance · UN Security{% endblock %}
-{% block content %}
-<div class="container" style="max-width: 900px;">
 
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <h3 class="mb-0">
-      <i class="bi bi-check-circle"></i> Verify Visitor Clearance
-    </h3>
-    <a class="btn btn-outline-secondary" href="{% url 'visitors:visitor_list' %}">
-      <i class="bi bi-list-ul"></i> All Visitors
-    </a>
+{% block extra_css %}
+<style>
+    :root {
+        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+        --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.15);
+        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        --border-radius: 12px;
+    }
+
+    .page-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+
+    /* Page Header */
+    .page-header-visitor {
+        background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: var(--border-radius);
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow-lg);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .page-header-visitor::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        opacity: 0.3;
+    }
+
+    .page-header-visitor .content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .page-header-visitor h3 {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.875rem;
+        letter-spacing: -0.5px;
+    }
+
+    .page-header-visitor p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.95;
+        font-size: 1rem;
+    }
+
+    /* Search Card */
+    .search-card {
+        background: white;
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-lg);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        transition: var(--transition);
+    }
+
+    .search-card:hover {
+        box-shadow: var(--shadow-xl);
+    }
+
+    .search-card-header {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: white;
+        padding: 1.5rem;
+        border-bottom: 3px solid #10b981;
+    }
+
+    .search-card-header h5 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.125rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-card-body {
+        padding: 2rem;
+    }
+
+    /* Search Input */
+    .search-input-wrapper {
+        position: relative;
+    }
+
+    .search-input {
+        height: 60px;
+        font-size: 1.125rem;
+        border: 3px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 0 1.5rem;
+        transition: var(--transition);
+        background: #f8fafc;
+    }
+
+    .search-input:focus {
+        border-color: #10b981;
+        background: white;
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+        outline: none;
+        transform: translateY(-2px);
+    }
+
+    .search-input::placeholder {
+        color: #94a3b8;
+    }
+
+    .search-label {
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.75rem;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-label i {
+        color: #10b981;
+        margin-right: 0.5rem;
+    }
+
+    .btn-search {
+        height: 60px;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        font-weight: 600;
+        font-size: 1.125rem;
+        border-radius: 12px;
+        transition: var(--transition);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-search:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-search:active {
+        transform: translateY(0);
+    }
+
+    .search-hint {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        border: 2px solid #3b82f6;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 1.5rem;
+    }
+
+    .search-hint-content {
+        display: flex;
+        align-items: start;
+    }
+
+    .search-hint-icon {
+        width: 32px;
+        height: 32px;
+        background: #3b82f6;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+
+    /* Result Card */
+    .result-card {
+        background: white;
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-lg);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        margin-top: 2rem;
+        animation: slideUp 0.4s ease;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .result-header {
+        padding: 2rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .visitor-name {
+        margin: 0;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .visitor-name i {
+        color: #10b981;
+        font-size: 2rem;
+    }
+
+    /* Status Badges */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1.25rem;
+        border-radius: 50px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        gap: 0.5rem;
+    }
+
+    .status-badge i {
+        font-size: 1rem;
+    }
+
+    .status-cleared {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    }
+
+    .status-pending {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .status-denied {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+
+    .status-in-compound {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .status-checked-out {
+        background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(100, 116, 139, 0.3);
+    }
+
+    .status-not-in {
+        background: #f1f5f9;
+        color: #475569;
+        border: 2px solid #cbd5e1;
+    }
+
+    /* Info Grid */
+    .info-section {
+        padding: 2rem;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 2rem;
+    }
+
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .info-label {
+        font-size: 0.8125rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .info-label i {
+        color: #10b981;
+    }
+
+    .info-value {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .info-value-empty {
+        color: #94a3b8;
+        font-weight: 400;
+    }
+
+    .code-display {
+        font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+        font-size: 1rem;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: #22c55e;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        display: inline-block;
+        letter-spacing: 2px;
+        font-weight: 600;
+    }
+
+    /* Action Section */
+    .action-section {
+        padding: 1.5rem 2rem;
+        background: linear-gradient(to right, #f8fafc, #f1f5f9);
+        border-top: 2px solid #e2e8f0;
+    }
+
+    .btn-view-details {
+        padding: 0.875rem 2rem;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        border: none;
+        font-weight: 600;
+        border-radius: 10px;
+        transition: var(--transition);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-view-details:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+        color: white;
+    }
+
+    /* Multiple Matches */
+    .matches-card {
+        background: white;
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-lg);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        margin-top: 2rem;
+        animation: slideUp 0.4s ease;
+    }
+
+    .matches-header {
+        background: linear-gradient(to right, #f8fafc, #f1f5f9);
+        padding: 1.5rem 2rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .matches-header h6 {
+        margin: 0;
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 1.125rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .matches-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: 0.875rem;
+    }
+
+    .match-item {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid #e2e8f0;
+        transition: var(--transition);
+        cursor: pointer;
+        text-decoration: none;
+        display: block;
+        color: inherit;
+    }
+
+    .match-item:last-child {
+        border-bottom: none;
+    }
+
+    .match-item:hover {
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        transform: translateX(8px);
+    }
+
+    .match-name {
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 1.125rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .match-id {
+        font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+        font-size: 0.875rem;
+        color: #64748b;
+        background: #f1f5f9;
+        padding: 0.25rem 0.75rem;
+        border-radius: 6px;
+    }
+
+    .match-details {
+        display: flex;
+        gap: 2rem;
+        color: #64748b;
+        font-size: 0.9375rem;
+    }
+
+    .match-detail-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .match-detail-item i {
+        color: #10b981;
+    }
+
+    /* Alert Boxes */
+    .alert-professional {
+        border-radius: 12px;
+        border: 2px solid;
+        padding: 1.5rem;
+        margin-top: 2rem;
+        animation: slideUp 0.4s ease;
+    }
+
+    .alert-danger-pro {
+        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+        border-color: #ef4444;
+    }
+
+    .alert-danger-pro .alert-icon {
+        width: 48px;
+        height: 48px;
+        background: #ef4444;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        margin-right: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .alert-danger-pro .alert-content h6 {
+        color: #991b1b;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .alert-danger-pro .alert-content p {
+        color: #dc2626;
+        margin: 0;
+    }
+
+    .alert-warning-pro {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border-color: #f59e0b;
+    }
+
+    .alert-warning-pro .alert-icon {
+        width: 48px;
+        height: 48px;
+        background: #f59e0b;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        margin-right: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .alert-warning-pro .alert-content {
+        color: #92400e;
+    }
+
+    /* Header Actions */
+    .btn-back {
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: var(--transition);
+    }
+
+    .btn-back:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.5);
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 767.98px) {
+        .page-header-visitor h3 {
+            font-size: 1.5rem;
+        }
+
+        .search-input,
+        .btn-search {
+            height: 50px;
+            font-size: 1rem;
+        }
+
+        .visitor-name {
+            font-size: 1.375rem;
+        }
+
+        .info-grid {
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        .match-details {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .result-header,
+        .info-section,
+        .action-section {
+            padding: 1.5rem;
+        }
+    }
+
+    /* Loading Animation */
+    .search-loading {
+        display: none;
+        position: absolute;
+        right: 1.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    .search-input:focus ~ .search-loading {
+        display: block;
+    }
+
+    .spinner {
+        width: 24px;
+        height: 24px;
+        border: 3px solid #e2e8f0;
+        border-top-color: #10b981;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- Page Header -->
+  <div class="page-header-visitor">
+    <div class="content">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center">
+        <div class="mb-3 mb-lg-0">
+          <h3>
+            <i class="bi bi-shield-check"></i>
+            Verify Visitor Clearance
+          </h3>
+          <p>Search and verify visitor authorization status at security checkpoints</p>
+        </div>
+        <a class="btn btn-back" href="{% url 'visitors:visitor_list' %}">
+          <i class="bi bi-list-ul me-2"></i>
+          All Visitors
+        </a>
+      </div>
+    </div>
   </div>
 
   {% if forbidden %}
-    <div class="alert alert-danger">
-      You don’t have permission to verify clearances. Please contact the LSA.
+    <!-- Permission Denied Alert -->
+    <div class="alert-professional alert-danger-pro">
+      <div class="d-flex align-items-start">
+        <div class="alert-icon">
+          <i class="bi bi-shield-x"></i>
+        </div>
+        <div class="alert-content">
+          <h6>Access Denied</h6>
+          <p>You don't have permission to verify visitor clearances. Please contact the Local Security Advisor (LSA) for access authorization.</p>
+        </div>
+      </div>
     </div>
   {% else %}
 
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <form method="get" class="row g-3" autocomplete="off">
-          <div class="col-md-9">
-            <label class="form-label" for="q">Search by Visitor ID, Full Name, or Vehicle Plate</label>
-            <input type="text" id="q" name="q" value="{{ q }}" class="form-control form-control-lg"
-                   placeholder="e.g., 123 or Ebrima Njie or BJL-1234">
+    <!-- Search Card -->
+    <div class="search-card">
+      <div class="search-card-header">
+        <h5>
+          <i class="bi bi-search me-2"></i>
+          Search Visitor Database
+        </h5>
+      </div>
+      <div class="search-card-body">
+        <form method="get" autocomplete="off">
+          <div class="row g-3">
+            <div class="col-lg-8">
+              <label class="search-label" for="q">
+                <i class="bi bi-person-badge"></i>
+                Search by Visitor ID, Full Name, or Vehicle Plate
+              </label>
+              <div class="search-input-wrapper">
+                <input type="text"
+                       id="q"
+                       name="q"
+                       value="{{ q }}"
+                       class="form-control search-input"
+                       placeholder="e.g., 123, Ebrima Njie, or BJL-1234"
+                       required>
+              </div>
+            </div>
+            <div class="col-lg-4 d-flex align-items-end">
+              <button class="btn btn-search w-100" type="submit">
+                <i class="bi bi-search me-2"></i>
+                Search Database
+              </button>
+            </div>
           </div>
-          <div class="col-md-3 d-flex align-items-end">
-            <button class="btn btn-primary btn-lg w-100" type="submit">
-              <i class="bi bi-search"></i> Search
-            </button>
+
+          <!-- Search Hint -->
+          <div class="search-hint">
+            <div class="search-hint-content">
+              <div class="search-hint-icon">
+                <i class="bi bi-info-circle-fill"></i>
+              </div>
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: #1e40af; margin-bottom: 0.25rem;">Search Instructions</div>
+                <div style="font-size: 0.9rem; color: #1e40af; line-height: 1.6;">
+                  Enter any of the following: visitor ID number, full name (first and/or last), or vehicle registration plate. The system will search across all fields and return matching records.
+                </div>
+              </div>
+            </div>
           </div>
         </form>
       </div>
@@ -37,87 +685,165 @@
 
     {% if q %}
       {% if result %}
-        <div class="card shadow-sm mt-3">
-          <div class="card-body">
-            <div class="d-flex align-items-center justify-content-between">
-              <!-- FIXED: no __str__ access -->
-              <h5 class="mb-0">{% firstof result.full_name result "Visitor" %}</h5>
-              {% if is_cleared %}
-                <span class="badge text-bg-success">LSA Cleared</span>
-              {% else %}
-                <span class="badge text-bg-warning">{{ status_label|default:"Pending / Not Cleared" }}</span>
-              {% endif %}
-            </div>
-            <hr>
-            <div class="row">
-              <div class="col-md-6">
-                <dl class="row mb-0">
-                  <dt class="col-5">Organization</dt>
-                  <dd class="col-7">{{ result.organization|default:"—" }}</dd>
+        <!-- Single Result Card -->
+        <div class="result-card">
+          <div class="result-header">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+              <h5 class="visitor-name">
+                <i class="bi bi-person-circle"></i>
+                {% firstof result.full_name result "Visitor" %}
+              </h5>
+              <div class="d-flex gap-2 flex-wrap">
+                {% if is_cleared %}
+                  <span class="status-badge status-cleared">
+                    <i class="bi bi-check-circle-fill"></i>
+                    LSA Cleared
+                  </span>
+                {% else %}
+                  <span class="status-badge status-pending">
+                    <i class="bi bi-clock-fill"></i>
+                    {{ status_label|default:"Pending / Not Cleared" }}
+                  </span>
+                {% endif %}
 
-                  <dt class="col-5">Vehicle plate</dt>
-                  <dd class="col-7">{{ result.vehicle_plate|default:"—" }}</dd>
-
-                  <dt class="col-5">Checked in</dt>
-                  <dd class="col-7">
-                    {% if result.checked_in and not result.checked_out %}
-                      <span class="badge text-bg-success">In compound</span>
-                    {% elif result.checked_out %}
-                      <span class="badge text-bg-secondary">Checked out</span>
-                    {% else %}
-                      <span class="badge text-bg-light border">Not in compound</span>
-                    {% endif %}
-                  </dd>
-                </dl>
-              </div>
-              <div class="col-md-6">
-                <dl class="row mb-0">
-                  <dt class="col-5">Approval code</dt>
-                  <dd class="col-7">
-                    {% if result.approval and result.approval.code %}
-                      {{ result.approval.code }}
-                    {% else %}
-                      —
-                    {% endif %}
-                  </dd>
-
-                  <dt class="col-5">Status</dt>
-                  <dd class="col-7">{{ status_label|default:"—" }}</dd>
-                </dl>
+                {% if result.checked_in and not result.checked_out %}
+                  <span class="status-badge status-in-compound">
+                    <i class="bi bi-geo-alt-fill"></i>
+                    In Compound
+                  </span>
+                {% elif result.checked_out %}
+                  <span class="status-badge status-checked-out">
+                    <i class="bi bi-box-arrow-right"></i>
+                    Checked Out
+                  </span>
+                {% else %}
+                  <span class="status-badge status-not-in">
+                    <i class="bi bi-circle"></i>
+                    Not In Compound
+                  </span>
+                {% endif %}
               </div>
             </div>
-            <div class="mt-3">
-              <a class="btn btn-outline-primary btn-sm" href="{% url 'visitors:visitor_detail' result.pk %}">
-                <i class="bi bi-eye"></i> View visitor details
+          </div>
+
+          <div class="info-section">
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-building"></i>
+                  Organization
+                </div>
+                <div class="info-value {% if not result.organization %}info-value-empty{% endif %}">
+                  {{ result.organization|default:"Not specified" }}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-car-front"></i>
+                  Vehicle Plate
+                </div>
+                <div class="info-value {% if not result.vehicle_plate %}info-value-empty{% endif %}">
+                  {{ result.vehicle_plate|default:"No vehicle registered" }}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-key"></i>
+                  Approval Code
+                </div>
+                <div class="info-value">
+                  {% if result.approval and result.approval.code %}
+                    <span class="code-display">{{ result.approval.code }}</span>
+                  {% else %}
+                    <span class="info-value-empty">No code assigned</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-flag"></i>
+                  Current Status
+                </div>
+                <div class="info-value">
+                  {{ status_label|default:"Status unavailable" }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="action-section">
+            <div class="d-flex flex-column flex-sm-row gap-3 align-items-center justify-content-between">
+              <div style="color: #64748b; font-size: 0.9375rem;">
+                <i class="bi bi-info-circle me-1"></i>
+                Click below to view complete visitor details and history
+              </div>
+              <a class="btn btn-view-details" href="{% url 'visitors:visitor_detail' result.pk %}">
+                <i class="bi bi-eye me-2"></i>
+                View Full Details
               </a>
             </div>
           </div>
         </div>
 
       {% elif matches %}
-        <div class="card shadow-sm mt-3">
-          <div class="card-body">
-            <h6 class="mb-3">Multiple matches</h6>
-            <div class="list-group list-group-flush">
-              {% for v in matches %}
-                <!-- FIXED: no __str__ access -->
-                <a class="list-group-item list-group-item-action" href="?q={{ v.id }}">
-                  <div class="d-flex justify-content-between">
-                    <div>{% firstof v.full_name v "Visitor" %}</div>
-                    <div class="text-muted small">ID: {{ v.id }}</div>
+        <!-- Multiple Matches Card -->
+        <div class="matches-card">
+          <div class="matches-header">
+            <h6>
+              <span class="matches-count">{{ matches|length }}</span>
+              Multiple Matching Records Found
+            </h6>
+          </div>
+          <div>
+            {% for v in matches %}
+              <a class="match-item" href="?q={{ v.id }}">
+                <div class="match-name">
+                  <span>
+                    <i class="bi bi-person-fill me-2" style="color: #10b981;"></i>
+                    {% firstof v.full_name v "Visitor" %}
+                  </span>
+                  <span class="match-id">ID: {{ v.id }}</span>
+                </div>
+                <div class="match-details">
+                  <div class="match-detail-item">
+                    <i class="bi bi-car-front-fill"></i>
+                    <span>{{ v.vehicle_plate|default:"No plate" }}</span>
                   </div>
-                  <div class="small text-muted">
-                    Plate: {{ v.vehicle_plate|default:"—" }} · Org: {{ v.organization|default:"—" }}
+                  <div class="match-detail-item">
+                    <i class="bi bi-building"></i>
+                    <span>{{ v.organization|default:"No organization" }}</span>
                   </div>
-                </a>
-              {% endfor %}
-            </div>
+                </div>
+              </a>
+            {% endfor %}
           </div>
         </div>
 
       {% else %}
-        <div class="alert alert-warning mt-3">
-          No visitor found matching “<strong>{{ q }}</strong>”.
+        <!-- No Results Alert -->
+        <div class="alert-professional alert-warning-pro">
+          <div class="d-flex align-items-start">
+            <div class="alert-icon">
+              <i class="bi bi-search"></i>
+            </div>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; margin-bottom: 0.5rem; font-size: 1.125rem;">No Records Found</div>
+              <div style="font-size: 0.9375rem; line-height: 1.6;">
+                No visitor found matching "<strong>{{ q }}</strong>". Please verify the search term and try again. Make sure you're using the correct visitor ID, full name, or vehicle registration plate.
+              </div>
+              <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(146, 64, 14, 0.2);">
+                <strong>Search tips:</strong>
+                <ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">
+                  <li>Try searching with just the last name</li>
+                  <li>Check for spelling variations or typos</li>
+                  <li>Verify the plate number format (e.g., BJL-1234)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       {% endif %}
     {% endif %}

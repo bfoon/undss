@@ -6,140 +6,817 @@
 
 {% block extra_css %}
 <style>
-    .verification-terminal {
-        border-left: 4px solid var(--warning-color);
-        background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+    :root {
+        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+        --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.15);
+        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        --border-radius: 12px;
     }
-    
-    .code-input {
-        font-family: 'Courier New', monospace;
-        font-weight: bold;
-        text-transform: uppercase;
-        font-size: 1.125rem;
-        letter-spacing: 2px;
-        text-align: center;
-    }
-    
-    .result-success {
-        border-left: 4px solid var(--success-color);
-        background: rgba(25, 135, 84, 0.05);
-        animation: fadeIn 0.3s ease;
-    }
-    
-    .result-warning {
-        border-left: 4px solid var(--warning-color);
-        background: rgba(253, 126, 20, 0.05);
-        animation: fadeIn 0.3s ease;
-    }
-    
-    .result-error {
-        border-left: 4px solid var(--danger-color);
-        background: rgba(220, 53, 69, 0.05);
-        animation: fadeIn 0.3s ease;
-    }
-    
-    .terminal-status {
-        background: var(--un-light-blue);
-        border-radius: 8px;
-        padding: 1rem;
+
+    /* Page Header */
+    .page-header-verification {
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: var(--border-radius);
         margin-bottom: 2rem;
+        box-shadow: var(--shadow-lg);
+        position: relative;
+        overflow: hidden;
     }
-    
+
+    .page-header-verification::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        opacity: 0.3;
+    }
+
+    .page-header-verification .content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .page-header-verification h1 {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.875rem;
+        letter-spacing: -0.5px;
+    }
+
+    .page-header-verification p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.95;
+        font-size: 1rem;
+    }
+
+    /* Status Badge */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+        animation: pulse-glow 2s infinite;
+    }
+
+    @keyframes pulse-glow {
+        0%, 100% {
+            opacity: 1;
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+        }
+        50% {
+            opacity: 0.8;
+            box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+        }
+    }
+
+    /* System Status Card */
+    .system-status-card {
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        border: 2px solid #86efac;
+        border-radius: var(--border-radius);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow-md);
+    }
+
+    .system-status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1rem;
+    }
+
+    .status-metric {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .status-metric-icon {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        border-radius: 10px;
+        font-size: 1.25rem;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .status-metric-content h6 {
+        margin: 0;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #166534;
+    }
+
+    .status-metric-content p {
+        margin: 0;
+        font-size: 0.75rem;
+        color: #15803d;
+    }
+
+    /* Verification Terminal */
+    .verification-terminal {
+        background: white;
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-xl);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        transition: var(--transition);
+    }
+
+    .verification-terminal:hover {
+        box-shadow: var(--shadow-xl), 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .terminal-header {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: white;
+        padding: 1.5rem;
+        border-bottom: 3px solid #f59e0b;
+    }
+
+    .terminal-header h5 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.125rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .terminal-body {
+        padding: 2rem;
+    }
+
+    /* Code Input */
+    .code-input-wrapper {
+        position: relative;
+        margin-bottom: 1.5rem;
+    }
+
+    .code-input {
+        font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 1.25rem;
+        letter-spacing: 3px;
+        text-align: center;
+        padding: 1rem 1.5rem;
+        border: 3px solid #e2e8f0;
+        border-radius: 10px;
+        transition: var(--transition);
+        background: #f8fafc;
+    }
+
+    .code-input:focus {
+        border-color: #3b82f6;
+        background: white;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        outline: none;
+        transform: translateY(-2px);
+    }
+
+    .code-input::placeholder {
+        color: #cbd5e1;
+        letter-spacing: 2px;
+    }
+
+    .input-group-lg .input-group-text {
+        background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+        color: white;
+        border: none;
+        font-size: 1.25rem;
+        padding: 0.75rem 1.25rem;
+    }
+
+    .btn-verify {
+        background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+        color: white;
+        border: none;
+        padding: 0.875rem 2rem;
+        font-weight: 600;
+        font-size: 1rem;
+        border-radius: 0 8px 8px 0;
+        transition: var(--transition);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-verify:hover {
+        background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn-verify:active {
+        transform: translateY(0);
+    }
+
+    /* Quick Scan Hint */
+    .quick-scan-hint {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 2px solid #fbbf24;
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+    }
+
+    .quick-scan-hint .icon-wrapper {
+        width: 32px;
+        height: 32px;
+        background: #fbbf24;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+
+    /* Process Steps */
+    .process-steps-card {
+        background: white;
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow-md);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+    }
+
+    .process-steps-header {
+        background: linear-gradient(to right, #f8fafc, #f1f5f9);
+        border-bottom: 2px solid #e2e8f0;
+        padding: 1.25rem 1.5rem;
+    }
+
+    .process-steps-header h6 {
+        margin: 0;
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 1rem;
+    }
+
     .process-step {
         background: white;
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
-        padding: 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
         text-align: center;
-        transition: all 0.2s ease;
-    }
-    
-    .process-step:hover {
-        border-color: var(--un-blue);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 158, 219, 0.15);
-    }
-    
-    .verification-code {
-        background: #f8f9fa;
-        border: 2px dashed #dee2e6;
-        border-radius: 8px;
-        padding: 1rem;
-        font-family: 'Courier New', monospace;
-        font-weight: bold;
-        font-size: 1.25rem;
-        text-align: center;
-        color: var(--un-dark-blue);
-    }
-    
-    .asset-table {
-        background: white;
-        border-radius: 8px;
+        transition: var(--transition);
+        height: 100%;
+        position: relative;
         overflow: hidden;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
-    
-    .loading-spinner {
-        display: inline-block;
-        width: 2rem;
-        height: 2rem;
-        border: 0.25rem solid rgba(0, 158, 219, 0.25);
-        border-right-color: var(--un-blue);
+
+    .process-step::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: linear-gradient(90deg, #3b82f6, #2563eb);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.3s ease;
+    }
+
+    .process-step:hover {
+        border-color: #3b82f6;
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .process-step:hover::before {
+        transform: scaleX(1);
+    }
+
+    .process-step-icon {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         border-radius: 50%;
-        animation: spin 1s linear infinite;
+        font-size: 1.75rem;
+        font-weight: 700;
+        transition: var(--transition);
     }
-    
+
+    .process-step:hover .process-step-icon {
+        transform: scale(1.1) rotate(5deg);
+    }
+
+    .step-1 .process-step-icon {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        color: #1e40af;
+    }
+
+    .step-2 .process-step-icon {
+        background: linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%);
+        color: #6d28d9;
+    }
+
+    .step-3 .process-step-icon {
+        background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+        color: #c2410c;
+    }
+
+    .step-4 .process-step-icon {
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+        color: #047857;
+    }
+
+    .process-step h6 {
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+    }
+
+    .process-step small {
+        color: #64748b;
+        font-size: 0.85rem;
+        line-height: 1.5;
+    }
+
+    /* Result Cards */
+    .result-card {
+        border-radius: var(--border-radius);
+        overflow: hidden;
+        box-shadow: var(--shadow-xl);
+        animation: slideUp 0.4s ease;
+        margin-top: 2rem;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .result-success {
+        border: 3px solid #22c55e;
+        background: white;
+    }
+
+    .result-success .result-header {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    }
+
+    .result-warning {
+        border: 3px solid #f59e0b;
+        background: white;
+    }
+
+    .result-warning .result-header {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .result-error {
+        border: 3px solid #ef4444;
+        background: white;
+    }
+
+    .result-error .result-header {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .result-header {
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .result-header-icon {
+        width: 60px;
+        height: 60px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        margin-right: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .result-header-content h5 {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1.5rem;
+    }
+
+    .result-header-content small {
+        opacity: 0.95;
+        font-size: 0.9rem;
+    }
+
+    .result-body {
+        padding: 2rem;
+    }
+
+    /* Info Grid */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .info-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1.25rem;
+        transition: var(--transition);
+    }
+
+    .info-card:hover {
+        border-color: #3b82f6;
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .info-card-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .info-card-value {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Verification Code Display */
+    .verification-code-display {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border: 3px dashed #64748b;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+        text-align: center;
+    }
+
+    .verification-code-display .label {
+        color: #94a3b8;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 0.75rem;
+    }
+
+    .verification-code-display .code {
+        font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+        font-weight: 700;
+        font-size: 1.75rem;
+        color: #22c55e;
+        letter-spacing: 4px;
+        text-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+    }
+
+    /* Asset Table */
+    .asset-table-wrapper {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 2px solid #e2e8f0;
+        box-shadow: var(--shadow-md);
+        margin: 1.5rem 0;
+    }
+
+    .asset-table {
+        margin: 0;
+        background: white;
+    }
+
+    .asset-table thead {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    }
+
+    .asset-table thead th {
+        color: white;
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 1.25rem 1rem;
+        border: none;
+        white-space: nowrap;
+    }
+
+    .asset-table tbody tr {
+        transition: var(--transition);
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .asset-table tbody tr:hover {
+        background: #f8fafc;
+        transform: scale(1.01);
+    }
+
+    .asset-table tbody tr:last-child {
+        border-bottom: none;
+    }
+
+    .asset-table tbody td {
+        padding: 1.25rem 1rem;
+        vertical-align: middle;
+    }
+
+    .asset-badge {
+        display: inline-block;
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+    }
+
+    .asset-serial {
+        font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+        font-size: 0.875rem;
+        background: #f1f5f9;
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        display: inline-block;
+    }
+
+    .quantity-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1rem;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Verification Checkbox */
+    .verification-checkbox {
+        width: 24px;
+        height: 24px;
+        border: 2px solid #cbd5e1;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .verification-checkbox:checked {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        border-color: #22c55e;
+    }
+
+    .verification-checkbox:hover {
+        border-color: #3b82f6;
+        transform: scale(1.1);
+    }
+
+    /* Alert Boxes */
+    .alert-professional {
+        border-radius: 10px;
+        border: 2px solid;
+        padding: 1.25rem;
+        margin: 1.5rem 0;
+    }
+
+    .alert-info-pro {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        border-color: #3b82f6;
+        color: #1e40af;
+    }
+
+    .alert-warning-pro {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border-color: #f59e0b;
+        color: #92400e;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 2px solid #e2e8f0;
+    }
+
+    .btn-action {
+        padding: 0.875rem 1.75rem;
+        font-weight: 600;
+        border-radius: 10px;
+        transition: var(--transition);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: 2px solid transparent;
+    }
+
+    .btn-action-success {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    }
+
+    .btn-action-success:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(34, 197, 94, 0.4);
+    }
+
+    .btn-action-success:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-action-secondary {
+        background: white;
+        color: #475569;
+        border-color: #cbd5e1;
+    }
+
+    .btn-action-secondary:hover {
+        background: #f8fafc;
+        border-color: #94a3b8;
+        transform: translateY(-2px);
+    }
+
+    .btn-action-info {
+        background: white;
+        color: #0284c7;
+        border-color: #7dd3fc;
+    }
+
+    .btn-action-info:hover {
+        background: #f0f9ff;
+        border-color: #0284c7;
+        transform: translateY(-2px);
+    }
+
+    /* Loading State */
+    .loading-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .loading-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid #e2e8f0;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 2rem;
+    }
+
     @keyframes spin {
         to { transform: rotate(360deg); }
     }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+
+    .loading-text {
+        color: #475569;
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
     }
-    
-    .system-online {
-        color: var(--success-color);
-        animation: pulse 2s infinite;
+
+    .loading-subtext {
+        color: #94a3b8;
+        font-size: 0.9375rem;
     }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
+
+    /* Responsive Design */
+    @media (max-width: 991.98px) {
+        .page-header-verification h1 {
+            font-size: 1.5rem;
+        }
+
+        .system-status-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
     }
-    
-    .quick-scan-hint {
-        background: var(--un-light-blue);
-        border: 1px solid var(--un-blue);
-        border-radius: 6px;
-        padding: 0.75rem;
-        margin-top: 1rem;
+
+    @media (max-width: 767.98px) {
+        .terminal-body {
+            padding: 1.5rem;
+        }
+
+        .code-input {
+            font-size: 1rem;
+            letter-spacing: 2px;
+        }
+
+        .btn-verify {
+            width: 100%;
+            border-radius: 0 0 8px 8px;
+        }
+
+        .input-group-lg {
+            flex-direction: column;
+        }
+
+        .input-group-lg .input-group-text {
+            border-radius: 10px 10px 0 0;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .input-group-lg .code-input {
+            border-radius: 0;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+
+        .btn-action {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    /* Print Styles */
+    @media print {
+        .page-header-verification,
+        .system-status-card,
+        .process-steps-card,
+        .action-buttons {
+            display: none !important;
+        }
+
+        .result-card {
+            box-shadow: none;
+            border: 2px solid #000;
+        }
+
+        .asset-table {
+            border: 1px solid #000;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <!-- Page Header -->
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4">
-            <div>
-                <h1 class="h3 mb-2">
-                    <i class="bi bi-shield-check text-un-primary me-2"></i>
+<div class="page-header-verification">
+    <div class="content">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center">
+            <div class="mb-3 mb-lg-0">
+                <h1>
+                    <i class="bi bi-shield-check me-2"></i>
                     Asset Exit Gate Verification
                 </h1>
-                <p class="text-muted mb-0">Verify LSA-approved asset exit requests at security checkpoint</p>
+                <p>Security checkpoint verification for LSA-approved asset removal requests</p>
             </div>
-            <div class="mt-3 mt-lg-0">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="d-flex align-items-center">
-                        <span class="status-indicator bg-success system-online" 
-                              style="width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 0.5rem;"></span>
-                        <small class="text-muted">Gate Terminal Online</small>
-                    </div>
-                    <div class="text-muted small" id="current-time">
-                        <!-- Time will be populated by JavaScript -->
-                    </div>
+            <div class="d-flex flex-column gap-2 align-items-lg-end">
+                <div class="status-badge">
+                    <span class="status-indicator bg-success"></span>
+                    Gate Terminal Online
+                </div>
+                <div class="text-white" style="opacity: 0.9;">
+                    <i class="bi bi-clock me-1"></i>
+                    <span id="current-time" style="font-family: 'SF Mono', monospace; font-weight: 600;"></span>
                 </div>
             </div>
         </div>
@@ -147,79 +824,111 @@
 </div>
 
 <!-- System Status -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="terminal-status">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
-                    <div>
-                        <h6 class="mb-0 text-success">Verification System Active</h6>
-                        <small class="text-muted">Ready to process asset exit requests</small>
-                    </div>
-                </div>
-                <div class="text-end">
-                    <div class="small text-muted">Last sync: <span id="last-sync">Just now</span></div>
-                    <div class="small">
-                        <i class="bi bi-wifi text-success me-1"></i>
-                        Network Connected
-                    </div>
-                </div>
+<div class="system-status-card">
+    <div class="d-flex align-items-center mb-3">
+        <div style="width: 48px; height: 48px; background: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem; box-shadow: var(--shadow-sm);">
+            <i class="bi bi-check-circle-fill text-success" style="font-size: 1.75rem;"></i>
+        </div>
+        <div>
+            <h6 class="mb-0" style="color: #166534; font-weight: 700; font-size: 1.125rem;">Verification System Active</h6>
+            <p class="mb-0" style="color: #15803d; font-size: 0.9375rem;">Ready to process asset exit requests</p>
+        </div>
+    </div>
+
+    <div class="system-status-grid">
+        <div class="status-metric">
+            <div class="status-metric-icon">
+                <i class="bi bi-activity text-success"></i>
+            </div>
+            <div class="status-metric-content">
+                <h6>System Health</h6>
+                <p>All services operational</p>
+            </div>
+        </div>
+
+        <div class="status-metric">
+            <div class="status-metric-icon">
+                <i class="bi bi-wifi text-success"></i>
+            </div>
+            <div class="status-metric-content">
+                <h6>Network Status</h6>
+                <p>Connected & synchronized</p>
+            </div>
+        </div>
+
+        <div class="status-metric">
+            <div class="status-metric-icon">
+                <i class="bi bi-clock-history text-success"></i>
+            </div>
+            <div class="status-metric-content">
+                <h6>Last Sync</h6>
+                <p id="last-sync">Just now</p>
+            </div>
+        </div>
+
+        <div class="status-metric">
+            <div class="status-metric-icon">
+                <i class="bi bi-database text-success"></i>
+            </div>
+            <div class="status-metric-content">
+                <h6>Database</h6>
+                <p>Online & responsive</p>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Verification Form -->
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="card verification-terminal">
-            <div class="card-header">
-                <h5 class="mb-0">
+<!-- Verification Terminal -->
+<div class="row justify-content-center mb-4">
+    <div class="col-lg-10 col-xl-9">
+        <div class="verification-terminal">
+            <div class="terminal-header">
+                <h5>
                     <i class="bi bi-upc-scan me-2"></i>
-                    Asset Exit Code Verification
+                    Asset Exit Authorization Verification
                 </h5>
             </div>
-            <div class="card-body">
-                <form id="verification-form" class="mb-4">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label for="exit-code" class="form-label fw-semibold">
-                                <i class="bi bi-key me-1"></i>
-                                Asset Exit Authorization Code
-                            </label>
-                            <div class="input-group input-group-lg">
-                                <span class="input-group-text">
-                                    <i class="bi bi-upc-scan"></i>
-                                </span>
-                                <input type="text" 
-                                       class="form-control code-input" 
-                                       id="exit-code"
-                                       placeholder="AX-12AB34CD"
-                                       autocomplete="off"
-                                       pattern="[A-Z]{2}-[0-9A-Z]{8}"
-                                       maxlength="11"
-                                       required>
-                                <button type="submit" class="btn btn-un-primary btn-lg">
-                                    <i class="bi bi-search me-2"></i>
-                                    Verify Authorization
-                                </button>
-                            </div>
-                            <div class="form-text">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Scan the QR code or manually enter the 11-character authorization code from the LSA-approved request
-                            </div>
-                        </div>
+            <div class="terminal-body">
+                <form id="verification-form">
+                    <label for="exit-code" class="form-label fw-semibold mb-3" style="font-size: 1rem; color: #1e293b;">
+                        <i class="bi bi-key-fill me-2" style="color: #3b82f6;"></i>
+                        Enter Asset Exit Authorization Code
+                    </label>
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text">
+                            <i class="bi bi-upc-scan"></i>
+                        </span>
+                        <input type="text"
+                               class="form-control code-input"
+                               id="exit-code"
+                               placeholder="AX-12AB34CD"
+                               autocomplete="off"
+                               pattern="[A-Z]{2}-[0-9A-Z]{8}"
+                               maxlength="11"
+                               required
+                               aria-label="Asset exit code">
+                        <button type="submit" class="btn btn-verify">
+                            <i class="bi bi-search me-2"></i>
+                            Verify Authorization
+                        </button>
+                    </div>
+                    <div class="mt-3" style="color: #64748b; font-size: 0.9375rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Scan the QR code or manually enter the 11-character code from the approved request (Format: XX-XXXXXXXX)
                     </div>
                 </form>
 
                 <!-- Quick Scan Hint -->
-                <div class="quick-scan-hint">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-lightbulb text-warning me-2"></i>
-                        <div class="small">
-                            <strong>Quick Tip:</strong> Position the QR code in front of your scanner or type the code exactly as shown on the asset exit form. 
-                            Press <kbd>Enter</kbd> to verify instantly.
+                <div class="quick-scan-hint mt-4">
+                    <div class="d-flex align-items-start">
+                        <div class="icon-wrapper">
+                            <i class="bi bi-lightbulb-fill text-white"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: #92400e; margin-bottom: 0.25rem;">Quick Verification Tips</div>
+                            <div style="font-size: 0.9rem; color: #b45309; line-height: 1.6;">
+                                Position the QR code in front of your scanner for instant verification. For manual entry, type the code exactly as shown on the asset exit form and press <kbd style="background: #92400e; color: white; padding: 0.25rem 0.5rem; border-radius: 4px;">Enter</kbd> to verify immediately.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -229,53 +938,49 @@
 </div>
 
 <!-- Verification Process Guide -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h6 class="mb-0">
-                    <i class="bi bi-clipboard-check me-2"></i>
-                    Security Verification Process
-                </h6>
+<div class="process-steps-card mb-4">
+    <div class="process-steps-header">
+        <h6>
+            <i class="bi bi-diagram-3 me-2"></i>
+            Security Verification Workflow
+        </h6>
+    </div>
+    <div class="card-body" style="padding: 2rem;">
+        <div class="row g-3">
+            <div class="col-md-6 col-lg-3">
+                <div class="process-step step-1">
+                    <div class="process-step-icon">
+                        <i class="bi bi-upc-scan"></i>
+                    </div>
+                    <h6>Scan Authorization</h6>
+                    <small>Scan QR code or manually enter the unique authorization code</small>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <div class="process-step">
-                            <i class="bi bi-1-circle text-primary fs-2 mb-2"></i>
-                            <h6 class="fw-semibold">Scan/Enter Code</h6>
-                            <small class="text-muted">
-                                Use barcode scanner or manually type the authorization code
-                            </small>
-                        </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="process-step step-2">
+                    <div class="process-step-icon">
+                        <i class="bi bi-shield-check"></i>
                     </div>
-                    <div class="col-md-3">
-                        <div class="process-step">
-                            <i class="bi bi-2-circle text-info fs-2 mb-2"></i>
-                            <h6 class="fw-semibold">Verify Request</h6>
-                            <small class="text-muted">
-                                System checks LSA approval and asset details
-                            </small>
-                        </div>
+                    <h6>Verify Approval</h6>
+                    <small>System validates LSA clearance and request status</small>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="process-step step-3">
+                    <div class="process-step-icon">
+                        <i class="bi bi-box-seam"></i>
                     </div>
-                    <div class="col-md-3">
-                        <div class="process-step">
-                            <i class="bi bi-3-circle text-warning fs-2 mb-2"></i>
-                            <h6 class="fw-semibold">Check Assets</h6>
-                            <small class="text-muted">
-                                Physically verify items match the approved list
-                            </small>
-                        </div>
+                    <h6>Inspect Assets</h6>
+                    <small>Physically verify all items match approved list</small>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="process-step step-4">
+                    <div class="process-step-icon">
+                        <i class="bi bi-check-circle"></i>
                     </div>
-                    <div class="col-md-3">
-                        <div class="process-step">
-                            <i class="bi bi-4-circle text-success fs-2 mb-2"></i>
-                            <h6 class="fw-semibold">Authorize Exit</h6>
-                            <small class="text-muted">
-                                Grant or deny exit permission based on verification
-                            </small>
-                        </div>
-                    </div>
+                    <h6>Grant Exit</h6>
+                    <small>Authorize departure after successful verification</small>
                 </div>
             </div>
         </div>
@@ -283,11 +988,7 @@
 </div>
 
 <!-- Verification Results Container -->
-<div class="row">
-    <div class="col-12">
-        <div id="verification-result" class="d-none"></div>
-    </div>
-</div>
+<div id="verification-result"></div>
 {% endblock %}
 
 {% block extra_js %}
@@ -296,10 +997,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('verification-form');
     const codeInput = document.getElementById('exit-code');
     const resultDiv = document.getElementById('verification-result');
-    
-    // Auto-focus the input field for immediate use
+
+    // Auto-focus the input field
     codeInput.focus();
-    
+
     // Real-time clock
     function updateClock() {
         const now = new Date();
@@ -309,201 +1010,212 @@ document.addEventListener('DOMContentLoaded', function() {
             second: '2-digit',
             hour12: false
         });
-        document.getElementById('current-time').textContent = timeString;
+        const dateString = now.toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+        document.getElementById('current-time').textContent = `${dateString} ${timeString}`;
     }
-    
-    // Update clock every second
+
     setInterval(updateClock, 1000);
-    updateClock(); // Initial call
-    
-    // Auto-uppercase and format input
+    updateClock();
+
+    // Auto-format input
     codeInput.addEventListener('input', function() {
         let value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        
-        // Auto-format: AX-12AB34CD
+
         if (value.length > 2) {
             value = value.substring(0, 2) + '-' + value.substring(2, 10);
         }
-        
+
         this.value = value;
     });
-    
+
     // Handle form submission
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
-        
+
         const code = codeInput.value.trim();
         if (!code || code.length < 11) {
-            showResult('error', 'Please enter a complete asset exit code', null);
+            showResult('error', 'Invalid Code Format', { message: 'Please enter a complete 11-character asset exit code' });
             return;
         }
-        
-        // Show loading state
+
         showLoadingState();
-        
+
         try {
             const response = await fetch(`{% url 'vehicles:asset_exit_lookup_api' %}?code=${encodeURIComponent(code)}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
-                
+
                 if (data.ok) {
-                    showResult('success', 'EXIT AUTHORIZED', data);
+                    showResult('success', 'Exit Authorized', data);
                 } else {
-                    showResult('warning', `Request Found - Not Authorized`, data);
+                    showResult('warning', 'Authorization Pending', data);
                 }
             } else {
-                showResult('error', 'Asset Exit Request Not Found', null);
+                showResult('error', 'Request Not Found', { message: 'No asset exit request found with this code' });
             }
-            
+
         } catch (error) {
             console.error('Verification error:', error);
-            showResult('error', 'Network Error - Unable to Verify', null);
+            showResult('error', 'Connection Error', { message: 'Unable to verify request. Please check network connection.' });
         }
     });
-    
+
     function showLoadingState() {
-        resultDiv.className = 'card';
         resultDiv.innerHTML = `
-            <div class="card-body text-center py-5">
-                <div class="loading-spinner mb-3"></div>
-                <h5 class="text-muted">Verifying Asset Exit Code...</h5>
-                <p class="text-muted mb-0">Checking LSA approval status</p>
+            <div class="result-card" style="border: 2px solid #e2e8f0;">
+                <div class="card-body loading-state">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Verifying Authorization Code...</div>
+                    <div class="loading-subtext">Checking LSA approval status and asset details</div>
+                </div>
             </div>
         `;
-        resultDiv.classList.remove('d-none');
         resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-    
-    function showResult(type, message, data) {
-        let cardClass = 'card ';
-        let alertClass = 'alert ';
+
+    function showResult(type, title, data) {
+        let resultClass = 'result-card ';
         let icon = '';
         let actionButtons = '';
-        
+
         switch(type) {
             case 'success':
-                cardClass += 'result-success';
-                alertClass += 'alert-success';
+                resultClass += 'result-success';
                 icon = 'bi-check-circle-fill';
                 actionButtons = `
-                    <button type="button" class="btn btn-success me-2" onclick="confirmExit()">
-                        <i class="bi bi-box-arrow-right me-1"></i>Authorize Exit
+                    <button type="button" class="btn-action btn-action-success" id="authorize-btn" onclick="confirmExit()">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Authorize Exit</span>
                     </button>
                 `;
                 break;
             case 'warning':
-                cardClass += 'result-warning';
-                alertClass += 'alert-warning';
+                resultClass += 'result-warning';
                 icon = 'bi-exclamation-triangle-fill';
                 break;
             case 'error':
-                cardClass += 'result-error';
-                alertClass += 'alert-danger';
+                resultClass += 'result-error';
                 icon = 'bi-x-circle-fill';
                 break;
         }
-        
-        resultDiv.className = cardClass;
-        
+
         let content = `
-            <div class="card-header">
-                <div class="${alertClass} mb-0 d-flex align-items-center">
-                    <i class="bi ${icon} fs-3 me-3"></i>
-                    <div>
-                        <h5 class="mb-0">${message}</h5>
-                        ${data && data.status ? `<small>Status: ${data.status}</small>` : ''}
+            <div class="${resultClass}">
+                <div class="result-header">
+                    <div class="result-header-icon">
+                        <i class="bi ${icon}"></i>
+                    </div>
+                    <div class="result-header-content">
+                        <h5>${escapeHtml(title)}</h5>
+                        ${data && data.status ? `<small>Request Status: ${escapeHtml(data.status)}</small>` : ''}
                     </div>
                 </div>
-            </div>
-            <div class="card-body">
+                <div class="result-body">
         `;
-        
+
         if (data && data.ok) {
             content += `
-                <!-- Request Information -->
-                <div class="row g-3 mb-4">
-                    <div class="col-md-4">
-                        <div class="border rounded p-3 bg-white">
-                            <small class="text-muted d-block">UN Agency</small>
-                            <div class="fw-semibold">${escapeHtml(data.agency || 'Not specified')}</div>
-                        </div>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <span class="info-card-label">
+                            <i class="bi bi-building me-1"></i>UN Agency
+                        </span>
+                        <div class="info-card-value">${escapeHtml(data.agency || 'Not specified')}</div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="border rounded p-3 bg-white">
-                            <small class="text-muted d-block">Destination</small>
-                            <div class="fw-semibold">${escapeHtml(data.destination || 'Not specified')}</div>
-                        </div>
+                    <div class="info-card">
+                        <span class="info-card-label">
+                            <i class="bi bi-geo-alt me-1"></i>Destination
+                        </span>
+                        <div class="info-card-value">${escapeHtml(data.destination || 'Not specified')}</div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="border rounded p-3 bg-white">
-                            <small class="text-muted d-block">Expected Return</small>
-                            <div class="fw-semibold">${escapeHtml(data.expected_date || 'Not specified')}</div>
-                        </div>
+                    <div class="info-card">
+                        <span class="info-card-label">
+                            <i class="bi bi-calendar-event me-1"></i>Expected Return
+                        </span>
+                        <div class="info-card-value">${escapeHtml(data.expected_date || 'Not specified')}</div>
                     </div>
                 </div>
-                
-                <!-- Authorization Code Display -->
-                <div class="verification-code mb-4">
-                    Authorization Code: ${escapeHtml(codeInput.value)}
+
+                <div class="verification-code-display">
+                    <div class="label">Authorization Code</div>
+                    <div class="code">${escapeHtml(codeInput.value)}</div>
                 </div>
             `;
-            
+
             if (data.items && data.items.length > 0) {
                 content += `
-                    <h6 class="mb-3">
-                        <i class="bi bi-box-seam me-2"></i>
-                        Authorized Assets (${data.items.length} item${data.items.length !== 1 ? 's' : ''})
-                    </h6>
-                    <div class="asset-table">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0" style="color: #1e293b; font-weight: 600;">
+                            <i class="bi bi-box-seam me-2"></i>
+                            Authorized Assets
+                        </h6>
+                        <span class="badge" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 0.5rem 1rem; border-radius: 20px;">
+                            ${data.items.length} Item${data.items.length !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+
+                    <div class="asset-table-wrapper">
+                        <table class="asset-table table mb-0">
+                            <thead>
                                 <tr>
                                     <th>Asset Description</th>
                                     <th>Category</th>
                                     <th class="text-center">Quantity</th>
-                                    <th>Serial/Tag Number</th>
+                                    <th>Serial/Tag</th>
                                     <th class="text-center">Verified</th>
                                 </tr>
                             </thead>
                             <tbody>
                 `;
-                
+
                 data.items.forEach((item, index) => {
                     content += `
                         <tr>
-                            <td class="fw-medium">${escapeHtml(item.description || 'No description')}</td>
                             <td>
-                                ${item.category ? `<span class="badge bg-light text-dark">${escapeHtml(item.category)}</span>` : '<span class="text-muted">—</span>'}
-                            </td>
-                            <td class="text-center">
-                                <span class="badge bg-primary fs-6">${item.quantity || 0}</span>
+                                <div style="font-weight: 600; color: #1e293b;">${escapeHtml(item.description || 'No description')}</div>
                             </td>
                             <td>
-                                ${item.serial_or_tag ? `<code class="bg-light px-2 py-1 rounded">${escapeHtml(item.serial_or_tag)}</code>` : '<span class="text-muted">—</span>'}
+                                ${item.category ?
+                                    `<span class="asset-badge" style="background: #f1f5f9; color: #475569;">${escapeHtml(item.category)}</span>` :
+                                    '<span style="color: #94a3b8;">—</span>'}
                             </td>
                             <td class="text-center">
-                                <input type="checkbox" class="form-check-input" id="verify-${index}" 
+                                <span class="quantity-badge">${item.quantity || 0}</span>
+                            </td>
+                            <td>
+                                ${item.serial_or_tag ?
+                                    `<span class="asset-serial">${escapeHtml(item.serial_or_tag)}</span>` :
+                                    '<span style="color: #94a3b8;">—</span>'}
+                            </td>
+                            <td class="text-center">
+                                <input type="checkbox"
+                                       class="verification-checkbox form-check-input"
+                                       id="verify-${index}"
                                        onchange="updateVerificationStatus()">
-                                <label for="verify-${index}" class="visually-hidden">Verify item ${index + 1}</label>
                             </td>
                         </tr>
                     `;
                 });
-                
+
                 content += `
                             </tbody>
                         </table>
                     </div>
-                    <div class="mt-3 p-3 bg-light rounded">
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-clipboard-check text-info me-2"></i>
-                            <div class="small">
-                                <strong>Physical Verification Required:</strong> Check each item against this list and mark as verified before authorizing exit.
+
+                    <div class="alert-professional alert-info-pro mt-3">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-clipboard2-check" style="font-size: 1.5rem; margin-right: 0.75rem;"></i>
+                            <div>
+                                <div style="font-weight: 600; margin-bottom: 0.25rem;">Physical Verification Required</div>
+                                <div style="font-size: 0.9rem;">Check each item against this list and mark as verified before authorizing exit. Ensure quantities and serial numbers match.</div>
                             </div>
                         </div>
                     </div>
@@ -511,70 +1223,86 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } else if (data && !data.ok) {
             content += `
-                <div class="alert alert-info">
-                    <h6 class="alert-heading">Request Found</h6>
-                    <p class="mb-0">This asset exit request exists but has not been LSA-approved yet.</p>
-                    <hr>
-                    <small class="mb-0">Current Status: <strong>${data.status || 'Unknown'}</strong></small>
+                <div class="alert-professional alert-warning-pro">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-exclamation-triangle" style="font-size: 1.5rem; margin-right: 0.75rem;"></i>
+                        <div>
+                            <div style="font-weight: 600; margin-bottom: 0.5rem;">Request Found - Approval Pending</div>
+                            <div style="font-size: 0.9rem; margin-bottom: 0.75rem;">${data.message || 'This asset exit request has not been approved by the LSA yet.'}</div>
+                            <div style="font-size: 0.875rem;">
+                                <strong>Current Status:</strong> ${escapeHtml(data.status || 'Unknown')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (data && data.message) {
+            content += `
+                <div class="alert-professional ${type === 'error' ? 'alert-warning-pro' : 'alert-info-pro'}">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-info-circle" style="font-size: 1.5rem; margin-right: 0.75rem;"></i>
+                        <div style="font-size: 0.9rem;">${escapeHtml(data.message)}</div>
+                    </div>
                 </div>
             `;
         }
-        
+
         content += `
-                <div class="d-flex gap-2 mt-4">
-                    ${actionButtons}
-                    <button type="button" class="btn btn-outline-secondary" onclick="clearResult()">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Verify Another Code
-                    </button>
-                    <button type="button" class="btn btn-outline-info" onclick="printVerification()">
-                        <i class="bi bi-printer me-1"></i>Print Record
-                    </button>
+                    <div class="action-buttons">
+                        ${actionButtons}
+                        <button type="button" class="btn-action btn-action-secondary" onclick="clearResult()">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            <span>Verify Another Code</span>
+                        </button>
+                        <button type="button" class="btn-action btn-action-info" onclick="printVerification()">
+                            <i class="bi bi-printer"></i>
+                            <span>Print Record</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
-        
+
         resultDiv.innerHTML = content;
-        resultDiv.classList.remove('d-none');
         resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        // Disable authorize button initially if there are items
+        if (data && data.ok && data.items && data.items.length > 0) {
+            const authorizeBtn = document.getElementById('authorize-btn');
+            if (authorizeBtn) {
+                authorizeBtn.disabled = true;
+            }
+        }
     }
-    
-    // Global functions for button actions
+
     window.clearResult = function() {
         codeInput.value = '';
-        resultDiv.classList.add('d-none');
+        resultDiv.innerHTML = '';
         codeInput.focus();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
-    
+
     window.confirmExit = function() {
-        if (confirm('Confirm that all assets have been physically verified and authorize exit?')) {
-            alert('Asset exit authorized successfully. Exit granted.');
+        if (confirm('✓ Confirm that all assets have been physically verified and match the approved list.\n\nAuthorize exit?')) {
+            alert('✓ Asset exit authorized successfully.\n\nExit granted. Safe travels.');
             clearResult();
         }
     };
-    
+
     window.printVerification = function() {
         window.print();
     };
-    
+
     window.updateVerificationStatus = function() {
-        const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="verify-"]');
-        const authorizeBtn = document.querySelector('button[onclick="confirmExit()"]');
-        
+        const checkboxes = document.querySelectorAll('.verification-checkbox');
+        const authorizeBtn = document.getElementById('authorize-btn');
+
         if (authorizeBtn) {
             const allChecked = Array.from(checkboxes).every(cb => cb.checked);
             authorizeBtn.disabled = !allChecked;
-            
-            if (allChecked) {
-                authorizeBtn.classList.remove('btn-success');
-                authorizeBtn.classList.add('btn-success');
-            } else {
-                authorizeBtn.classList.remove('btn-success');
-                authorizeBtn.classList.add('btn-outline-success');
-            }
         }
     };
-    
-    // Escape HTML for security
+
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;

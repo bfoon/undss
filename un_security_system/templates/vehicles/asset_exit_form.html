@@ -5,57 +5,409 @@
 
 {% block extra_css %}
 <style>
+    :root {
+        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .page-header {
+        background: linear-gradient(135deg, var(--un-blue) 0%, var(--un-dark-blue) 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow-lg);
+    }
+
+    .page-header h1 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.75rem;
+    }
+
+    .page-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.95;
+        font-size: 0.95rem;
+    }
+
+    .form-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        transition: var(--transition);
+        overflow: hidden;
+    }
+
+    .form-card:hover {
+        box-shadow: var(--shadow-lg);
+    }
+
+    .form-card .card-header {
+        background: linear-gradient(to right, var(--un-light-blue), #f8f9fa);
+        border-bottom: 2px solid var(--un-blue);
+        padding: 1.25rem 1.5rem;
+    }
+
+    .form-card .card-header h5 {
+        margin: 0;
+        color: var(--un-dark-blue);
+        font-weight: 600;
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .form-card .card-header h5 i {
+        font-size: 1.25rem;
+    }
+
+    .form-card .card-body {
+        padding: 1.5rem;
+    }
+
+    .help-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        position: sticky;
+        top: 20px;
+    }
+
+    .help-card .card-header {
+        background: linear-gradient(135deg, #009edb 0%, #0073b7 100%);
+        color: white;
+        border: none;
+        padding: 1.25rem 1.5rem;
+    }
+
+    .help-card .card-header h5 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .help-card .card-body {
+        padding: 1.5rem;
+    }
+
+    .help-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .help-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .help-section h6 {
+        color: var(--un-dark-blue);
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .help-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .help-list li {
+        padding: 0.5rem 0;
+        padding-left: 1.75rem;
+        position: relative;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .help-list li::before {
+        content: "✓";
+        position: absolute;
+        left: 0;
+        color: var(--un-blue);
+        font-weight: bold;
+    }
+
+    .approval-step {
+        display: flex;
+        align-items: flex-start;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        border-radius: 8px;
+        background: #f8f9fa;
+        transition: var(--transition);
+    }
+
+    .approval-step:hover {
+        background: var(--un-light-blue);
+        transform: translateX(4px);
+    }
+
+    .approval-step i {
+        font-size: 1.5rem;
+        margin-right: 0.75rem;
+        flex-shrink: 0;
+    }
+
+    .approval-step-content {
+        flex: 1;
+    }
+
+    .approval-step-title {
+        font-weight: 600;
+        color: var(--un-dark-blue);
+        font-size: 0.9rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .approval-step-desc {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin: 0;
+    }
+
+    .formset-table-wrapper {
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #e9ecef;
+    }
+
     .formset-table {
+        margin: 0;
         background: white;
     }
 
+    .formset-table thead {
+        background: linear-gradient(to right, var(--un-dark-blue), var(--un-blue));
+    }
+
     .formset-table th {
-        background-color: var(--un-light-blue);
-        color: var(--un-dark-blue);
+        color: white;
         font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 1rem;
         border: none;
+        white-space: nowrap;
+    }
+
+    .formset-table tbody tr {
+        transition: var(--transition);
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .formset-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .formset-table tbody tr:last-child {
+        border-bottom: none;
     }
 
     .formset-table td {
+        padding: 1rem;
         vertical-align: middle;
         border-color: #e9ecef;
     }
 
-    .form-section {
-        border-left: 4px solid var(--un-blue);
-        background: white;
+    .formset-table input,
+    .formset-table select {
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        padding: 0.5rem;
+        transition: var(--transition);
+    }
+
+    .formset-table input:focus,
+    .formset-table select:focus {
+        border-color: var(--un-blue);
+        box-shadow: 0 0 0 3px rgba(0, 158, 219, 0.1);
+        outline: none;
     }
 
     .required-field::after {
         content: " *";
-        color: var(--danger-color);
+        color: #dc3545;
+        font-weight: bold;
     }
 
-    .help-text {
-        background: var(--un-light-blue);
+    .info-banner {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        border: 2px solid #ffc107;
+        border-radius: 10px;
+        padding: 1.25rem;
+        margin-top: 1.5rem;
+    }
+
+    .info-banner-content {
+        display: flex;
+        align-items-flex-start;
+    }
+
+    .info-banner i {
+        font-size: 1.5rem;
+        color: #f39c12;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+
+    .info-banner-text {
+        flex: 1;
+    }
+
+    .info-banner-text strong {
+        display: block;
+        color: #856404;
+        margin-bottom: 0.25rem;
+        font-size: 0.95rem;
+    }
+
+    .info-banner-text p {
+        margin: 0;
+        color: #856404;
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    .submit-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .submit-card .card-body {
+        padding: 1.75rem;
+    }
+
+    .btn-un-primary {
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        border-radius: 8px;
+        transition: var(--transition);
+        box-shadow: 0 4px 12px rgba(0, 158, 219, 0.3);
+    }
+
+    .btn-un-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 158, 219, 0.4);
+    }
+
+    .btn-outline-secondary {
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        border-radius: 8px;
+        border-width: 2px;
+        transition: var(--transition);
+    }
+
+    .btn-outline-secondary:hover {
+        transform: translateY(-2px);
+    }
+
+    .required-info {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        background: #f8f9fa;
         border-radius: 6px;
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+
+    .required-info i {
+        margin-right: 0.5rem;
+        color: var(--un-blue);
+    }
+
+    .badge-new {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    @media (max-width: 991.98px) {
+        .help-card {
+            position: relative;
+            top: 0;
+            margin-bottom: 1.5rem;
+        }
+
+        .page-header {
+            padding: 1.5rem;
+        }
+
+        .page-header h1 {
+            font-size: 1.5rem;
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .formset-table-wrapper {
+            overflow-x: auto;
+        }
+
+        .formset-table {
+            min-width: 800px;
+        }
+    }
+
+    /* Form field improvements */
+    .form-control,
+    .form-select {
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
         padding: 0.75rem;
-        margin-top: 1rem;
+        transition: var(--transition);
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+        border-color: var(--un-blue);
+        box-shadow: 0 0 0 3px rgba(0, 158, 219, 0.1);
+    }
+
+    .form-label {
+        font-weight: 600;
+        color: var(--un-dark-blue);
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .invalid-feedback {
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4">
-            <div>
-                <h1 class="h3 mb-2">
-                    <i class="bi bi-plus-circle text-un-primary me-2"></i>
-                    New Asset Exit Request
-                </h1>
-                <p class="text-muted mb-0">Submit a request to remove UN assets from the premises</p>
-            </div>
-            <div class="mt-3 mt-lg-0">
-                <a class="btn btn-outline-secondary" href="{% url 'vehicles:my_asset_exits' %}">
-                    <i class="bi bi-arrow-left me-1"></i>My Requests
-                </a>
-            </div>
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center">
+        <div>
+            <h1>
+                <i class="bi bi-box-arrow-right me-2"></i>
+                New Asset Exit Request
+            </h1>
+            <p>Submit a request to temporarily remove UN assets from the premises</p>
+        </div>
+        <div class="mt-3 mt-lg-0">
+            <a class="btn btn-light btn-lg" href="{% url 'vehicles:my_asset_exits' %}">
+                <i class="bi bi-arrow-left me-2"></i>Back to My Requests
+            </a>
         </div>
     </div>
 </div>
@@ -63,64 +415,35 @@
 <form method="post" novalidate>
     {% csrf_token %}
 
-    <!-- Request Information -->
     <div class="row g-4">
+        <!-- Main Form Section -->
         <div class="col-lg-8">
-            <div class="card form-section">
+            <!-- Request Information -->
+            <div class="form-card mb-4">
                 <div class="card-header">
-                    <h5><i class="bi bi-info-circle me-2"></i>Request Information</h5>
+                    <h5>
+                        <i class="bi bi-info-circle me-2"></i>
+                        Request Information
+                    </h5>
                 </div>
                 <div class="card-body">
                     {{ form|crispy }}
                 </div>
             </div>
-        </div>
 
-        <div class="col-lg-4">
-            <div class="card">
+            <!-- Assets List -->
+            <div class="form-card">
                 <div class="card-header">
-                    <h5><i class="bi bi-question-circle me-2"></i>Help & Guidelines</h5>
-                </div>
-                <div class="card-body">
-                    <h6 class="text-un-primary">Before Submitting:</h6>
-                    <ul class="small mb-3">
-                        <li>Ensure all asset details are accurate</li>
-                        <li>Provide clear purpose and destination</li>
-                        <li>Check if security escort is required</li>
-                        <li>Allow 24-48 hours for LSA approval</li>
-                    </ul>
-
-                    <h6 class="text-un-primary">Required Approvals:</h6>
-                    <div class="small">
-                        <div class="d-flex align-items-center mb-2">
-                            <i class="bi bi-1-circle text-warning me-2"></i>
-                            <span>LSA clearance required</span>
-                        </div>
-                        <div class="d-flex align-items-center mb-2">
-                            <i class="bi bi-2-circle text-info me-2"></i>
-                            <span>Gate verification needed</span>
-                        </div>
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-3-circle text-success me-2"></i>
-                            <span>Return confirmation</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Assets List -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-box-seam me-2"></i>Assets to be Removed <span class="required-field"></span></h5>
+                    <h5>
+                        <i class="bi bi-box-seam me-2"></i>
+                        Assets to be Removed
+                        <span class="required-field"></span>
+                    </h5>
                 </div>
                 <div class="card-body">
                     {{ formset.management_form }}
 
-                    <div class="table-responsive">
+                    <div class="formset-table-wrapper">
                         <table class="table formset-table">
                             <thead>
                                 <tr>
@@ -141,7 +464,7 @@
                                     <td style="width: 80px;" class="text-center">
                                         {% if form.instance.pk %}
                                             {{ form.DELETE }}
-                                            <label for="{{ form.DELETE.id_for_label }}" class="small text-muted">Remove</label>
+                                            <label for="{{ form.DELETE.id_for_label }}" class="small text-muted mt-1">Remove</label>
                                         {% else %}
                                             <span class="text-muted">—</span>
                                         {% endif %}
@@ -152,13 +475,78 @@
                         </table>
                     </div>
 
-                    <div class="help-text">
-                        <div class="d-flex align-items-start">
-                            <i class="bi bi-lightbulb text-warning me-2 mt-1"></i>
-                            <div class="small">
-                                <strong>Instructions:</strong> Fill in the extra rows to add more assets.
-                                Provide detailed descriptions and accurate quantities. For existing items,
-                                check "Remove" to delete them from the request.
+                    <div class="info-banner">
+                        <div class="info-banner-content">
+                            <i class="bi bi-lightbulb-fill"></i>
+                            <div class="info-banner-text">
+                                <strong>How to Add Assets</strong>
+                                <p>Fill in the empty rows to add additional assets to your request. Provide detailed descriptions and accurate quantities for each item. For existing assets, check the "Remove" box to delete them from this request.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar Help Section -->
+        <div class="col-lg-4">
+            <div class="help-card">
+                <div class="card-header">
+                    <h5>
+                        <i class="bi bi-question-circle-fill me-2"></i>
+                        Help & Guidelines
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Before Submitting -->
+                    <div class="help-section">
+                        <h6>Before Submitting</h6>
+                        <ul class="help-list">
+                            <li>Verify all asset details are accurate and complete</li>
+                            <li>Provide a clear purpose and destination for removal</li>
+                            <li>Determine if security escort is required</li>
+                            <li>Allow 24-48 hours for LSA approval processing</li>
+                        </ul>
+                    </div>
+
+                    <!-- Approval Process -->
+                    <div class="help-section">
+                        <h6>Approval Process</h6>
+
+                        <div class="approval-step">
+                            <i class="bi bi-1-circle-fill text-warning"></i>
+                            <div class="approval-step-content">
+                                <div class="approval-step-title">LSA Clearance</div>
+                                <p class="approval-step-desc">Local Security Advisor review and authorization</p>
+                            </div>
+                        </div>
+
+                        <div class="approval-step">
+                            <i class="bi bi-2-circle-fill text-info"></i>
+                            <div class="approval-step-content">
+                                <div class="approval-step-title">Gate Verification</div>
+                                <p class="approval-step-desc">Security gate inspection and documentation</p>
+                            </div>
+                        </div>
+
+                        <div class="approval-step">
+                            <i class="bi bi-3-circle-fill text-success"></i>
+                            <div class="approval-step-content">
+                                <div class="approval-step-title">Return Confirmation</div>
+                                <p class="approval-step-desc">Asset return verification and sign-off</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contact Info -->
+                    <div class="help-section">
+                        <div class="alert alert-info mb-0" style="border-radius: 8px;">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-telephone-fill me-2 mt-1"></i>
+                                <div class="small">
+                                    <strong>Need Assistance?</strong><br>
+                                    Contact Security Operations at ext. 2500
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -170,21 +558,19 @@
     <!-- Submit Actions -->
     <div class="row mt-4">
         <div class="col-12">
-            <div class="card">
+            <div class="submit-card">
                 <div class="card-body">
-                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center">
-                        <div class="mb-3 mb-sm-0">
-                            <div class="small text-muted">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Fields marked with <span class="text-danger">*</span> are required
-                            </div>
+                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3">
+                        <div class="required-info">
+                            <i class="bi bi-asterisk"></i>
+                            Fields marked with <span class="text-danger fw-bold">*</span> are required
                         </div>
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-un-primary btn-lg">
-                                <i class="bi bi-send me-2"></i>Submit Request
+                                <i class="bi bi-send-fill me-2"></i>Submit Request
                             </button>
                             <a href="{% url 'vehicles:my_asset_exits' %}" class="btn btn-outline-secondary btn-lg">
-                                <i class="bi bi-x-lg me-2"></i>Cancel
+                                <i class="bi bi-x-circle me-2"></i>Cancel
                             </a>
                         </div>
                     </div>

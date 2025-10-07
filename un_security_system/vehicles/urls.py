@@ -50,6 +50,7 @@ urlpatterns = [
     path('asset-exit/<int:pk>/cancel/', views.asset_exit_cancel, name='asset_exit_cancel'),
     path('asset-exit/<int:pk>/agency-approve/', views.asset_exit_agency_approve, name='asset_exit_agency_approve'),
     path('asset-exit/<int:pk>/edit/', views.asset_exit_edit, name='asset_exit_edit'),
+    path('asset-exit/verify/page', views.asset_exit_verify_page, name='asset_exit_verify_page'),
 
     # add these if you want print/duplicate actions
     path('asset-exit/<int:pk>/print/', views.asset_exit_print, name='asset_exit_print'),
