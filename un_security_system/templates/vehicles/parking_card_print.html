@@ -1,60 +1,680 @@
 {% extends "base.html" %}
-{% block title %}Print Parking Card · UN Security{% endblock %}
-{% block content %}
-<div class="container" style="max-width: 800px;">
-  <div class="d-print-none d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0"><i class="bi bi-printer"></i> Parking Card</h4>
-    <div class="d-flex gap-2">
-      <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
-      <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_detail' card.pk %}">Back</a>
-    </div>
-  </div>
+{% block title %}Print Parking Card {{ card.card_number }} - Parking Management{% endblock %}
 
-  <div class="card">
-    <div class="card-body">
-      <div class="row mb-3">
-        <div class="col-6">
-          <h5 class="mb-1">Card: {{ card.card_number }}</h5>
-          <div class="text-muted">Department: {{ card.department|default:"—" }}</div>
-          <div class="text-muted">Expiry: {{ card.expiry_date|date:"M d, Y" }}</div>
-          <div class="text-muted">Status: {% if card.is_active %}Active{% else %}Inactive{% endif %}</div>
+{% block content %}
+<div class="print-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 900px;">
+
+    <!-- Screen-only Header -->
+    <div class="page-header d-print-none mb-4">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <h2 class="page-title mb-1">
+            <i class="bi bi-printer text-primary me-2"></i>
+            Print Parking Card
+          </h2>
+          <p class="text-muted mb-0">Review card details before printing</p>
         </div>
-        <div class="col-6">
-          <h6 class="mb-1">Owner</h6>
-          <div>{{ card.owner_name|default:"—" }}</div>
-          <div>ID: {{ card.owner_id|default:"—" }}</div>
-          <div>Phone: {{ card.phone|default:"—" }}</div>
+        <div class="col-md-4 text-md-end">
+          <div class="btn-group" role="group">
+            <button class="btn btn-primary" onclick="window.print()">
+              <i class="bi bi-printer me-2"></i>Print Card
+            </button>
+            <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_detail' card.pk %}">
+              <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Print Preview Notice -->
+    <div class="alert alert-info d-print-none mb-4" role="alert">
+      <div class="d-flex align-items-center">
+        <i class="bi bi-info-circle fs-4 me-3"></i>
+        <div>
+          <strong>Print Instructions:</strong>
+          Click "Print Card" to open the print dialog. Use landscape orientation for best results.
+        </div>
+      </div>
+    </div>
+
+    <!-- Printable Parking Card -->
+    <div class="parking-card-printable">
+
+      <!-- Card Header -->
+      <div class="card-print-header">
+        <div class="header-left">
+          <div class="un-logo">
+            <div class="un-emblem">🇺🇳</div>
+            <div class="un-text">
+              <div class="un-title">UNITED NATIONS</div>
+              <div class="un-subtitle">Security Management</div>
+            </div>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="card-type-badge">PARKING PASS</div>
+          <div class="card-number-display">{{ card.card_number }}</div>
         </div>
       </div>
 
-      <hr>
+      <!-- Main Card Content -->
+      <div class="card-content">
 
-      <h6 class="mb-2">Vehicle</h6>
-      <div>Plate: <strong>{{ card.vehicle_plate|default:"—" }}</strong></div>
-      <div>Make/Model: {{ card.vehicle_make|default:"—" }} {{ card.vehicle_model|default:"" }}</div>
-      <div>Color: {{ card.vehicle_color|default:"—" }}</div>
+        <!-- Status Banner -->
+        <div class="status-banner status-{% if card.is_active %}active{% else %}inactive{% endif %}">
+          {% if card.is_active %}
+            <i class="bi bi-check-circle-fill me-2"></i>ACTIVE CARD
+          {% else %}
+            <i class="bi bi-x-circle-fill me-2"></i>INACTIVE CARD
+          {% endif %}
+        </div>
 
-      <hr class="my-4">
+        <div class="row g-4">
 
-      <div class="row">
-        <div class="col-6">
-          <div class="border p-4" style="height: 120px;">
-            <strong>Authorized by (LSA)</strong>
+          <!-- Left Column: Owner & Vehicle -->
+          <div class="col-md-8">
+
+            <!-- Owner Information Section -->
+            <div class="info-section">
+              <h3 class="section-title">
+                <i class="bi bi-person-circle me-2"></i>Card Holder
+              </h3>
+              <div class="info-grid">
+                <div class="info-row">
+                  <div class="info-label">Full Name:</div>
+                  <div class="info-value-large">{{ card.owner_name|default:"Not Specified" }}</div>
+                </div>
+                <div class="info-row">
+                  <div class="info-label">Owner ID:</div>
+                  <div class="info-value">{{ card.owner_id|default:"—" }}</div>
+                </div>
+                <div class="info-row">
+                  <div class="info-label">Department:</div>
+                  <div class="info-value">{{ card.department|default:"—" }}</div>
+                </div>
+                <div class="info-row">
+                  <div class="info-label">Contact:</div>
+                  <div class="info-value">{{ card.phone|default:"—" }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Vehicle Information Section -->
+            <div class="info-section">
+              <h3 class="section-title">
+                <i class="bi bi-car-front-fill me-2"></i>Authorized Vehicle
+              </h3>
+              <div class="vehicle-display">
+                <div class="plate-number-large">
+                  <div class="plate-label">LICENSE PLATE</div>
+                  <div class="plate-value">{{ card.vehicle_plate|default:"NOT SPECIFIED" }}</div>
+                </div>
+                <div class="vehicle-details-grid">
+                  <div class="vehicle-detail">
+                    <span class="detail-label">Make:</span>
+                    <span class="detail-value">{{ card.vehicle_make|default:"—" }}</span>
+                  </div>
+                  <div class="vehicle-detail">
+                    <span class="detail-label">Model:</span>
+                    <span class="detail-value">{{ card.vehicle_model|default:"—" }}</span>
+                  </div>
+                  <div class="vehicle-detail">
+                    <span class="detail-label">Color:</span>
+                    <span class="detail-value">{{ card.vehicle_color|default:"—" }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Validity & QR Code -->
+          <div class="col-md-4">
+
+            <!-- Validity Section -->
+            <div class="validity-section">
+              <div class="validity-title">VALIDITY PERIOD</div>
+              <div class="date-display">
+                <div class="date-item">
+                  <div class="date-label">Issued</div>
+                  <div class="date-value">{{ card.issued_date|date:"M d, Y" }}</div>
+                </div>
+                <div class="date-separator">
+                  <i class="bi bi-arrow-down"></i>
+                </div>
+                <div class="date-item">
+                  <div class="date-label">Expires</div>
+                  <div class="date-value date-expiry">{{ card.expiry_date|date:"M d, Y" }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- QR Code Placeholder -->
+            <div class="qr-section">
+              <div class="qr-code-placeholder">
+                <div class="qr-pattern">
+                  <div class="qr-corner tl"></div>
+                  <div class="qr-corner tr"></div>
+                  <div class="qr-corner bl"></div>
+                  <div class="qr-corner br"></div>
+                  <div class="qr-center">QR</div>
+                </div>
+              </div>
+              <div class="qr-label">Scan to Verify</div>
+            </div>
           </div>
         </div>
-        <div class="col-6">
-          <div class="border p-4" style="height: 120px;">
-            <strong>Issued to</strong>
+
+        <!-- Signature Section -->
+        <div class="signature-section">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="signature-box">
+                <div class="signature-label">Authorized by (LSA)</div>
+                <div class="signature-line"></div>
+                <div class="signature-details">
+                  <div>Signature: _________________</div>
+                  <div>Date: _____________________</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="signature-box">
+                <div class="signature-label">Received by Card Holder</div>
+                <div class="signature-line"></div>
+                <div class="signature-details">
+                  <div>Signature: _________________</div>
+                  <div>Date: _____________________</div>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <!-- Footer Notice -->
+        <div class="card-footer-notice">
+          <div class="footer-icon">
+            <i class="bi bi-shield-exclamation"></i>
+          </div>
+          <div class="footer-text">
+            <strong>IMPORTANT:</strong> This parking card must be displayed at all times while vehicle is on UN premises.
+            Unauthorized use or transfer of this card is strictly prohibited. Report lost or stolen cards immediately.
+          </div>
+        </div>
+      </div>
+
+      <!-- Print Footer -->
+      <div class="print-footer">
+        <div class="footer-left">
+          Printed: {{ "now"|date:"F j, Y g:i A" }}
+        </div>
+        <div class="footer-center">
+          Card #{{ card.card_number }}
+        </div>
+        <div class="footer-right">
+          UN Security Management System
         </div>
       </div>
     </div>
   </div>
 </div>
+
 <style>
-@media print {
-  .navbar, .btn, .d-print-none { display: none !important; }
-  .card { border: none; box-shadow: none; }
-}
+  /* Screen Styles */
+  .print-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  /* Printable Card Styles */
+  .parking-card-printable {
+    background: white;
+    border: 3px solid #0a3d62;
+    border-radius: 1rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+
+  /* Card Header */
+  .card-print-header {
+    background: linear-gradient(135deg, #0a3d62 0%, #1e5f88 100%);
+    color: white;
+    padding: 1.5rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .un-logo {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .un-emblem {
+    font-size: 2.5rem;
+  }
+
+  .un-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .un-subtitle {
+    font-size: 0.875rem;
+    opacity: 0.9;
+  }
+
+  .card-type-badge {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .card-number-display {
+    font-family: monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  /* Card Content */
+  .card-content {
+    padding: 2rem;
+  }
+
+  /* Status Banner */
+  .status-banner {
+    text-align: center;
+    padding: 0.75rem;
+    margin: -2rem -2rem 2rem -2rem;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 1px;
+  }
+
+  .status-active {
+    background: #d1e7dd;
+    color: #0f5132;
+  }
+
+  .status-inactive {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  /* Info Sections */
+  .info-section {
+    margin-bottom: 2rem;
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0a3d62;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #0a3d62;
+  }
+
+  .info-grid {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .info-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 1rem;
+    align-items: baseline;
+  }
+
+  .info-label {
+    font-weight: 600;
+    color: #6c757d;
+    font-size: 0.875rem;
+  }
+
+  .info-value {
+    color: #212529;
+    font-size: 0.95rem;
+  }
+
+  .info-value-large {
+    color: #212529;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  /* Vehicle Display */
+  .vehicle-display {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    border: 2px solid #dee2e6;
+  }
+
+  .plate-number-large {
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+
+  .plate-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    letter-spacing: 1px;
+    margin-bottom: 0.5rem;
+  }
+
+  .plate-value {
+    background: white;
+    border: 3px solid #0a3d62;
+    padding: 0.75rem 1.5rem;
+    font-family: monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0a3d62;
+    border-radius: 0.5rem;
+    letter-spacing: 3px;
+    display: inline-block;
+  }
+
+  .vehicle-details-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .vehicle-detail {
+    text-align: center;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 0.375rem;
+  }
+
+  .detail-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #6c757d;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .detail-value {
+    display: block;
+    font-size: 0.95rem;
+    color: #212529;
+    font-weight: 600;
+  }
+
+  /* Validity Section */
+  .validity-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .validity-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+
+  .date-display {
+    text-align: center;
+  }
+
+  .date-item {
+    margin: 0.75rem 0;
+  }
+
+  .date-label {
+    font-size: 0.75rem;
+    opacity: 0.9;
+    margin-bottom: 0.25rem;
+  }
+
+  .date-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .date-expiry {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+  }
+
+  .date-separator {
+    font-size: 1.5rem;
+    opacity: 0.7;
+    margin: 0.5rem 0;
+  }
+
+  /* QR Code Section */
+  .qr-section {
+    text-align: center;
+  }
+
+  .qr-code-placeholder {
+    background: white;
+    border: 2px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .qr-pattern {
+    width: 150px;
+    height: 150px;
+    margin: 0 auto;
+    position: relative;
+    background: #f8f9fa;
+    border: 2px solid #0a3d62;
+  }
+
+  .qr-corner {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border: 3px solid #0a3d62;
+  }
+
+  .qr-corner.tl { top: 5px; left: 5px; border-right: none; border-bottom: none; }
+  .qr-corner.tr { top: 5px; right: 5px; border-left: none; border-bottom: none; }
+  .qr-corner.bl { bottom: 5px; left: 5px; border-right: none; border-top: none; }
+  .qr-corner.br { bottom: 5px; right: 5px; border-left: none; border-top: none; }
+
+  .qr-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0a3d62;
+  }
+
+  .qr-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 600;
+  }
+
+  /* Signature Section */
+  .signature-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 2px solid #dee2e6;
+  }
+
+  .signature-box {
+    border: 2px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+  }
+
+  .signature-label {
+    font-weight: 700;
+    color: #0a3d62;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+  }
+
+  .signature-line {
+    height: 60px;
+    border-bottom: 2px solid #0a3d62;
+    margin-bottom: 1rem;
+  }
+
+  .signature-details {
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+
+  .signature-details div {
+    margin-bottom: 0.5rem;
+  }
+
+  /* Footer Notice */
+  .card-footer-notice {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 0.5rem;
+    display: flex;
+    gap: 1rem;
+  }
+
+  .footer-icon {
+    font-size: 2rem;
+    color: #856404;
+    flex-shrink: 0;
+  }
+
+  .footer-text {
+    font-size: 0.875rem;
+    color: #856404;
+    line-height: 1.6;
+  }
+
+  /* Print Footer */
+  .print-footer {
+    background: #f8f9fa;
+    border-top: 2px solid #dee2e6;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #6c757d;
+  }
+
+  /* Print-specific styles */
+  @media print {
+    body {
+      background: white;
+    }
+
+    .print-container {
+      background: white;
+    }
+
+    .d-print-none {
+      display: none !important;
+    }
+
+    .parking-card-printable {
+      box-shadow: none;
+      page-break-inside: avoid;
+      margin: 0;
+    }
+
+    .btn {
+      display: none;
+    }
+
+    @page {
+      margin: 1cm;
+      size: landscape;
+    }
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 767px) {
+    .card-print-header {
+      flex-direction: column;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .header-right {
+      text-align: center;
+    }
+
+    .info-row {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+
+    .vehicle-details-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .plate-value {
+      font-size: 1.5rem;
+    }
+  }
 </style>
 {% endblock %}

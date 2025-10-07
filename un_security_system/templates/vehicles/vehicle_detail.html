@@ -1,128 +1,398 @@
 {% extends "base.html" %}
 
-{% block title %}Vehicle · {{ object.plate_number }}{% endblock %}
+{% block title %}Vehicle {{ object.plate_number }} - Vehicle Management{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 1100px;">
+<div class="vehicle-detail-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 1400px;">
 
-  <!-- Header + actions -->
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <div>
-      <h3 class="mb-0">
-        <i class="bi bi-car-front"></i>
-        Vehicle <span class="text-muted">#{{ object.plate_number }}</span>
-      </h3>
-      <div class="small text-muted">
-        Type: {{ object.get_vehicle_type_display|default:object.vehicle_type|default:"—" }}
-      </div>
-    </div>
-
-    <div class="d-flex gap-2">
-      {# Resolve URLs safely so missing routes don't crash the page #}
-      {% url 'vehicles:vehicle_edit' object.pk as edit_url %}
-      {% url 'vehicles:vehicle_delete' object.pk as delete_url %}
-      {% url 'vehicles:record_movement' as record_move_url %}
-      {% url 'vehicles:movement_list' as movement_list_url %}
-
-      {% if record_move_url %}
-        <a class="btn btn-success" href="{{ record_move_url }}">
-          <i class="bi bi-plus-circle"></i> Record Movement
-        </a>
-      {% endif %}
-
-      {% if movement_list_url %}
-        <a class="btn btn-outline-secondary" href="{{ movement_list_url }}">
-          <i class="bi bi-clock-history"></i> Movement Log
-        </a>
-      {% endif %}
-
-      {% if edit_url %}
-        <a class="btn btn-primary" href="{{ edit_url }}">
-          <i class="bi bi-pencil"></i> Edit
-        </a>
-      {% endif %}
-      {% if delete_url %}
-        <a class="btn btn-outline-danger" href="{{ delete_url }}">
-          <i class="bi bi-trash"></i> Delete
-        </a>
-      {% endif %}
-
-      <a class="btn btn-outline-secondary" href="{% url 'vehicles:vehicle_list' %}">
-        <i class="bi bi-arrow-left"></i> Back
-      </a>
-    </div>
-  </div>
-
-  <!-- Vehicle + Owner/Agency info -->
-  <div class="row g-3">
-    <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-body">
-          <h5 class="card-title mb-3">Vehicle Info</h5>
-          <dl class="row mb-0">
-            <dt class="col-4">Plate</dt>
-            <dd class="col-8">{{ object.plate_number }}</dd>
-
-            <dt class="col-4">Make</dt>
-            <dd class="col-8">{{ object.make|default:"—" }}</dd>
-
-            <dt class="col-4">Model</dt>
-            <dd class="col-8">{{ object.model|default:"—" }}</dd>
-
-            <dt class="col-4">Color</dt>
-            <dd class="col-8">{{ object.color|default:"—" }}</dd>
-
-            <dt class="col-4">Type</dt>
-            <dd class="col-8">{{ object.get_vehicle_type_display|default:object.vehicle_type|default:"—" }}</dd>
-
-            <dt class="col-4">UN Agency</dt>
-            <dd class="col-8">{{ object.un_agency|default:"—" }}</dd>
-          </dl>
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+              <li class="breadcrumb-item"><a href="/">Home</a></li>
+              <li class="breadcrumb-item"><a href="{% url 'vehicles:vehicle_list' %}">Vehicles</a></li>
+              <li class="breadcrumb-item active" aria-current="page">{{ object.plate_number }}</li>
+            </ol>
+          </nav>
+          <h2 class="page-title mb-1">
+            <i class="bi bi-car-front-fill text-primary me-2"></i>
+            {{ object.plate_number }}
+          </h2>
+          <div class="vehicle-meta">
+            <span class="badge bg-light text-dark border me-2">
+              {{ object.get_vehicle_type_display|default:object.vehicle_type|default:"Unknown Type" }}
+            </span>
+            {% if object.un_agency %}
+              <span class="badge bg-primary bg-opacity-10 text-primary">
+                <i class="bi bi-building me-1"></i>{{ object.un_agency }}
+              </span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+          <div class="btn-group" role="group">
+            {% url 'vehicles:vehicle_edit' object.pk as edit_url %}
+            {% if edit_url %}
+              <a class="btn btn-primary" href="{{ edit_url }}">
+                <i class="bi bi-pencil me-1"></i>Edit
+              </a>
+            {% endif %}
+            <a class="btn btn-outline-secondary" href="{% url 'vehicles:vehicle_list' %}">
+              <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-body">
-          <h5 class="card-title mb-3">Parking Card</h5>
+    <!-- Quick Actions Bar -->
+    <div class="quick-actions mb-4">
+      <div class="card shadow-sm">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="action-label">
+              <i class="bi bi-lightning-fill text-warning me-2"></i>
+              <strong>Quick Actions</strong>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              {% url 'vehicles:record_movement' as record_move_url %}
+              {% if record_move_url %}
+                <a class="btn btn-success" href="{{ record_move_url }}">
+                  <i class="bi bi-plus-circle me-2"></i>Record Movement
+                </a>
+              {% endif %}
+              {% url 'vehicles:movement_list' as movement_list_url %}
+              {% if movement_list_url %}
+                <a class="btn btn-outline-primary" href="{{ movement_list_url }}">
+                  <i class="bi bi-clock-history me-2"></i>Movement Log
+                </a>
+              {% endif %}
+              {% url 'vehicles:vehicle_delete' object.pk as delete_url %}
+              {% if delete_url %}
+                <a class="btn btn-outline-danger" href="{{ delete_url }}">
+                  <i class="bi bi-trash me-2"></i>Delete
+                </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-          {% if object.parking_card %}
-            {% url 'vehicles:parking_card_detail' object.parking_card.pk as pc_detail_url %}
-            <dl class="row mb-0">
-              <dt class="col-4">Card No.</dt>
-              <dd class="col-8">
+    <div class="row g-4">
+
+      <!-- Left Column: Vehicle & Parking Info -->
+      <div class="col-lg-5">
+
+        <!-- Vehicle Information Card -->
+        <div class="card vehicle-info-card shadow-sm mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-car-front-fill me-2"></i>Vehicle Information
+            </h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="info-list">
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-hash"></i>
+                  <span>Plate Number</span>
+                </div>
+                <div class="info-value">
+                  <strong class="plate-number">{{ object.plate_number }}</strong>
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-car-front"></i>
+                  <span>Make</span>
+                </div>
+                <div class="info-value">
+                  {% if object.make %}
+                    {{ object.make }}
+                  {% else %}
+                    <span class="text-muted fst-italic">Not specified</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-card-text"></i>
+                  <span>Model</span>
+                </div>
+                <div class="info-value">
+                  {% if object.model %}
+                    {{ object.model }}
+                  {% else %}
+                    <span class="text-muted fst-italic">Not specified</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-palette"></i>
+                  <span>Color</span>
+                </div>
+                <div class="info-value">
+                  {% if object.color %}
+                    <span class="badge bg-light text-dark border">{{ object.color }}</span>
+                  {% else %}
+                    <span class="text-muted fst-italic">Not specified</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-tag"></i>
+                  <span>Vehicle Type</span>
+                </div>
+                <div class="info-value">
+                  <span class="badge bg-primary bg-opacity-10 text-primary">
+                    {{ object.get_vehicle_type_display|default:object.vehicle_type|default:"Unknown" }}
+                  </span>
+                </div>
+              </div>
+
+              {% if object.year %}
+                <div class="info-item">
+                  <div class="info-label">
+                    <i class="bi bi-calendar"></i>
+                    <span>Year</span>
+                  </div>
+                  <div class="info-value">
+                    {{ object.year }}
+                  </div>
+                </div>
+              {% endif %}
+
+              <div class="info-item border-0">
+                <div class="info-label">
+                  <i class="bi bi-building"></i>
+                  <span>UN Agency</span>
+                </div>
+                <div class="info-value">
+                  {% if object.un_agency %}
+                    <strong>{{ object.un_agency }}</strong>
+                  {% else %}
+                    <span class="text-muted fst-italic">Not specified</span>
+                  {% endif %}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Parking Card Information -->
+        <div class="card parking-card-info shadow-sm">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-credit-card-2-front me-2"></i>Parking Card
+            </h5>
+          </div>
+          <div class="card-body">
+            {% if object.parking_card %}
+              {% url 'vehicles:parking_card_detail' object.parking_card.pk as pc_detail_url %}
+              <div class="parking-card-display">
+                <div class="parking-card-header mb-3">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                      <div class="parking-card-number">
+                        {% if pc_detail_url %}
+                          <a href="{{ pc_detail_url }}" class="card-link">
+                            <i class="bi bi-credit-card me-2"></i>
+                            {{ object.parking_card.card_number }}
+                          </a>
+                        {% else %}
+                          <i class="bi bi-credit-card me-2"></i>
+                          {{ object.parking_card.card_number }}
+                        {% endif %}
+                      </div>
+                    </div>
+                    <div>
+                      {% if object.parking_card.is_active %}
+                        <span class="status-badge status-active">
+                          <i class="bi bi-check-circle-fill me-1"></i>Active
+                        </span>
+                      {% else %}
+                        <span class="status-badge status-inactive">
+                          <i class="bi bi-x-circle-fill me-1"></i>Inactive
+                        </span>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="parking-card-details">
+                  <div class="detail-row">
+                    <span class="detail-label">
+                      <i class="bi bi-person me-1"></i>Owner:
+                    </span>
+                    <span class="detail-value">
+                      {{ object.parking_card.owner_name|default:"Not specified" }}
+                    </span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">
+                      <i class="bi bi-building me-1"></i>Department:
+                    </span>
+                    <span class="detail-value">
+                      {{ object.parking_card.department|default:"Not specified" }}
+                    </span>
+                  </div>
+                  <div class="detail-row">
+                    <span class="detail-label">
+                      <i class="bi bi-calendar-check me-1"></i>Expires:
+                    </span>
+                    <span class="detail-value">
+                      {{ object.parking_card.expiry_date|date:"F j, Y" }}
+                    </span>
+                  </div>
+                </div>
+
                 {% if pc_detail_url %}
-                  <a href="{{ pc_detail_url }}">{{ object.parking_card.card_number }}</a>
-                {% else %}
-                  {{ object.parking_card.card_number }}
+                  <div class="mt-3">
+                    <a href="{{ pc_detail_url }}" class="btn btn-outline-primary btn-sm w-100">
+                      <i class="bi bi-eye me-2"></i>View Card Details
+                    </a>
+                  </div>
                 {% endif %}
-              </dd>
+              </div>
+            {% else %}
+              <div class="alert alert-warning mb-0">
+                <div class="d-flex align-items-start">
+                  <i class="bi bi-exclamation-triangle fs-4 me-3"></i>
+                  <div>
+                    <strong>No Parking Card Linked</strong>
+                    <p class="mb-2">This vehicle doesn't have a parking card associated with it.</p>
+                    {% url 'vehicles:parking_card_create' as pc_new_url %}
+                    {% if pc_new_url %}
+                      <a class="btn btn-sm btn-warning" href="{{ pc_new_url }}">
+                        <i class="bi bi-plus-circle me-1"></i>Create Parking Card
+                      </a>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
 
-              <dt class="col-4">Owner</dt>
-              <dd class="col-8">{{ object.parking_card.owner_name|default:"—" }}</dd>
-
-              <dt class="col-4">Dept</dt>
-              <dd class="col-8">{{ object.parking_card.department|default:"—" }}</dd>
-
-              <dt class="col-4">Expires</dt>
-              <dd class="col-8">{{ object.parking_card.expiry_date|date:"M d, Y" }}</dd>
-
-              <dt class="col-4">Status</dt>
-              <dd class="col-8">
-                {% if object.parking_card.is_active %}
-                  <span class="badge text-bg-success">Active</span>
-                {% else %}
-                  <span class="badge text-bg-secondary">Inactive</span>
+      <!-- Right Column: Recent Movements -->
+      <div class="col-lg-7">
+        <div class="card movements-card shadow-sm">
+          <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+              <h5 class="card-title mb-0">
+                <i class="bi bi-clock-history me-2"></i>Recent Movements
+              </h5>
+              <div class="d-flex gap-2">
+                <span class="badge bg-primary">
+                  {{ object.vehiclemovement_set.count }} Total
+                </span>
+                {% if record_move_url %}
+                  <a class="btn btn-sm btn-success" href="{{ record_move_url }}">
+                    <i class="bi bi-plus-circle"></i>
+                  </a>
                 {% endif %}
-              </dd>
-            </dl>
+              </div>
+            </div>
+          </div>
+
+          {% if object.vehiclemovement_set.exists %}
+            <div class="table-responsive">
+              <table class="table movements-table mb-0">
+                <thead>
+                  <tr>
+                    <th style="width: 16%;">Date & Time</th>
+                    <th style="width: 12%;">Type</th>
+                    <th style="width: 15%;">Gate</th>
+                    <th style="width: 18%;">Driver</th>
+                    <th style="width: 20%;">Purpose</th>
+                    <th style="width: 19%;">Recorded By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for m in object.vehiclemovement_set.all|dictsortreversed:"timestamp"|slice:":10" %}
+                    <tr>
+                      <td>
+                        <div class="date-info">
+                          <div class="date-primary">{{ m.timestamp|date:"M d, Y" }}</div>
+                          <div class="date-time">{{ m.timestamp|date:"g:i A" }}</div>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="movement-badge movement-{% if m.movement_type == 'entry' %}entry{% else %}exit{% endif %}">
+                          {% if m.movement_type == 'entry' %}
+                            <i class="bi bi-arrow-right me-1"></i>Entry
+                          {% else %}
+                            <i class="bi bi-arrow-left me-1"></i>Exit
+                          {% endif %}
+                        </span>
+                      </td>
+                      <td>
+                        {% if m.gate %}
+                          {{ m.get_gate_display|default:m.gate }}
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if m.driver_name %}
+                          <i class="bi bi-person-circle text-muted me-1"></i>{{ m.driver_name }}
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <span class="purpose-text">{{ m.purpose|default:"—"|truncatewords:5 }}</span>
+                      </td>
+                      <td>
+                        {% if m.recorded_by %}
+                          <span class="recorded-by">
+                            <i class="bi bi-person-badge text-muted me-1"></i>{{ m.recorded_by.username }}
+                          </span>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% if object.vehiclemovement_set.count > 10 %}
+              <div class="card-footer text-center">
+                {% if movement_list_url %}
+                  <a href="{{ movement_list_url }}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-list-ul me-2"></i>View All {{ object.vehiclemovement_set.count }} Movements
+                  </a>
+                {% endif %}
+              </div>
+            {% endif %}
           {% else %}
-            <div class="alert alert-warning mb-0">
-              No parking card linked to this vehicle.
-              {% url 'vehicles:parking_card_create' as pc_new_url %}
-              {% if pc_new_url %}
-                <a class="alert-link" href="{{ pc_new_url }}">Create one</a>.
+            <div class="card-body empty-state text-center py-5">
+              <div class="empty-icon mb-3">
+                <i class="bi bi-clock-history"></i>
+              </div>
+              <h5 class="empty-title">No Movements Recorded</h5>
+              <p class="empty-text text-muted mb-4">
+                This vehicle has no movement records yet.
+              </p>
+              {% if record_move_url %}
+                <a href="{{ record_move_url }}" class="btn btn-success">
+                  <i class="bi bi-plus-circle me-2"></i>Record First Movement
+                </a>
               {% endif %}
             </div>
           {% endif %}
@@ -130,58 +400,437 @@
       </div>
     </div>
   </div>
-
-  <!-- Recent movements -->
-  <div class="card shadow-sm mt-3">
-    <div class="card-body">
-      <div class="d-flex align-items-center justify-content-between">
-        <h5 class="card-title mb-0">Recent Movements</h5>
-        {% if record_move_url %}
-          <a class="btn btn-sm btn-outline-primary" href="{{ record_move_url }}">
-            <i class="bi bi-plus-circle"></i> Record Movement
-          </a>
-        {% endif %}
-      </div>
-      <div class="table-responsive mt-3">
-        <table class="table table-sm align-middle">
-          <thead>
-            <tr>
-              <th style="width: 110px;">When</th>
-              <th style="width: 110px;">Type</th>
-              <th style="width: 130px;">Gate</th>
-              <th>Driver</th>
-              <th>Purpose</th>
-              <th>Notes</th>
-              <th style="width: 150px;">Recorded by</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for m in object.vehiclemovement_set.all|dictsortreversed:"timestamp"|slice:":10" %}
-              <tr>
-                <td class="text-nowrap">{{ m.timestamp|date:"M d, Y H:i" }}</td>
-                <td>
-                  <span class="badge {% if m.movement_type == 'entry' %}text-bg-success{% else %}text-bg-secondary{% endif %}">
-                    {{ m.get_movement_type_display|default:m.movement_type }}
-                  </span>
-                </td>
-                <td>{{ m.get_gate_display|default:m.gate|default:"—" }}</td>
-                <td>{{ m.driver_name|default:"—" }}</td>
-                <td>{{ m.purpose|default:"—" }}</td>
-                <td>{{ m.notes|default:"—" }}</td>
-                <td class="text-nowrap">
-                  {% if m.recorded_by %}{{ m.recorded_by.username }}{% else %}—{% endif %}
-                </td>
-              </tr>
-            {% empty %}
-              <tr>
-                <td colspan="7" class="text-muted text-center py-4">No movements recorded yet.</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
 </div>
+
+<style>
+  /* Layout & Container */
+  .vehicle-detail-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .vehicle-meta {
+    margin-top: 0.5rem;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Quick Actions */
+  .quick-actions .card {
+    border: 2px solid #e9ecef;
+  }
+
+  .action-label {
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+    color: #495057;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .vehicle-info-card,
+  .parking-card-info,
+  .movements-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+  }
+
+  .card-footer {
+    background: #f8f9fa;
+    border-top: 2px solid #e9ecef;
+    padding: 1rem;
+  }
+
+  /* Info List */
+  .info-list {
+    padding: 0;
+    margin: 0;
+  }
+
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+  }
+
+  .info-item:last-child {
+    border-bottom: none;
+  }
+
+  .info-item:hover {
+    background-color: #f8f9fa;
+  }
+
+  .info-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #6c757d;
+    min-width: 140px;
+  }
+
+  .info-label i {
+    font-size: 1rem;
+    color: #adb5bd;
+  }
+
+  .info-value {
+    flex: 1;
+    text-align: right;
+    font-size: 0.95rem;
+    color: #212529;
+  }
+
+  .plate-number {
+    font-size: 1.1rem;
+    font-family: monospace;
+    color: #0d6efd;
+  }
+
+  /* Parking Card Display */
+  .parking-card-display {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 2px solid #e9ecef;
+  }
+
+  .parking-card-number {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .card-link {
+    color: #0d6efd;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .card-link:hover {
+    color: #0a58ca;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .status-active {
+    background: #d1e7dd;
+    color: #0f5132;
+  }
+
+  .status-inactive {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  .parking-card-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+
+  .detail-label {
+    color: #6c757d;
+    font-weight: 600;
+  }
+
+  .detail-value {
+    color: #212529;
+    text-align: right;
+  }
+
+  /* Movements Table */
+  .movements-table {
+    font-size: 0.9rem;
+  }
+
+  .movements-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .movements-table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 1rem 0.75rem;
+    border: none;
+  }
+
+  .movements-table td {
+    padding: 1rem 0.75rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .movements-table tbody tr {
+    transition: all 0.2s;
+  }
+
+  .movements-table tbody tr:hover {
+    background-color: #f8f9fa;
+    transform: scale(1.002);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .date-info {
+    line-height: 1.4;
+  }
+
+  .date-primary {
+    font-weight: 500;
+    color: #212529;
+  }
+
+  .date-time {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+
+  .movement-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.65rem;
+    border-radius: 0.375rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .movement-entry {
+    background: #d1e7dd;
+    color: #0f5132;
+  }
+
+  .movement-exit {
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .purpose-text {
+    font-size: 0.875rem;
+    color: #495057;
+  }
+
+  .recorded-by {
+    font-size: 0.875rem;
+    color: #495057;
+  }
+
+  /* Empty State */
+  .empty-state {
+    padding: 3rem 2rem;
+  }
+
+  .empty-icon {
+    font-size: 4rem;
+    color: #dee2e6;
+  }
+
+  .empty-title {
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-text {
+    font-size: 0.95rem;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  .btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border-color: #28a745;
+  }
+
+  .btn-success:hover {
+    background: linear-gradient(135deg, #218838 0%, #1ba57b 100%);
+    border-color: #218838;
+  }
+
+  .btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  /* Badges */
+  .badge {
+    font-weight: 500;
+    padding: 0.375rem 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  /* Alerts */
+  .alert-warning {
+    background: #fff9e6;
+    border: 2px solid #ffc107;
+    color: #856404;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 991px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .info-item {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .info-value {
+      text-align: left;
+    }
+
+    .detail-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
+
+    .detail-value {
+      text-align: left;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .btn-group .btn {
+      width: 100%;
+    }
+
+    .quick-actions .d-flex {
+      flex-direction: column;
+      align-items: stretch !important;
+    }
+
+    .quick-actions .d-flex .btn {
+      width: 100%;
+    }
+
+    .movements-table {
+      font-size: 0.85rem;
+    }
+
+    .movements-table th,
+    .movements-table td {
+      padding: 0.75rem 0.5rem;
+    }
+  }
+
+  /* Animation */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .vehicle-info-card,
+  .parking-card-info,
+  .movements-card,
+  .quick-actions {
+    animation: slideIn 0.3s ease-out;
+  }
+</style>
 {% endblock %}

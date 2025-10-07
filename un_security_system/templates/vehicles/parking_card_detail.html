@@ -1,103 +1,840 @@
 {% extends "base.html" %}
 
-{% block title %}Parking Card · {{ object.card_number }}{% endblock %}
+{% block title %}Parking Card {{ object.card_number }} - Parking Management{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 1000px;">
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <div>
-      <h3 class="mb-0">
-        <i class="bi bi-credit-card-2-front"></i>
-        Parking Card <span class="text-muted">#{{ object.card_number }}</span>
-      </h3>
-      <div class="text-muted small">
-        Issued: {{ object.issued_date|date:"M d, Y" }} ·
-        Expires: {{ object.expiry_date|date:"M d, Y" }}
-      </div>
-    </div>
+<div class="parking-card-detail-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 1400px;">
 
-    <div class="d-flex gap-2">
-      {% url 'vehicles:parking_card_print' object.pk as print_url %}
-      {% url 'vehicles:parking_card_duplicate' object.pk as dup_url %}
-      {% url 'vehicles:parking_card_delete' object.pk as del_url %}
-      {% url 'vehicles:parking_card_edit' object.pk as edit_url %}
-      {% url 'vehicles:parking_card_deactivate' object.pk as deact_url %}
-      {% url 'vehicles:parking_card_reactivate' object.pk as react_url %}
-
-      {% if print_url %}<a class="btn btn-outline-secondary" href="{{ print_url }}"><i class="bi bi-printer"></i> Print</a>{% endif %}
-      {% if dup_url %}<a class="btn btn-outline-secondary" href="{{ dup_url }}"><i class="bi bi-files"></i> Duplicate</a>{% endif %}
-      {% if edit_url %}<a class="btn btn-primary" href="{{ edit_url }}"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
-
-      {% if object.is_active %}
-        {% if deact_url %}<a class="btn btn-outline-warning" href="{{ deact_url }}"><i class="bi bi-pause-circle"></i> Deactivate</a>{% endif %}
-      {% else %}
-        {% if react_url %}<a class="btn btn-outline-success" href="{{ react_url }}"><i class="bi bi-play-circle"></i> Reactivate</a>{% endif %}
-      {% endif %}
-
-      {% if del_url %}
-        <a class="btn btn-outline-danger" href="{{ del_url }}"><i class="bi bi-trash"></i> Delete</a>
-      {% endif %}
-      <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_list' %}"><i class="bi bi-arrow-left"></i> Back</a>
-    </div>
-  </div>
-
-  <div class="row g-3">
-    <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-body">
-          <h5 class="card-title mb-3">Owner</h5>
-          <dl class="row mb-0">
-            <dt class="col-4">Name</dt><dd class="col-8">{{ object.owner_name|default:"—" }}</dd>
-            <dt class="col-4">Owner ID</dt><dd class="col-8">{{ object.owner_id|default:"—" }}</dd>
-            <dt class="col-4">Phone</dt><dd class="col-8">{{ object.phone|default:"—" }}</dd>
-            <dt class="col-4">Department</dt><dd class="col-8">{{ object.department|default:"—" }}</dd>
-            <dt class="col-4">Status</dt>
-            <dd class="col-8">
-              {% if object.is_active and object.expiry_date >= today|default:object.expiry_date %}
-                <span class="badge text-bg-success">Active</span>
-              {% elif object.is_active and object.expiry_date < today|default:object.expiry_date %}
-                <span class="badge text-bg-warning">Expired</span>
-              {% else %}
-                <span class="badge text-bg-secondary">Inactive</span>
-              {% endif %}
-            </dd>
-          </dl>
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+              <li class="breadcrumb-item"><a href="/">Home</a></li>
+              <li class="breadcrumb-item"><a href="{% url 'vehicles:parking_card_list' %}">Parking Cards</a></li>
+              <li class="breadcrumb-item active" aria-current="page">{{ object.card_number }}</li>
+            </ol>
+          </nav>
+          <h2 class="page-title mb-1">
+            <i class="bi bi-credit-card-2-front-fill text-primary me-2"></i>
+            Parking Card {{ object.card_number }}
+          </h2>
+          <div class="card-meta">
+            <span class="meta-item">
+              <i class="bi bi-calendar-check me-1"></i>
+              Issued: {{ object.issued_date|date:"M d, Y" }}
+            </span>
+            <span class="meta-separator">•</span>
+            <span class="meta-item">
+              <i class="bi bi-calendar-x me-1"></i>
+              Expires: {{ object.expiry_date|date:"M d, Y" }}
+            </span>
+          </div>
         </div>
-      </div>
-    </div>
-
-    <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-body">
-          <h5 class="card-title mb-3">Vehicle</h5>
-          <dl class="row mb-0">
-            <dt class="col-4">Plate</dt><dd class="col-8">{{ object.vehicle_plate|default:"—" }}</dd>
-            <dt class="col-4">Make</dt><dd class="col-8">{{ object.vehicle_make|default:"—" }}</dd>
-            <dt class="col-4">Model</dt><dd class="col-8">{{ object.vehicle_model|default:"—" }}</dd>
-            <dt class="col-4">Color</dt><dd class="col-8">{{ object.vehicle_color|default:"—" }}</dd>
-          </dl>
-          {% if object.vehicles.all %}
-            <hr>
-            <div class="small text-muted">Linked system vehicles: {{ object.vehicles.count }}</div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+          {% url 'vehicles:parking_card_edit' object.pk as edit_url %}
+          {% if edit_url %}
+            <a class="btn btn-primary" href="{{ edit_url }}">
+              <i class="bi bi-pencil me-1"></i>Edit
+            </a>
           {% endif %}
+          <a class="btn btn-outline-secondary" href="{% url 'vehicles:parking_card_list' %}">
+            <i class="bi bi-arrow-left me-1"></i>Back
+          </a>
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="card shadow-sm mt-3">
-    <div class="card-body">
-      <h5 class="card-title mb-3">Metadata</h5>
-      <dl class="row mb-0">
-        <dt class="col-3">Card Number</dt><dd class="col-9">{{ object.card_number }}</dd>
-        <dt class="col-3">Issued</dt><dd class="col-9">{{ object.issued_date|date:"M d, Y" }}</dd>
-        <dt class="col-3">Expires</dt><dd class="col-9">{{ object.expiry_date|date:"M d, Y" }}</dd>
-        <dt class="col-3">Created By</dt>
-        <dd class="col-9">{% if object.created_by %}{{ object.created_by.username }}{% else %}—{% endif %}</dd>
-        <dt class="col-3">Created</dt><dd class="col-9">{{ object.created_at|date:"M d, Y H:i" }}</dd>
-        <dt class="col-3">Updated</dt><dd class="col-9">{{ object.updated_at|date:"M d, Y H:i" }}</dd>
-      </dl>
+    <!-- Status Alert -->
+    {% if object.is_active and object.expiry_date >= today|default:object.expiry_date %}
+      <div class="alert alert-success shadow-sm mb-4" role="alert">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-check-circle-fill fs-3 me-3"></i>
+          <div>
+            <h5 class="alert-heading mb-1">Active Card</h5>
+            <p class="mb-0">This parking card is currently active and valid.</p>
+          </div>
+        </div>
+      </div>
+    {% elif object.is_active and object.expiry_date < today|default:object.expiry_date %}
+      <div class="alert alert-warning shadow-sm mb-4" role="alert">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
+          <div>
+            <h5 class="alert-heading mb-1">Expired Card</h5>
+            <p class="mb-0">This parking card has expired and needs renewal.</p>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-secondary shadow-sm mb-4" role="alert">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-x-circle-fill fs-3 me-3"></i>
+          <div>
+            <h5 class="alert-heading mb-1">Inactive Card</h5>
+            <p class="mb-0">This parking card has been deactivated.</p>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Quick Actions Bar -->
+    <div class="quick-actions mb-4">
+      <div class="card shadow-sm">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="action-label">
+              <i class="bi bi-lightning-fill text-warning me-2"></i>
+              <strong>Quick Actions</strong>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              {% url 'vehicles:parking_card_print' object.pk as print_url %}
+              {% if print_url %}
+                <a class="btn btn-outline-secondary" href="{{ print_url }}">
+                  <i class="bi bi-printer me-2"></i>Print
+                </a>
+              {% endif %}
+              {% url 'vehicles:parking_card_duplicate' object.pk as dup_url %}
+              {% if dup_url %}
+                <a class="btn btn-outline-info" href="{{ dup_url }}">
+                  <i class="bi bi-files me-2"></i>Duplicate
+                </a>
+              {% endif %}
+              {% if object.is_active %}
+                {% url 'vehicles:parking_card_deactivate' object.pk as deact_url %}
+                {% if deact_url %}
+                  <a class="btn btn-outline-warning" href="{{ deact_url }}">
+                    <i class="bi bi-pause-circle me-2"></i>Deactivate
+                  </a>
+                {% endif %}
+              {% else %}
+                {% url 'vehicles:parking_card_reactivate' object.pk as react_url %}
+                {% if react_url %}
+                  <a class="btn btn-outline-success" href="{{ react_url }}">
+                    <i class="bi bi-play-circle me-2"></i>Reactivate
+                  </a>
+                {% endif %}
+              {% endif %}
+              {% url 'vehicles:parking_card_delete' object.pk as del_url %}
+              {% if del_url %}
+                <a class="btn btn-outline-danger" href="{{ del_url }}">
+                  <i class="bi bi-trash me-2"></i>Delete
+                </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+
+      <!-- Left Column: Owner & Vehicle Info -->
+      <div class="col-lg-8">
+
+        <div class="row g-4 mb-4">
+          <!-- Owner Information Card -->
+          <div class="col-md-6">
+            <div class="card owner-card shadow-sm h-100">
+              <div class="card-header">
+                <h5 class="card-title mb-0">
+                  <i class="bi bi-person-circle me-2"></i>Card Owner
+                </h5>
+              </div>
+              <div class="card-body p-0">
+                <div class="info-list">
+
+                  <div class="info-item">
+                    <div class="info-label">
+                      <i class="bi bi-person"></i>
+                      <span>Full Name</span>
+                    </div>
+                    <div class="info-value">
+                      {% if object.owner_name %}
+                        <strong>{{ object.owner_name }}</strong>
+                      {% else %}
+                        <span class="text-muted fst-italic">Not specified</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="info-item">
+                    <div class="info-label">
+                      <i class="bi bi-person-badge"></i>
+                      <span>Owner ID</span>
+                    </div>
+                    <div class="info-value">
+                      {% if object.owner_id %}
+                        <code>{{ object.owner_id }}</code>
+                      {% else %}
+                        <span class="text-muted fst-italic">Not specified</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="info-item">
+                    <div class="info-label">
+                      <i class="bi bi-telephone"></i>
+                      <span>Phone</span>
+                    </div>
+                    <div class="info-value">
+                      {% if object.phone %}
+                        <a href="tel:{{ object.phone }}" class="phone-link">{{ object.phone }}</a>
+                      {% else %}
+                        <span class="text-muted fst-italic">Not specified</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="info-item border-0">
+                    <div class="info-label">
+                      <i class="bi bi-building"></i>
+                      <span>Department</span>
+                    </div>
+                    <div class="info-value">
+                      {% if object.department %}
+                        <span class="badge bg-light text-dark border">{{ object.department }}</span>
+                      {% else %}
+                        <span class="text-muted fst-italic">Not specified</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Vehicle Information Card -->
+          <div class="col-md-6">
+            <div class="card vehicle-card shadow-sm h-100">
+              <div class="card-header">
+                <h5 class="card-title mb-0">
+                  <i class="bi bi-car-front-fill me-2"></i>Vehicle Details
+                </h5>
+              </div>
+              <div class="card-body p-0">
+                <div class="info-list">
+
+                  <div class="info-item">
+                    <div class="info-label">
+                      <i class="bi bi-hash"></i>
+                      <span>Plate Number</span>
+                    </div>
+                    <div class="info-value">
+                      {% if object.vehicle_plate %}
+                        <strong class="plate-number">{{ object.vehicle_plate }}</strong>
+                      {% else %}
+                        <span class="text-muted fst-italic">Not specified</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="info-item">
+                    <div class="info-label">
+                      <i class="bi bi-car-front"></i>
+                      <span>Make</span>
+                    </div>
+                    <div class="info-value">
+                      {{ object.vehicle_make|default:"<span class='text-muted fst-italic'>Not specified</span>" }}
+                    </div>
+                  </div>
+
+                  <div class="info-item">
+                    <div class="info-label">
+                      <i class="bi bi-card-text"></i>
+                      <span>Model</span>
+                    </div>
+                    <div class="info-value">
+                      {{ object.vehicle_model|default:"<span class='text-muted fst-italic'>Not specified</span>" }}
+                    </div>
+                  </div>
+
+                  <div class="info-item border-0">
+                    <div class="info-label">
+                      <i class="bi bi-palette"></i>
+                      <span>Color</span>
+                    </div>
+                    <div class="info-value">
+                      {% if object.vehicle_color %}
+                        <span class="badge bg-light text-dark border">{{ object.vehicle_color }}</span>
+                      {% else %}
+                        <span class="text-muted fst-italic">Not specified</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Linked Vehicles Card -->
+        {% if object.vehicles.exists %}
+          <div class="card linked-vehicles-card shadow-sm">
+            <div class="card-header">
+              <div class="d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                  <i class="bi bi-link-45deg me-2"></i>Linked System Vehicles
+                </h5>
+                <span class="badge bg-primary">{{ object.vehicles.count }} Vehicle{{ object.vehicles.count|pluralize }}</span>
+              </div>
+            </div>
+            <div class="card-body p-3">
+              <div class="linked-vehicles-list">
+                {% for vehicle in object.vehicles.all %}
+                  <div class="linked-vehicle-item">
+                    <div class="vehicle-icon">
+                      <i class="bi bi-car-front-fill"></i>
+                    </div>
+                    <div class="vehicle-info">
+                      <div class="vehicle-plate">
+                        {% url 'vehicles:vehicle_detail' vehicle.pk as v_detail %}
+                        {% if v_detail %}
+                          <a href="{{ v_detail }}" class="vehicle-link">
+                            {{ vehicle.plate_number }}
+                            <i class="bi bi-arrow-right-short ms-1"></i>
+                          </a>
+                        {% else %}
+                          {{ vehicle.plate_number }}
+                        {% endif %}
+                      </div>
+                      <div class="vehicle-details">
+                        {{ vehicle.make|default:"Unknown" }} {{ vehicle.model|default:"" }}
+                        {% if vehicle.color %} · {{ vehicle.color }}{% endif %}
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Right Column: Status & Metadata -->
+      <div class="col-lg-4">
+
+        <!-- Status Card -->
+        <div class="card status-card shadow-sm mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-toggle-on me-2"></i>Card Status
+            </h5>
+          </div>
+          <div class="card-body text-center p-4">
+            {% if object.is_active and object.expiry_date >= today|default:object.expiry_date %}
+              <div class="status-icon status-active">
+                <i class="bi bi-check-circle-fill"></i>
+              </div>
+              <h4 class="status-title text-success mt-3">Active</h4>
+              <p class="status-description">Card is valid and active</p>
+            {% elif object.is_active and object.expiry_date < today|default:object.expiry_date %}
+              <div class="status-icon status-expired">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+              </div>
+              <h4 class="status-title text-warning mt-3">Expired</h4>
+              <p class="status-description">Card has passed expiry date</p>
+            {% else %}
+              <div class="status-icon status-inactive">
+                <i class="bi bi-x-circle-fill"></i>
+              </div>
+              <h4 class="status-title text-secondary mt-3">Inactive</h4>
+              <p class="status-description">Card has been deactivated</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Metadata Card -->
+        <div class="card metadata-card shadow-sm">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-info-circle me-2"></i>Card Metadata
+            </h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="info-list">
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-credit-card"></i>
+                  <span>Card Number</span>
+                </div>
+                <div class="info-value">
+                  <code>{{ object.card_number }}</code>
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-calendar-plus"></i>
+                  <span>Issued Date</span>
+                </div>
+                <div class="info-value">
+                  {{ object.issued_date|date:"F j, Y" }}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-calendar-x"></i>
+                  <span>Expiry Date</span>
+                </div>
+                <div class="info-value">
+                  {{ object.expiry_date|date:"F j, Y" }}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-person-check"></i>
+                  <span>Created By</span>
+                </div>
+                <div class="info-value">
+                  {% if object.created_by %}
+                    {{ object.created_by.username }}
+                  {% else %}
+                    <span class="text-muted fst-italic">System</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-label">
+                  <i class="bi bi-clock"></i>
+                  <span>Created At</span>
+                </div>
+                <div class="info-value">
+                  <div class="timestamp">
+                    <div>{{ object.created_at|date:"M d, Y" }}</div>
+                    <small class="text-muted">{{ object.created_at|date:"g:i A" }}</small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="info-item border-0">
+                <div class="info-label">
+                  <i class="bi bi-pencil"></i>
+                  <span>Last Updated</span>
+                </div>
+                <div class="info-value">
+                  <div class="timestamp">
+                    <div>{{ object.updated_at|date:"M d, Y" }}</div>
+                    <small class="text-muted">{{ object.updated_at|date:"g:i A" }}</small>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
+
+<style>
+  /* Layout & Container */
+  .parking-card-detail-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+  }
+
+  .meta-separator {
+    color: #dee2e6;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Alerts */
+  .alert-success {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border: 2px solid #a3cfbb;
+    color: #155724;
+  }
+
+  .alert-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+    border: 2px solid #ffc107;
+    color: #856404;
+  }
+
+  .alert-secondary {
+    background: linear-gradient(135deg, #e2e3e5 0%, #d6d8db 100%);
+    border: 2px solid #c5c7ca;
+    color: #383d41;
+  }
+
+  .alert-heading {
+    font-weight: 600;
+  }
+
+  /* Quick Actions */
+  .quick-actions .card {
+    border: 2px solid #e9ecef;
+  }
+
+  .action-label {
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+    color: #495057;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .owner-card,
+  .vehicle-card,
+  .linked-vehicles-card,
+  .status-card,
+  .metadata-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+  }
+
+  /* Info List */
+  .info-list {
+    padding: 0;
+    margin: 0;
+  }
+
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+  }
+
+  .info-item:last-child {
+    border-bottom: none;
+  }
+
+  .info-item:hover {
+    background-color: #f8f9fa;
+  }
+
+  .info-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #6c757d;
+    min-width: 130px;
+  }
+
+  .info-label i {
+    font-size: 1rem;
+    color: #adb5bd;
+  }
+
+  .info-value {
+    flex: 1;
+    text-align: right;
+    font-size: 0.95rem;
+    color: #212529;
+  }
+
+  .plate-number {
+    font-size: 1.1rem;
+    font-family: monospace;
+    color: #0d6efd;
+  }
+
+  .phone-link {
+    color: #0d6efd;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .phone-link:hover {
+    color: #0a58ca;
+  }
+
+  code {
+    background: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    color: #495057;
+  }
+
+  .timestamp {
+    text-align: right;
+  }
+
+  /* Status Card */
+  .status-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+  }
+
+  .status-active {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #198754;
+    border: 4px solid #198754;
+  }
+
+  .status-expired {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+    color: #ffc107;
+    border: 4px solid #ffc107;
+  }
+
+  .status-inactive {
+    background: linear-gradient(135deg, #e2e3e5 0%, #d6d8db 100%);
+    color: #6c757d;
+    border: 4px solid #6c757d;
+  }
+
+  .status-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 0;
+  }
+
+  /* Linked Vehicles */
+  .linked-vehicles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .linked-vehicle-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    border: 2px solid #e9ecef;
+    transition: all 0.2s;
+  }
+
+  .linked-vehicle-item:hover {
+    border-color: #667eea;
+    transform: translateX(4px);
+  }
+
+  .vehicle-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .vehicle-info {
+    flex: 1;
+  }
+
+  .vehicle-plate {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #212529;
+    margin-bottom: 0.25rem;
+  }
+
+  .vehicle-link {
+    color: #0d6efd;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .vehicle-link:hover {
+    color: #0a58ca;
+  }
+
+  .vehicle-details {
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  /* Badges */
+  .badge {
+    font-weight: 500;
+    padding: 0.375rem 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 991px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .card-meta {
+      font-size: 0.85rem;
+    }
+
+    .info-item {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .info-value {
+      text-align: left;
+    }
+
+    .timestamp {
+      text-align: left;
+    }
+
+    .status-icon {
+      width: 60px;
+      height: 60px;
+      font-size: 2rem;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .quick-actions .d-flex {
+      flex-direction: column;
+      align-items: stretch !important;
+    }
+
+    .quick-actions .d-flex .btn {
+      width: 100%;
+    }
+
+    .linked-vehicle-item {
+      flex-direction: column;
+      text-align: center;
+    }
+
+    .vehicle-info {
+      text-align: center;
+    }
+
+    .vehicle-icon {
+      margin: 0 auto;
+    }
+  }
+
+  /* Animation */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .owner-card,
+  .vehicle-card,
+  .linked-vehicles-card,
+  .status-card,
+  .metadata-card,
+  .quick-actions {
+    animation: slideIn 0.3s ease-out;
+  }
+</style>
 {% endblock %}
