@@ -3,7 +3,8 @@ from django.utils import timezone
 from crispy_forms.helper import FormHelper
 from django.forms import inlineformset_factory
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column, HTML
-from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AssetExitItem, ParkingCardRequest
+from .models import (Vehicle, VehicleMovement, ParkingCard, AssetExit,
+                     AssetExitItem, ParkingCardRequest, Key, KeyLog)
 
 
 class VehicleForm(forms.ModelForm):
@@ -297,3 +298,24 @@ class ParkingCardRequestForm(forms.ModelForm):
         if d and d <= timezone.now().date():
             raise forms.ValidationError("Expiry must be a future date.")
         return d
+
+class KeyForm(forms.ModelForm):
+    class Meta:
+        model = Key
+        fields = ['code', 'label', 'key_type', 'vehicle', 'location', 'is_active', 'notes']
+
+class KeyIssueForm(forms.ModelForm):
+    class Meta:
+        model = KeyLog
+        fields = [
+            'issued_to_name', 'issued_to_agency', 'issued_to_badge_id',
+            'purpose', 'due_back', 'condition_out'
+        ]
+        widgets = {
+            'due_back': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
+        }
+
+class KeyReturnForm(forms.ModelForm):
+    class Meta:
+        model = KeyLog
+        fields = ['condition_in']

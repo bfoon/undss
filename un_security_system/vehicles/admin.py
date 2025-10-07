@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
 import csv
-from .models import Vehicle, VehicleMovement, ParkingCard, ParkingCardRequest
+from .models import Vehicle, VehicleMovement, ParkingCard, ParkingCardRequest, Key, KeyLog
 
 # Try to import optional models without crashing
 try:
@@ -177,3 +177,20 @@ class ParkingCardRequestAdmin(admin.ModelAdmin):
     list_filter = ('status','requested_at','decided_at','department')
     search_fields = ('owner_name','owner_id','vehicle_plate','requested_by__username','department')
     date_hierarchy = 'requested_at'
+
+@admin.register(Key)
+class KeyAdmin(admin.ModelAdmin):
+    list_display = ('code', 'label', 'key_type', 'vehicle', 'location', 'is_active', 'is_out_flag')
+    list_filter = ('key_type', 'is_active')
+    search_fields = ('code', 'label', 'vehicle__plate_number', 'location', 'notes')
+
+    def is_out_flag(self, obj):
+        return obj.is_out
+    is_out_flag.boolean = True
+    is_out_flag.short_description = "Out?"
+
+@admin.register(KeyLog)
+class KeyLogAdmin(admin.ModelAdmin):
+    list_display = ('key', 'issued_to_name', 'issued_at', 'due_back', 'returned_at', 'issued_by', 'received_by')
+    list_filter = ('key__key_type', 'issued_at', 'returned_at')
+    search_fields = ('key__code', 'key__label', 'issued_to_name', 'issued_to_badge_id', 'purpose')

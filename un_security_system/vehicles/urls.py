@@ -74,4 +74,17 @@ urlpatterns = [
     path('asset-exit/<int:pk>/sign-out/', views.asset_exit_mark_signed_out, name='asset_exit_mark_signed_out'),
     path('asset-exit/<int:pk>/sign-in/', views.asset_exit_mark_signed_in, name='asset_exit_mark_signed_in'),
 
+    # --- KEY CONTROL ------------------------------------------------------------
+    path('keys/', views.KeyListView.as_view(), name='key_list'),
+    path('keys/create/', views.KeyCreateView.as_view(), name='key_create'),
+    path('keys/<int:pk>/', views.KeyDetailView.as_view(), name='key_detail'),
+    path('keys/<int:pk>/edit/', views.KeyUpdateView.as_view(), name='key_edit'),
+
+    path('keys/<int:pk>/issue/', views.key_issue, name='key_issue'),
+    path('keys/<int:pk>/return/', views.key_return, name='key_return'),
+
+    path('keys/logs/', views.KeyLogListView.as_view(), name='key_logs'),
+    path('keys/quick/', views.quick_key_page, name='quick_key'),
+    path('api/keys/lookup/', views.key_lookup_api, name='key_lookup_api'),
+
 ]

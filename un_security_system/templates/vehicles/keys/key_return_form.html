@@ -1,0 +1,680 @@
+{% extends "base.html" %}
+{% block title %}Return Key {{ key.code }} - Key Management{% endblock %}
+
+{% block content %}
+<div class="key-return-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 900px;">
+
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb mb-0">
+          <li class="breadcrumb-item"><a href="{% url 'vehicles:key_list' %}">Keys</a></li>
+          <li class="breadcrumb-item"><a href="{% url 'vehicles:key_detail' key.pk %}">{{ key.code }}</a></li>
+          <li class="breadcrumb-item active" aria-current="page">Return</li>
+        </ol>
+      </nav>
+      <h2 class="page-title mb-1">
+        <i class="bi bi-box-arrow-in-right text-primary me-2"></i>
+        Return Key
+      </h2>
+      <p class="text-muted mb-0">Process key return and update inventory status</p>
+    </div>
+
+    <!-- Alert Messages -->
+    {% if messages %}
+      <div class="alerts-container mb-4">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-{% if message.tags == 'success' %}check-circle-fill{% elif message.tags == 'danger' %}exclamation-circle-fill{% else %}info-circle-fill{% endif %} me-2"></i>
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Key Information Card -->
+    <div class="card info-card shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-start">
+          <div class="key-icon me-3">
+            <i class="bi bi-key-fill"></i>
+          </div>
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between align-items-start flex-wrap">
+              <div>
+                <h5 class="mb-1 fw-semibold">{{ key.code }}</h5>
+                <p class="text-muted mb-2">{{ key.label }}</p>
+                <div class="key-metadata">
+                  {% if key.vehicle %}
+                    <span class="badge bg-primary bg-opacity-10 text-primary me-2">
+                      <i class="bi bi-car-front me-1"></i>{{ key.vehicle }}
+                    </span>
+                  {% endif %}
+                  {% if key.location %}
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary">
+                      <i class="bi bi-geo-alt me-1"></i>{{ key.location }}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="status-badge-large">
+                <i class="bi bi-hourglass-split"></i>
+                <span>Checked Out</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Holder Information -->
+    <div class="alert alert-info shadow-sm border-info mb-4" role="alert">
+      <div class="d-flex align-items-start">
+        <div class="alert-icon me-3">
+          <i class="bi bi-person-circle fs-3"></i>
+        </div>
+        <div class="flex-grow-1">
+          <h5 class="alert-heading mb-3">Current Holder Information</h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="detail-group">
+                <span class="detail-label">Issued To</span>
+                <div class="detail-value fw-semibold">
+                  {{ log.issued_to_name }}
+                  {% if log.issued_to_agency %}
+                    <br><small class="text-muted">{{ log.issued_to_agency }}</small>
+                  {% endif %}
+                </div>
+              </div>
+              {% if log.issued_to_badge_id %}
+                <div class="detail-group mt-2">
+                  <span class="detail-label">Badge ID</span>
+                  <div class="detail-value">
+                    <span class="badge bg-dark">{{ log.issued_to_badge_id }}</span>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <div class="detail-group">
+                <span class="detail-label">Checked Out Since</span>
+                <div class="detail-value">{{ log.issued_at|date:"F j, Y" }} at {{ log.issued_at|date:"g:i A" }}</div>
+              </div>
+              {% if log.due_back %}
+                <div class="detail-group mt-2">
+                  <span class="detail-label">Due Back</span>
+                  <div class="detail-value">
+                    {{ log.due_back|date:"F j, Y" }} at {{ log.due_back|date:"g:i A" }}
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Return Form Card -->
+    <div class="card form-card shadow-sm">
+      <div class="card-header">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-clipboard-check me-2"></i>Return Information
+        </h5>
+      </div>
+      <div class="card-body p-4">
+        <form method="post" id="returnForm" novalidate>
+          {% csrf_token %}
+
+          <!-- Form Fields -->
+          <div class="form-content">
+            {% for field in form %}
+              <div class="form-group mb-4">
+                <label for="{{ field.id_for_label }}" class="form-label">
+                  {{ field.label }}
+                  {% if field.field.required %}
+                    <span class="text-danger">*</span>
+                  {% endif %}
+                </label>
+
+                {% if field.field.widget.input_type == 'select' %}
+                  <select name="{{ field.name }}"
+                          id="{{ field.id_for_label }}"
+                          class="form-select {% if field.errors %}is-invalid{% endif %}"
+                          {% if field.field.required %}required{% endif %}>
+                    {% for choice_value, choice_label in field.field.choices %}
+                      <option value="{{ choice_value }}"
+                              {% if field.value == choice_value %}selected{% endif %}>
+                        {{ choice_label }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                {% elif field.field.widget.input_type == 'textarea' %}
+                  <textarea name="{{ field.name }}"
+                            id="{{ field.id_for_label }}"
+                            class="form-control {% if field.errors %}is-invalid{% endif %}"
+                            rows="4"
+                            {% if field.field.required %}required{% endif %}
+                            placeholder="{{ field.field.widget.attrs.placeholder|default:'' }}">{{ field.value|default:'' }}</textarea>
+                {% else %}
+                  <input type="{{ field.field.widget.input_type|default:'text' }}"
+                         name="{{ field.name }}"
+                         id="{{ field.id_for_label }}"
+                         value="{{ field.value|default:'' }}"
+                         class="form-control {% if field.errors %}is-invalid{% endif %}"
+                         {% if field.field.required %}required{% endif %}
+                         placeholder="{{ field.field.widget.attrs.placeholder|default:'' }}">
+                {% endif %}
+
+                {% if field.help_text %}
+                  <div class="form-text">
+                    <i class="bi bi-info-circle me-1"></i>{{ field.help_text }}
+                  </div>
+                {% endif %}
+
+                {% if field.errors %}
+                  <div class="invalid-feedback d-block">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    {% for error in field.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger" role="alert">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                {% for error in form.non_field_errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Form Actions -->
+          <div class="form-actions mt-4 pt-4 border-top">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+              <div class="form-note">
+                <small class="text-muted">
+                  <i class="bi bi-clock-history me-1"></i>
+                  Return will be timestamped automatically
+                </small>
+              </div>
+              <div class="button-group d-flex gap-2">
+                <a class="btn btn-outline-secondary" href="{% url 'vehicles:key_detail' key.pk %}">
+                  <i class="bi bi-x-lg me-2"></i>Cancel
+                </a>
+                <button class="btn btn-primary" type="submit">
+                  <i class="bi bi-check-circle me-2"></i>Mark as Returned
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Return Checklist Card -->
+    <div class="card checklist-card shadow-sm mt-4">
+      <div class="card-body">
+        <div class="d-flex align-items-start">
+          <div class="checklist-icon me-3">
+            <i class="bi bi-clipboard-check-fill"></i>
+          </div>
+          <div>
+            <h6 class="mb-2">Return Checklist</h6>
+            <ul class="checklist-list mb-0">
+              <li>Verify the key is physically in your possession</li>
+              <li>Inspect the key for any damage or issues</li>
+              <li>Document the condition of the key upon return</li>
+              <li>Ensure all parts (fob, attachments) are accounted for</li>
+              <li>Return the key to its designated storage location</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Layout & Container */
+  .key-return-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  /* Info Card */
+  .info-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+  }
+
+  .key-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    flex-shrink: 0;
+  }
+
+  .info-card h5 {
+    color: white;
+    font-size: 1.5rem;
+  }
+
+  .info-card p {
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 0.5rem;
+  }
+
+  .key-metadata .badge {
+    font-weight: 500;
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 255, 255, 0.95) !important;
+  }
+
+  .status-badge-large {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    min-width: 100px;
+  }
+
+  .status-badge-large i {
+    font-size: 2rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .status-badge-large span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Alert */
+  .alert-info {
+    background: #e3f2fd;
+    border-width: 2px;
+    border-color: #90caf9;
+  }
+
+  .alert-icon {
+    flex-shrink: 0;
+    color: #1976d2;
+  }
+
+  .alert-heading {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #0d47a1;
+  }
+
+  .detail-group {
+    margin-bottom: 0;
+  }
+
+  .detail-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #1565c0;
+    margin-bottom: 0.25rem;
+  }
+
+  .detail-value {
+    font-size: 0.95rem;
+    color: #212529;
+  }
+
+  /* Form Card */
+  .form-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .card-header {
+    background: white;
+    border-bottom: 2px solid #f0f0f0;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  /* Form Styling */
+  .form-content {
+    max-width: 100%;
+  }
+
+  .form-group {
+    position: relative;
+  }
+
+  .form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .form-control,
+  .form-select {
+    border: 2px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+    outline: none;
+  }
+
+  .form-control::placeholder {
+    color: #adb5bd;
+  }
+
+  .form-control.is-invalid,
+  .form-select.is-invalid {
+    border-color: #dc3545;
+  }
+
+  .form-control.is-invalid:focus,
+  .form-select.is-invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
+  }
+
+  .form-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.375rem;
+    display: block;
+  }
+
+  .invalid-feedback {
+    display: block;
+    font-size: 0.875rem;
+    color: #dc3545;
+    margin-top: 0.375rem;
+    font-weight: 500;
+  }
+
+  textarea.form-control {
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  /* Form Actions */
+  .form-actions {
+    background: #f8f9fa;
+    margin: 0 -1.5rem -1.5rem;
+    padding: 1.5rem;
+    border-radius: 0 0 0.75rem 0.75rem;
+  }
+
+  .form-note {
+    font-size: 0.875rem;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.5rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  .btn-outline-secondary {
+    color: #6c757d;
+    border-color: #6c757d;
+  }
+
+  .btn-outline-secondary:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+  }
+
+  /* Checklist Card */
+  .checklist-card {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border: 2px solid #a3cfbb;
+  }
+
+  .checklist-card .card-body {
+    padding: 1.25rem;
+  }
+
+  .checklist-icon {
+    font-size: 2rem;
+    color: #155724;
+    flex-shrink: 0;
+  }
+
+  .checklist-card h6 {
+    font-weight: 600;
+    color: #155724;
+    margin-bottom: 0.5rem;
+  }
+
+  .checklist-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.9rem;
+    color: #155724;
+  }
+
+  .checklist-list li {
+    padding: 0.35rem 0;
+    padding-left: 1.5rem;
+    position: relative;
+  }
+
+  .checklist-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #28a745;
+    font-weight: bold;
+    font-size: 1.1rem;
+  }
+
+  /* Alert Styling */
+  .alert {
+    border-radius: 0.5rem;
+    border-width: 2px;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 767px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .key-icon {
+      width: 50px;
+      height: 50px;
+      font-size: 1.5rem;
+    }
+
+    .info-card h5 {
+      font-size: 1.25rem;
+    }
+
+    .status-badge-large {
+      padding: 0.75rem;
+      min-width: 80px;
+    }
+
+    .status-badge-large i {
+      font-size: 1.5rem;
+    }
+
+    .form-actions {
+      padding: 1rem;
+    }
+
+    .form-actions .d-flex {
+      flex-direction: column;
+      align-items: stretch !important;
+    }
+
+    .button-group {
+      width: 100%;
+    }
+
+    .button-group .btn {
+      flex: 1;
+    }
+
+    .form-note {
+      text-align: center;
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+
+    .card-body {
+      padding: 1.5rem 1rem !important;
+    }
+  }
+
+  /* Animation */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .form-card,
+  .info-card {
+    animation: slideIn 0.3s ease-out;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Form validation enhancement
+    const form = document.getElementById('returnForm');
+
+    if (form) {
+      // Form submission
+      form.addEventListener('submit', function(event) {
+        if (!form.checkValidity()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        form.classList.add('was-validated');
+      });
+
+      // Real-time validation
+      const inputs = form.querySelectorAll('input, select, textarea');
+      inputs.forEach(function(input) {
+        input.addEventListener('blur', function() {
+          if (input.hasAttribute('required') && !input.value) {
+            input.classList.add('is-invalid');
+          } else {
+            input.classList.remove('is-invalid');
+          }
+        });
+
+        input.addEventListener('input', function() {
+          if (input.classList.contains('is-invalid') && input.value) {
+            input.classList.remove('is-invalid');
+          }
+        });
+      });
+    }
+
+    // Auto-dismiss alerts
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function(alert) {
+      setTimeout(function() {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+      }, 5000);
+    });
+  });
+</script>
+{% endblock %}

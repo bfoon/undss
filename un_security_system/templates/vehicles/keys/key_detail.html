@@ -1,0 +1,748 @@
+{% extends "base.html" %}
+{% block title %}Key {{ key.code }} - Key Management{% endblock %}
+
+{% block content %}
+<div class="key-detail-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 1200px;">
+
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+              <li class="breadcrumb-item"><a href="{% url 'vehicles:key_list' %}">Keys</a></li>
+              <li class="breadcrumb-item active" aria-current="page">{{ key.code }}</li>
+            </ol>
+          </nav>
+          <h2 class="page-title mb-1">
+            <i class="bi bi-key-fill text-primary me-2"></i>
+            Key {{ key.code }}
+          </h2>
+          <p class="text-muted mb-0">{{ key.label }}</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+          <div class="btn-group" role="group">
+            {% if user.role == 'lsa' %}
+              <a class="btn btn-outline-primary" href="{% url 'vehicles:key_edit' key.pk %}">
+                <i class="bi bi-pencil me-1"></i>Edit
+              </a>
+            {% endif %}
+            <a class="btn btn-outline-secondary" href="{% url 'vehicles:key_list' %}">
+              <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Messages -->
+    {% if messages %}
+      <div class="alerts-container mb-4">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-{% if message.tags == 'success' %}check-circle-fill{% elif message.tags == 'danger' %}exclamation-circle-fill{% else %}info-circle-fill{% endif %} me-2"></i>
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="row g-4">
+
+      <!-- Left Column: Key Details & Status -->
+      <div class="col-lg-4">
+
+        <!-- Status Card -->
+        <div class="card status-card shadow-sm mb-4">
+          <div class="card-body text-center p-4">
+            {% if key.is_out %}
+              <div class="status-badge status-out mb-3">
+                <i class="bi bi-box-arrow-right"></i>
+              </div>
+              <h4 class="status-title text-warning mb-2">Currently Out</h4>
+              <p class="status-subtitle text-muted mb-4">Key is checked out</p>
+              <a class="btn btn-primary w-100" href="{% url 'vehicles:key_return' key.pk %}">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Return Key
+              </a>
+            {% else %}
+              <div class="status-badge status-in mb-3">
+                <i class="bi bi-check-circle-fill"></i>
+              </div>
+              <h4 class="status-title text-success mb-2">Available</h4>
+              <p class="status-subtitle text-muted mb-4">Ready for checkout</p>
+              <a class="btn btn-success w-100" href="{% url 'vehicles:key_issue' key.pk %}">
+                <i class="bi bi-box-arrow-right me-2"></i>Issue Key
+              </a>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Key Information Card -->
+        <div class="card info-card shadow-sm">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-info-circle me-2"></i>Key Details
+            </h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="info-list">
+
+              <div class="info-item">
+                <div class="info-item-label">
+                  <i class="bi bi-tag-fill"></i>
+                  <span>Code</span>
+                </div>
+                <div class="info-item-value">
+                  <strong>{{ key.code }}</strong>
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-item-label">
+                  <i class="bi bi-bookmark-fill"></i>
+                  <span>Label</span>
+                </div>
+                <div class="info-item-value">
+                  {{ key.label }}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-item-label">
+                  <i class="bi bi-collection-fill"></i>
+                  <span>Type</span>
+                </div>
+                <div class="info-item-value">
+                  <span class="badge bg-light text-dark border">
+                    {{ key.get_key_type_display }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-item-label">
+                  <i class="bi bi-geo-alt-fill"></i>
+                  <span>Location</span>
+                </div>
+                <div class="info-item-value">
+                  {% if key.location %}
+                    {{ key.location }}
+                  {% else %}
+                    <span class="text-muted fst-italic">Not specified</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="info-item">
+                <div class="info-item-label">
+                  <i class="bi bi-car-front-fill"></i>
+                  <span>Vehicle</span>
+                </div>
+                <div class="info-item-value">
+                  {% if key.vehicle %}
+                    <a href="{% url 'vehicles:vehicle_detail' key.vehicle.pk %}" class="vehicle-link">
+                      {{ key.vehicle }}
+                      <i class="bi bi-arrow-right-short ms-1"></i>
+                    </a>
+                  {% else %}
+                    <span class="text-muted fst-italic">No vehicle assigned</span>
+                  {% endif %}
+                </div>
+              </div>
+
+              {% if key.notes %}
+                <div class="info-item border-0">
+                  <div class="info-item-label">
+                    <i class="bi bi-sticky-fill"></i>
+                    <span>Notes</span>
+                  </div>
+                  <div class="info-item-value">
+                    <div class="notes-box">
+                      {{ key.notes }}
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Transaction History -->
+      <div class="col-lg-8">
+
+        <!-- Current Holder Alert (if key is out) -->
+        {% if key.is_out %}
+          {% for log in key.keylog_set.all %}
+            {% if not log.returned_at %}
+              <div class="alert alert-warning shadow-sm border-warning mb-4" role="alert">
+                <div class="d-flex align-items-start">
+                  <div class="alert-icon me-3">
+                    <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+                  </div>
+                  <div class="flex-grow-1">
+                    <h5 class="alert-heading mb-3">Currently Checked Out</h5>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <div class="detail-group">
+                          <span class="detail-label">Issued To</span>
+                          <div class="detail-value fw-semibold">
+                            {{ log.issued_to_name }}
+                            {% if log.issued_to_agency %}
+                              <br><small class="text-muted">{{ log.issued_to_agency }}</small>
+                            {% endif %}
+                          </div>
+                        </div>
+                        {% if log.issued_to_badge_id %}
+                          <div class="detail-group mt-2">
+                            <span class="detail-label">Badge ID</span>
+                            <div class="detail-value">
+                              <span class="badge bg-dark">{{ log.issued_to_badge_id }}</span>
+                            </div>
+                          </div>
+                        {% endif %}
+                      </div>
+                      <div class="col-md-6">
+                        <div class="detail-group">
+                          <span class="detail-label">Issued On</span>
+                          <div class="detail-value">{{ log.issued_at|date:"F j, Y" }} at {{ log.issued_at|date:"g:i A" }}</div>
+                        </div>
+                        {% if log.due_back %}
+                          <div class="detail-group mt-2">
+                            <span class="detail-label">Due Back</span>
+                            <div class="detail-value">
+                              {{ log.due_back|date:"F j, Y" }} at {{ log.due_back|date:"g:i A" }}
+                            </div>
+                          </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+
+        <!-- Transaction History Card -->
+        <div class="card history-card shadow-sm">
+          <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+              <h5 class="card-title mb-0">
+                <i class="bi bi-clock-history me-2"></i>Transaction History
+              </h5>
+              <span class="badge bg-primary">
+                {{ key.keylog_set.count }} Record{{ key.keylog_set.count|pluralize }}
+              </span>
+            </div>
+          </div>
+
+          {% if key.keylog_set.exists %}
+            <div class="table-responsive">
+              <table class="table table-hover transactions-table mb-0">
+                <thead>
+                  <tr>
+                    <th>Issued To</th>
+                    <th>Badge/ID</th>
+                    <th>Issued</th>
+                    <th>Due Back</th>
+                    <th>Returned</th>
+                    <th>Staff</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for log in key.keylog_set.all %}
+                    <tr {% if not log.returned_at %}class="table-active"{% endif %}>
+                      <td>
+                        <div class="person-info">
+                          <div class="person-name">{{ log.issued_to_name }}</div>
+                          {% if log.issued_to_agency %}
+                            <div class="person-agency">
+                              <i class="bi bi-building"></i> {{ log.issued_to_agency }}
+                            </div>
+                          {% endif %}
+                        </div>
+                      </td>
+                      <td>
+                        {% if log.issued_to_badge_id %}
+                          <span class="badge bg-light text-dark border border-secondary">
+                            {{ log.issued_to_badge_id }}
+                          </span>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <div class="date-info">
+                          <div class="date-primary">{{ log.issued_at|date:"M d, Y" }}</div>
+                          <div class="date-time">{{ log.issued_at|date:"g:i A" }}</div>
+                        </div>
+                      </td>
+                      <td>
+                        {% if log.due_back %}
+                          <div class="date-info">
+                            <div class="date-primary">{{ log.due_back|date:"M d, Y" }}</div>
+                            <div class="date-time">{{ log.due_back|date:"g:i A" }}</div>
+                          </div>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if log.returned_at %}
+                          <div class="date-info">
+                            <div class="date-primary text-success">{{ log.returned_at|date:"M d, Y" }}</div>
+                            <div class="date-time">{{ log.returned_at|date:"g:i A" }}</div>
+                          </div>
+                        {% else %}
+                          <span class="badge bg-warning text-dark">
+                            <i class="bi bi-hourglass-split me-1"></i>Outstanding
+                          </span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <div class="staff-info">
+                          <div><i class="bi bi-arrow-up-circle text-success me-1"></i>{{ log.issued_by.username }}</div>
+                          {% if log.received_by %}
+                            <div class="mt-1"><i class="bi bi-arrow-down-circle text-primary me-1"></i>{{ log.received_by.username }}</div>
+                          {% endif %}
+                        </div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="card-body empty-state text-center py-5">
+              <div class="empty-icon mb-3">
+                <i class="bi bi-inbox"></i>
+              </div>
+              <h5 class="empty-title">No Transaction History</h5>
+              <p class="empty-text text-muted mb-4">This key has not been issued yet.</p>
+              <a href="{% url 'vehicles:key_issue' key.pk %}" class="btn btn-success">
+                <i class="bi bi-box-arrow-right me-2"></i>Issue This Key
+              </a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Layout & Container */
+  .key-detail-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  /* Status Card */
+  .status-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .status-badge {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+  }
+
+  .status-badge.status-in {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #198754;
+    border: 4px solid #198754;
+  }
+
+  .status-badge.status-out {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+    color: #ffc107;
+    border: 4px solid #ffc107;
+  }
+
+  .status-title {
+    font-weight: 600;
+    font-size: 1.5rem;
+  }
+
+  .status-subtitle {
+    font-size: 0.95rem;
+  }
+
+  /* Info Card */
+  .info-card .card-body {
+    padding: 0;
+  }
+
+  .card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+  }
+
+  .info-list {
+    padding: 0;
+    margin: 0;
+  }
+
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.2s;
+  }
+
+  .info-item:last-child {
+    border-bottom: none;
+  }
+
+  .info-item:hover {
+    background-color: #f8f9fa;
+  }
+
+  .info-item-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #6c757d;
+    min-width: 120px;
+  }
+
+  .info-item-label i {
+    font-size: 1rem;
+    color: #adb5bd;
+  }
+
+  .info-item-value {
+    text-align: right;
+    flex: 1;
+    font-size: 0.95rem;
+    color: #212529;
+  }
+
+  .vehicle-link {
+    color: #0d6efd;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .vehicle-link:hover {
+    color: #0a58ca;
+  }
+
+  .notes-box {
+    background: #f8f9fa;
+    border-left: 4px solid #0d6efd;
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.9rem;
+    color: #495057;
+    text-align: left;
+    margin-top: 0.5rem;
+  }
+
+  /* Alert */
+  .alert-warning {
+    background: #fff9e6;
+    border-width: 2px;
+  }
+
+  .alert-icon {
+    flex-shrink: 0;
+  }
+
+  .alert-heading {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #856404;
+  }
+
+  .detail-group {
+    margin-bottom: 0;
+  }
+
+  .detail-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #856404;
+    margin-bottom: 0.25rem;
+  }
+
+  .detail-value {
+    font-size: 0.95rem;
+    color: #212529;
+  }
+
+  /* Table */
+  .transactions-table {
+    font-size: 0.9rem;
+  }
+
+  .transactions-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .transactions-table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 1rem 1rem;
+    border: none;
+  }
+
+  .transactions-table td {
+    padding: 1rem 1rem;
+    vertical-align: middle;
+  }
+
+  .transactions-table tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+    transition: all 0.2s;
+  }
+
+  .transactions-table tbody tr:hover {
+    background-color: #f8f9fa;
+    transform: scale(1.01);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .transactions-table .table-active {
+    background-color: #fff9e6;
+  }
+
+  .transactions-table .table-active:hover {
+    background-color: #fff3cd;
+  }
+
+  .person-info {
+    line-height: 1.4;
+  }
+
+  .person-name {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .person-agency {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+  }
+
+  .person-agency i {
+    font-size: 0.75rem;
+  }
+
+  .date-info {
+    line-height: 1.4;
+  }
+
+  .date-primary {
+    font-weight: 500;
+    color: #212529;
+  }
+
+  .date-time {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.125rem;
+  }
+
+  .staff-info {
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  /* Empty State */
+  .empty-state {
+    padding: 4rem 2rem;
+  }
+
+  .empty-icon {
+    font-size: 4rem;
+    color: #dee2e6;
+  }
+
+  .empty-title {
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-text {
+    font-size: 0.95rem;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border-color: #28a745;
+  }
+
+  .btn-success:hover {
+    background: linear-gradient(135deg, #218838 0%, #1ba57b 100%);
+    border-color: #218838;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  /* Badges */
+  .badge {
+    font-weight: 500;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    border-radius: 0.375rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 991px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .status-badge {
+      width: 80px;
+      height: 80px;
+      font-size: 2rem;
+    }
+
+    .info-item {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .info-item-value {
+      text-align: left;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .btn-group .btn {
+      width: 100%;
+    }
+  }
+
+  /* Animation */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .status-card,
+  .info-card,
+  .history-card {
+    animation: slideIn 0.3s ease-out;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Auto-dismiss alerts
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function(alert) {
+      setTimeout(function() {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+      }, 5000);
+    });
+  });
+</script>
+{% endblock %}

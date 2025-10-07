@@ -224,3 +224,65 @@ class ParkingCardRequest(models.Model):
 
     def __str__(self):
         return f"PC Request #{self.id} - {self.owner_name} ({self.vehicle_plate}) - {self.get_status_display()}"
+
+# --- KEY CONTROL ------------------------------------------------------------
+from django.conf import settings
+from django.db import models
+from django.utils import timezone
+
+class Key(models.Model):
+    KEY_TYPES = (
+        ('office', 'Office Key'),
+        ('vehicle', 'Vehicle Key'),
+    )
+
+    code = models.CharField(max_length=50, unique=True, help_text="Unique key code/number engraved on tag")
+    label = models.CharField(max_length=150, help_text="Human-friendly name e.g. 'Room 2A – Store'")
+    key_type = models.CharField(max_length=10, choices=KEY_TYPES, default='office')
+    vehicle = models.ForeignKey('vehicles.Vehicle', null=True, blank=True,
+                                on_delete=models.SET_NULL,
+                                help_text="Link for vehicle keys (optional)")
+    location = models.CharField(max_length=120, blank=True, help_text="Rack/hook position")
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['key_type', 'code']
+
+    def __str__(self):
+        return f"{self.get_key_type_display()} | {self.code} – {self.label}"
+
+    @property
+    def is_out(self):
+        """True if there is an open KeyLog (not returned)"""
+        return self.keylog_set.filter(returned_at__isnull=True).exists()
+
+    @property
+    def current_log(self):
+        return self.keylog_set.filter(returned_at__isnull=True).order_by('-issued_at').first()
+
+
+class KeyLog(models.Model):
+    key = models.ForeignKey(Key, on_delete=models.CASCADE)
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='keys_issued')
+    issued_to_name = models.CharField(max_length=120)
+    issued_to_agency = models.CharField(max_length=120, blank=True)
+    issued_to_badge_id = models.CharField(max_length=60, blank=True)
+    purpose = models.CharField(max_length=200, blank=True)
+
+    issued_at = models.DateTimeField(default=timezone.now)
+    due_back = models.DateTimeField(null=True, blank=True)
+
+    returned_at = models.DateTimeField(null=True, blank=True)
+    received_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.PROTECT, related_name='keys_received')
+
+    condition_out = models.CharField(max_length=120, blank=True)
+    condition_in = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        ordering = ['-issued_at']
+
+    def __str__(self):
+        status = "OUT" if self.returned_at is None else "IN"
+        return f"{self.key.code} to {self.issued_to_name} at {self.issued_at:%Y-%m-%d %H:%M} [{status}]"

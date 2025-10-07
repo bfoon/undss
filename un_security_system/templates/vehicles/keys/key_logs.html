@@ -1,0 +1,817 @@
+{% extends "base.html" %}
+{% block title %}Key Transaction Logs - Key Management{% endblock %}
+
+{% block content %}
+<div class="key-logs-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 1600px;">
+
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <div class="row align-items-center">
+        <div class="col-md-8">
+          <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+              <li class="breadcrumb-item"><a href="/">Home</a></li>
+              <li class="breadcrumb-item"><a href="{% url 'vehicles:key_list' %}">Keys</a></li>
+              <li class="breadcrumb-item active" aria-current="page">Transaction Logs</li>
+            </ol>
+          </nav>
+          <h2 class="page-title mb-1">
+            <i class="bi bi-clipboard-check text-primary me-2"></i>
+            Key Transaction Logs
+          </h2>
+          <p class="text-muted mb-0">Complete audit trail of all key checkouts and returns</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+          <button class="btn btn-outline-primary" onclick="window.print()">
+            <i class="bi bi-printer me-2"></i>Print Report
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-primary">
+            <i class="bi bi-journal-text"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Total Transactions</div>
+            <div class="stat-value">{{ logs|length }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-success">
+            <i class="bi bi-check-circle-fill"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Completed</div>
+            <div class="stat-value">{{ logs|length|add:"0" }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-warning">
+            <i class="bi bi-hourglass-split"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Active Checkouts</div>
+            <div class="stat-value">1</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6">
+        <div class="stat-card shadow-sm">
+          <div class="stat-icon stat-icon-danger">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Overdue</div>
+            <div class="stat-value">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search and Filter Section -->
+    <div class="card filter-card shadow-sm mb-4">
+      <div class="card-body p-3">
+        <form method="get" id="filterForm" class="row g-3 align-items-end">
+          <div class="col-lg-5 col-md-6">
+            <label class="form-label small fw-semibold mb-2">
+              <i class="bi bi-search me-1"></i>Search
+            </label>
+            <input type="text"
+                   name="q"
+                   value="{{ request.GET.q }}"
+                   class="form-control"
+                   placeholder="Search key code, recipient name, badge ID..."
+                   id="searchInput">
+          </div>
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label small fw-semibold mb-2">
+              <i class="bi bi-calendar-range me-1"></i>Date From
+            </label>
+            <input type="date"
+                   name="date_from"
+                   value="{{ request.GET.date_from }}"
+                   class="form-control">
+          </div>
+          <div class="col-lg-2 col-md-3 col-sm-6">
+            <label class="form-label small fw-semibold mb-2">
+              <i class="bi bi-calendar-range me-1"></i>Date To
+            </label>
+            <input type="date"
+                   name="date_to"
+                   value="{{ request.GET.date_to }}"
+                   class="form-control">
+          </div>
+          <div class="col-lg-3 col-md-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-grow-1">
+              <i class="bi bi-funnel me-2"></i>Apply Filters
+            </button>
+            <a href="{% url 'vehicles:key_logs' %}" class="btn btn-outline-secondary">
+              <i class="bi bi-x-circle"></i>
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Logs Table Card -->
+    <div class="card table-card shadow-sm">
+      <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-list-ul me-2"></i>Transaction History
+          </h5>
+          <div class="text-muted small">
+            <i class="bi bi-clock-history me-1"></i>
+            Showing {{ logs|length }} record{{ logs|length|pluralize }}
+          </div>
+        </div>
+      </div>
+
+      {% if logs %}
+        <div class="table-responsive">
+          <table class="table logs-table mb-0">
+            <thead>
+              <tr>
+                <th style="width: 15%;">Key</th>
+                <th style="width: 20%;">Issued To</th>
+                <th style="width: 13%;">Issued Date</th>
+                <th style="width: 13%;">Due Back</th>
+                <th style="width: 13%;">Returned Date</th>
+                <th style="width: 16%;">Staff</th>
+                <th style="width: 10%;" class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for l in logs %}
+                <tr class="log-row {% if not l.returned_at %}log-active{% endif %}">
+                  <td>
+                    <a href="{% url 'vehicles:key_detail' l.key.pk %}" class="key-link">
+                      <div class="key-info">
+                        <div class="key-code">
+                          <i class="bi bi-key-fill me-2 text-primary"></i>
+                          <strong>{{ l.key.code }}</strong>
+                        </div>
+                        <div class="key-label">{{ l.key.label }}</div>
+                      </div>
+                    </a>
+                  </td>
+                  <td>
+                    <div class="recipient-info">
+                      <div class="recipient-name">
+                        <i class="bi bi-person-fill me-1 text-muted"></i>
+                        {{ l.issued_to_name }}
+                      </div>
+                      {% if l.issued_to_agency %}
+                        <div class="recipient-agency">
+                          <i class="bi bi-building"></i> {{ l.issued_to_agency }}
+                        </div>
+                      {% endif %}
+                      {% if l.issued_to_badge_id %}
+                        <div class="recipient-badge">
+                          <span class="badge bg-light text-dark border">
+                            <i class="bi bi-person-badge"></i> {{ l.issued_to_badge_id }}
+                          </span>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="date-info">
+                      <div class="date-primary">
+                        <i class="bi bi-calendar-event me-1"></i>
+                        {{ l.issued_at|date:"M d, Y" }}
+                      </div>
+                      <div class="date-time">{{ l.issued_at|date:"g:i A" }}</div>
+                    </div>
+                  </td>
+                  <td>
+                    {% if l.due_back %}
+                      <div class="date-info">
+                        <div class="date-primary">
+                          <i class="bi bi-calendar-check me-1"></i>
+                          {{ l.due_back|date:"M d, Y" }}
+                        </div>
+                        <div class="date-time">{{ l.due_back|date:"g:i A" }}</div>
+                      </div>
+                    {% else %}
+                      <span class="text-muted fst-italic">Not specified</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if l.returned_at %}
+                      <div class="date-info">
+                        <div class="date-primary text-success">
+                          <i class="bi bi-check-circle-fill me-1"></i>
+                          {{ l.returned_at|date:"M d, Y" }}
+                        </div>
+                        <div class="date-time">{{ l.returned_at|date:"g:i A" }}</div>
+                      </div>
+                    {% else %}
+                      <span class="status-badge status-outstanding">
+                        <i class="bi bi-hourglass-split me-1"></i>Outstanding
+                      </span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="staff-info">
+                      <div class="staff-issued">
+                        <i class="bi bi-arrow-up-circle text-success me-1"></i>
+                        <span class="staff-name">{{ l.issued_by.username }}</span>
+                      </div>
+                      {% if l.received_by %}
+                        <div class="staff-received mt-1">
+                          <i class="bi bi-arrow-down-circle text-primary me-1"></i>
+                          <span class="staff-name">{{ l.received_by.username }}</span>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td class="text-center">
+                    {% if l.returned_at %}
+                      <div class="status-icon status-completed" data-bs-toggle="tooltip" title="Completed">
+                        <i class="bi bi-check-circle-fill"></i>
+                      </div>
+                    {% else %}
+                      <div class="status-icon status-active" data-bs-toggle="tooltip" title="Active Checkout">
+                        <i class="bi bi-arrow-right-circle-fill"></i>
+                      </div>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card-body empty-state text-center py-5">
+          <div class="empty-icon mb-3">
+            <i class="bi bi-inbox"></i>
+          </div>
+          <h5 class="empty-title">No Transaction Logs Found</h5>
+          <p class="empty-text text-muted mb-4">
+            {% if request.GET.q or request.GET.date_from or request.GET.date_to %}
+              No transactions match your search criteria. Try adjusting your filters.
+            {% else %}
+              There are no key transactions recorded yet.
+            {% endif %}
+          </p>
+          {% if request.GET.q or request.GET.date_from or request.GET.date_to %}
+            <a href="{% url 'vehicles:keylog_list' %}" class="btn btn-outline-secondary">
+              <i class="bi bi-x-circle me-2"></i>Clear Filters
+            </a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Legend Card -->
+    <div class="card legend-card shadow-sm mt-4">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <h6 class="mb-3 fw-semibold">
+              <i class="bi bi-info-circle me-2"></i>Status Legend
+            </h6>
+            <div class="d-flex flex-wrap gap-3">
+              <div class="legend-item">
+                <i class="bi bi-check-circle-fill text-success fs-5 me-2"></i>
+                <span><strong>Completed:</strong> Key has been returned</span>
+              </div>
+              <div class="legend-item">
+                <i class="bi bi-arrow-right-circle-fill text-warning fs-5 me-2"></i>
+                <span><strong>Active:</strong> Key is currently checked out</span>
+              </div>
+              <div class="legend-item">
+                <i class="bi bi-exclamation-triangle-fill text-danger fs-5 me-2"></i>
+                <span><strong>Overdue:</strong> Past due date, not returned</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <small class="text-muted">
+              <i class="bi bi-arrow-up-circle text-success me-1"></i> Issued by staff<br>
+              <i class="bi bi-arrow-down-circle text-primary me-1"></i> Received by staff
+            </small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Layout & Container */
+  .key-logs-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Statistics Cards */
+  .stat-card {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    border: 2px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.3s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    border-color: #667eea;
+  }
+
+  .stat-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .stat-icon-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+
+  .stat-icon-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+  }
+
+  .stat-icon-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+    color: white;
+  }
+
+  .stat-icon-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+  }
+
+  .stat-content {
+    flex: 1;
+  }
+
+  .stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #212529;
+    line-height: 1;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .filter-card,
+  .table-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .card-header {
+    background: white;
+    border-bottom: 2px solid #f0f0f0;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  /* Form Controls */
+  .form-label {
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-control,
+  .form-select {
+    border: 2px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+    outline: none;
+  }
+
+  /* Table Styling */
+  .logs-table {
+    font-size: 0.9rem;
+  }
+
+  .logs-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .logs-table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 1rem 1rem;
+    border: none;
+    white-space: nowrap;
+  }
+
+  .logs-table td {
+    padding: 1rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .logs-table tbody tr {
+    transition: all 0.2s;
+  }
+
+  .logs-table tbody tr:hover {
+    background-color: #f8f9fa;
+    transform: scale(1.002);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .log-row.log-active {
+    background-color: #fff9e6;
+  }
+
+  .log-row.log-active:hover {
+    background-color: #fff3cd;
+  }
+
+  /* Table Cell Content */
+  .key-link {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .key-info {
+    line-height: 1.4;
+  }
+
+  .key-code {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+  }
+
+  .key-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+
+  .recipient-info {
+    line-height: 1.5;
+  }
+
+  .recipient-name {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+  }
+
+  .recipient-agency {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+  }
+
+  .recipient-agency i {
+    font-size: 0.75rem;
+  }
+
+  .recipient-badge {
+    margin-top: 0.25rem;
+  }
+
+  .date-info {
+    line-height: 1.4;
+  }
+
+  .date-primary {
+    font-weight: 500;
+    color: #212529;
+    margin-bottom: 0.125rem;
+  }
+
+  .date-time {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+
+  .staff-info {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .staff-name {
+    font-weight: 500;
+  }
+
+  /* Status Elements */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .status-outstanding {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .status-icon {
+    font-size: 1.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .status-icon.status-completed {
+    color: #28a745;
+  }
+
+  .status-icon.status-active {
+    color: #ffc107;
+  }
+
+  /* Legend Card */
+  .legend-card {
+    background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%);
+    border: 2px solid #bbdefb;
+  }
+
+  .legend-card .card-body {
+    padding: 1.25rem;
+  }
+
+  .legend-card h6 {
+    color: #1565c0;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #0d47a1;
+  }
+
+  /* Empty State */
+  .empty-state {
+    padding: 4rem 2rem;
+  }
+
+  .empty-icon {
+    font-size: 4rem;
+    color: #dee2e6;
+  }
+
+  .empty-title {
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-text {
+    font-size: 0.95rem;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
+    border-color: #5568d3;
+  }
+
+  /* Badges */
+  .badge {
+    font-weight: 500;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  /* Print Styles */
+  @media print {
+    .page-header .btn,
+    .filter-card,
+    .stat-card,
+    .legend-card {
+      display: none !important;
+    }
+
+    .key-logs-container {
+      background: white;
+    }
+
+    .card {
+      border: 1px solid #dee2e6 !important;
+      box-shadow: none !important;
+    }
+
+    .logs-table {
+      font-size: 0.85rem;
+    }
+  }
+
+  /* Responsive Design */
+  @media (max-width: 991px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .stat-card {
+      padding: 1rem;
+    }
+
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      font-size: 1.25rem;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+    }
+
+    .logs-table {
+      font-size: 0.85rem;
+    }
+
+    .logs-table th,
+    .logs-table td {
+      padding: 0.75rem 0.5rem;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .logs-table {
+      font-size: 0.8rem;
+    }
+
+    .key-code,
+    .recipient-name,
+    .date-primary {
+      font-size: 0.875rem;
+    }
+
+    .key-label,
+    .recipient-agency,
+    .date-time {
+      font-size: 0.75rem;
+    }
+  }
+
+  /* Animation */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .stat-card,
+  .table-card,
+  .filter-card {
+    animation: fadeIn 0.4s ease-out;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+      return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Search input enhancement
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+      searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('filterForm').submit();
+        }
+      });
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+      // Ctrl/Cmd + K to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInput) searchInput.focus();
+      }
+
+      // Ctrl/Cmd + P for print
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        window.print();
+      }
+    });
+
+    // Highlight rows based on date
+    const today = new Date();
+    document.querySelectorAll('.log-row').forEach(row => {
+      const dueBackCell = row.querySelector('.date-info');
+      if (dueBackCell) {
+        const dateText = dueBackCell.querySelector('.date-primary');
+        if (dateText) {
+          // Add visual indicator for overdue items
+          // This would need the actual date comparison logic
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}

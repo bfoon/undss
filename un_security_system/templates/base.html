@@ -25,11 +25,20 @@
             --warning-color: #fd7e14;
             --danger-color: #dc3545;
         }
+        html, body {
+                 height: 100%;
+                    }
 
         body {
             background-color: var(--un-light-gray);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        main {
+            flex: 1 0 auto;
         }
 
         .navbar-brand {
@@ -212,7 +221,7 @@
         .footer-info {
             background-color: white;
             border-top: 1px solid #e9ecef;
-            margin-top: 3rem;
+            margin-top: auto;
             padding: 1.5rem 0;
             font-size: 0.875rem;
             color: var(--un-gray);
@@ -300,6 +309,20 @@
             <li><a class="dropdown-item" href="{% url 'vehicles:movement_list' %}">
               <i class="bi bi-clock-history me-2"></i>Movement Log
             </a></li>
+
+              <li><hr class="dropdown-divider"></li>
+
+                <li class="dropdown-header">Key Control</li>
+                <li><a class="dropdown-item" href="{% url 'vehicles:key_list' %}">
+                  <i class="bi bi-key me-2" aria-hidden="true"></i>Keys Inventory
+                </a></li>
+                <li><a class="dropdown-item" href="{% url 'vehicles:quick_key' %}">
+                  <i class="bi bi-qr-code-scan me-2" aria-hidden="true"></i>Quick Issue/Return
+                </a></li>
+                <li><a class="dropdown-item" href="{% url 'vehicles:key_logs' %}">
+                  <i class="bi bi-clipboard-check me-2" aria-hidden="true"></i>Key Logs
+                </a></li>
+
 
             {% if user.role == 'lsa' %}
               <li class="dropdown-header mt-2">Parking Cards (LSA)</li>

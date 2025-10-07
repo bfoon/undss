@@ -1,0 +1,732 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Issue Key {{ key.code }} - Key Management{% endblock %}
+
+{% block content %}
+<div class="key-issue-container">
+  <div class="container-fluid px-4 py-4" style="max-width: 900px;">
+
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+      <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb mb-0">
+          <li class="breadcrumb-item"><a href="{% url 'vehicles:key_list' %}">Keys</a></li>
+          <li class="breadcrumb-item"><a href="{% url 'vehicles:key_detail' key.pk %}">{{ key.code }}</a></li>
+          <li class="breadcrumb-item active" aria-current="page">Issue</li>
+        </ol>
+      </nav>
+      <h2 class="page-title mb-1">
+        <i class="bi bi-box-arrow-right text-success me-2"></i>
+        Issue Key
+      </h2>
+      <p class="text-muted mb-0">Record a new key checkout transaction</p>
+    </div>
+
+    <!-- Alert Messages -->
+    {% if messages %}
+      <div class="alerts-container mb-4">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-{% if message.tags == 'success' %}check-circle-fill{% elif message.tags == 'danger' %}exclamation-circle-fill{% else %}info-circle-fill{% endif %} me-2"></i>
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Key Information Card -->
+    <div class="card info-card shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-start">
+          <div class="key-icon me-3">
+            <i class="bi bi-key-fill"></i>
+          </div>
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between align-items-start flex-wrap">
+              <div>
+                <h5 class="mb-1 fw-semibold">{{ key.code }}</h5>
+                <p class="text-muted mb-2">{{ key.label }}</p>
+                <div class="key-metadata">
+                  {% if key.vehicle %}
+                    <span class="badge bg-primary bg-opacity-10 text-primary me-2">
+                      <i class="bi bi-car-front me-1"></i>{{ key.vehicle }}
+                    </span>
+                  {% endif %}
+                  {% if key.location %}
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary">
+                      <i class="bi bi-geo-alt me-1"></i>{{ key.location }}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="status-badge-large">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Available</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Issue Form Card -->
+    <div class="card form-card shadow-sm">
+      <div class="card-header">
+        <h5 class="card-title mb-0">
+          <i class="bi bi-file-text me-2"></i>Checkout Information
+        </h5>
+      </div>
+      <div class="card-body p-4">
+        <form method="post" id="issueForm" novalidate>
+          {% csrf_token %}
+
+          <!-- Recipient Information Section -->
+          <div class="form-section">
+            <h6 class="section-title">
+              <i class="bi bi-person-circle me-2"></i>Recipient Information
+            </h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="{{ form.issued_to_name.id_for_label }}" class="form-label">
+                    Issued To (Name)
+                    <span class="text-danger">*</span>
+                  </label>
+                  <input type="text"
+                         name="{{ form.issued_to_name.name }}"
+                         id="{{ form.issued_to_name.id_for_label }}"
+                         value="{{ form.issued_to_name.value|default:'' }}"
+                         class="form-control {% if form.issued_to_name.errors %}is-invalid{% endif %}"
+                         required
+                         placeholder="Enter full name">
+                  {% if form.issued_to_name.errors %}
+                    <div class="invalid-feedback">
+                      {{ form.issued_to_name.errors.0 }}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="{{ form.issued_to_agency.id_for_label }}" class="form-label">
+                    Agency / Office
+                  </label>
+                  <input type="text"
+                         name="{{ form.issued_to_agency.name }}"
+                         id="{{ form.issued_to_agency.id_for_label }}"
+                         value="{{ form.issued_to_agency.value|default:'' }}"
+                         class="form-control {% if form.issued_to_agency.errors %}is-invalid{% endif %}"
+                         placeholder="e.g., UNDP, UNDSS">
+                  {% if form.issued_to_agency.errors %}
+                    <div class="invalid-feedback">
+                      {{ form.issued_to_agency.errors.0 }}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="{{ form.issued_to_badge_id.id_for_label }}" class="form-label">
+                    Badge / ID Number
+                  </label>
+                  <input type="text"
+                         name="{{ form.issued_to_badge_id.name }}"
+                         id="{{ form.issued_to_badge_id.id_for_label }}"
+                         value="{{ form.issued_to_badge_id.value|default:'' }}"
+                         class="form-control {% if form.issued_to_badge_id.errors %}is-invalid{% endif %}"
+                         placeholder="Enter badge or ID number">
+                  {% if form.issued_to_badge_id.errors %}
+                    <div class="invalid-feedback">
+                      {{ form.issued_to_badge_id.errors.0 }}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="{{ form.due_back.id_for_label }}" class="form-label">
+                    Due Back Date & Time
+                  </label>
+                  <input type="datetime-local"
+                         name="{{ form.due_back.name }}"
+                         id="{{ form.due_back.id_for_label }}"
+                         value="{{ form.due_back.value|default:'' }}"
+                         class="form-control {% if form.due_back.errors %}is-invalid{% endif %}">
+                  <small class="form-text">
+                    <i class="bi bi-info-circle me-1"></i>Optional for short-term loans
+                  </small>
+                  {% if form.due_back.errors %}
+                    <div class="invalid-feedback">
+                      {{ form.due_back.errors.0 }}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Usage Information Section -->
+          <div class="form-section">
+            <h6 class="section-title">
+              <i class="bi bi-clipboard-check me-2"></i>Usage Details
+            </h6>
+            <div class="row g-3">
+              <div class="col-12">
+                <div class="form-group">
+                  <label for="{{ form.purpose.id_for_label }}" class="form-label">
+                    Purpose
+                  </label>
+                  <textarea name="{{ form.purpose.name }}"
+                            id="{{ form.purpose.id_for_label }}"
+                            class="form-control {% if form.purpose.errors %}is-invalid{% endif %}"
+                            rows="3"
+                            placeholder="Describe the purpose of this key checkout...">{{ form.purpose.value|default:'' }}</textarea>
+                  <small class="form-text">
+                    <i class="bi bi-info-circle me-1"></i>Brief description of why the key is needed
+                  </small>
+                  {% if form.purpose.errors %}
+                    <div class="invalid-feedback">
+                      {{ form.purpose.errors.0 }}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="col-12">
+                <div class="form-group">
+                  <label for="{{ form.condition_out.id_for_label }}" class="form-label">
+                    Condition (At Checkout)
+                  </label>
+                  {% if form.condition_out.field.widget.input_type == 'select' %}
+                    <select name="{{ form.condition_out.name }}"
+                            id="{{ form.condition_out.id_for_label }}"
+                            class="form-select {% if form.condition_out.errors %}is-invalid{% endif %}">
+                      {% for choice_value, choice_label in form.condition_out.field.choices %}
+                        <option value="{{ choice_value }}"
+                                {% if form.condition_out.value == choice_value %}selected{% endif %}>
+                          {{ choice_label }}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  {% else %}
+                    <textarea name="{{ form.condition_out.name }}"
+                              id="{{ form.condition_out.id_for_label }}"
+                              class="form-control {% if form.condition_out.errors %}is-invalid{% endif %}"
+                              rows="3"
+                              placeholder="Describe the condition of the key...">{{ form.condition_out.value|default:'' }}</textarea>
+                  {% endif %}
+                  <small class="form-text">
+                    <i class="bi bi-info-circle me-1"></i>Note any existing damage or issues
+                  </small>
+                  {% if form.condition_out.errors %}
+                    <div class="invalid-feedback">
+                      {{ form.condition_out.errors.0 }}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger mt-3" role="alert">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              {% for error in form.non_field_errors %}
+                {{ error }}
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <!-- Form Actions -->
+          <div class="form-actions mt-4 pt-4 border-top">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+              <div class="form-note">
+                <small class="text-muted">
+                  <i class="bi bi-shield-check me-1"></i>
+                  This transaction will be logged and timestamped
+                </small>
+              </div>
+              <div class="button-group d-flex gap-2">
+                <a class="btn btn-outline-secondary" href="{% url 'vehicles:key_detail' key.pk %}">
+                  <i class="bi bi-x-lg me-2"></i>Cancel
+                </a>
+                <button class="btn btn-success" type="submit">
+                  <i class="bi bi-box-arrow-right me-2"></i>Issue Key
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Guidelines Card -->
+    <div class="card guidelines-card shadow-sm mt-4">
+      <div class="card-body">
+        <div class="d-flex align-items-start">
+          <div class="guidelines-icon me-3">
+            <i class="bi bi-info-circle-fill"></i>
+          </div>
+          <div>
+            <h6 class="mb-2">Checkout Guidelines</h6>
+            <ul class="guidelines-list mb-0">
+              <li>Verify the recipient's identity before issuing the key</li>
+              <li>Ensure all required information is accurate and complete</li>
+              <li>Set a due date for keys needed for extended periods</li>
+              <li>Document any existing damage to the key or fob</li>
+              <li>Remind the recipient of their responsibility for the key</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Layout & Container */
+  .key-issue-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+
+  /* Page Header */
+  .page-header {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+
+  .breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    color: #0d6efd;
+  }
+
+  /* Cards */
+  .card {
+    border: none;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  /* Info Card */
+  .info-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+  }
+
+  .key-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    flex-shrink: 0;
+  }
+
+  .info-card h5 {
+    color: white;
+    font-size: 1.5rem;
+  }
+
+  .info-card p {
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 0.5rem;
+  }
+
+  .key-metadata .badge {
+    font-weight: 500;
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 255, 255, 0.95) !important;
+  }
+
+  .status-badge-large {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    min-width: 100px;
+  }
+
+  .status-badge-large i {
+    font-size: 2rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .status-badge-large span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Form Card */
+  .form-card {
+    border: 2px solid #e9ecef;
+  }
+
+  .card-header {
+    background: white;
+    border-bottom: 2px solid #f0f0f0;
+    padding: 1rem 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  /* Form Sections */
+  .form-section {
+    margin-bottom: 2rem;
+  }
+
+  .form-section:last-of-type {
+    margin-bottom: 0;
+  }
+
+  .section-title {
+    color: #495057;
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+  }
+
+  .section-title i {
+    color: #667eea;
+  }
+
+  /* Form Controls */
+  .form-group {
+    margin-bottom: 0;
+  }
+
+  .form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    display: block;
+  }
+
+  .form-control,
+  .form-select {
+    border: 2px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+    outline: none;
+  }
+
+  .form-control::placeholder {
+    color: #adb5bd;
+  }
+
+  .form-control.is-invalid,
+  .form-select.is-invalid {
+    border-color: #dc3545;
+  }
+
+  .form-control.is-invalid:focus,
+  .form-select.is-invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
+  }
+
+  .form-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.375rem;
+    display: block;
+  }
+
+  .invalid-feedback {
+    display: block;
+    font-size: 0.875rem;
+    color: #dc3545;
+    margin-top: 0.375rem;
+    font-weight: 500;
+  }
+
+  textarea.form-control {
+    resize: vertical;
+    min-height: 90px;
+  }
+
+  /* Form Actions */
+  .form-actions {
+    background: #f8f9fa;
+    margin: 0 -1.5rem -1.5rem;
+    padding: 1.5rem;
+    border-radius: 0 0 0.75rem 0.75rem;
+  }
+
+  .form-note {
+    font-size: 0.875rem;
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    padding: 0.625rem 1.5rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    border-width: 2px;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border-color: #28a745;
+  }
+
+  .btn-success:hover {
+    background: linear-gradient(135deg, #218838 0%, #1ba57b 100%);
+    border-color: #218838;
+  }
+
+  .btn-outline-secondary {
+    color: #6c757d;
+    border-color: #6c757d;
+  }
+
+  .btn-outline-secondary:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+  }
+
+  /* Guidelines Card */
+  .guidelines-card {
+    background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%);
+    border: 2px solid #bbdefb;
+  }
+
+  .guidelines-card .card-body {
+    padding: 1.25rem;
+  }
+
+  .guidelines-icon {
+    font-size: 2rem;
+    color: #1976d2;
+    flex-shrink: 0;
+  }
+
+  .guidelines-card h6 {
+    font-weight: 600;
+    color: #1565c0;
+    margin-bottom: 0.5rem;
+  }
+
+  .guidelines-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.9rem;
+    color: #0d47a1;
+  }
+
+  .guidelines-list li {
+    padding: 0.35rem 0;
+    padding-left: 1.5rem;
+    position: relative;
+  }
+
+  .guidelines-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #1976d2;
+    font-weight: bold;
+    font-size: 1.1rem;
+  }
+
+  /* Alert Styling */
+  .alert {
+    border-radius: 0.5rem;
+    border-width: 2px;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 767px) {
+    .page-title {
+      font-size: 1.5rem;
+    }
+
+    .key-icon {
+      width: 50px;
+      height: 50px;
+      font-size: 1.5rem;
+    }
+
+    .info-card h5 {
+      font-size: 1.25rem;
+    }
+
+    .status-badge-large {
+      padding: 0.75rem;
+      min-width: 80px;
+    }
+
+    .status-badge-large i {
+      font-size: 1.5rem;
+    }
+
+    .form-actions {
+      padding: 1rem;
+    }
+
+    .form-actions .d-flex {
+      flex-direction: column;
+      align-items: stretch !important;
+    }
+
+    .button-group {
+      width: 100%;
+    }
+
+    .button-group .btn {
+      flex: 1;
+    }
+
+    .form-note {
+      text-align: center;
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+
+    .card-body {
+      padding: 1.5rem 1rem !important;
+    }
+  }
+
+  /* Animation */
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .form-card,
+  .info-card {
+    animation: slideIn 0.3s ease-out;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Form validation enhancement
+    const form = document.getElementById('issueForm');
+
+    if (form) {
+      // Set minimum datetime to current time
+      const dueDateInput = document.getElementById('{{ form.due_back.id_for_label }}');
+      if (dueDateInput) {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        dueDateInput.min = now.toISOString().slice(0, 16);
+      }
+
+      // Form submission
+      form.addEventListener('submit', function(event) {
+        if (!form.checkValidity()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        form.classList.add('was-validated');
+      });
+
+      // Real-time validation
+      const inputs = form.querySelectorAll('input, select, textarea');
+      inputs.forEach(function(input) {
+        input.addEventListener('blur', function() {
+          if (input.hasAttribute('required') && !input.value) {
+            input.classList.add('is-invalid');
+          } else {
+            input.classList.remove('is-invalid');
+          }
+        });
+
+        input.addEventListener('input', function() {
+          if (input.classList.contains('is-invalid') && input.value) {
+            input.classList.remove('is-invalid');
+          }
+        });
+      });
+    }
+
+    // Auto-dismiss alerts
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function(alert) {
+      setTimeout(function() {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+      }, 5000);
+    });
+
+    // Capitalize first letter of name input
+    const nameInput = document.getElementById('{{ form.issued_to_name.id_for_label }}');
+    if (nameInput) {
+      nameInput.addEventListener('blur', function() {
+        if (this.value) {
+          this.value = this.value.split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

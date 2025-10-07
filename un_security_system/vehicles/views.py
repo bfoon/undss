@@ -3,13 +3,21 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.contrib import messages
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.db.models import Q, Count
 import csv
-from .models import Vehicle, VehicleMovement, ParkingCard, AssetExit, AgencyApprover, ParkingCardRequest
-from .forms import VehicleForm, ParkingCardForm, VehicleMovementForm, QuickVehicleCheckForm, AssetExitForm, AssetExitItemFormSet, ParkingCardRequestForm
+from .models import (Vehicle, VehicleMovement,
+                     ParkingCard, AssetExit,
+                     AgencyApprover, ParkingCardRequest, Key, KeyLog
+                     )
+from .forms import (VehicleForm, ParkingCardForm,
+                    VehicleMovementForm, QuickVehicleCheckForm,
+                    AssetExitForm, AssetExitItemFormSet,
+                    ParkingCardRequestForm, KeyForm, KeyIssueForm, KeyReturnForm
+                    )
 
 def is_lsa(u): return u.is_authenticated and (getattr(u, 'role', '') == 'lsa' or u.is_superuser)
 def is_data_entry(u): return u.is_authenticated and (getattr(u, 'role', '') == 'data_entry' or u.is_superuser)
@@ -850,3 +858,152 @@ def pc_request_cancel(request, pk):
         req.save()
         messages.info(request, "Request cancelled.")
     return redirect('vehicles:my_pc_requests')
+
+def _gate_role(user):
+    return user.is_authenticated and (getattr(user, 'role', None) in ('data_entry', 'lsa', 'soc') or user.is_superuser)
+
+# Inventory
+@method_decorator(login_required, name='dispatch')
+class KeyListView(ListView):
+    model = Key
+    template_name = 'vehicles/keys/key_list.html'
+    context_object_name = 'keys'
+    paginate_by = 25
+
+    def get_queryset(self):
+        q = (self.request.GET.get('q') or '').strip()
+        qs = Key.objects.all()
+        if q:
+            qs = qs.filter(
+                Q(code__icontains=q) |
+                Q(label__icontains=q) |
+                Q(vehicle__plate_number__icontains=q)
+            )
+        key_type = self.request.GET.get('type')
+        if key_type in ('office', 'vehicle'):
+            qs = qs.filter(key_type=key_type)
+        status = self.request.GET.get('status')
+        if status == 'out':
+            qs = [k for k in qs if k.is_out]
+        elif status == 'in':
+            qs = [k for k in qs if not k.is_out]
+        return qs
+
+@method_decorator([login_required, user_passes_test(_is_lsa)], name='dispatch')
+class KeyCreateView(CreateView):
+    model = Key
+    form_class = KeyForm
+    template_name = 'vehicles/keys/key_form.html'
+    success_url = reverse_lazy('vehicles:key_list')
+
+@method_decorator([login_required, user_passes_test(_is_lsa)], name='dispatch')
+class KeyUpdateView(UpdateView):
+    model = Key
+    form_class = KeyForm
+    template_name = 'vehicles/keys/key_form.html'
+    success_url = reverse_lazy('vehicles:key_list')
+
+@method_decorator(login_required, name='dispatch')
+class KeyDetailView(DetailView):
+    model = Key
+    template_name = 'vehicles/keys/key_detail.html'
+    context_object_name = 'key'
+
+# Issue / Return
+@login_required
+@user_passes_test(_gate_role)
+def key_issue(request, pk):
+    key = get_object_or_404(Key, pk=pk, is_active=True)
+    if key.is_out:
+        messages.error(request, "This key is already issued.")
+        return redirect('vehicles:key_detail', pk=key.pk)
+
+    if request.method == 'POST':
+        form = KeyIssueForm(request.POST)
+        if form.is_valid():
+            log = form.save(commit=False)
+            log.key = key
+            log.issued_by = request.user
+            log.save()
+            messages.success(request, f"Key {key.code} issued to {log.issued_to_name}.")
+            return redirect('vehicles:key_detail', pk=key.pk)
+    else:
+        form = KeyIssueForm()
+
+    return render(request, 'vehicles/keys/key_issue_form.html', {'key': key, 'form': form})
+
+@login_required
+@user_passes_test(_gate_role)
+def key_return(request, pk):
+    key = get_object_or_404(Key, pk=pk)
+    log = key.current_log
+    if not log:
+        messages.error(request, "This key is not currently issued.")
+        return redirect('vehicles:key_detail', pk=key.pk)
+
+    if request.method == 'POST':
+        form = KeyReturnForm(request.POST, instance=log)
+        if form.is_valid():
+            log = form.save(commit=False)
+            log.returned_at = timezone.now()
+            log.received_by = request.user
+            log.save()
+            messages.success(request, f"Key {key.code} returned by {log.issued_to_name}.")
+            return redirect('vehicles:key_detail', pk=key.pk)
+    else:
+        form = KeyReturnForm()
+
+    return render(request, 'vehicles/keys/key_return_form.html', {'key': key, 'log': log, 'form': form})
+
+# Logs
+@method_decorator(login_required, name='dispatch')
+class KeyLogListView(ListView):
+    model = KeyLog
+    template_name = 'vehicles/keys/key_logs.html'
+    context_object_name = 'logs'
+    paginate_by = 50
+
+    def get_queryset(self):
+        q = (self.request.GET.get('q') or '').strip()
+        qs = KeyLog.objects.select_related('key', 'issued_by', 'received_by')
+        if q:
+            qs = qs.filter(
+                Q(key__code__icontains=q) |
+                Q(issued_to_name__icontains=q) |
+                Q(issued_to_badge_id__icontains=q)
+            )
+        return qs.order_by('-issued_at')
+
+# Quick page (scan / type code, then issue/return)
+@login_required
+@user_passes_test(_gate_role)
+def quick_key_page(request):
+    return render(request, 'vehicles/keys/quick_key.html')
+
+@login_required
+@user_passes_test(_gate_role)
+def key_lookup_api(request):
+    code = (request.GET.get('code') or '').strip()
+    if not code:
+        return JsonResponse({'ok': False, 'error': 'missing_code'}, status=400)
+    key = Key.objects.filter(code__iexact=code).first()
+    if not key:
+        return JsonResponse({'ok': False, 'found': False})
+    current = key.current_log
+    return JsonResponse({
+        'ok': True,
+        'found': True,
+        'key': {
+            'id': key.id,
+            'code': key.code,
+            'label': key.label,
+            'key_type': key.key_type,
+            'is_out': key.is_out,
+        },
+        'current': ({
+            'issued_to_name': current.issued_to_name,
+            'issued_to_badge_id': current.issued_to_badge_id,
+            'issued_at': current.issued_at.isoformat(),
+            'due_back': current.due_back.isoformat() if current.due_back else None,
+        } if current else None)
+    })
