@@ -33,7 +33,6 @@ def _gate_role(user):
         getattr(user, 'role', None) in ('data_entry', 'lsa', 'soc') or user.is_superuser
     )
 
-
 class VisitorListView(LoginRequiredMixin, ListView):
     model = Visitor
     template_name = 'visitors/visitor_list.html'
@@ -41,39 +40,51 @@ class VisitorListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = Visitor.objects.all()
+        user = self.request.user
+        qs = Visitor.objects.all()
 
-        # Handle filter_status from URL kwargs (for filtered views)
+        # Non-privileged users (e.g., requester/staff) only see their own records
+        privileged_roles = {'lsa', 'soc', 'data_entry'}
+        if not (user.is_superuser or getattr(user, 'role', None) in privileged_roles):
+            qs = qs.filter(registered_by=user)
+
+        # URL-based status filter (takes precedence)
         filter_status = self.kwargs.get('filter_status')
         if filter_status:
-            queryset = queryset.filter(status=filter_status)
+            qs = qs.filter(status=filter_status)
 
-        # Handle search and filters from GET parameters
+        # Querystring filters
         status = self.request.GET.get('status')
         search = self.request.GET.get('search')
 
-        if status and not filter_status:  # Don't override URL-based filter
-            queryset = queryset.filter(status=status)
+        if status and not filter_status:
+            qs = qs.filter(status=status)
 
         if search:
-            queryset = queryset.filter(
+            qs = qs.filter(
                 Q(full_name__icontains=search) |
                 Q(organization__icontains=search) |
                 Q(id_number__icontains=search) |
                 Q(phone__icontains=search)
             )
 
-        return queryset.order_by('-registered_at')
+        return qs.order_by('-registered_at')
 
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update({
+        ctx = super().get_context_data(**kwargs)
+        user = self.request.user
+        privileged_roles = {'lsa', 'soc', 'data_entry'}
+        mine_only = not (user.is_superuser or getattr(user, 'role', None) in privileged_roles)
+
+        ctx.update({
             'status_filter': self.request.GET.get('status', ''),
             'search_query': self.request.GET.get('search', ''),
             'filter_status': self.kwargs.get('filter_status', ''),
             'status_choices': Visitor.APPROVAL_STATUS,
+            'mine_only': mine_only,  # optional: show a hint like “Showing your requests only”
         })
-        return context
+        return ctx
+
 
 
 class VisitorDetailView(LoginRequiredMixin, DetailView):
@@ -81,12 +92,21 @@ class VisitorDetailView(LoginRequiredMixin, DetailView):
     template_name = 'visitors/visitor_detail.html'
     context_object_name = 'visitor'
 
+    def get_queryset(self):
+        user = self.request.user
+        qs = super().get_queryset()
+        privileged_roles = {'lsa', 'soc', 'data_entry'}
+        if not (user.is_superuser or getattr(user, 'role', None) in privileged_roles):
+            qs = qs.filter(registered_by=user)
+        return qs
+
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['logs'] = VisitorLog.objects.filter(
+        ctx = super().get_context_data(**kwargs)
+        ctx['logs'] = VisitorLog.objects.filter(
             visitor=self.object
         ).select_related('performed_by').order_by('-timestamp')
-        return context
+        return ctx
+
 
 
 class VisitorCreateView(LoginRequiredMixin, CreateView):
