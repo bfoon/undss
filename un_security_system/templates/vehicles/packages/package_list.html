@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Packages & Mailroom{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="bi bi-box-seam"></i> Packages & Mailroom</h3>
+    <div class="d-flex gap-2">
+      {% if user.role in 'data_entry lsa soc' or user.is_superuser %}
+        <a class="btn btn-primary" href="{% url 'vehicles:package_log_new' %}"><i class="bi bi-journal-plus"></i> Log at Gate</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <form class="row g-2 mb-3">
+    <div class="col-sm-6 col-md-4">
+      <input class="form-control" name="q" value="{{ q }}" placeholder="Search tracking, sender, agency, recipient">
+    </div>
+    <div class="col-sm-4 col-md-3">
+      <select class="form-select" name="status">
+        <option value="">All Status</option>
+        {% for k,v in packages.model.STATUS %}
+          <option value="{{ k }}" {% if status_filter == k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-2 col-md-2">
+      <button class="btn btn-outline-primary w-100">Filter</button>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table align-middle table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Tracking</th><th>Item</th><th>Sender</th><th>Destination</th><th>Status</th><th>Logged</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in packages %}
+            <tr>
+              <td><span class="badge bg-light text-dark border">{{ p.tracking_code }}</span></td>
+              <td>{{ p.item_type }}{% if p.for_recipient %}<br><small class="text-muted">For: {{ p.for_recipient }}</small>{% endif %}</td>
+              <td>{{ p.sender_name }}{% if p.sender_org %}<br><small class="text-muted">{{ p.sender_org }}</small>{% endif %}</td>
+              <td>{{ p.destination_agency }}</td>
+              <td><span class="badge text-bg-secondary">{{ p.get_status_display }}</span></td>
+              <td><small>{{ p.logged_at|date:"M d, Y H:i" }}</small></td>
+              <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'vehicles:package_detail' p.pk %}"><i class="bi bi-eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox fs-1 d-block mb-2"></i>No packages</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

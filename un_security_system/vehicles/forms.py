@@ -4,7 +4,7 @@ from crispy_forms.helper import FormHelper
 from django.forms import inlineformset_factory
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column, HTML
 from .models import (Vehicle, VehicleMovement, ParkingCard, AssetExit,
-                     AssetExitItem, ParkingCardRequest, Key, KeyLog)
+                     AssetExitItem, ParkingCardRequest, Key, KeyLog, Package)
 
 
 class VehicleForm(forms.ModelForm):
@@ -319,3 +319,23 @@ class KeyReturnForm(forms.ModelForm):
     class Meta:
         model = KeyLog
         fields = ['condition_in']
+
+
+class PackageLogForm(forms.ModelForm):
+    class Meta:
+        model = Package
+        fields = [
+            "sender_name","sender_type","sender_org","sender_contact",
+            "item_type","description","destination_agency","dest_focal_email",
+            "for_recipient","notes"
+        ]
+
+class PackageReceptionForm(forms.Form):
+    note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows":2}))
+
+class PackageAgencyReceiveForm(forms.Form):
+    note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows":2}))
+
+class PackageDeliverForm(forms.Form):
+    delivered_to = forms.CharField(max_length=120)
+    note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows":2}))

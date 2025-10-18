@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
 import csv
-from .models import Vehicle, VehicleMovement, ParkingCard, ParkingCardRequest, Key, KeyLog
+from .models import Vehicle, VehicleMovement, ParkingCard, ParkingCardRequest, Key, KeyLog, Package, PackageEvent
 
 # Try to import optional models without crashing
 try:
@@ -194,3 +194,17 @@ class KeyLogAdmin(admin.ModelAdmin):
     list_display = ('key', 'issued_to_name', 'issued_at', 'due_back', 'returned_at', 'issued_by', 'received_by')
     list_filter = ('key__key_type', 'issued_at', 'returned_at')
     search_fields = ('key__code', 'key__label', 'issued_to_name', 'issued_to_badge_id', 'purpose')
+
+
+@admin.register(Package)
+class PackageAdmin(admin.ModelAdmin):
+    list_display = ("tracking_code","item_type","destination_agency","status","logged_at","logged_by")
+    list_filter = ("status","destination_agency","sender_type")
+    search_fields = ("tracking_code","sender_name","sender_org","destination_agency","for_recipient")
+
+@admin.register(PackageEvent)
+class PackageEventAdmin(admin.ModelAdmin):
+    list_display = ("package","status","at","who","note")
+    list_filter = ("status",)
+    search_fields = ("package__tracking_code","note","who__username")
+

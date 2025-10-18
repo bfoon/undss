@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}Package {{ package.tracking_code }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 1100px;">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-box-seam fs-4 text-primary"></i>
+        <h2 class="fw-bold mb-0">{{ package.tracking_code }}</h2>
+      </div>
+      <p class="text-muted mb-0">
+        <i class="bi bi-clock-history me-1"></i>
+        Logged {{ package.logged_at|date:"M d, Y \a\t H:i" }}
+      </p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'vehicles:package_list' %}">
+      <i class="bi bi-arrow-left me-2"></i>Back to List
+    </a>
+  </div>
+
+  <!-- Status Banner -->
+  <div class="alert alert-info border-0 shadow-sm mb-4" role="alert">
+    <div class="d-flex align-items-center">
+      <i class="bi bi-info-circle-fill fs-5 me-3"></i>
+      <div class="flex-grow-1">
+        <strong>Current Status:</strong>
+        <span class="badge bg-primary ms-2 px-3 py-2">{{ package.get_status_display }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Left Column - Package Details -->
+    <div class="col-lg-7">
+      <!-- Main Details Card -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-gradient text-white py-3">
+          <h5 class="mb-0">
+            <i class="bi bi-info-circle me-2"></i>Package Details
+          </h5>
+        </div>
+        <div class="card-body p-4">
+          <dl class="row g-3 mb-0">
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Status</dt>
+              <dd class="mb-0">
+                <span class="badge bg-secondary px-3 py-2">
+                  {{ package.get_status_display }}
+                </span>
+              </dd>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Item Type</dt>
+              <dd class="mb-0 fw-semibold">{{ package.item_type }}</dd>
+            </div>
+
+            <div class="col-12">
+              <dt class="text-muted small text-uppercase mb-1">Description</dt>
+              <dd class="mb-0">{{ package.description|default:"—" }}</dd>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Destination Agency</dt>
+              <dd class="mb-0 fw-semibold">{{ package.destination_agency }}</dd>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Recipient</dt>
+              <dd class="mb-0">{{ package.for_recipient|default:"—" }}</dd>
+            </div>
+
+            <div class="col-12">
+              <dt class="text-muted small text-uppercase mb-1">Logged Information</dt>
+              <dd class="mb-0">
+                <i class="bi bi-calendar-event text-primary me-2"></i>
+                {{ package.logged_at|date:"M d, Y H:i" }}
+                <span class="mx-2">•</span>
+                <i class="bi bi-person text-primary me-2"></i>
+                {{ package.logged_by.username }}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Sender Details Card -->
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-light border-bottom py-3">
+          <h5 class="mb-0 text-dark">
+            <i class="bi bi-person-circle me-2"></i>Sender Information
+          </h5>
+        </div>
+        <div class="card-body p-4">
+          <dl class="row g-3 mb-0">
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Name</dt>
+              <dd class="mb-0 fw-semibold">{{ package.sender_name }}</dd>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Type</dt>
+              <dd class="mb-0">
+                <span class="badge bg-light text-dark border">
+                  {{ package.get_sender_type_display }}
+                </span>
+              </dd>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Organization</dt>
+              <dd class="mb-0">{{ package.sender_org|default:"—" }}</dd>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <dt class="text-muted small text-uppercase mb-1">Contact</dt>
+              <dd class="mb-0">
+                {% if package.sender_contact %}
+                  <i class="bi bi-telephone me-1"></i>{{ package.sender_contact }}
+                {% else %}
+                  —
+                {% endif %}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column - Actions & Timeline -->
+    <div class="col-lg-5">
+      <!-- Actions Card -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-gradient text-white py-3">
+          <h5 class="mb-0">
+            <i class="bi bi-lightning-charge me-2"></i>Quick Actions
+          </h5>
+        </div>
+        <div class="card-body p-4">
+          {% if user.role == 'reception' or user.role == 'lsa' or user.role == 'soc' %}
+            {% if package.status in 'to_reception,logged' %}
+              <a class="btn btn-primary w-100 mb-2 py-3" href="{% url 'vehicles:package_reception_receive' package.pk %}">
+                <i class="bi bi-check-circle me-2"></i>Receive at Reception
+              </a>
+            {% endif %}
+            {% if package.status == 'at_reception' %}
+              <a class="btn btn-outline-primary w-100 py-3" href="{% url 'vehicles:package_send_to_agency' package.pk %}">
+                <i class="bi bi-send me-2"></i>Send to Agency/Registry
+              </a>
+            {% endif %}
+          {% endif %}
+
+          {% if user.role in 'registry agency_fp lsa soc' %}
+            {% if package.status == 'to_agency' %}
+              <a class="btn btn-success w-100 mb-2 py-3" href="{% url 'vehicles:package_agency_receive' package.pk %}">
+                <i class="bi bi-check-circle-fill me-2"></i>Mark Received by Agency/Registry
+              </a>
+            {% endif %}
+          {% endif %}
+
+          {% if user.role in 'registry agency_fp lsa soc' %}
+            {% if package.status == 'with_agency' %}
+              <a class="btn btn-dark w-100 py-3" href="{% url 'vehicles:package_deliver' package.pk %}">
+                <i class="bi bi-truck me-2"></i>Mark Delivered
+              </a>
+            {% endif %}
+          {% endif %}
+
+          {% if not user.role or package.status == 'delivered' %}
+            <div class="text-center text-muted py-3">
+              <i class="bi bi-check-all fs-3 mb-2 d-block"></i>
+              <p class="mb-0">No actions available</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Tracking Events Card -->
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-light border-bottom py-3">
+          <h5 class="mb-0 text-dark">
+            <i class="bi bi-clock-history me-2"></i>Tracking Timeline
+          </h5>
+        </div>
+        <div class="card-body p-0">
+          {% if package.events.all %}
+            <div class="timeline-container">
+              {% for e in package.events.all %}
+                <div class="timeline-item {% if forloop.last %}timeline-item-last{% endif %}">
+                  <div class="timeline-marker"></div>
+                  <div class="timeline-content">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                      <span class="badge bg-primary">{{ e.get_status_display }}</span>
+                      <small class="text-muted">{{ e.at|date:"M d, H:i" }}</small>
+                    </div>
+                    {% if e.note %}
+                      <p class="mb-1 small">{{ e.note }}</p>
+                    {% endif %}
+                    {% if e.who %}
+                      <div class="small text-muted">
+                        <i class="bi bi-person-fill me-1"></i>{{ e.who.username }}
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-center text-muted py-5">
+              <i class="bi bi-inbox fs-3 mb-2 d-block"></i>
+              <p class="mb-0">No tracking events yet</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+  /* Gradient Background */
+  .bg-gradient {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  /* Card Styling */
+  .card {
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .card-header {
+    border-bottom: none;
+  }
+
+  /* Definition List Styling */
+  dt {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  dd {
+    color: #2d3748;
+  }
+
+  /* Badge Styling */
+  .badge {
+    font-weight: 500;
+    font-size: 0.85rem;
+    letter-spacing: 0.3px;
+  }
+
+  /* Button Styling */
+  .btn {
+    font-weight: 500;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+  }
+
+  .btn-outline-primary {
+    color: #667eea;
+    border-color: #667eea;
+  }
+
+  .btn-outline-primary:hover {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: transparent;
+    color: white;
+  }
+
+  /* Alert Styling */
+  .alert-info {
+    background-color: #e6f2ff;
+    border-left: 4px solid #4299e1;
+  }
+
+  /* Timeline Styling */
+  .timeline-container {
+    padding: 1.5rem;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-left: 2.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .timeline-item-last {
+    padding-bottom: 0;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: 0.625rem;
+    top: 2rem;
+    bottom: -0.5rem;
+    width: 2px;
+    background: linear-gradient(180deg, #e2e8f0 0%, transparent 100%);
+  }
+
+  .timeline-item-last::before {
+    display: none;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    left: 0;
+    top: 0.25rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px #e2e8f0;
+  }
+
+  .timeline-content {
+    background-color: #f8fafc;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border-left: 3px solid #e2e8f0;
+  }
+
+  .timeline-item:hover .timeline-content {
+    background-color: #f1f5f9;
+    border-left-color: #667eea;
+  }
+
+  /* Responsive */
+  @media (max-width: 992px) {
+    .col-lg-7, .col-lg-5 {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    .card-body {
+      padding: 1.5rem !important;
+    }
+
+    .timeline-container {
+      padding: 1rem;
+    }
+
+    .btn {
+      font-size: 0.9rem;
+    }
+  }
+</style>
+{% endblock %}

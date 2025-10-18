@@ -338,6 +338,20 @@
               </a></li>
             {% endif %}
 
+
+              <li><hr class="dropdown-divider"></li>
+
+              <li class="dropdown-header">Packages & Mailroom</li>
+                <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
+                  <i class="bi bi-box-seam me-2"></i>Packages
+                </a></li>
+
+                {% if user.role in 'data_entry lsa soc' or user.is_superuser %}
+                  <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
+                    <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
+                  </a></li>
+                {% endif %}
+
             <li><hr class="dropdown-divider"></li>
 
             <li class="dropdown-header">Asset Exit</li>
@@ -359,7 +373,7 @@
       {% endif %}
 
       {# ===== Requesters (normal staff) ===== #}
-      {% if user.role == 'requester' %}
+      {% if user.role == 'requester' or user.role == 'reception'  or user.role == 'registry' %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
              aria-expanded="false">
@@ -398,6 +412,19 @@
             <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
               <i class="bi bi-file-text me-2"></i>My Asset Requests
             </a></li>
+
+              <li><hr class="dropdown-divider"></li>
+
+              <li class="dropdown-header">Packages & Mailroom</li>
+                <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
+                  <i class="bi bi-box-seam me-2"></i>Packages
+                </a></li>
+
+                {% if user.role in 'data_entry lsa soc' or user.is_superuser %}
+                  <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
+                    <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
+                  </a></li>
+                {% endif %}
 
               <li><hr class="dropdown-divider"></li>
 

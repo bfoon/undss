@@ -9,19 +9,23 @@ from django.utils import timezone
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.db.models import Q, Count
 import csv
+import random, string
 from .models import (Vehicle, VehicleMovement,
                      ParkingCard, AssetExit,
-                     AgencyApprover, ParkingCardRequest, Key, KeyLog
-                     )
+                     AgencyApprover, ParkingCardRequest, Key, KeyLog,
+                     Package, PackageEvent)
 from .forms import (VehicleForm, ParkingCardForm,
                     VehicleMovementForm, QuickVehicleCheckForm,
                     AssetExitForm, AssetExitItemFormSet,
-                    ParkingCardRequestForm, KeyForm, KeyIssueForm, KeyReturnForm
+                    ParkingCardRequestForm, KeyForm, KeyIssueForm, KeyReturnForm,
+                    PackageLogForm, PackageReceptionForm, PackageAgencyReceiveForm, PackageDeliverForm
                     )
 
 def is_lsa(u): return u.is_authenticated and (getattr(u, 'role', '') == 'lsa' or u.is_superuser)
 def is_data_entry(u): return u.is_authenticated and (getattr(u, 'role', '') == 'data_entry' or u.is_superuser)
-
+def _is_guard(u): return u.is_authenticated and getattr(u, "role", "") in ("data_entry", "soc", "lsa")
+def _is_reception(u): return u.is_authenticated and getattr(u, "role", "") in ("reception", "lsa", "soc")
+def _is_agency_or_registry(u): return u.is_authenticated and getattr(u, "role", "") in ("registry", "agency_fp", "lsa", "soc")
 
 # ------------ Role helpers (works with either user.role or Django Groups) ------------
 def user_has_role(user, *roles):
@@ -1006,4 +1010,157 @@ def key_lookup_api(request):
             'issued_at': current.issued_at.isoformat(),
             'due_back': current.due_back.isoformat() if current.due_back else None,
         } if current else None)
+    })
+
+def _new_tracking_code():
+    stamp = timezone.now().strftime("%Y%m%d")
+    suffix = "".join(random.choices(string.digits, k=4))
+    return f"PKG-{stamp}-{suffix}"
+
+@login_required
+@user_passes_test(_is_guard)
+def package_log_new(request):
+    if request.method == "POST":
+        form = PackageLogForm(request.POST)
+        if form.is_valid():
+            pkg = form.save(commit=False)
+            pkg.tracking_code = _new_tracking_code()
+            pkg.logged_by = request.user
+            pkg.status = "to_reception"  # guard logged and forwards to reception
+            pkg.save()
+            PackageEvent.objects.create(package=pkg, status="logged", who=request.user, note="Logged at gate")
+            PackageEvent.objects.create(package=pkg, status="to_reception", who=request.user, note="Forwarded to reception")
+            messages.success(request, f"Package logged. Tracking: {pkg.tracking_code}")
+            # TODO: notify reception by email/channel if you have it
+            return redirect("vehicles:package_detail", pk=pkg.pk)
+    else:
+        form = PackageLogForm()
+    return render(request, "vehicles/packages/package_form.html", {"form": form, "is_guard": True})
+
+@login_required
+def package_list(request):
+    q = request.GET.get("q","").strip()
+    status = request.GET.get("status","")
+    qs = Package.objects.all()
+
+    # basic role-based default scoping (optional: show inboxes)
+    role = getattr(request.user, "role", "")
+    if role == "reception":
+        qs = qs.filter(Q(status__in=["to_reception","at_reception","to_agency"]))
+    elif role in ("registry", "agency_fp"):
+        qs = qs.filter(Q(status__in=["to_agency","with_agency","delivered"]))
+    # lsa/soc/guards see all; requesters not relevant here
+
+    if q:
+        qs = qs.filter(
+            Q(tracking_code__icontains=q)|
+            Q(sender_name__icontains=q)|
+            Q(sender_org__icontains=q)|
+            Q(destination_agency__icontains=q)|
+            Q(for_recipient__icontains=q)
+        )
+    if status:
+        qs = qs.filter(status=status)
+
+    return render(request, "vehicles/packages/package_list.html", {
+        "packages": qs.select_related("logged_by","reception_received_by","agency_received_by","delivered_by")[:200],
+        "q": q, "status_filter": status
+    })
+
+@login_required
+def package_detail(request, pk):
+    pkg = get_object_or_404(Package, pk=pk)
+    return render(request, "vehicles/packages/package_detail.html", {"package": pkg})
+
+@login_required
+@user_passes_test(_is_reception)
+def package_mark_reception_received(request, pk):
+    pkg = get_object_or_404(Package, pk=pk)
+    if request.method == "POST":
+        form = PackageReceptionForm(request.POST)
+        if form.is_valid():
+            pkg.status = "at_reception"
+            pkg.reception_received_at = timezone.now()
+            pkg.reception_received_by = request.user
+            pkg.save()
+            PackageEvent.objects.create(package=pkg, status="at_reception", who=request.user, note=form.cleaned_data.get("note",""))
+            messages.success(request, "Package marked received at Reception.")
+            # notify agency focal/registry if email exists
+            return redirect("vehicles:package_detail", pk=pkg.pk)
+    else:
+        form = PackageReceptionForm()
+    return render(request, "vehicles/packages/package_action_form.html", {
+        "package": pkg, "form": form, "title": "Receive at Reception", "action": "Receive"
+    })
+
+@login_required
+@user_passes_test(_is_reception)
+def package_send_to_agency(request, pk):
+    pkg = get_object_or_404(Package, pk=pk)
+    # immediate transition (simple POST button)
+    pkg.status = "to_agency"
+    pkg.save()
+    PackageEvent.objects.create(package=pkg, status="to_agency", who=request.user, note="Sent to Agency/Registry")
+    messages.info(request, "Package sent to Agency/Registry.")
+    # notify agency focal point via email if configured
+    return redirect("vehicles:package_detail", pk=pkg.pk)
+
+@login_required
+@user_passes_test(_is_agency_or_registry)
+def package_mark_agency_received(request, pk):
+    pkg = get_object_or_404(Package, pk=pk)
+    if request.method == "POST":
+        form = PackageAgencyReceiveForm(request.POST)
+        if form.is_valid():
+            pkg.status = "with_agency"
+            pkg.agency_received_at = timezone.now()
+            pkg.agency_received_by = request.user
+            pkg.save()
+            PackageEvent.objects.create(package=pkg, status="with_agency", who=request.user, note=form.cleaned_data.get("note",""))
+            messages.success(request, "Package marked received by Agency/Registry.")
+            return redirect("vehicles:package_detail", pk=pkg.pk)
+    else:
+        form = PackageAgencyReceiveForm()
+    return render(request, "vehicles/packages/package_action_form.html", {
+        "package": pkg, "form": form, "title": "Receive by Agency/Registry", "action": "Receive"
+    })
+
+@login_required
+@user_passes_test(_is_agency_or_registry)
+def package_mark_delivered(request, pk):
+    pkg = get_object_or_404(Package, pk=pk)
+    if request.method == "POST":
+        form = PackageDeliverForm(request.POST)
+        if form.is_valid():
+            pkg.status = "delivered"
+            pkg.delivered_at = timezone.now()
+            pkg.delivered_to = form.cleaned_data["delivered_to"]
+            pkg.delivered_by = request.user
+            pkg.save()
+            PackageEvent.objects.create(package=pkg, status="delivered", who=request.user, note=form.cleaned_data.get("note",""))
+            messages.success(request, "Package marked delivered.")
+            return redirect("vehicles:package_detail", pk=pkg.pk)
+    else:
+        form = PackageDeliverForm()
+    return render(request, "vehicles/packages/package_action_form.html", {
+        "package": pkg, "form": form, "title": "Deliver Package", "action": "Deliver"
+    })
+
+# Public/simple tracking (optional)
+@login_required
+def package_track_api(request):
+    code = (request.GET.get("code") or "").strip()
+    pkg = Package.objects.filter(tracking_code__iexact=code).first()
+    if not pkg:
+        return JsonResponse({"ok": False, "error": "not_found"}, status=404)
+    return JsonResponse({
+        "ok": True,
+        "tracking_code": pkg.tracking_code,
+        "status": pkg.status,
+        "last_update": pkg.last_update.isoformat(),
+        "destination_agency": pkg.destination_agency,
+        "events": [
+            {"at": e.at.isoformat(), "status": e.status, "note": e.note or "", "who": (e.who.username if e.who else None)}
+            for e in pkg.events.all().order_by("-at")[:20]
+        ],
     })

@@ -8,6 +8,8 @@ class User(AbstractUser):
         ('data_entry', 'Data Entry (Security Guard)'),
         ('lsa', 'Local Security Associate'),
         ('soc', 'Security Operations Center'),
+        ('reception', 'Receptionist'),
+        ('registry', 'Registry'),
     ]
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='requester')

@@ -286,3 +286,79 @@ class KeyLog(models.Model):
     def __str__(self):
         status = "OUT" if self.returned_at is None else "IN"
         return f"{self.key.code} to {self.issued_to_name} at {self.issued_at:%Y-%m-%d %H:%M} [{status}]"
+
+# --- Packages & Mailroom ---
+
+from django.conf import settings
+from django.db import models
+from django.utils import timezone
+
+class Package(models.Model):
+    SENDER_TYPES = [
+        ("gov", "Government / Law Enforcement"),
+        ("private", "Private Sector"),
+        ("ngo", "NGO"),
+        ("nonprofit", "Non-Profit"),
+        ("individual", "Individual"),
+        ("other", "Other"),
+    ]
+
+    STATUS = [
+        ("logged", "Logged at Gate"),
+        ("to_reception", "Sent to Reception"),
+        ("at_reception", "Received by Reception"),
+        ("to_agency", "Sent to Agency/Registry"),
+        ("with_agency", "Received by Agency/Registry"),
+        ("delivered", "Delivered to Recipient"),
+        ("returned", "Returned to Sender"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    # basics
+    tracking_code = models.CharField(max_length=32, unique=True)
+    sender_name = models.CharField(max_length=120)
+    sender_type = models.CharField(max_length=20, choices=SENDER_TYPES)
+    sender_org = models.CharField(max_length=120, blank=True)
+    sender_contact = models.CharField(max_length=120, blank=True)
+
+    # content / routing
+    item_type = models.CharField(max_length=60, help_text="Package / Envelope / Box / Other")
+    description = models.TextField(blank=True)
+    destination_agency = models.CharField(max_length=120, help_text="UN Agency / Office (e.g., UNDP)")
+    dest_focal_email = models.EmailField(blank=True, help_text="Agency focal point will be notified")
+    for_recipient = models.CharField(max_length=120, blank=True)
+
+    # custody & workflow
+    status = models.CharField(max_length=20, choices=STATUS, default="logged")
+    logged_at = models.DateTimeField(default=timezone.now)
+    logged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="packages_logged")
+
+    reception_received_at = models.DateTimeField(null=True, blank=True)
+    reception_received_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="packages_reception")
+
+    agency_received_at = models.DateTimeField(null=True, blank=True)
+    agency_received_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="packages_agency")
+
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    delivered_to = models.CharField(max_length=120, blank=True)
+    delivered_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="packages_delivered")
+
+    # audit
+    last_update = models.DateTimeField(auto_now=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-logged_at"]
+
+    def __str__(self):
+        return f"{self.tracking_code} · {self.item_type} → {self.destination_agency}"
+
+class PackageEvent(models.Model):
+    package = models.ForeignKey(Package, on_delete=models.CASCADE, related_name="events")
+    at = models.DateTimeField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=Package.STATUS)
+    who = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-at"]

@@ -88,4 +88,15 @@ urlpatterns = [
     path('keys/quick/', views.quick_key_page, name='quick_key'),
     path('api/keys/lookup/', views.key_lookup_api, name='key_lookup_api'),
 
+    # Packages & Mailroom
+    path('packages/', views.package_list, name='package_list'),
+    path('packages/new/', views.package_log_new, name='package_log_new'),
+    path('packages/<int:pk>/', views.package_detail, name='package_detail'),
+    path('packages/<int:pk>/reception/receive/', views.package_mark_reception_received, name='package_reception_receive'),
+    path('packages/<int:pk>/reception/send-to-agency/', views.package_send_to_agency, name='package_send_to_agency'),
+    path('packages/<int:pk>/agency/receive/', views.package_mark_agency_received, name='package_agency_receive'),
+    path('packages/<int:pk>/deliver/', views.package_mark_delivered, name='package_deliver'),
+    path('api/package/track/', views.package_track_api, name='package_track_api'),
+
+
 ]
