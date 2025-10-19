@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, ListView, DetailView
 from django.utils import timezone
+from django.db.models import Q
 
 
 from .models import IncidentReport
@@ -29,8 +30,11 @@ class MyIncidentListView(LoginRequiredMixin, ListView):
             qs = qs.filter(status=status)
         return qs
 
+
 class TeamIncidentListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
-    """LSA/SOC triage list of all incidents"""
+    """
+    LSA/SOC triage list of incidents with filtering + dashboard stats.
+    """
     model = IncidentReport
     template_name = "incidents/incident_triage_list.html"
     context_object_name = "incidents"
@@ -39,12 +43,84 @@ class TeamIncidentListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     def test_func(self):
         return is_lsa_or_soc(self.request.user)
 
+    # ---- helpers ------------------------------------------------------------
+    def _base_queryset(self):
+        # Tweak select_related/prefetch as your model allows
+        return (IncidentReport.objects
+                .select_related("reported_by")
+                .order_by("-created_at"))
+
+    def _apply_common_filters(self, qs):
+        """
+        Filters that affect both the table and the stat cards:
+        - search (q)
+        - severity
+        - date range (created_at)
+        We intentionally do NOT apply 'status' here so cards can show their own counts.
+        """
+        request = self.request
+        q = (request.GET.get("q") or "").strip()
+        severity = (request.GET.get("severity") or "").strip()
+        date_from = (request.GET.get("date_from") or "").strip()
+        date_to = (request.GET.get("date_to") or "").strip()
+
+        if q:
+            qs = qs.filter(
+                Q(title__icontains=q) |
+                Q(id__icontains=q) |
+                Q(reported_by__username__icontains=q)
+            )
+
+        if severity:
+            qs = qs.filter(severity=severity)
+
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        return qs
+
+    # ---- queryset for the table --------------------------------------------
     def get_queryset(self):
-        qs = IncidentReport.objects.all().order_by("-created_at")
-        status = self.request.GET.get("status", "")
+        qs = self._apply_common_filters(self._base_queryset())
+
+        # Status handling:
+        # - If user explicitly passes ?status=..., filter by it.
+        # - Otherwise, hide resolved by default.
+        status = (self.request.GET.get("status") or "").strip()
         if status:
             qs = qs.filter(status=status)
+        else:
+            qs = qs.exclude(status="resolved")
+
         return qs
+
+    # ---- context (stats for the cards) --------------------------------------
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        # Build stats from the *same search/severity/date* filters,
+        # but WITHOUT the status filter (so cards are informative).
+        base = self._apply_common_filters(self._base_queryset())
+
+        ctx["stats"] = {
+            "total": base.count(),
+            "new": base.filter(status="new").count(),
+            "in_review": base.filter(status="in_review").count(),
+            "critical": base.filter(severity="critical").count(),
+        }
+
+        # Echo filters (useful for template inputs’ values)
+        ctx["filters"] = {
+            "q": (self.request.GET.get("q") or "").strip(),
+            "severity": (self.request.GET.get("severity") or "").strip(),
+            "status": (self.request.GET.get("status") or "").strip(),
+            "date_from": (self.request.GET.get("date_from") or "").strip(),
+            "date_to": (self.request.GET.get("date_to") or "").strip(),
+        }
+
+        return ctx
 
 class IncidentCreateView(LoginRequiredMixin, CreateView):
     model = IncidentReport

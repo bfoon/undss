@@ -39,7 +39,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">Total Transactions</div>
-            <div class="stat-value">{{ logs|length }}</div>
+            <div class="stat-value">{{ stats.total_logs }}</div>
           </div>
         </div>
       </div>
@@ -50,7 +50,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">Completed</div>
-            <div class="stat-value">{{ logs|length|add:"0" }}</div>
+            <div class="stat-value">{{ stats.returned_logs }}</div>
           </div>
         </div>
       </div>
@@ -61,7 +61,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">Active Checkouts</div>
-            <div class="stat-value">1</div>
+            <div class="stat-value">{{ stats.open_logs }}</div>
           </div>
         </div>
       </div>
@@ -72,7 +72,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">Overdue</div>
-            <div class="stat-value">0</div>
+            <div class="stat-value">{{ stats.overdue_logs }}</div>
           </div>
         </div>
       </div>

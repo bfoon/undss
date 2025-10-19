@@ -1,0 +1,22 @@
+<style>
+  .activity-item { padding: .9rem 1rem; border-bottom: 1px solid #f1f3f5; }
+  .activity-item:last-child { border-bottom: 0; }
+</style>
+
+{% if rows %}
+  {% for a in rows %}
+    <div class="activity-item">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong><i class="bi {{ a.icon }} me-2"></i>{{ a.title }}</strong>
+          {% if a.detail %}<div class="text-muted small">{{ a.detail }}</div>{% endif %}
+        </div>
+        <small class="text-muted">{{ a.when|timesince }} ago</small>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="p-4 text-center text-muted">
+    <i class="bi bi-inbox fs-1 d-block mb-2"></i>No recent activity
+  </div>
+{% endif %}

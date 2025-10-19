@@ -221,94 +221,52 @@
 </div>
 {% endif %}
 
-{% if user.role in 'lsa,soc' %}
-<!-- Advanced Dashboard for LSA/SOC -->
+{% if user.role == 'lsa' or user.role == 'soc' %}
 <div class="row g-4">
-    <div class="col-lg-8">
-        <div class="card h-100">
-            <div class="card-header">
-                <h5>
-                    <i class="bi bi-activity me-2"></i>
-                    Recent Security Activities
-                </h5>
-            </div>
-            <div class="card-body p-0">
-                <div id="recent-activities">
-                    <div class="activity-item">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <strong>Visitor registration completed</strong>
-                                <div class="text-muted small">John Doe registered for UNDP meeting</div>
-                            </div>
-                            <small class="text-muted">2 min ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <strong>Vehicle movement recorded</strong>
-                                <div class="text-muted small">License plate ABC-123 exit at Main Gate</div>
-                            </div>
-                            <small class="text-muted">8 min ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <strong>Asset exit approved</strong>
-                                <div class="text-muted small">Equipment AX-001 cleared for transport</div>
-                            </div>
-                            <small class="text-muted">15 min ago</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="card-footer bg-light">
-                <a href="#" class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-arrow-right me-1"></i>View All Activities
-                </a>
-            </div>
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header">
+        <h5><i class="bi bi-activity me-2"></i>Recent Security Activities</h5>
+      </div>
+      <div class="card-body p-0">
+        <!-- Live content area -->
+        <div id="recent-activities"
+             hx-get="{% url 'dashboard:recent_activities_partial' %}"
+             hx-trigger="load, every 10s"
+             hx-target="#recent-activities"
+             hx-swap="innerHTML">
+          {% include "dashboard/_recent_activities.html" with rows=recent_activities now=now %}
         </div>
+      </div>
+      <div class="card-footer bg-light">
+        <a href="#" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-arrow-right me-1"></i>View All Activities
+        </a>
+      </div>
     </div>
+  </div>
 
-    <div class="col-lg-4">
-        <div class="card h-100">
-            <div class="card-header">
-                <h5>
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                    Security Alerts
-                </h5>
-            </div>
-            <div class="card-body">
-                {% if recent_incidents %}
-                    {% for incident in recent_incidents %}
-                        <div class="alert alert-{{ incident.severity }} alert-sm mb-2">
-                            <div class="d-flex align-items-start">
-                                <i class="bi bi-info-circle-fill me-2 mt-1"></i>
-                                <div>
-                                    <strong>{{ incident.title }}</strong>
-                                    <div class="small">{{ incident.reported_at|timesince }} ago</div>
-                                </div>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="text-center py-4">
-                        <i class="bi bi-shield-check fs-1 text-success mb-3"></i>
-                        <p class="text-muted mb-0">No security incidents reported today</p>
-                        <small class="text-success">All systems operational</small>
-                    </div>
-                {% endif %}
-            </div>
-            {% if recent_incidents %}
-            <div class="card-footer bg-light">
-                <a href="#" class="btn btn-outline-danger btn-sm">
-                    <i class="bi bi-arrow-right me-1"></i>View All Incidents
-                </a>
-            </div>
-            {% endif %}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">
+        <h5><i class="bi bi-exclamation-triangle-fill me-2"></i>Security Alerts</h5>
+      </div>
+      <div class="card-body">
+        <div id="recent-incidents"
+             hx-get="{% url 'dashboard:recent_incidents_partial' %}"
+             hx-trigger="load, every 15s"
+             hx-target="#recent-incidents"
+             hx-swap="innerHTML">
+          {% include "dashboard/_recent_incidents.html" with recent_incidents=recent_incidents %}
         </div>
+      </div>
+      <div class="card-footer bg-light">
+        <a href="#" class="btn btn-outline-danger btn-sm">
+          <i class="bi bi-arrow-right me-1"></i>View All Incidents
+        </a>
+      </div>
     </div>
+  </div>
 </div>
 {% endif %}
 
@@ -353,6 +311,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 <script>
 // Real-time clock
 function updateClock() {

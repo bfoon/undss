@@ -7,7 +7,7 @@ from django.utils.decorators import method_decorator
 from django.contrib import messages
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Exists, OuterRef
 import csv
 import random, string
 from .models import (Vehicle, VehicleMovement,
@@ -893,6 +893,36 @@ class KeyListView(ListView):
             qs = [k for k in qs if not k.is_out]
         return qs
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        # Base = active keys
+        base = Key.objects.filter(is_active=True)
+
+        # Subquery: does this key have an open log?
+        open_log_qs = KeyLog.objects.filter(key=OuterRef("pk"), returned_at__isnull=True)
+
+        # Annotate once, then derive stats
+        annotated = base.annotate(is_out=Exists(open_log_qs))
+
+        total = annotated.count()
+        checked_out = annotated.filter(is_out=True).count()
+        available = annotated.filter(is_out=False).count()
+
+        overdue = KeyLog.objects.filter(
+            key__is_active=True,
+            returned_at__isnull=True,
+            due_back__lt=timezone.now(),
+        ).count()
+
+        ctx["stats"] = {
+            "total": total,
+            "available": available,
+            "checked_out": checked_out,
+            "overdue": overdue,
+        }
+        return ctx
+
 @method_decorator([login_required, user_passes_test(_is_lsa)], name='dispatch')
 class KeyCreateView(CreateView):
     model = Key
@@ -977,6 +1007,60 @@ class KeyLogListView(ListView):
                 Q(issued_to_badge_id__icontains=q)
             )
         return qs.order_by('-issued_at')
+
+    # ---- stats for the header cards -----------------------------------------
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        # Build the same base set used by the table so stats follow the current search.
+        base = KeyLog.objects.all()
+        q = (self.request.GET.get('q') or '').strip()
+        if q:
+            base = base.filter(
+                Q(key__code__icontains=q) |
+                Q(issued_to_name__icontains=q) |
+                Q(issued_to_badge_id__icontains=q)
+            )
+
+        now = timezone.now()
+        today = now.date()
+
+        # Log-transaction stats (respecting search)
+        total_logs = base.count()
+        open_logs = base.filter(returned_at__isnull=True).count()
+        returned_logs = base.filter(returned_at__isnull=False).count()
+        overdue_logs = base.filter(
+            returned_at__isnull=True,
+            due_back__lt=now,
+        ).count()
+        issued_today = base.filter(issued_at__date=today).count()
+        returned_today = base.filter(returned_at__date=today).count()
+
+        # Key-level stat: how many distinct keys are currently out (accurate even if data drift)
+        open_keys = base.filter(returned_at__isnull=True).values('key_id').distinct().count()
+
+        # (Optional) global “keys out” not limited by search:
+        open_log_qs = KeyLog.objects.filter(key=OuterRef('pk'), returned_at__isnull=True)
+        keys_out_now_global = Key.objects.annotate(is_out=Exists(open_log_qs)).filter(is_out=True).count()
+
+        ctx['stats'] = {
+            # Transactions (respect current search)
+            'total_logs': total_logs,
+            'open_logs': open_logs,
+            'returned_logs': returned_logs,
+            'overdue_logs': overdue_logs,
+            'issued_today': issued_today,
+            'returned_today': returned_today,
+
+            # Keys
+            'open_keys': open_keys,  # distinct keys out (within search)
+            'keys_out_now_global': keys_out_now_global,  # distinct keys out (global)
+        }
+
+        # Handy echo for the search box
+        ctx['filters'] = {'q': q}
+        return ctx
 
 # Quick page (scan / type code, then issue/return)
 @login_required

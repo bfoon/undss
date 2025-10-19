@@ -38,7 +38,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">All Incidents</div>
-            <div class="stat-value">{{ incidents|length }}</div>
+            <div class="stat-value">{{ stats.total }}</div>
           </div>
         </div>
       </div>
@@ -49,7 +49,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">New</div>
-            <div class="stat-value">0</div>
+            <div class="stat-value">{{ stats.new }}</div>
           </div>
         </div>
       </div>
@@ -60,7 +60,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">In Review</div>
-            <div class="stat-value">0</div>
+            <div class="stat-value">{{ stats.in_review }}</div>
           </div>
         </div>
       </div>
@@ -71,7 +71,7 @@
           </div>
           <div class="stat-content">
             <div class="stat-label">Critical Priority</div>
-            <div class="stat-value">0</div>
+            <div class="stat-value">{{ stats.critical }}</div>
           </div>
         </div>
       </div>

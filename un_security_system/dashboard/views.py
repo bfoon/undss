@@ -12,8 +12,9 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from visitors.models import Visitor, VisitorLog
-from vehicles.models import VehicleMovement, Vehicle
+from vehicles.models import VehicleMovement, Vehicle, PackageEvent, AssetExit
 from accounts.models import SecurityIncident
+from incidents.models import IncidentReport
 
 
 # ----------------------------- role helpers -----------------------------
@@ -27,6 +28,8 @@ def is_soc(user):
 def is_data_entry(user):
     return user.is_authenticated and (user.role == 'data_entry' or user.is_superuser)
 
+def _is_lsa_or_soc(user):
+    return user.is_authenticated and getattr(user, "role", "") in ("lsa", "soc")
 
 class LSARequiredMixin(UserPassesTestMixin):
     def test_func(self):
@@ -407,3 +410,130 @@ def export_security_report(request):
     for i in qs:
         writer.writerow([i.id, i.title, i.severity, i.location, i.reported_at.isoformat(), getattr(i.reported_by, 'username', '')])
     return response
+
+class LsaSocDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+    template_name = "dashboard/lsa_soc_dashboard.html"
+
+    def test_func(self):
+        return _is_lsa_or_soc(self.request.user)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        now = timezone.now()
+        since = now - timedelta(days=1)
+
+        # Recent, NOT resolved incidents (limit 5)
+        try:
+            ctx["recent_incidents"] = (
+                IncidentReport.objects
+                .filter(created_at__gte=since)
+                .exclude(status__in=["resolved", "closed", "dismissed"])
+                .order_by("-created_at")[:5]
+            )
+        except Exception:
+            ctx["recent_incidents"] = []
+
+        # ---- build recent_activities (unchanged) ----
+        activities = []
+        for v in VisitorLog.objects.select_related("visitor", "performed_by").order_by("-timestamp")[:10]:
+            activities.append({
+                "when": v.timestamp,
+                "title": v.get_action_display() if hasattr(v, "get_action_display") else (v.action or "Visitor activity"),
+                "detail": getattr(v, "notes", None) or getattr(v, "description", None) or getattr(v.visitor, "full_name", ""),
+                "icon": "bi-person-badge",
+            })
+
+        for e in PackageEvent.objects.select_related("package","who").order_by("-at")[:10]:
+            activities.append({
+                "when": e.at,
+                "title": f"Package {e.package.tracking_code} · {e.get_status_display()}",
+                "detail": e.note or e.package.destination_agency,
+                "icon": "bi-box-seam",
+            })
+
+        try:
+            for m in VehicleMovement.objects.select_related("vehicle","recorded_by").order_by("-timestamp")[:10]:
+                plate = getattr(m.vehicle, "plate_number", "") or getattr(m, "plate_number", "")
+                gate = getattr(m, "gate", "Gate")
+                direction = getattr(m, "direction", "").capitalize()
+                activities.append({
+                    "when": m.timestamp,
+                    "title": "Vehicle movement recorded",
+                    "detail": f"{plate} {direction} at {gate}",
+                    "icon": "bi-car-front",
+                })
+        except Exception:
+            pass
+
+        try:
+            for a in AssetExit.objects.order_by("-updated_at")[:10]:
+                status = getattr(a, "status", "Updated")
+                activities.append({
+                    "when": getattr(a, "updated_at", getattr(a, "created_at", now)),
+                    "title": "Asset exit " + status.replace("_"," ").title(),
+                    "detail": getattr(a, "reference_no", "") or getattr(a, "title", "Asset"),
+                    "icon": "bi-box-arrow-right",
+                })
+        except Exception:
+            pass
+
+        activities.sort(key=lambda x: x["when"], reverse=True)
+        ctx["recent_activities"] = activities[:5]
+        return ctx
+
+
+# -------- Live partials (HTMX) --------
+
+def recent_activities_partial(request):
+    if not _is_lsa_or_soc(request.user):
+        return HttpResponseForbidden()
+    now = timezone.now()
+
+    rows = []
+    for v in VisitorLog.objects.select_related("visitor").order_by("-timestamp")[:8]:
+        rows.append({
+            "when": v.timestamp,
+            "title": v.get_action_display() if hasattr(v, "get_action_display") else (v.action or "Visitor activity"),
+            "detail": getattr(v, "notes", None) or getattr(v, "description", None) or getattr(v.visitor, "full_name", ""),
+            "icon": "bi-person-badge",
+        })
+
+    for e in PackageEvent.objects.select_related("package").order_by("-at")[:8]:
+        rows.append({
+            "when": e.at,
+            "title": f"Package {e.package.tracking_code} · {e.get_status_display()}",
+            "detail": e.note or e.package.destination_agency,
+            "icon": "bi-box-seam",
+        })
+
+    try:
+        for m in VehicleMovement.objects.select_related("vehicle").order_by("-timestamp")[:8]:
+            plate = getattr(m.vehicle, "plate_number", "") or getattr(m, "plate_number", "")
+            gate = getattr(m, "gate", "Gate")
+            direction = getattr(m, "direction", "").capitalize()
+            rows.append({
+                "when": m.timestamp,
+                "title": "Vehicle movement recorded",
+                "detail": f"{plate} {direction} at {gate}",
+                "icon": "bi-car-front",
+            })
+    except Exception:
+        pass
+
+    rows.sort(key=lambda x: x["when"], reverse=True)
+    rows = rows[:5]
+    return render(request, "dashboard/_recent_activities.html", {"rows": rows, "now": now})
+
+
+def recent_incidents_partial(request):
+    if not _is_lsa_or_soc(request.user):
+        return HttpResponseForbidden()
+    try:
+        incidents = (
+            IncidentReport.objects
+            .exclude(status__in=["resolved", "closed", "dismissed"])
+            .order_by("-created_at")[:5]
+        )
+    except Exception:
+        incidents = []
+    return render(request, "dashboard/_recent_incidents.html", {"recent_incidents": incidents})

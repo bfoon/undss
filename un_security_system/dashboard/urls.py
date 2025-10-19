@@ -6,6 +6,8 @@ app_name = 'dashboard'
 urlpatterns = [
     # Main Dashboard
     path('', views.DashboardView.as_view(), name='dashboard'),
+    path("live/recent-activities/", views.recent_activities_partial, name="recent_activities_partial"),
+    path("live/incidents/", views.recent_incidents_partial, name="recent_incidents_partial"),
 
     # Role-specific Dashboards
     path('data-entry/', views.DataEntryDashboardView.as_view(), name='data_entry_dashboard'),

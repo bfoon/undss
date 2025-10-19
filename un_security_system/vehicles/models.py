@@ -226,9 +226,6 @@ class ParkingCardRequest(models.Model):
         return f"PC Request #{self.id} - {self.owner_name} ({self.vehicle_plate}) - {self.get_status_display()}"
 
 # --- KEY CONTROL ------------------------------------------------------------
-from django.conf import settings
-from django.db import models
-from django.utils import timezone
 
 class Key(models.Model):
     KEY_TYPES = (
@@ -288,10 +285,6 @@ class KeyLog(models.Model):
         return f"{self.key.code} to {self.issued_to_name} at {self.issued_at:%Y-%m-%d %H:%M} [{status}]"
 
 # --- Packages & Mailroom ---
-
-from django.conf import settings
-from django.db import models
-from django.utils import timezone
 
 class Package(models.Model):
     SENDER_TYPES = [

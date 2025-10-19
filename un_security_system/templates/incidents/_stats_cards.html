@@ -1,0 +1,26 @@
+<div class="row g-3 mb-4">
+  <div class="col-lg-3 col-md-6">
+    <div class="stat-card shadow-sm">
+      <div class="stat-icon stat-icon-primary"><i class="bi bi-clipboard-data"></i></div>
+      <div class="stat-content"><div class="stat-label">All Incidents</div><div class="stat-value">{{ stats.total }}</div></div>
+    </div>
+  </div>
+  <div class="col-lg-3 col-md-6">
+    <div class="stat-card shadow-sm stat-card-new">
+      <div class="stat-icon stat-icon-warning"><i class="bi bi-exclamation-circle"></i></div>
+      <div class="stat-content"><div class="stat-label">New</div><div class="stat-value">{{ stats.new }}</div></div>
+    </div>
+  </div>
+  <div class="col-lg-3 col-md-6">
+    <div class="stat-card shadow-sm stat-card-review">
+      <div class="stat-icon stat-icon-info"><i class="bi bi-hourglass-split"></i></div>
+      <div class="stat-content"><div class="stat-label">In Review</div><div class="stat-value">{{ stats.in_review }}</div></div>
+    </div>
+  </div>
+  <div class="col-lg-3 col-md-6">
+    <div class="stat-card shadow-sm stat-card-critical">
+      <div class="stat-icon stat-icon-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
+      <div class="stat-content"><div class="stat-label">Critical Priority</div><div class="stat-value">{{ stats.critical }}</div></div>
+    </div>
+  </div>
+</div>
