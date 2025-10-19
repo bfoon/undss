@@ -265,10 +265,15 @@
               There are no key transactions recorded yet.
             {% endif %}
           </p>
-          {% if request.GET.q or request.GET.date_from or request.GET.date_to %}
-            <a href="{% url 'vehicles:keylog_list' %}" class="btn btn-outline-secondary">
+         {% url 'vehicles:key_logs' as clear_filters_url %}
+          {% if clear_filters_url %}
+            <a href="{{ clear_filters_url }}" class="btn btn-outline-secondary">
               <i class="bi bi-x-circle me-2"></i>Clear Filters
             </a>
+          {% else %}
+            <div class="alert alert-warning d-inline-block ms-2 mb-0 py-1 px-2">
+              Clear-filters link is not configured.
+            </div>
           {% endif %}
         </div>
       {% endif %}

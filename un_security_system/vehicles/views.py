@@ -997,69 +997,85 @@ class KeyLogListView(ListView):
     context_object_name = 'logs'
     paginate_by = 50
 
-    def get_queryset(self):
-        q = (self.request.GET.get('q') or '').strip()
-        qs = KeyLog.objects.select_related('key', 'issued_by', 'received_by')
+    # --- helpers ------------------------------------------------------------
+    def _apply_filters(self, qs):
+        """
+        Apply search + date range filters.
+        Date range filters use issued_at (typical for log lists).
+        """
+        request = self.request
+        q = (request.GET.get('q') or '').strip()
+        date_from = (request.GET.get('date_from') or '').strip()
+        date_to = (request.GET.get('date_to') or '').strip()
+
         if q:
             qs = qs.filter(
                 Q(key__code__icontains=q) |
                 Q(issued_to_name__icontains=q) |
                 Q(issued_to_badge_id__icontains=q)
             )
-        return qs.order_by('-issued_at')
 
-    # ---- stats for the header cards -----------------------------------------
+        # Inclusive range by date (works with YYYY-MM-DD strings directly)
+        if date_from:
+            qs = qs.filter(issued_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(issued_at__date__lte=date_to)
 
+        return qs
+
+    # --- table queryset -----------------------------------------------------
+    def get_queryset(self):
+        qs = KeyLog.objects.select_related('key', 'issued_by', 'received_by').order_by('-issued_at')
+        return self._apply_filters(qs)
+
+    # --- stats + template helpers ------------------------------------------
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        # Build the same base set used by the table so stats follow the current search.
-        base = KeyLog.objects.all()
-        q = (self.request.GET.get('q') or '').strip()
-        if q:
-            base = base.filter(
-                Q(key__code__icontains=q) |
-                Q(issued_to_name__icontains=q) |
-                Q(issued_to_badge_id__icontains=q)
-            )
-
+        # Base set for stats mirrors the same filters as the table
+        base = self._apply_filters(KeyLog.objects.all())
         now = timezone.now()
         today = now.date()
 
-        # Log-transaction stats (respecting search)
+        # Transaction stats (respect filters)
         total_logs = base.count()
         open_logs = base.filter(returned_at__isnull=True).count()
         returned_logs = base.filter(returned_at__isnull=False).count()
-        overdue_logs = base.filter(
-            returned_at__isnull=True,
-            due_back__lt=now,
-        ).count()
+        overdue_logs = base.filter(returned_at__isnull=True, due_back__lt=now).count()
         issued_today = base.filter(issued_at__date=today).count()
         returned_today = base.filter(returned_at__date=today).count()
 
-        # Key-level stat: how many distinct keys are currently out (accurate even if data drift)
+        # Distinct keys currently out within filtered set
         open_keys = base.filter(returned_at__isnull=True).values('key_id').distinct().count()
 
-        # (Optional) global “keys out” not limited by search:
+        # Global “keys out now” (not limited by filters) — optional
         open_log_qs = KeyLog.objects.filter(key=OuterRef('pk'), returned_at__isnull=True)
         keys_out_now_global = Key.objects.annotate(is_out=Exists(open_log_qs)).filter(is_out=True).count()
 
         ctx['stats'] = {
-            # Transactions (respect current search)
             'total_logs': total_logs,
             'open_logs': open_logs,
             'returned_logs': returned_logs,
             'overdue_logs': overdue_logs,
             'issued_today': issued_today,
             'returned_today': returned_today,
-
-            # Keys
-            'open_keys': open_keys,  # distinct keys out (within search)
-            'keys_out_now_global': keys_out_now_global,  # distinct keys out (global)
+            'open_keys': open_keys,
+            'keys_out_now_global': keys_out_now_global,
         }
 
-        # Handy echo for the search box
-        ctx['filters'] = {'q': q}
+        # Echo filters for your form inputs
+        ctx['filters'] = {
+            'q': (self.request.GET.get('q') or '').strip(),
+            'date_from': (self.request.GET.get('date_from') or '').strip(),
+            'date_to': (self.request.GET.get('date_to') or '').strip(),
+        }
+
+        # Preserve filters in pagination links
+        get_copy = self.request.GET.copy()
+        if 'page' in get_copy:
+            get_copy.pop('page')
+        ctx['querystring'] = f"&{get_copy.urlencode()}" if get_copy else ""
+
         return ctx
 
 # Quick page (scan / type code, then issue/return)
