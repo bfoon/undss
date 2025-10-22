@@ -353,6 +353,16 @@
                 {% endif %}
 
             <li><hr class="dropdown-divider"></li>
+            {% if user.role in 'lsa,soc' %}
+              <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_queue' %}">
+                <i class="bi bi-inboxes me-2"></i>Asset Exit Review
+              </a></li>
+            {% endif %}
+              {% if user.role == 'data_entry' %}
+            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_approved_list' %}">
+              <i class="bi bi-shield-check me-2"></i>Approved Asset Exits (Gate)
+            </a></li>
+              {% endif %}
 
             <li class="dropdown-header">Asset Exit</li>
             <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">

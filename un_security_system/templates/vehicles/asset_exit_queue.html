@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Asset Exit Management – Review Queue{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Header Section -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="mb-1">
+        <i class="bi bi-box-arrow-right me-2"></i>Asset Exit Management
+      </h3>
+      <p class="text-muted mb-0">Review and approve asset exit requests</p>
+    </div>
+    <div class="d-flex gap-2">
+      <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+        <i class="bi bi-clock me-1"></i>Pending: {{ stats.pending }}
+      </span>
+      <span class="badge bg-success fs-6 px-3 py-2">
+        <i class="bi bi-check-circle me-1"></i>Approved: {{ stats.approved }}
+      </span>
+      <span class="badge bg-danger fs-6 px-3 py-2">
+        <i class="bi bi-x-circle me-1"></i>Rejected: {{ stats.rejected }}
+      </span>
+      <span class="badge bg-secondary fs-6 px-3 py-2">
+        <i class="bi bi-box-arrow-right me-1"></i>Signed Out: {{ stats.signed_out }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Filters Section -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-funnel me-1"></i>Status
+          </label>
+          <select name="status" class="form-select">
+            <option value="">All Statuses</option>
+            <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending Review</option>
+            <option value="approved" {% if filters.status == 'approved' %}selected{% endif %}>Approved</option>
+            <option value="rejected" {% if filters.status == 'rejected' %}selected{% endif %}>Rejected</option>
+            <option value="signed_out" {% if filters.status == 'signed_out' %}selected{% endif %}>Signed Out</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-search me-1"></i>Search
+          </label>
+          <input
+            type="text"
+            name="q"
+            value="{{ filters.q }}"
+            class="form-control"
+            placeholder="Reference, title, user, or destination..."
+          >
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-calendar-event me-1"></i>Date From
+          </label>
+          <input
+            type="date"
+            name="date_from"
+            value="{{ filters.date_from }}"
+            class="form-control"
+          >
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">
+            <i class="bi bi-calendar-event me-1"></i>Date To
+          </label>
+          <input
+            type="date"
+            name="date_to"
+            value="{{ filters.date_to }}"
+            class="form-control"
+          >
+        </div>
+
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-funnel-fill me-1"></i>Apply Filters
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Results Section -->
+  {% if exits %}
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="px-4">Reference</th>
+                <th>Asset Title</th>
+                <th>Requester</th>
+                <th>Status</th>
+                <th>Destination</th>
+                <th>Request Date</th>
+                <th class="text-end px-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in exits %}
+              <tr>
+                <td class="px-4">
+                  <span class="badge bg-primary bg-opacity-10 text-primary border border-primary fw-semibold">
+                    #{{ a.code }}
+                  </span>
+                </td>
+
+                <td>
+                  <a
+                    href="{% url 'vehicles:asset_exit_detail' a.pk %}"
+                    class="text-decoration-none fw-semibold text-dark"
+                  >
+                    {{ a.agency_name }}
+                  </a>
+                </td>
+
+                <td>
+                  <i class="bi bi-person me-1 text-muted"></i>
+                  {{ a.requester.username }}
+                </td>
+
+                <td>
+                  {% if a.status == 'pending' %}
+                    <span class="badge bg-warning text-dark">
+                      <i class="bi bi-clock-history me-1"></i>Pending Review
+                    </span>
+                  {% elif a.status == 'approved' %}
+                    <span class="badge bg-success">
+                      <i class="bi bi-check-circle-fill me-1"></i>Approved
+                    </span>
+                  {% elif a.status == 'rejected' %}
+                    <span class="badge bg-danger">
+                      <i class="bi bi-x-circle-fill me-1"></i>Rejected
+                    </span>
+                  {% elif a.status == 'signed_out' %}
+                    <span class="badge bg-secondary">
+                      <i class="bi bi-box-arrow-right me-1"></i>Signed Out
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ a.status|title }}</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if a.destination %}
+                    <i class="bi bi-geo-alt me-1 text-muted"></i>
+                    {{ a.destination }}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  <div class="d-flex flex-column">
+                    <span class="text-dark">{{ a.created_at|date:"M d, Y" }}</span>
+                    <small class="text-muted">{{ a.created_at|date:"g:i A" }}</small>
+                  </div>
+                </td>
+
+                <td class="text-end px-4">
+                  {% if a.status == 'pending' %}
+                    <div class="btn-group btn-group-sm" role="group">
+                      <form method="post" action="{% url 'vehicles:asset_exit_lsa_clear' a.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button
+                          type="submit"
+                          class="btn btn-success"
+                          onclick="return confirm('Are you sure you want to approve this exit request?')"
+                          title="Approve Request"
+                        >
+                          <i class="bi bi-check-lg"></i> Approve
+                        </button>
+                      </form>
+                      <form method="post" action="{% url 'vehicles:asset_exit_lsa_reject' a.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <button
+                          type="submit"
+                          class="btn btn-danger"
+                          onclick="return confirm('Are you sure you want to reject this exit request?')"
+                          title="Reject Request"
+                        >
+                          <i class="bi bi-x-lg"></i> Reject
+                        </button>
+                      </form>
+                    </div>
+                  {% else %}
+                    <a
+                      class="btn btn-outline-primary btn-sm"
+                      href="{% url 'vehicles:asset_exit_detail' a.pk %}"
+                      title="View Details"
+                    >
+                      <i class="bi bi-eye me-1"></i>View Details
+                    </a>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <nav class="mt-4" aria-label="Page navigation">
+        <ul class="pagination pagination-sm justify-content-center">
+          {% if page_obj.has_previous %}
+            <li class="page-item">
+              <a class="page-link" href="?page=1&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}" aria-label="First">
+                <i class="bi bi-chevron-double-left"></i>
+              </a>
+            </li>
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}" aria-label="Previous">
+                <i class="bi bi-chevron-left"></i>
+              </a>
+            </li>
+          {% else %}
+            <li class="page-item disabled">
+              <span class="page-link"><i class="bi bi-chevron-double-left"></i></span>
+            </li>
+            <li class="page-item disabled">
+              <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+            </li>
+          {% endif %}
+
+          <li class="page-item active">
+            <span class="page-link">
+              Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+          </li>
+
+          {% if page_obj.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}" aria-label="Next">
+                <i class="bi bi-chevron-right"></i>
+              </a>
+            </li>
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}" aria-label="Last">
+                <i class="bi bi-chevron-double-right"></i>
+              </a>
+            </li>
+          {% else %}
+            <li class="page-item disabled">
+              <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+            </li>
+            <li class="page-item disabled">
+              <span class="page-link"><i class="bi bi-chevron-double-right"></i></span>
+            </li>
+          {% endif %}
+        </ul>
+      </nav>
+    {% endif %}
+
+  {% else %}
+    <div class="alert alert-info border-0 shadow-sm" role="alert">
+      <div class="d-flex align-items-center">
+        <i class="bi bi-info-circle fs-4 me-3"></i>
+        <div>
+          <h5 class="alert-heading mb-1">No Results Found</h5>
+          <p class="mb-0">No asset exit requests match your current filters. Try adjusting your search criteria.</p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

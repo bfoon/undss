@@ -9,7 +9,10 @@ from django.utils import timezone
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.db.models import Q, Count, Exists, OuterRef
 import csv
+import base64
+from io import BytesIO
 import random, string
+from django.urls import reverse
 from .models import (Vehicle, VehicleMovement,
                      ParkingCard, AssetExit,
                      AgencyApprover, ParkingCardRequest, Key, KeyLog,
@@ -22,6 +25,8 @@ from .forms import (VehicleForm, ParkingCardForm,
                     )
 
 def is_lsa(u): return u.is_authenticated and (getattr(u, 'role', '') == 'lsa' or u.is_superuser)
+def is_lsa_or_soc(user):
+    return user.is_authenticated and (getattr(user, "role", "") in ("lsa", "soc") or user.is_superuser)
 def is_data_entry(u): return u.is_authenticated and (getattr(u, 'role', '') == 'data_entry' or u.is_superuser)
 def _is_guard(u): return u.is_authenticated and getattr(u, "role", "") in ("data_entry", "soc", "lsa")
 def _is_reception(u): return u.is_authenticated and getattr(u, "role", "") in ("reception", "lsa", "soc")
@@ -556,8 +561,67 @@ def asset_exit_new(request):
 
 @login_required
 def my_asset_exits(request):
-    items = AssetExit.objects.filter(requester=request.user).order_by('-created_at')
-    return render(request, 'vehicles/asset_exit_list.html', {'items': items})
+    """
+    Requester’s own Asset Exit list + summary cards.
+    Filters: ?q=…&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD[&status=…]
+    """
+    # ----- Base queryset (scoped to this user) -----
+    base_qs = (
+        AssetExit.objects
+        .select_related("requester", "agency_approver", "lsa_user", "signed_out_by", "signed_in_by")
+        .filter(requester=request.user)
+        .order_by("-created_at")
+    )
+
+    # ----- Common filters (affect list + summary cards) -----
+    q = (request.GET.get("q") or "").strip()
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to   = (request.GET.get("date_to") or "").strip()
+
+    if q:
+        base_qs = base_qs.filter(
+            Q(code__icontains=q) |
+            Q(agency_name__icontains=q) |
+            Q(reason__icontains=q) |
+            Q(destination__icontains=q)
+        )
+
+    if date_from:
+        base_qs = base_qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        base_qs = base_qs.filter(created_at__date__lte=date_to)
+
+    # ----- Table queryset (optional status filter) -----
+    status = (request.GET.get("status") or "").strip()
+    if status:
+        items = base_qs.filter(status=status)
+    else:
+        items = base_qs
+
+    # ----- Summary cards -----
+    total_requests  = base_qs.count()
+    pending_count   = base_qs.filter(status="pending").count()
+    approved_count  = base_qs.filter(status="lsa_cleared").count()          # “LSA Cleared”
+    signed_out_count = base_qs.filter(signed_out_at__isnull=False).count()  # derived
+    completed_count  = base_qs.filter(signed_in_at__isnull=False).count()   # derived (returned)
+    rejected_count   = base_qs.filter(status__in=["rejected", "cancelled"]).count()
+
+    context = {
+        "items": items,
+        "total_requests": total_requests,
+        "pending_count": pending_count,
+        "approved_count": approved_count,
+        "signed_out_count": signed_out_count,
+        "completed_count": completed_count,
+        "rejected_count": rejected_count,
+        "filters": {
+            "q": q,
+            "date_from": date_from,
+            "date_to": date_to,
+            "status": status,
+        },
+    }
+    return render(request, "vehicles/asset_exit_list.html", context)
 
 @login_required
 def asset_exit_detail(request, pk):
@@ -705,6 +769,28 @@ def asset_exit_mark_signed_in(request, pk):
     obj.mark_signed_in(request.user)
     messages.success(request, 'Assets marked as signed in.')
     return redirect('vehicles:asset_exit_detail', pk=pk)
+
+
+def asset_exit_qr_code(request, pk):
+    exit_obj = get_object_or_404(AssetExit, pk=pk)
+
+    # Encode whatever you want the QR to represent:
+    # here we embed the absolute URL to the detail page.
+    target_url = request.build_absolute_uri(
+        reverse('vehicles:asset_exit_detail', args=[exit_obj.pk])
+    )
+
+    try:
+        import qrcode
+        img = qrcode.make(target_url)
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        qr_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+        ctx = {"exit": exit_obj, "qr_b64": qr_b64, "target_url": target_url}
+        return render(request, "vehicles/asset_exit_qr.html", ctx)
+    except Exception:
+        messages.error(request, "QR code generation is not available on this server.")
+        return redirect('vehicles:asset_exit_detail', pk=exit_obj.pk)
 
 def _is_lsa(user):
     return getattr(user, "role", None) == "lsa" or user.is_superuser
@@ -1264,3 +1350,107 @@ def package_track_api(request):
             for e in pkg.events.all().order_by("-at")[:20]
         ],
     })
+
+class AssetExitQueueView(LoginRequiredMixin, UserPassesTestMixin, ListView):
+    model = AssetExit
+    template_name = "vehicles/asset_exit_queue.html"
+    context_object_name = "exits"
+    paginate_by = 25
+
+    def test_func(self):
+        return is_lsa_or_soc(self.request.user)
+
+    def get_queryset(self):
+        qs = (AssetExit.objects
+              .select_related("requester")        # <-- FIXED
+              .order_by("-created_at"))
+
+        status = (self.request.GET.get("status") or "pending").strip()
+        q = (self.request.GET.get("q") or "").strip()
+        date_from = (self.request.GET.get("date_from") or "").strip()
+        date_to = (self.request.GET.get("date_to") or "").strip()
+
+        if status:
+            qs = qs.filter(status=status)
+
+        if q:
+            qs = qs.filter(
+                Q(code__icontains=q) |
+                Q(agency_name__icontains=q) |
+                Q(requester__username__icontains=q) |   # <-- FIXED
+                Q(destination__icontains=q)
+            )
+
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        base = AssetExit.objects.all()
+        ctx["stats"] = {
+            "pending": base.filter(status="pending").count(),
+            "approved": base.filter(status="approved").count(),
+            "rejected": base.filter(status="rejected").count(),
+            "signed_out": base.filter(status="signed_out").count(),
+        }
+        ctx["filters"] = {
+            "status": (self.request.GET.get("status") or "pending"),
+            "q": (self.request.GET.get("q") or ""),
+            "date_from": (self.request.GET.get("date_from") or ""),
+            "date_to": (self.request.GET.get("date_to") or ""),
+        }
+        return ctx
+
+
+class GuardApprovedAssetExitsView(LoginRequiredMixin, UserPassesTestMixin, ListView):
+    model = AssetExit
+    template_name = "vehicles/asset_exit_guard_list.html"
+    context_object_name = "exits"
+    paginate_by = 50
+
+    def test_func(self):
+        return _is_guard(self.request.user)
+
+    def get_queryset(self):
+        qs = (AssetExit.objects
+              .filter(status="lsa_cleared")
+              .select_related("requester")      # <-- FIXED
+              .order_by("-created_at"))
+
+        today = timezone.localdate()
+        date_from = (self.request.GET.get("date_from") or str(today)).strip()
+        date_to = (self.request.GET.get("date_to") or str(today)).strip()
+        q = (self.request.GET.get("q") or "").strip()
+
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        if q:
+            qs = qs.filter(
+                Q(code__icontains=q) |
+                Q(agency_name__icontains=q) |
+                Q(requester__username__icontains=q) |   # <-- FIXED
+                Q(destination__icontains=q)
+            )
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        base = AssetExit.objects.all()
+        ctx["stats"] = {
+            "approved_today": base.filter(status="lsa_cleared",
+                                          lsa_decided_at__date=timezone.localdate()).count(),
+            "pending": base.filter(status="pending").count(),
+        }
+        ctx["filters"] = {
+            "q": (self.request.GET.get("q") or ""),
+            "date_from": (self.request.GET.get("date_from") or str(timezone.localdate())),
+            "date_to": (self.request.GET.get("date_to") or str(timezone.localdate())),
+        }
+        return ctx

@@ -211,6 +211,10 @@
         border-bottom: none;
     }
 
+    .formset-table tbody tr.formset-row-hidden {
+        display: none;
+    }
+
     .formset-table td {
         padding: 1rem;
         vertical-align: middle;
@@ -223,6 +227,7 @@
         border: 1px solid #dee2e6;
         padding: 0.5rem;
         transition: var(--transition);
+        width: 100%;
     }
 
     .formset-table input:focus,
@@ -239,8 +244,8 @@
     }
 
     .info-banner {
-        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-        border: 2px solid #ffc107;
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 2px solid var(--un-blue);
         border-radius: 10px;
         padding: 1.25rem;
         margin-top: 1.5rem;
@@ -248,12 +253,12 @@
 
     .info-banner-content {
         display: flex;
-        align-items-flex-start;
+        align-items: flex-start;
     }
 
     .info-banner i {
         font-size: 1.5rem;
-        color: #f39c12;
+        color: var(--un-blue);
         margin-right: 1rem;
         flex-shrink: 0;
     }
@@ -264,14 +269,14 @@
 
     .info-banner-text strong {
         display: block;
-        color: #856404;
+        color: var(--un-dark-blue);
         margin-bottom: 0.25rem;
         font-size: 0.95rem;
     }
 
     .info-banner-text p {
         margin: 0;
-        color: #856404;
+        color: #495057;
         font-size: 0.9rem;
         line-height: 1.6;
     }
@@ -327,15 +332,46 @@
         color: var(--un-blue);
     }
 
-    .badge-new {
+    .btn-add-asset {
         background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
         color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
         font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        transition: var(--transition);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    }
+
+    .btn-add-asset:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+        color: white;
+    }
+
+    .btn-remove-asset {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        transition: var(--transition);
+    }
+
+    .btn-remove-asset:hover {
+        background: #c82333;
+        transform: scale(1.05);
+    }
+
+    .asset-count-badge {
+        background: linear-gradient(135deg, var(--un-blue) 0%, var(--un-dark-blue) 100%);
+        color: white;
+        padding: 0.35rem 0.85rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
     }
 
     @media (max-width: 991.98px) {
@@ -390,6 +426,22 @@
         font-size: 0.875rem;
         margin-top: 0.5rem;
     }
+
+    /* Animation for new rows */
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .formset-row-new {
+        animation: slideIn 0.3s ease-out;
+    }
 </style>
 {% endblock %}
 
@@ -433,41 +485,43 @@
 
             <!-- Assets List -->
             <div class="form-card">
-                <div class="card-header">
-                    <h5>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
                         <i class="bi bi-box-seam me-2"></i>
                         Assets to be Removed
                         <span class="required-field"></span>
+                        <span class="asset-count-badge" id="assetCount">0 items</span>
                     </h5>
+                    <button type="button" class="btn btn-add-asset" id="addAssetBtn">
+                        <i class="bi bi-plus-circle me-2"></i>Add Asset
+                    </button>
                 </div>
                 <div class="card-body">
                     {{ formset.management_form }}
 
                     <div class="formset-table-wrapper">
-                        <table class="table formset-table">
+                        <table class="table formset-table" id="assetFormset">
                             <thead>
                                 <tr>
                                     <th class="required-field">Asset Description</th>
                                     <th>Category</th>
                                     <th class="text-center required-field">Quantity</th>
                                     <th>Serial/Tag Number</th>
-                                    <th class="text-center">Remove</th>
+                                    <th class="text-center">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="formsetBody">
                                 {% for form in formset %}
-                                <tr>
+                                <tr class="formset-row" data-form-index="{{ forloop.counter0 }}">
                                     <td style="min-width: 200px;">{{ form.description }}</td>
                                     <td style="min-width: 120px;">{{ form.category }}</td>
                                     <td style="width: 100px;" class="text-center">{{ form.quantity }}</td>
                                     <td style="min-width: 140px;">{{ form.serial_or_tag }}</td>
-                                    <td style="width: 80px;" class="text-center">
-                                        {% if form.instance.pk %}
-                                            {{ form.DELETE }}
-                                            <label for="{{ form.DELETE.id_for_label }}" class="small text-muted mt-1">Remove</label>
-                                        {% else %}
-                                            <span class="text-muted">—</span>
-                                        {% endif %}
+                                    <td style="width: 100px;" class="text-center">
+                                        {{ form.DELETE }}
+                                        <button type="button" class="btn btn-remove-asset remove-asset-btn" data-form-index="{{ forloop.counter0 }}">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -479,8 +533,8 @@
                         <div class="info-banner-content">
                             <i class="bi bi-lightbulb-fill"></i>
                             <div class="info-banner-text">
-                                <strong>How to Add Assets</strong>
-                                <p>Fill in the empty rows to add additional assets to your request. Provide detailed descriptions and accurate quantities for each item. For existing assets, check the "Remove" box to delete them from this request.</p>
+                                <strong>Adding Assets Made Easy</strong>
+                                <p>Click the <strong>"Add Asset"</strong> button above to add items to your exit request. Fill in detailed descriptions and accurate quantities for each asset. You can remove items by clicking the "Remove" button next to each row.</p>
                             </div>
                         </div>
                     </div>
@@ -579,4 +633,102 @@
         </div>
     </div>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const formsetBody = document.getElementById('formsetBody');
+    const addBtn = document.getElementById('addAssetBtn');
+    const totalFormsInput = document.getElementById('id_form-TOTAL_FORMS');
+    const assetCountBadge = document.getElementById('assetCount');
+
+    // Get the empty form template from the last row
+    let emptyFormRow = formsetBody.querySelector('.formset-row:last-child');
+    if (!emptyFormRow) {
+        console.error('No formset rows found');
+        return;
+    }
+    const emptyFormHTML = emptyFormRow.outerHTML;
+
+    // Update asset count
+    function updateAssetCount() {
+        const visibleRows = formsetBody.querySelectorAll('.formset-row:not(.formset-row-hidden)').length;
+        assetCountBadge.textContent = `${visibleRows} item${visibleRows !== 1 ? 's' : ''}`;
+    }
+
+    // Add new asset row
+    addBtn.addEventListener('click', function() {
+        const currentFormCount = parseInt(totalFormsInput.value);
+        let newFormHTML = emptyFormHTML.replace(/form-\d+-/g, `form-${currentFormCount}-`);
+        newFormHTML = newFormHTML.replace(/data-form-index="\d+"/, `data-form-index="${currentFormCount}"`);
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = newFormHTML;
+        const newRow = tempDiv.firstElementChild;
+
+        // Clear input values
+        newRow.querySelectorAll('input, select, textarea').forEach(input => {
+            if (input.type === 'checkbox') {
+                input.checked = false;
+            } else {
+                input.value = '';
+            }
+        });
+
+        // Add animation class
+        newRow.classList.add('formset-row-new');
+
+        formsetBody.appendChild(newRow);
+        totalFormsInput.value = currentFormCount + 1;
+        updateAssetCount();
+
+        // Scroll to new row
+        newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    // Remove asset row
+    formsetBody.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-asset-btn')) {
+            const btn = e.target.closest('.remove-asset-btn');
+            const row = btn.closest('.formset-row');
+            const deleteCheckbox = row.querySelector('input[name$="-DELETE"]');
+
+            if (deleteCheckbox) {
+                // If it's an existing form, mark for deletion
+                deleteCheckbox.checked = true;
+                row.classList.add('formset-row-hidden');
+            } else {
+                // If it's a new form, remove it completely
+                row.remove();
+
+                // Reindex remaining forms
+                const rows = formsetBody.querySelectorAll('.formset-row:not(.formset-row-hidden)');
+                rows.forEach((row, index) => {
+                    row.querySelectorAll('input, select, textarea').forEach(input => {
+                        const name = input.getAttribute('name');
+                        if (name) {
+                            input.setAttribute('name', name.replace(/form-\d+-/, `form-${index}-`));
+                        }
+                        const id = input.getAttribute('id');
+                        if (id) {
+                            input.setAttribute('id', id.replace(/id_form-\d+-/, `id_form-${index}-`));
+                        }
+                    });
+                    row.setAttribute('data-form-index', index);
+                    const removeBtn = row.querySelector('.remove-asset-btn');
+                    if (removeBtn) {
+                        removeBtn.setAttribute('data-form-index', index);
+                    }
+                });
+
+                totalFormsInput.value = rows.length;
+            }
+
+            updateAssetCount();
+        }
+    });
+
+    // Initial count
+    updateAssetCount();
+});
+</script>
 {% endblock %}

@@ -51,6 +51,11 @@ urlpatterns = [
     path('asset-exit/<int:pk>/agency-approve/', views.asset_exit_agency_approve, name='asset_exit_agency_approve'),
     path('asset-exit/<int:pk>/edit/', views.asset_exit_edit, name='asset_exit_edit'),
     path('asset-exit/verify/page', views.asset_exit_verify_page, name='asset_exit_verify_page'),
+    # Review/Queue for LSA & SOC
+    path('asset-exit/queue/', views.AssetExitQueueView.as_view(), name='asset_exit_queue'),
+
+    # Guard list of approved exits
+    path('asset-exit/approved/', views.GuardApprovedAssetExitsView.as_view(), name='asset_exit_approved_list'),
 
     # add these if you want print/duplicate actions
     path('asset-exit/<int:pk>/print/', views.asset_exit_print, name='asset_exit_print'),
@@ -98,5 +103,6 @@ urlpatterns = [
     path('packages/<int:pk>/deliver/', views.package_mark_delivered, name='package_deliver'),
     path('api/package/track/', views.package_track_api, name='package_track_api'),
 
+    path('asset-exit/<int:pk>/qr/', views.asset_exit_qr_code, name='asset_exit_qr_code'),
 
 ]

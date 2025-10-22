@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Asset Exit QR · {{ exit.reference_no|default:("#" ~ exit.pk) }}{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:720px;">
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0"><i class="bi bi-qr-code me-2"></i>Asset Exit QR Code</h5>
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'vehicles:asset_exit_detail' exit.pk %}">
+        <i class="bi bi-arrow-left"></i> Back
+      </a>
+    </div>
+    <div class="card-body text-center">
+      <h6 class="text-muted mb-3">{{ exit.reference_no|default:("#" ~ exit.pk) }}</h6>
+      {% if qr_b64 %}
+        <img alt="QR Code" class="img-fluid" style="max-width:320px"
+             src="data:image/png;base64,{{ qr_b64 }}">
+        <div class="small text-muted mt-3">{{ target_url }}</div>
+      {% else %}
+        <div class="alert alert-warning mb-0">QR not available.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
