@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'vehicles',
     'visitors',
     'incidents',
+    'comms',
     'dashboard',
 ]
 

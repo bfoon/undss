@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ view.object|default_if_none:"New Device" }} — Communications{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 900px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">
+      <i class="bi bi-broadcast-pin me-2"></i>
+      {% if view.object %}Edit Device{% else %}Register Device{% endif %}
+    </h3>
+    <a class="btn btn-outline-secondary" href="{% url 'comms:my_devices' %}">
+      <i class="bi bi-arrow-left me-1"></i> Back to My Devices
+    </a>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {# Show any non-field errors #}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        {# If you have specific fields on your form, lay them out explicitly.
+           Otherwise, the fallback below will render all fields cleanly. #}
+
+        <div class="row g-3">
+          {% for field in form %}
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">
+                {{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}
+              </label>
+              {{ field }}
+              {% if field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+              {% endif %}
+              {% if field.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ field.errors|join:", " }}
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="d-flex justify-content-end gap-2 mt-4">
+          <a href="{% url 'comms:my_devices' %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save me-1"></i> {% if view.object %}Save Changes{% else %}Create Device{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <p class="text-muted small mt-3">
+    Tip: You can register **radios (HF/VHF)** and **satellite phones** here. If your form includes fields like
+    <em>device type</em>, <em>call sign</em>, <em>serial</em>, <em>network/band</em>, and <em>notes</em>,
+    they’ll appear automatically.
+  </p>
+</div>
+{% endblock %}

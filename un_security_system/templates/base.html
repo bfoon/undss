@@ -382,6 +382,8 @@
         </li>
       {% endif %}
 
+
+
       {# ===== Requesters (normal staff) ===== #}
       {% if user.role == 'requester' or user.role == 'reception'  or user.role == 'registry' %}
         <li class="nav-item dropdown">
@@ -453,7 +455,47 @@
       {% endif %}
 
     {% endif %}
+      {% if user.is_authenticated %}
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" href="#" id="commsDropdown" role="button"
+     data-bs-toggle="dropdown" aria-expanded="false">
+    <i class="bi bi-broadcast me-1"></i> Communications
+  </a>
+
+  <ul class="dropdown-menu" aria-labelledby="commsDropdown">
+
+    {% if user.role != 'guard' and user.role != 'data_entry' %}
+      <li>
+        <a class="dropdown-item" href="{% url 'comms:my_devices' %}">
+          <i class="bi bi-broadcast-pin me-2"></i> My Radios & Sat Phones
+        </a>
+      </li>
+      <li><hr class="dropdown-divider"></li>
+    {% endif %}
+
+    {% if user.role in 'lsa,soc' %}
+      <li class="dropdown-header">LSA / SOC Panel</li>
+      <li><a class="dropdown-item" href="{% url 'comms:radios' %}">
+          <i class="bi bi-radioactive me-2"></i> All Radios
+      </a></li>
+      <li><a class="dropdown-item" href="{% url 'comms:satphones' %}">
+          <i class="bi bi-phone me-2"></i> Sat Phones
+      </a></li>
+      <li><a class="dropdown-item" href="{% url 'comms:users_without_radios' %}">
+          <i class="bi bi-person-dash me-2"></i> Users Without Radios
+      </a></li>
+      <li><a class="dropdown-item" href="{% url 'comms:check_start' %}">
+          <i class="bi bi-activity me-2"></i> Start Radio Check
+      </a></li>
+    {% endif %}
+
   </ul>
+</li>
+{% endif %}
+
+  </ul>
+
+
 
   <ul class="navbar-nav">
     <li class="nav-item dropdown">
