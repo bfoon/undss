@@ -27,17 +27,26 @@
       <form method="post" novalidate>
         {% csrf_token %}
 
-        {# If your view passes a Django Form named "form", this will work out of the box #}
         {% if form.non_field_errors %}
           <div class="alert alert-danger">{{ form.non_field_errors }}</div>
         {% endif %}
 
         <div class="row g-3">
-          {# Render fields with Bootstrap-friendly wrappers #}
           {% for field in form %}
             <div class="col-md-6">
-              <label class="form-label fw-semibold">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>
-              {{ field }}
+              <label class="form-label fw-semibold">
+                {{ field.label }}
+                {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              {% if field.field.widget.input_type == 'datetime-local' or field.name == 'started_at' %}
+                <input type="datetime-local"
+                       name="{{ field.name }}"
+                       id="id_{{ field.name }}"
+                       class="form-control {% if field.errors %}is-invalid{% endif %}"
+                       value="{{ field.value|default:'' }}">
+              {% else %}
+                {{ field }}
+              {% endif %}
               {% if field.help_text %}
                 <div class="form-text">{{ field.help_text }}</div>
               {% endif %}
@@ -48,53 +57,10 @@
           {% endfor %}
         </div>
 
-        {# Optional: if your view passes a queryset of radios to include in this check #}
-        {% if radios %}
-          <hr class="my-4">
-          <h5 class="mb-3"><i class="bi bi-radioactive me-2"></i>Radios to be checked</h5>
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th style="width:16%">Call Sign</th>
-                  <th style="width:28%">Assigned To</th>
-                  <th style="width:16%">Band</th>
-                  <th style="width:28%">Model / Serial</th>
-                  <th style="width:12%">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for r in radios %}
-                  <tr>
-                    <td><strong>{{ r.call_sign|default:"—" }}</strong></td>
-                    <td>
-                      {% if r.owner %}
-                        {{ r.owner.get_full_name|default:r.owner.username }}
-                      {% else %}
-                        <span class="text-muted">Unassigned</span>
-                      {% endif %}
-                    </td>
-                    <td>{{ r.band|default:"—" }}</td>
-                    <td>{{ r.model|default:"" }}{% if r.model and r.serial %} · {% endif %}<span class="text-muted">{{ r.serial|default:"" }}</span></td>
-                    <td>
-                      {% if r.status == "available" %}
-                        <span class="badge bg-success-subtle text-success">Available</span>
-                      {% elif r.status == "issued" %}
-                        <span class="badge bg-primary-subtle text-primary">With User</span>
-                      {% elif r.status == "repair" %}
-                        <span class="badge bg-warning-subtle text-warning">Under Repair</span>
-                      {% elif r.status == "damaged" %}
-                        <span class="badge bg-danger-subtle text-danger">Damaged</span>
-                      {% else %}
-                        <span class="badge bg-secondary-subtle text-secondary">{{ r.status|default:"Unknown" }}</span>
-                      {% endif %}
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% endif %}
+        <div class="alert alert-info mt-4 mb-0">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>Note:</strong> After starting this check, all HF and VHF radios in the system will be added to the check list automatically.
+        </div>
 
         <div class="d-flex justify-content-end gap-2 mt-4">
           <a href="{% url 'comms:radios' %}" class="btn btn-outline-secondary">
@@ -109,4 +75,13 @@
   </div>
 
 </div>
+
+<style>
+  .badge.bg-success-subtle { background-color: rgba(25,135,84,.1)!important; color: #198754!important; }
+  .badge.bg-primary-subtle { background-color: rgba(13,110,253,.1)!important; color: #0d6efd!important; }
+  .badge.bg-warning-subtle { background-color: rgba(255,193,7,.1)!important; color: #ffc107!important; }
+  .badge.bg-danger-subtle { background-color: rgba(220,53,69,.1)!important; color: #dc3545!important; }
+  .badge.bg-secondary-subtle { background-color: rgba(108,117,125,.1)!important; color: #6c757d!important; }
+  .badge.bg-info-subtle { background-color: rgba(13,202,240,.1)!important; color: #0dcaf0!important; }
+</style>
 {% endblock %}

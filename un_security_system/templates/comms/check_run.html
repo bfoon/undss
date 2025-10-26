@@ -8,24 +8,21 @@
     <div>
       <h3 class="mb-1">
         <i class="bi bi-activity me-2"></i> Radio Check
-        {% if check.name %}<small class="text-muted">— {{ check.name }}</small>{% endif %}
+        {% if session.name %}<small class="text-muted">— {{ session.name }}</small>{% endif %}
       </h3>
       <div class="text-muted small">
-        Started: {{ check.started_at|default:check.created_at|date:"M d, Y g:i A" }}
-        {% if check.created_by %} · By {{ check.created_by.get_full_name|default:check.created_by.username }}{% endif %}
+        Started: {{ session.started_at|date:"M d, Y g:i A" }}
+        {% if session.created_by %} · By {{ session.created_by.get_full_name|default:session.created_by.username }}{% endif %}
       </div>
-      {% if check.notes %}
-        <div class="mt-2 small text-muted">{{ check.notes }}</div>
-      {% endif %}
     </div>
     <div class="d-flex gap-2">
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'comms:radios' %}">
         <i class="bi bi-arrow-left me-1"></i> Back to Radios
       </a>
-      <a class="btn btn-outline-primary btn-sm" href="{% url 'comms:check_export_csv' check.pk %}">
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'comms:check_export_csv' session.pk %}">
         <i class="bi bi-filetype-csv me-1"></i> CSV
       </a>
-      <a class="btn btn-outline-success btn-sm" href="{% url 'comms:check_export_xlsx' check.pk %}">
+      <a class="btn btn-outline-success btn-sm" href="{% url 'comms:check_export_xlsx' session.pk %}">
         <i class="bi bi-file-earmark-excel me-1"></i> Excel
       </a>
     </div>
@@ -47,8 +44,8 @@
         <div class="card-body d-flex align-items-center gap-3">
           <div class="rounded p-2 bg-light"><i class="bi bi-list-check fs-4"></i></div>
           <div>
-            <div class="fw-semibold">Total</div>
-            <div class="fs-5">{{ stats.total|default:lines|length }}</div>
+            <div class="fw-semibold">Total Radios</div>
+            <div class="fs-5" id="totalCount">{{ stats.total }}</div>
           </div>
         </div>
       </div>
@@ -59,7 +56,7 @@
           <div class="rounded p-2 bg-light"><i class="bi bi-check2-circle fs-4 text-success"></i></div>
           <div>
             <div class="fw-semibold">Responded</div>
-            <div class="fs-5 text-success">{{ stats.responded|default:0 }}</div>
+            <div class="fs-5 text-success" id="respondedCount">{{ stats.responded }}</div>
           </div>
         </div>
       </div>
@@ -70,7 +67,7 @@
           <div class="rounded p-2 bg-light"><i class="bi bi-x-circle fs-4 text-danger"></i></div>
           <div>
             <div class="fw-semibold">No Response</div>
-            <div class="fs-5 text-danger">{{ stats.missed|default:0 }}</div>
+            <div class="fs-5 text-danger" id="missedCount">{{ stats.missed }}</div>
           </div>
         </div>
       </div>
@@ -81,14 +78,14 @@
           <div class="rounded p-2 bg-light"><i class="bi bi-hourglass-split fs-4 text-warning"></i></div>
           <div>
             <div class="fw-semibold">Pending</div>
-            <div class="fs-5 text-warning">{{ stats.pending|default:0 }}</div>
+            <div class="fs-5 text-warning" id="pendingCount">{{ stats.pending }}</div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Filter (client-side quick filter) -->
+  <!-- Filter -->
   <div class="card shadow-sm mb-3">
     <div class="card-body py-2">
       <div class="row g-2 align-items-center">
@@ -98,126 +95,206 @@
               <i class="bi bi-search"></i>
             </span>
             <input type="text" id="quickFilter" class="form-control border-start-0"
-                   placeholder="Filter by call sign, user, or device...">
+                   placeholder="Filter by call sign, user, or serial...">
           </div>
         </div>
         <div class="col-md-6 text-md-end small text-muted">
-          Click ✓ Responded or ✗ No Response to mark each line.
+          Mark each radio's response status below
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Lines table -->
-  <div class="card shadow-sm">
-    <div class="table-responsive">
-      <table class="table align-middle mb-0" id="linesTable">
-        <thead class="table-light">
-          <tr>
-            <th style="width: 14%;">Call Sign</th>
-            <th style="width: 26%;">Assigned To</th>
-            <th style="width: 18%;">Device</th>
-            <th style="width: 16%;">Band</th>
-            <th style="width: 14%;">Responded</th>
-            <th style="width: 12%;" class="text-end">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for line in lines %}
-            {# Expected fields: line.status in ["pending","ok","missed"], line.responded_at, line.comment, line.device (with call_sign/owner/band/model/serial) #}
-            <tr class="line-row"
-                data-search="{{ line.device.call_sign|default_if_none:'' }} {{ line.device.owner.get_full_name|default:line.device.owner.username }} {{ line.device.model|default:'' }} {{ line.device.serial|default:'' }} {{ line.device.band|default:'' }}">
-              <td>
-                <strong>{{ line.device.call_sign|default:"—" }}</strong>
-              </td>
-              <td>
-                {% if line.device.owner %}
-                  {{ line.device.owner.get_full_name|default:line.device.owner.username }}
-                  {% if line.device.owner.department %}
-                    <div class="small text-muted">{{ line.device.owner.department }}</div>
-                  {% endif %}
-                {% else %}
-                  <span class="text-muted">Unassigned</span>
-                {% endif %}
-              </td>
-              <td>
-                {{ line.device.model|default:"Radio" }}
-                {% if line.device.serial %}<div class="small text-muted">S/N {{ line.device.serial }}</div>{% endif %}
-              </td>
-              <td>{{ line.device.band|upper|default:"—" }}</td>
-              <td>
-                {% if line.status == "ok" %}
-                  <span class="badge bg-success-subtle text-success">
-                    <i class="bi bi-check2-circle me-1"></i>Yes
-                  </span>
-                  {% if line.responded_at %}
-                    <div class="small text-muted">{{ line.responded_at|date:"H:i" }}</div>
-                  {% endif %}
-                {% elif line.status == "missed" %}
-                  <span class="badge bg-danger-subtle text-danger">
-                    <i class="bi bi-x-circle me-1"></i>No
-                  </span>
-                {% else %}
-                  <span class="badge bg-secondary-subtle text-secondary">Pending</span>
-                {% endif %}
-              </td>
-              <td class="text-end">
-                <div class="btn-group btn-group-sm" role="group">
-                  <form method="post" action="{% url 'comms:check_mark' check.pk line.pk 'ok' %}">
-                    {% csrf_token %}
-                    <button class="btn btn-outline-success" title="Mark Responded">
-                      <i class="bi bi-check2-circle"></i>
-                    </button>
-                  </form>
-                  <form method="post" action="{% url 'comms:check_mark' check.pk line.pk 'missed' %}">
-                    {% csrf_token %}
-                    <button class="btn btn-outline-danger" title="Mark No Response">
-                      <i class="bi bi-x-circle"></i>
-                    </button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-          {% empty %}
+  <!-- Entries form -->
+  <form method="post">
+    {% csrf_token %}
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0" id="entriesTable">
+          <thead class="table-light">
             <tr>
-              <td colspan="6" class="text-center py-5">
-                <div class="text-muted">
-                  <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                  No participants in this check yet.
-                </div>
-              </td>
+              <th style="width: 16%;">Call Sign</th>
+              <th style="width: 14%;">Type</th>
+              <th style="width: 24%;">Assigned To</th>
+              <th style="width: 12%;">Status</th>
+              <th style="width: 12%;">Responded</th>
+              <th style="width: 22%;">Issue/Notes</th>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {% for entry in session.entries.all %}
+              <tr class="entry-row"
+                  data-search="{{ entry.call_sign|default_if_none:'' }} {{ entry.device.assigned_to.get_full_name|default:entry.device.assigned_to.username|default:'' }} {{ entry.device.serial_number|default:'' }}">
+                <td>
+                  <strong>{{ entry.call_sign|default:"—" }}</strong>
+                  {% if entry.device.serial_number %}
+                    <div class="small text-muted">{{ entry.device.serial_number }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge bg-info-subtle text-info">
+                    {{ entry.device.get_device_type_display }}
+                  </span>
+                </td>
+                <td>
+                  {% if entry.device.assigned_to %}
+                    {{ entry.device.assigned_to.get_full_name|default:entry.device.assigned_to.username }}
+                  {% else %}
+                    <span class="text-muted">Unassigned</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if entry.device.status == "available" %}
+                    <span class="badge bg-success-subtle text-success">Available</span>
+                  {% elif entry.device.status == "with_user" %}
+                    <span class="badge bg-primary-subtle text-primary">With User</span>
+                  {% elif entry.device.status == "repair" %}
+                    <span class="badge bg-warning-subtle text-warning">Repair</span>
+                  {% elif entry.device.status == "damaged" %}
+                    <span class="badge bg-danger-subtle text-danger">Damaged</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="btn-group btn-group-sm" role="group">
+                    <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
+                           id="yes_{{ entry.pk }}" value="yes"
+                           {% if entry.responded == True %}checked{% endif %}
+                           autocomplete="off">
+                    <label class="btn btn-outline-success" for="yes_{{ entry.pk }}">
+                      <i class="bi bi-check2-circle"></i> Yes
+                    </label>
+
+                    <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
+                           id="no_{{ entry.pk }}" value="no"
+                           {% if entry.responded == False %}checked{% endif %}
+                           autocomplete="off">
+                    <label class="btn btn-outline-danger" for="no_{{ entry.pk }}">
+                      <i class="bi bi-x-circle"></i> No
+                    </label>
+                  </div>
+                  {% if entry.checked_at %}
+                    <div class="small text-muted mt-1">{{ entry.checked_at|date:"H:i" }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <input type="text"
+                         name="issue_{{ entry.pk }}"
+                         class="form-control form-control-sm"
+                         placeholder="Issue or notes..."
+                         value="{{ entry.noted_issue|default:'' }}">
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="text-center py-5">
+                  <div class="text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    No radios to check yet.
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-3">
+      <a href="{% url 'comms:radios' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back
+      </a>
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-save me-1"></i> Save Updates
+      </button>
+    </div>
+  </form>
 
 </div>
 
 <style>
-  .badge.bg-success-subtle{ background-color: rgba(25,135,84,.1)!important; }
-  .badge.bg-danger-subtle{ background-color: rgba(220,53,69,.1)!important; }
-  .badge.bg-secondary-subtle{ background-color: rgba(108,117,125,.1)!important; }
+  .badge.bg-success-subtle { background-color: rgba(25,135,84,.1)!important; color: #198754!important; }
+  .badge.bg-primary-subtle { background-color: rgba(13,110,253,.1)!important; color: #0d6efd!important; }
+  .badge.bg-warning-subtle { background-color: rgba(255,193,7,.1)!important; color: #ffc107!important; }
+  .badge.bg-danger-subtle { background-color: rgba(220,53,69,.1)!important; color: #dc3545!important; }
+  .badge.bg-secondary-subtle { background-color: rgba(108,117,125,.1)!important; color: #6c757d!important; }
+  .badge.bg-info-subtle { background-color: rgba(13,202,240,.1)!important; color: #0dcaf0!important; }
+
+  .btn-check:checked + .btn-outline-success {
+    background-color: #198754;
+    color: white;
+  }
+  .btn-check:checked + .btn-outline-danger {
+    background-color: #dc3545;
+    color: white;
+  }
 </style>
 
 <script>
   // Quick client-side filter
   document.addEventListener('DOMContentLoaded', function () {
     const input = document.getElementById('quickFilter');
-    const rows = document.querySelectorAll('#linesTable tbody tr.line-row');
-    if (!input) return;
+    const rows = document.querySelectorAll('#entriesTable tbody tr.entry-row');
 
-    input.addEventListener('input', function () {
-      const q = this.value.toLowerCase();
-      let visible = 0;
-      rows.forEach(r => {
-        const hay = (r.getAttribute('data-search') || '').toLowerCase();
-        const show = !q || hay.includes(q);
-        r.style.display = show ? '' : 'none';
-        if (show) visible++;
+    if (input && rows.length) {
+      input.addEventListener('input', function () {
+        const q = this.value.toLowerCase();
+        let visible = 0;
+        rows.forEach(r => {
+          const hay = (r.getAttribute('data-search') || '').toLowerCase();
+          const show = !q || hay.includes(q);
+          r.style.display = show ? '' : 'none';
+          if (show) visible++;
+        });
       });
+    }
+
+    // Update stats on page load
+    updateStats();
+
+    // Update stats when radio buttons change
+    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+      radio.addEventListener('change', updateStats);
     });
   });
+
+  function updateStats() {
+    const allRadios = document.querySelectorAll('input[type="radio"][name^="responded_"]');
+    const radioGroups = {};
+
+    // Group radios by entry
+    allRadios.forEach(radio => {
+      const name = radio.name;
+      if (!radioGroups[name]) {
+        radioGroups[name] = [];
+      }
+      radioGroups[name].push(radio);
+    });
+
+    let responded = 0;
+    let missed = 0;
+    let pending = 0;
+
+    Object.values(radioGroups).forEach(group => {
+      const yesRadio = group.find(r => r.value === 'yes' && r.checked);
+      const noRadio = group.find(r => r.value === 'no' && r.checked);
+
+      if (yesRadio) {
+        responded++;
+      } else if (noRadio) {
+        missed++;
+      } else {
+        pending++;
+      }
+    });
+
+    // Update the display (using textContent for counts calculated on page)
+    const respondedEl = document.querySelector('.text-success.fs-5');
+    const missedEl = document.getElementById('missedCount');
+    const pendingEl = document.getElementById('pendingCount');
+
+    if (respondedEl) respondedEl.textContent = responded;
+    if (missedEl) missedEl.textContent = missed;
+    if (pendingEl) pendingEl.textContent = pending;
+  }
 </script>
 {% endblock %}
