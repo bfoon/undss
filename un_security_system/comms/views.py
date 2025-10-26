@@ -1,11 +1,12 @@
 import csv
 from io import BytesIO
 from typing import Optional
+from django.db.models.functions import Coalesce
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Q, Exists, OuterRef, QuerySet
+from django.db.models import Q, Exists, OuterRef, QuerySet, Value, CharField
 from django.http import HttpResponse, HttpRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -128,49 +129,39 @@ class RadioListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
         return ctx
 
 
-class SatPhoneListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
-    """Display all satellite phones with search capability."""
-    model = CommunicationDevice
+class SatPhoneListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     template_name = "comms/satphones_list.html"
-    context_object_name = "phones"
+    context_object_name = "satphones"
     paginate_by = 50
 
-    def get_queryset(self) -> QuerySet:
-        q = self.request.GET.get("q", "").strip()
-        status = self.request.GET.get("status", "").strip()
+    def test_func(self):
+        return is_lsa_or_soc(self.request.user)
 
-        qs = (
-            CommunicationDevice.objects
-            .filter(device_type="satphone")
-            .select_related("assigned_to")
-            .order_by("imei")
+    def get_queryset(self):
+        q = (self.request.GET.get("q") or "").strip()
+        qs = (CommunicationDevice.objects
+              .filter(device_type="satphone")
+              .select_related("assigned_to")
+              .annotate(
+                  display_id=Coalesce(
+                      "imei",
+                      "serial_number",
+                      "call_sign",
+                      output_field=CharField()
+                  )
+              )
         )
-
         if q:
             qs = qs.filter(
+                Q(phone_number__icontains=q) |
                 Q(imei__icontains=q) |
+                Q(serial_number__icontains=q) |
+                Q(call_sign__icontains=q) |
                 Q(assigned_to__username__icontains=q) |
                 Q(assigned_to__first_name__icontains=q) |
-                Q(assigned_to__last_name__icontains=q) |
-                Q(serial_number__icontains=q)
+                Q(assigned_to__last_name__icontains=q)
             )
-        if status:
-            qs = qs.filter(status=status)
-
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        base = CommunicationDevice.objects.filter(device_type="satphone")
-        ctx["stats"] = {
-            "total": base.count(),
-            "issued": base.filter(status="with_user").count(),
-            "available": base.filter(status="available").count(),
-            "damaged": base.filter(status="damaged").count(),
-        }
-        ctx["search_query"] = self.request.GET.get("q", "")
-        ctx["status_filter"] = self.request.GET.get("status", "")
-        return ctx
+        return qs.order_by("assigned_to__last_name", "assigned_to__first_name", "id")
 
 
 class UsersWithoutRadiosView(LoginRequiredMixin, OnlyTeamMixin, ListView):
