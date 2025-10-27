@@ -147,3 +147,37 @@ class UserProfileForm(forms.ModelForm):
             ),
             Submit('submit', 'Update Profile', css_class='btn btn-primary')
         )
+
+# Which roles ICT is allowed to assign (adjust as needed)
+ICT_ASSIGNABLE_ROLES = [
+    ('requester', 'Requester (Staff)'),
+    ('reception', 'Receptionist'),
+    ('registry', 'Registry'),
+    ('data_entry', 'Data Entry (Security Guard)'),
+    # Usually don’t allow ICT to create LSA/SOC
+]
+
+class ICTUserCreateForm(forms.ModelForm):
+    role = forms.ChoiceField(choices=ICT_ASSIGNABLE_ROLES)
+
+    class Meta:
+        model = User
+        fields = [
+            'username', 'first_name', 'last_name', 'email',
+            'employee_id', 'phone', 'role'
+        ]
+
+    def __init__(self, *args, **kwargs):
+        self.request_user = kwargs.pop('request_user', None)
+        super().__init__(*args, **kwargs)
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        # Force the agency to ICT focal's agency
+        if self.request_user and self.request_user.agency_id:
+            user.agency_id = self.request_user.agency_id
+        # You can set a temporary password or unusable password
+        user.set_unusable_password()
+        if commit:
+            user.save()
+        return user

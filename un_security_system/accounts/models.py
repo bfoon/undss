@@ -1,6 +1,11 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+class Agency(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    code = models.CharField(max_length=20, unique=True, help_text="Short code e.g. UNDP, UNICEF")
+    def __str__(self):
+        return self.code or self.name
 
 class User(AbstractUser):
     ROLE_CHOICES = [
@@ -10,11 +15,13 @@ class User(AbstractUser):
         ('soc', 'Security Operations Center'),
         ('reception', 'Receptionist'),
         ('registry', 'Registry'),
+        ('ict_focal', 'ICT Focal Point'),
     ]
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='requester')
     phone = models.CharField(max_length=20, blank=True)
     employee_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="users")
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"

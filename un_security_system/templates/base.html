@@ -493,6 +493,22 @@
 </li>
 {% endif %}
 
+{% if user.is_authenticated and user.role == 'ict_focal' %}
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+    <i class="bi bi-person-gear me-1"></i> ICT Console
+  </a>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="{% url 'accounts:ict_user_list' %}">
+      <i class="bi bi-people me-2"></i> Agency Users
+    </a></li>
+    <li><a class="dropdown-item" href="{% url 'accounts:ict_user_create' %}">
+      <i class="bi bi-person-plus me-2"></i> Create User
+    </a></li>
+  </ul>
+</li>
+{% endif %}
+
   </ul>
 
 

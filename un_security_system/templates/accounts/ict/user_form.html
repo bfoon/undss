@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Create User{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:900px;">
+  <!-- Header -->
+  <div class="mb-4">
+    <h2 class="mb-1">
+      <i class="bi bi-person-plus me-2"></i> Create New User
+    </h2>
+    <p class="text-muted mb-0">Add a new user to your agency</p>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-light">
+      <h5 class="mb-0">
+        <i class="bi bi-pencil-square me-2"></i>User Information
+      </h5>
+    </div>
+    <div class="card-body">
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>Please correct the following errors:</strong>
+          <ul class="mb-0 mt-2">
+            {% for error in form.non_field_errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <!-- Account Information -->
+        <div class="mb-4">
+          <h6 class="text-muted mb-3 pb-2 border-bottom">
+            <i class="bi bi-person-badge me-2"></i>Account Details
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.username.id_for_label }}" class="form-label fw-semibold">
+                {{ form.username.label }}
+                <span class="text-danger">*</span>
+              </label>
+              {{ form.username }}
+              {% if form.username.help_text %}
+                <small class="form-text text-muted">{{ form.username.help_text }}</small>
+              {% endif %}
+              {% if form.username.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.username.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.role.id_for_label }}" class="form-label fw-semibold">
+                {{ form.role.label }}
+                <span class="text-danger">*</span>
+              </label>
+              {{ form.role }}
+              {% if form.role.help_text %}
+                <small class="form-text text-muted">{{ form.role.help_text }}</small>
+              {% endif %}
+              {% if form.role.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.role.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Personal Information -->
+        <div class="mb-4">
+          <h6 class="text-muted mb-3 pb-2 border-bottom">
+            <i class="bi bi-person me-2"></i>Personal Information
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.first_name.id_for_label }}" class="form-label fw-semibold">
+                {{ form.first_name.label }}
+              </label>
+              {{ form.first_name }}
+              {% if form.first_name.help_text %}
+                <small class="form-text text-muted">{{ form.first_name.help_text }}</small>
+              {% endif %}
+              {% if form.first_name.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.first_name.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.last_name.id_for_label }}" class="form-label fw-semibold">
+                {{ form.last_name.label }}
+              </label>
+              {{ form.last_name }}
+              {% if form.last_name.help_text %}
+                <small class="form-text text-muted">{{ form.last_name.help_text }}</small>
+              {% endif %}
+              {% if form.last_name.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.last_name.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.employee_id.id_for_label }}" class="form-label fw-semibold">
+                {{ form.employee_id.label }}
+              </label>
+              {{ form.employee_id }}
+              {% if form.employee_id.help_text %}
+                <small class="form-text text-muted">{{ form.employee_id.help_text }}</small>
+              {% endif %}
+              {% if form.employee_id.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.employee_id.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Contact Information -->
+        <div class="mb-4">
+          <h6 class="text-muted mb-3 pb-2 border-bottom">
+            <i class="bi bi-telephone me-2"></i>Contact Information
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="{{ form.email.id_for_label }}" class="form-label fw-semibold">
+                {{ form.email.label }}
+              </label>
+              {{ form.email }}
+              {% if form.email.help_text %}
+                <small class="form-text text-muted">{{ form.email.help_text }}</small>
+              {% endif %}
+              {% if form.email.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.email.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.phone.id_for_label }}" class="form-label fw-semibold">
+                {{ form.phone.label }}
+              </label>
+              {{ form.phone }}
+              {% if form.phone.help_text %}
+                <small class="form-text text-muted">{{ form.phone.help_text }}</small>
+              {% endif %}
+              {% if form.phone.errors %}
+                <div class="invalid-feedback d-block">
+                  {{ form.phone.errors.0 }}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="d-flex gap-2 pt-3 border-top">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2-circle me-1"></i> Create User
+          </button>
+          <a class="btn btn-outline-secondary" href="{% url 'accounts:ict_user_list' %}">
+            <i class="bi bi-x-circle me-1"></i> Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Information Alert -->
+  <div class="alert alert-info mt-3 shadow-sm" role="alert">
+    <div class="d-flex">
+      <div class="flex-shrink-0">
+        <i class="bi bi-info-circle-fill fs-5"></i>
+      </div>
+      <div class="flex-grow-1 ms-3">
+        <h6 class="alert-heading mb-1">Password Setup Required</h6>
+        <p class="mb-0 small">
+          The user will be created within your agency without an initial password.
+          You'll need to either set a password through the admin panel or send them a password reset link to activate their account.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

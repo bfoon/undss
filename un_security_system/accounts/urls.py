@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .views_ict import ICTUserListView, ICTUserCreateView
 
 app_name = 'accounts'
 
@@ -17,6 +18,9 @@ urlpatterns = [
     path('users/<int:pk>/toggle-status/', views.toggle_user_status, name='toggle_user_status'),
     path('users/<int:user_id>/activity/', views.user_activity_log, name='user_activity_log'),
     path('activity/', views.user_activity_log, name='my_activity_log'),
+
+    path("ict/users/", ICTUserListView.as_view(), name="ict_user_list"),
+    path("ict/users/new/", ICTUserCreateView.as_view(), name="ict_user_create"),
 
     # Security Incidents
     path('incidents/', views.SecurityIncidentListView.as_view(), name='incident_list'),
