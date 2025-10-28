@@ -1,14 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Create User{% endblock %}
+{% block title %}{% if form.instance.pk %}Edit{% else %}Create{% endif %} User{% endblock %}
 
 {% block content %}
 <div class="container py-4" style="max-width:900px;">
   <!-- Header -->
   <div class="mb-4">
     <h2 class="mb-1">
-      <i class="bi bi-person-plus me-2"></i> Create New User
+      {% if form.instance.pk %}
+        <i class="bi bi-pencil-square me-2"></i> Edit User
+      {% else %}
+        <i class="bi bi-person-plus me-2"></i> Create New User
+      {% endif %}
     </h2>
-    <p class="text-muted mb-0">Add a new user to your agency</p>
+    <p class="text-muted mb-0">
+      {% if form.instance.pk %}
+        Update user information for {{ form.instance.username }}
+      {% else %}
+        Add a new user to your agency
+      {% endif %}
+    </p>
   </div>
 
   <!-- Form Card -->
@@ -48,11 +58,13 @@
               </label>
               {{ form.username }}
               {% if form.username.help_text %}
-                <small class="form-text text-muted">{{ form.username.help_text }}</small>
+                <small class="form-text text-muted d-block mt-1">{{ form.username.help_text }}</small>
               {% endif %}
               {% if form.username.errors %}
                 <div class="invalid-feedback d-block">
-                  {{ form.username.errors.0 }}
+                  {% for error in form.username.errors %}
+                    {{ error }}
+                  {% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -63,11 +75,13 @@
               </label>
               {{ form.role }}
               {% if form.role.help_text %}
-                <small class="form-text text-muted">{{ form.role.help_text }}</small>
+                <small class="form-text text-muted d-block mt-1">{{ form.role.help_text }}</small>
               {% endif %}
               {% if form.role.errors %}
                 <div class="invalid-feedback d-block">
-                  {{ form.role.errors.0 }}
+                  {% for error in form.role.errors %}
+                    {{ error }}
+                  {% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -86,11 +100,13 @@
               </label>
               {{ form.first_name }}
               {% if form.first_name.help_text %}
-                <small class="form-text text-muted">{{ form.first_name.help_text }}</small>
+                <small class="form-text text-muted d-block mt-1">{{ form.first_name.help_text }}</small>
               {% endif %}
               {% if form.first_name.errors %}
                 <div class="invalid-feedback d-block">
-                  {{ form.first_name.errors.0 }}
+                  {% for error in form.first_name.errors %}
+                    {{ error }}
+                  {% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -100,11 +116,13 @@
               </label>
               {{ form.last_name }}
               {% if form.last_name.help_text %}
-                <small class="form-text text-muted">{{ form.last_name.help_text }}</small>
+                <small class="form-text text-muted d-block mt-1">{{ form.last_name.help_text }}</small>
               {% endif %}
               {% if form.last_name.errors %}
                 <div class="invalid-feedback d-block">
-                  {{ form.last_name.errors.0 }}
+                  {% for error in form.last_name.errors %}
+                    {{ error }}
+                  {% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -114,11 +132,13 @@
               </label>
               {{ form.employee_id }}
               {% if form.employee_id.help_text %}
-                <small class="form-text text-muted">{{ form.employee_id.help_text }}</small>
+                <small class="form-text text-muted d-block mt-1">{{ form.employee_id.help_text }}</small>
               {% endif %}
               {% if form.employee_id.errors %}
                 <div class="invalid-feedback d-block">
-                  {{ form.employee_id.errors.0 }}
+                  {% for error in form.employee_id.errors %}
+                    {{ error }}
+                  {% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -137,11 +157,13 @@
               </label>
               {{ form.email }}
               {% if form.email.help_text %}
-                <small class="form-text text-muted">{{ form.email.help_text }}</small>
+                <small class="form-text text-muted d-block mt-1">{{ form.email.help_text }}</small>
               {% endif %}
               {% if form.email.errors %}
                 <div class="invalid-feedback d-block">
-                  {{ form.email.errors.0 }}
+                  {% for error in form.email.errors %}
+                    {{ error }}
+                  {% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -151,11 +173,13 @@
               </label>
               {{ form.phone }}
               {% if form.phone.help_text %}
-                <small class="form-text text-muted">{{ form.phone.help_text }}</small>
+                <small class="form-text text-muted d-block mt-1">{{ form.phone.help_text }}</small>
               {% endif %}
               {% if form.phone.errors %}
                 <div class="invalid-feedback d-block">
-                  {{ form.phone.errors.0 }}
+                  {% for error in form.phone.errors %}
+                    {{ error }}
+                  {% endfor %}
                 </div>
               {% endif %}
             </div>
@@ -165,7 +189,8 @@
         <!-- Form Actions -->
         <div class="d-flex gap-2 pt-3 border-top">
           <button type="submit" class="btn btn-primary">
-            <i class="bi bi-check2-circle me-1"></i> Create User
+            <i class="bi bi-check2-circle me-1"></i>
+            {% if form.instance.pk %}Update{% else %}Create{% endif %} User
           </button>
           <a class="btn btn-outline-secondary" href="{% url 'accounts:ict_user_list' %}">
             <i class="bi bi-x-circle me-1"></i> Cancel
@@ -176,20 +201,48 @@
   </div>
 
   <!-- Information Alert -->
-  <div class="alert alert-info mt-3 shadow-sm" role="alert">
-    <div class="d-flex">
-      <div class="flex-shrink-0">
-        <i class="bi bi-info-circle-fill fs-5"></i>
-      </div>
-      <div class="flex-grow-1 ms-3">
-        <h6 class="alert-heading mb-1">Password Setup Required</h6>
-        <p class="mb-0 small">
-          The user will be created within your agency without an initial password.
-          You'll need to either set a password through the admin panel or send them a password reset link to activate their account.
-        </p>
+  {% if not form.instance.pk %}
+    <div class="alert alert-info mt-3 shadow-sm" role="alert">
+      <div class="d-flex">
+        <div class="flex-shrink-0">
+          <i class="bi bi-info-circle-fill fs-5"></i>
+        </div>
+        <div class="flex-grow-1 ms-3">
+          <h6 class="alert-heading mb-1">Password Setup Required</h6>
+          <p class="mb-0 small">
+            The user will be created within your agency without an initial password.
+            You'll need to either set a password through the admin panel or send them a password reset link to activate their account.
+          </p>
+        </div>
       </div>
     </div>
-  </div>
+  {% endif %}
 </div>
+
+<!-- Add Bootstrap form validation styles -->
+<style>
+  .form-control.is-invalid,
+  .form-select.is-invalid {
+    border-color: #dc3545;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  }
+</style>
+
+<script>
+  // Add Bootstrap validation classes to form controls with errors
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.invalid-feedback').forEach(function(feedback) {
+      const formControl = feedback.previousElementSibling;
+      if (formControl && (formControl.classList.contains('form-control') || formControl.classList.contains('form-select'))) {
+        formControl.classList.add('is-invalid');
+      }
+    });
+  });
+</script>
 
 {% endblock %}

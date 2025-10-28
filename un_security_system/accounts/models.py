@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 class Agency(models.Model):
     name = models.CharField(max_length=120, unique=True)
@@ -22,6 +23,14 @@ class User(AbstractUser):
     phone = models.CharField(max_length=20, blank=True)
     employee_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
     agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="users")
+    # NEW
+    must_change_password = models.BooleanField(default=False)
+    temp_password_set_at = models.DateTimeField(null=True, blank=True)
+
+    def mark_temp_password(self):
+        self.must_change_password = True
+        self.temp_password_set_at = timezone.now()
+        self.save(update_fields=["must_change_password", "temp_password_set_at"])
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"

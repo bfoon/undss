@@ -12,6 +12,9 @@
       <p class="text-muted mb-0">
         <i class="bi bi-building me-1"></i>
         <span class="fw-semibold">{{ my_agency|default:"No Agency Assigned" }}</span>
+        {% if total_agency_users %}
+          <span class="badge bg-secondary ms-2">{{ total_agency_users }} total</span>
+        {% endif %}
       </p>
     </div>
     <a class="btn btn-primary" href="{% url 'accounts:ict_user_create' %}">
@@ -35,17 +38,20 @@
                  name="q"
                  value="{{ q }}"
                  class="form-control"
-                 placeholder="Search by username, name, or email address...">
+                 placeholder="Search by username, name, email, or employee ID..."
+                 autofocus>
         </div>
         <div class="col-md-4 d-flex align-items-end gap-2">
           <button type="submit" class="btn btn-primary flex-grow-1">
             <i class="bi bi-search me-1"></i> Search
           </button>
-          <a href="?"
-             class="btn btn-outline-secondary"
-             title="Clear search">
-            <i class="bi bi-x-circle"></i>
-          </a>
+          {% if q %}
+            <a href="{% url 'accounts:ict_user_list' %}"
+               class="btn btn-outline-secondary"
+               title="Clear search">
+              <i class="bi bi-x-circle"></i>
+            </a>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -57,11 +63,11 @@
       <div class="card-header bg-light d-flex justify-content-between align-items-center">
         <h6 class="mb-0">
           <i class="bi bi-list-ul me-2"></i>Users
-          <span class="badge bg-secondary ms-2">{{ users|length }}</span>
+          <span class="badge bg-secondary ms-2">{{ page_obj.paginator.count }} {% if q %}result{{ page_obj.paginator.count|pluralize }}{% else %}total{% endif %}</span>
         </h6>
         {% if q %}
           <small class="text-muted">
-            <i class="bi bi-funnel me-1"></i>Filtered results for "{{ q }}"
+            <i class="bi bi-funnel me-1"></i>Filtered results for "<strong>{{ q }}</strong>"
           </small>
         {% endif %}
       </div>
@@ -81,14 +87,25 @@
             <tr>
               <td>
                 <div class="d-flex align-items-center">
-                  <i class="bi bi-person-circle me-2 text-muted"></i>
-                  <span class="fw-semibold text-dark">{{ u.username }}</span>
+                  {% if u.is_active %}
+                    <i class="bi bi-person-circle me-2 text-primary"></i>
+                  {% else %}
+                    <i class="bi bi-person-slash me-2 text-muted"></i>
+                  {% endif %}
+                  <a href="{% url 'accounts:ict_user_detail' pk=u.pk %}"
+                     class="fw-semibold text-decoration-none {% if not u.is_active %}text-muted{% else %}text-dark{% endif %}">
+                    {{ u.username }}
+                  </a>
+                  {% if not u.is_active %}
+                    <span class="badge bg-warning text-dark ms-2 small">Inactive</span>
+                  {% endif %}
                 </div>
               </td>
               <td>
-                <span class="fw-medium">{{ u.get_full_name|default:"—" }}</span>
-                {% if not u.get_full_name %}
-                  <small class="text-muted fst-italic">(No name set)</small>
+                {% if u.get_full_name %}
+                  <span class="fw-medium">{{ u.get_full_name }}</span>
+                {% else %}
+                  <span class="text-muted fst-italic">(No name set)</span>
                 {% endif %}
               </td>
               <td>
@@ -130,14 +147,14 @@
               {% if page_obj.has_previous %}
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page=1{% if q %}&q={{ q }}{% endif %}"
+                     href="?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
                      aria-label="First">
                     <i class="bi bi-chevron-double-left"></i>
                   </a>
                 </li>
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}"
+                     href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                      aria-label="Previous">
                     <i class="bi bi-chevron-left"></i>
                   </a>
@@ -160,14 +177,14 @@
               {% if page_obj.has_next %}
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}"
+                     href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                      aria-label="Next">
                     <i class="bi bi-chevron-right"></i>
                   </a>
                 </li>
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q }}{% endif %}"
+                     href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                      aria-label="Last">
                     <i class="bi bi-chevron-double-right"></i>
                   </a>
@@ -203,7 +220,7 @@
         </p>
         <div class="d-flex gap-2 justify-content-center">
           {% if q %}
-            <a href="{% url 'accounts:ict_agency_users' %}" class="btn btn-outline-primary">
+            <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-outline-primary">
               <i class="bi bi-x-circle me-1"></i> Clear Search
             </a>
           {% endif %}

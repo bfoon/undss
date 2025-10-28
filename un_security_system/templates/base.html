@@ -382,10 +382,8 @@
         </li>
       {% endif %}
 
-
-
       {# ===== Requesters (normal staff) ===== #}
-      {% if user.role == 'requester' or user.role == 'reception'  or user.role == 'registry' %}
+      {% if user.role == 'requester' or user.role == 'reception'  or user.role == 'registry' or user.role == 'ict_focal'  %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
              aria-expanded="false">

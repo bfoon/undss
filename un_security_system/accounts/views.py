@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import ListView, CreateView, UpdateView, DetailView, TemplateView
+from django.contrib.auth.views import PasswordChangeView
 
 from .forms import (
     LoginForm,
@@ -98,6 +99,19 @@ def change_password_view(request):
     # Template suggestion: templates/accounts/change_password.html
     return render(request, 'accounts/change_password.html', {'form': form})
 
+
+
+class PasswordChangeAndClearFlagView(PasswordChangeView):
+    template_name = "registration/password_change_form.html"
+    success_url = reverse_lazy("password_change_done")
+
+    def form_valid(self, form):
+        resp = super().form_valid(form)
+        user = self.request.user
+        if getattr(user, "must_change_password", False):
+            user.must_change_password = False
+            user.save(update_fields=["must_change_password"])
+        return resp
 
 # ----------------------- User management (LSA) ----------------------
 

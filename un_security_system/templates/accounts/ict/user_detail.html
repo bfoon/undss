@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}{{ target_user.username }} - User Detail{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:1200px;">
+  <!-- Header with Actions -->
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+      <div class="d-flex align-items-center mb-2">
+        <h2 class="mb-0 me-3">
+          <i class="bi bi-person-circle me-2"></i>{{ target_user.username }}
+        </h2>
+        {% if target_user.is_active %}
+          <span class="badge bg-success">
+            <i class="bi bi-check-circle me-1"></i>Active
+          </span>
+        {% else %}
+          <span class="badge bg-warning text-dark">
+            <i class="bi bi-x-circle me-1"></i>Inactive
+          </span>
+        {% endif %}
+        {% if target_user.must_change_password %}
+          <span class="badge bg-danger ms-2">
+            <i class="bi bi-shield-exclamation me-1"></i>Must Change Password
+          </span>
+        {% endif %}
+      </div>
+      <p class="text-muted mb-0">
+        <i class="bi bi-building me-1"></i>{{ target_user.agency|default:"No Agency" }}
+      </p>
+    </div>
+    
+    <div class="d-flex gap-2">
+      <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to List
+      </a>
+      {% if not is_own_account %}
+        <a href="{% url 'accounts:ict_user_edit' pk=target_user.pk %}" class="btn btn-primary">
+          <i class="bi bi-pencil-square me-1"></i> Edit User
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- User Information Card -->
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">
+          <h5 class="mb-0">
+            <i class="bi bi-info-circle me-2"></i>User Information
+          </h5>
+        </div>
+        <div class="card-body">
+          <!-- Personal Information -->
+          <div class="mb-4">
+            <h6 class="text-muted mb-3 pb-2 border-bottom">
+              <i class="bi bi-person me-2"></i>Personal Details
+            </h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Username</label>
+                <div class="fw-semibold">{{ target_user.username }}</div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Employee ID</label>
+                <div class="fw-semibold">
+                  {% if target_user.employee_id %}
+                    <span class="font-monospace">{{ target_user.employee_id }}</span>
+                  {% else %}
+                    <span class="text-muted fst-italic">Not set</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">First Name</label>
+                <div class="fw-semibold">
+                  {{ target_user.first_name|default:"—" }}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Last Name</label>
+                <div class="fw-semibold">
+                  {{ target_user.last_name|default:"—" }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contact Information -->
+          <div class="mb-4">
+            <h6 class="text-muted mb-3 pb-2 border-bottom">
+              <i class="bi bi-telephone me-2"></i>Contact Information
+            </h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Email Address</label>
+                <div class="fw-semibold">
+                  {% if target_user.email %}
+                    <a href="mailto:{{ target_user.email }}" class="text-decoration-none">
+                      <i class="bi bi-envelope me-1"></i>{{ target_user.email }}
+                    </a>
+                  {% else %}
+                    <span class="text-muted fst-italic">Not set</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Phone Number</label>
+                <div class="fw-semibold">
+                  {% if target_user.phone %}
+                    <a href="tel:{{ target_user.phone }}" class="text-decoration-none">
+                      <i class="bi bi-telephone me-1"></i>{{ target_user.phone }}
+                    </a>
+                  {% else %}
+                    <span class="text-muted fst-italic">Not set</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Account Information -->
+          <div class="mb-0">
+            <h6 class="text-muted mb-3 pb-2 border-bottom">
+              <i class="bi bi-shield-check me-2"></i>Account Information
+            </h6>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Role</label>
+                <div>
+                  {% if target_user.role %}
+                    <span class="badge bg-primary">
+                      <i class="bi bi-shield-check me-1"></i>{{ target_user.get_role_display }}
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary">No Role Assigned</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Account Status</label>
+                <div>
+                  {% if target_user.is_active %}
+                    <span class="badge bg-success">
+                      <i class="bi bi-check-circle me-1"></i>Active
+                    </span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">
+                      <i class="bi bi-x-circle me-1"></i>Inactive
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Date Joined</label>
+                <div class="fw-semibold">
+                  <i class="bi bi-calendar-event me-1"></i>
+                  {{ target_user.date_joined|date:"M d, Y" }}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Last Login</label>
+                <div class="fw-semibold">
+                  {% if target_user.last_login %}
+                    <i class="bi bi-clock-history me-1"></i>
+                    {{ target_user.last_login|date:"M d, Y g:i A" }}
+                  {% else %}
+                    <span class="text-muted fst-italic">Never logged in</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions Sidebar -->
+    <div class="col-lg-4">
+      <!-- Password Management Card -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h6 class="mb-0">
+            <i class="bi bi-key me-2"></i>Password Management
+          </h6>
+        </div>
+        <div class="card-body">
+          {% if is_own_account %}
+            <p class="text-muted small mb-3">
+              Use the profile page to manage your own password.
+            </p>
+            <a href="{% url 'accounts:change_password' %}" class="btn btn-primary w-100">
+              <i class="bi bi-key me-1"></i> Change My Password
+            </a>
+          {% else %}
+            <p class="text-muted small mb-3">
+              Set a new password or send a reset link to the user.
+            </p>
+            <div class="d-grid gap-2">
+              <a href="{% url 'accounts:ict_user_set_password' pk=target_user.pk %}" 
+                 class="btn btn-primary">
+                <i class="bi bi-key me-1"></i> Set New Password
+              </a>
+              {% if target_user.email %}
+                <form method="post" 
+                      action="{% url 'accounts:ict_user_send_reset_link' pk=target_user.pk %}"
+                      onsubmit="return confirm('Send password reset link to {{ target_user.email }}?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-envelope me-1"></i> Send Reset Link
+                  </button>
+                </form>
+              {% else %}
+                <button class="btn btn-outline-secondary w-100" disabled 
+                        title="User has no email address">
+                  <i class="bi bi-envelope-slash me-1"></i> No Email Set
+                </button>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Account Actions Card -->
+      {% if not is_own_account %}
+        <div class="card shadow-sm">
+          <div class="card-header bg-light">
+            <h6 class="mb-0">
+              <i class="bi bi-gear me-2"></i>Account Actions
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="d-grid gap-2">
+              <!-- Edit User -->
+              <a href="{% url 'accounts:ict_user_edit' pk=target_user.pk %}" 
+                 class="btn btn-outline-primary">
+                <i class="bi bi-pencil-square me-1"></i> Edit Details
+              </a>
+              
+              <!-- Toggle Active Status -->
+              <form method="post" 
+                    action="{% url 'accounts:ict_user_toggle_status' pk=target_user.pk %}"
+                    onsubmit="return confirm('{% if target_user.is_active %}Deactivate{% else %}Activate{% endif %} {{ target_user.username }}?');">
+                {% csrf_token %}
+                {% if target_user.is_active %}
+                  <button type="submit" class="btn btn-outline-warning w-100">
+                    <i class="bi bi-x-circle me-1"></i> Deactivate Account
+                  </button>
+                {% else %}
+                  <button type="submit" class="btn btn-outline-success w-100">
+                    <i class="bi bi-check-circle me-1"></i> Activate Account
+                  </button>
+                {% endif %}
+              </form>
+            </div>
+            
+            <!-- Warning Message -->
+            <div class="alert alert-warning mt-3 mb-0 small" role="alert">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i>
+              <strong>Note:</strong> Deactivating a user will prevent them from logging in.
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

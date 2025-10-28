@@ -1,62 +1,358 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.urls import reverse_lazy
-from django.views.generic import ListView, CreateView
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.db import models
+from django.http import HttpResponseForbidden, Http404
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse_lazy, reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+from django.views.generic import ListView, CreateView, UpdateView, DetailView
 
-from .forms import ICTUserCreateForm
+from .forms import ICTUserCreateForm, ICTUserUpdateForm
 from .permissions import is_ict_focal
 
 User = get_user_model()
 
+
 class ICTUserGuardMixin(LoginRequiredMixin, UserPassesTestMixin):
+    """Mixin to restrict access to ICT focal point users only."""
+
     def test_func(self):
         return is_ict_focal(self.request.user)
 
+    def handle_no_permission(self):
+        """Provide helpful feedback when access is denied."""
+        messages.error(
+            self.request,
+            'You must be an ICT Focal Point to access this page.'
+        )
+        return super().handle_no_permission()
+
+
+class ICTUserAccessMixin(ICTUserGuardMixin):
+    """Mixin to ensure ICT focal can only access users in their agency."""
+
+    def get_object(self, queryset=None):
+        """Get user object and verify it's in the ICT focal's agency."""
+        obj = super().get_object(queryset)
+        user = self.request.user
+
+        # Check if the user belongs to the ICT focal's agency
+        if not user.agency_id:
+            raise Http404("You are not assigned to an agency.")
+
+        if obj.agency_id != user.agency_id:
+            raise Http404("User not found in your agency.")
+
+        return obj
+
 
 class ICTUserListView(ICTUserGuardMixin, ListView):
+    """List users within the ICT focal point's agency."""
+
     template_name = "accounts/ict/user_list.html"
     context_object_name = "users"
     paginate_by = 25
 
     def get_queryset(self):
-        # ICT focal can only see users in their agency
-        me = self.request.user
-        qs = User.objects.all().select_related('agency')
-        if me.agency_id:
-            qs = qs.filter(agency_id=me.agency_id)
+        """Return users in the ICT focal's agency with optional search."""
+        user = self.request.user
+
+        # Base queryset with related data
+        qs = User.objects.select_related('agency').order_by(
+            'last_name', 'first_name', 'username'
+        )
+
+        # Filter by agency - ICT focal can only see their agency's users
+        if user.agency_id:
+            qs = qs.filter(agency_id=user.agency_id)
         else:
-            qs = qs.none()
-        # optional search
-        q = (self.request.GET.get('q') or '').strip()
-        if q:
+            # If ICT focal has no agency, show empty queryset
+            return User.objects.none()
+
+        # Apply search filter if provided
+        search_query = self.request.GET.get('q', '').strip()
+        if search_query:
             qs = qs.filter(
-                models.Q(username__icontains=q) |
-                models.Q(first_name__icontains=q) |
-                models.Q(last_name__icontains=q) |
-                models.Q(email__icontains=q)
+                models.Q(username__icontains=search_query) |
+                models.Q(first_name__icontains=search_query) |
+                models.Q(last_name__icontains=search_query) |
+                models.Q(email__icontains=search_query) |
+                models.Q(employee_id__icontains=search_query)
             )
-        return qs.order_by('last_name', 'first_name', 'username')
+
+        return qs
 
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        me = self.request.user
-        ctx['my_agency'] = me.agency
-        ctx['q'] = self.request.GET.get('q', '')
-        return ctx
+        """Add additional context for the template."""
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        context['my_agency'] = user.agency
+        context['q'] = self.request.GET.get('q', '').strip()
+
+        # Add user counts for better UX
+        if user.agency_id:
+            context['total_agency_users'] = User.objects.filter(
+                agency_id=user.agency_id
+            ).count()
+        else:
+            context['total_agency_users'] = 0
+
+        return context
+
+
+class ICTUserDetailView(ICTUserAccessMixin, DetailView):
+    """View detailed information about a user in the agency."""
+
+    model = User
+    template_name = "accounts/ict/user_detail.html"
+    context_object_name = "target_user"
+
+    def get_context_data(self, **kwargs):
+        """Add additional context."""
+        context = super().get_context_data(**kwargs)
+        target_user = self.object
+
+        # Check if this is the ICT focal's own account
+        context['is_own_account'] = (target_user.id == self.request.user.id)
+
+        return context
 
 
 class ICTUserCreateView(ICTUserGuardMixin, CreateView):
+    """Create a new user within the ICT focal point's agency."""
+
     template_name = "accounts/ict/user_form.html"
     form_class = ICTUserCreateForm
     success_url = reverse_lazy("accounts:ict_user_list")
 
     def get_form_kwargs(self):
+        """Pass the requesting user to the form for validation."""
         kwargs = super().get_form_kwargs()
         kwargs['request_user'] = self.request.user
         return kwargs
 
     def form_valid(self, form):
-        resp = super().form_valid(form)
-        messages.success(self.request, "User created. They currently have no password; set one from admin or send a set-password link.")
-        return resp
+        """Handle successful form submission."""
+        response = super().form_valid(form)
+
+        # Provide detailed success message
+        new_user = form.instance
+        messages.success(
+            self.request,
+            f'User "{new_user.username}" has been created successfully. '
+            f'They will need a password set before they can log in.'
+        )
+
+        return response
+
+    def form_invalid(self, form):
+        """Handle form validation errors."""
+        messages.error(
+            self.request,
+            'Please correct the errors below to create the user.'
+        )
+        return super().form_invalid(form)
+
+
+class ICTUserUpdateView(ICTUserAccessMixin, UpdateView):
+    """Update user information within the ICT focal point's agency."""
+
+    model = User
+    form_class = ICTUserUpdateForm
+    template_name = "accounts/ict/user_form.html"
+
+    def get_success_url(self):
+        """Redirect to user detail page after update."""
+        return reverse('accounts:ict_user_detail', kwargs={'pk': self.object.pk})
+
+    def get_form_kwargs(self):
+        """Pass the requesting user to the form."""
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        """Handle successful form submission."""
+        response = super().form_valid(form)
+
+        messages.success(
+            self.request,
+            f'User "{form.instance.username}" has been updated successfully.'
+        )
+
+        return response
+
+    def form_invalid(self, form):
+        """Handle form validation errors."""
+        messages.error(
+            self.request,
+            'Please correct the errors below to update the user.'
+        )
+        return super().form_invalid(form)
+
+
+@login_required
+def ict_user_set_password(request, pk):
+    """Allow ICT focal to set a new password for a user in their agency."""
+
+    # Check ICT focal permission
+    if not is_ict_focal(request.user):
+        messages.error(request, 'You must be an ICT Focal Point to access this page.')
+        return HttpResponseForbidden('Access denied')
+
+    # Get user and verify agency
+    target_user = get_object_or_404(User, pk=pk)
+
+    if not request.user.agency_id:
+        messages.error(request, 'You are not assigned to an agency.')
+        return redirect('accounts:ict_user_list')
+
+    if target_user.agency_id != request.user.agency_id:
+        messages.error(request, 'User not found in your agency.')
+        return redirect('accounts:ict_user_list')
+
+    # Prevent ICT focal from changing their own password this way
+    if target_user.id == request.user.id:
+        messages.warning(request, 'Please use the profile page to change your own password.')
+        return redirect('accounts:profile')
+
+    if request.method == 'POST':
+        form = SetPasswordForm(user=target_user, data=request.POST)
+        if form.is_valid():
+            form.save()
+
+            # Clear the must_change_password flag if it exists
+            if hasattr(target_user, 'must_change_password'):
+                target_user.must_change_password = False
+                target_user.save(update_fields=['must_change_password'])
+
+            messages.success(
+                request,
+                f'Password for "{target_user.username}" has been set successfully.'
+            )
+            return redirect('accounts:ict_user_detail', pk=pk)
+    else:
+        form = SetPasswordForm(user=target_user)
+
+    return render(request, 'accounts/ict/user_set_password.html', {
+        'form': form,
+        'target_user': target_user,
+    })
+
+
+@login_required
+def ict_user_send_reset_link(request, pk):
+    """Send password reset link to a user in the agency."""
+
+    # Check ICT focal permission
+    if not is_ict_focal(request.user):
+        messages.error(request, 'You must be an ICT Focal Point to access this page.')
+        return HttpResponseForbidden('Access denied')
+
+    # Get user and verify agency
+    target_user = get_object_or_404(User, pk=pk)
+
+    if not request.user.agency_id:
+        messages.error(request, 'You are not assigned to an agency.')
+        return redirect('accounts:ict_user_list')
+
+    if target_user.agency_id != request.user.agency_id:
+        messages.error(request, 'User not found in your agency.')
+        return redirect('accounts:ict_user_list')
+
+    if not target_user.email:
+        messages.error(request, f'User "{target_user.username}" has no email address set.')
+        return redirect('accounts:ict_user_detail', pk=pk)
+
+    # Generate password reset token
+    token = default_token_generator.make_token(target_user)
+    uid = urlsafe_base64_encode(force_bytes(target_user.pk))
+
+    # Build reset URL - try to use Django's built-in or custom reset view
+    try:
+        # Try to use Django's built-in password reset confirm URL
+        reset_url = request.build_absolute_uri(
+            reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
+        )
+    except:
+        # Fallback: use custom reset URL or admin
+        try:
+            reset_url = request.build_absolute_uri(
+                reverse('accounts:password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
+            )
+        except:
+            # Last resort: direct them to contact admin
+            messages.warning(
+                request,
+                f'Password reset URL is not configured. Please set a password directly '
+                f'or contact the system administrator to configure password reset emails.'
+            )
+            return redirect('accounts:ict_user_detail', pk=pk)
+
+    # Send email
+    try:
+        send_mail(
+            subject='Password Reset Request',
+            message=f'Hello {target_user.get_full_name() or target_user.username},\n\n'
+                    f'A password reset has been requested for your account.\n\n'
+                    f'Please click the following link to set your new password:\n{reset_url}\n\n'
+                    f'If you did not request this, please ignore this email.\n\n'
+                    f'Best regards,\nICT Support Team',
+            from_email=None,  # Uses DEFAULT_FROM_EMAIL from settings
+            recipient_list=[target_user.email],
+            fail_silently=False,
+        )
+
+        messages.success(
+            request,
+            f'Password reset link has been sent to {target_user.email}.'
+        )
+    except Exception as e:
+        messages.error(
+            request,
+            f'Failed to send email: {str(e)}'
+        )
+
+    return redirect('accounts:ict_user_detail', pk=pk)
+
+
+@login_required
+def ict_user_toggle_status(request, pk):
+    """Toggle user active/inactive status."""
+
+    # Check ICT focal permission
+    if not is_ict_focal(request.user):
+        messages.error(request, 'You must be an ICT Focal Point to access this page.')
+        return HttpResponseForbidden('Access denied')
+
+    # Get user and verify agency
+    target_user = get_object_or_404(User, pk=pk)
+
+    if not request.user.agency_id:
+        messages.error(request, 'You are not assigned to an agency.')
+        return redirect('accounts:ict_user_list')
+
+    if target_user.agency_id != request.user.agency_id:
+        messages.error(request, 'User not found in your agency.')
+        return redirect('accounts:ict_user_list')
+
+    # Prevent ICT focal from deactivating themselves
+    if target_user.id == request.user.id:
+        messages.error(request, "You cannot deactivate your own account.")
+        return redirect('accounts:ict_user_detail', pk=pk)
+
+    # Toggle status
+    target_user.is_active = not target_user.is_active
+    target_user.save(update_fields=['is_active'])
+
+    status = 'activated' if target_user.is_active else 'deactivated'
+    messages.success(request, f'User "{target_user.username}" has been {status}.')
+
+    return redirect('accounts:ict_user_detail', pk=pk)
