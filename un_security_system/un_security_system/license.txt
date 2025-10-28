@@ -1,0 +1,76 @@
+SOFTWARE LICENSE AND OWNERSHIP AGREEMENT
+
+Between
+Baboucarr Foon (“Owner/Developer”)
+and
+United Nations System (“UN System”)/Any User
+
+1. Ownership
+
+1.1. The software platform, including all source code, architecture, design, documentation, databases, modules, updates, and derivative works (hereinafter referred to as “the System”), is and shall remain the exclusive intellectual property of Baboucarr Foon.
+
+1.2. The UN System acknowledges that no ownership, title, or intellectual property rights are transferred or implied under this Agreement.
+
+2. License to Use
+
+2.1. The UN System is granted a non-exclusive, non-transferable, internal-use-only license to operate the System only during the period in which Baboucarr Foon remains within the UN System as staff or contractor managing it.
+
+2.2. The System shall only be implemented, configured, maintained, or modified by Baboucarr Foon or his designated beneficiary/successor.
+
+2.3. The UN System may not duplicate, reverse-engineer, re-implement, modify, migrate, or provide access to the System or any of its components to third parties without prior written authorization from Baboucarr Foon.
+
+3. Post-Separation Terms
+
+3.1. Upon separation of Baboucarr Foon from the UN System—whether by resignation, contract end, reassignment, or termination—the UN System’s right to use the System shall convert into a paid license.
+
+3.2. At such time, the UN System must enter into a Maintenance and Annual Licensing Agreement with Baboucarr Foon or his beneficiary to retain usage and continued maintenance of the System.
+
+3.3. The maintenance and licensing fees will be disclosed and negotiated after separation, and payment will be mandatory for continued use.
+
+4. Prohibited Actions
+
+Without written authorization from Baboucarr Foon, the UN System and its users shall not:
+
+Assign, sub-license, or transfer the System;
+
+Engage external developers or vendors to alter or maintain the System;
+
+Use any component of the System to create derivative or replacement systems;
+
+Commercialize, sell, or repurpose the System or any of its modules.
+
+5. Source Code Restrictions and Legal Enforcement
+
+5.1. The source code of the System remains the confidential intellectual property of Baboucarr Foon.
+
+5.2. No user, staff member, consultant, vendor, or third party within or outside the UN System may:
+
+Copy, export, or reproduce the source code,
+
+Retain a copy in any form (digital, printed, or archived),
+
+Share, upload, or distribute the source code,
+
+Use it to develop similar systems or products.
+
+5.3. Any unauthorized attempt to duplicate, extract, access, or retain the source code—intentionally or accidentally—shall constitute a legal breach and result in:
+
+Immediate termination of license and access,
+
+Mandatory removal of all instances of the System,
+
+Legal action for intellectual property violation and damages.
+
+6. Audit Rights
+
+6.1. Baboucarr Foon or his designated representative retains the right to periodically audit the System’s infrastructure to ensure compliance with this Agreement.
+
+6.2. The UN System agrees to cooperate with such audits and to provide reasonable access for verification that no unauthorized copies, modifications, or replications have been made.
+
+7. Jurisdiction
+
+This Agreement is binding and enforceable globally. Any disputes shall be resolved in accordance with applicable intellectual property laws, and Baboucarr Foon reserves the right to pursue legal or injunctive remedies to protect his rights.
+
+8. Acknowledgment
+
+By deploying or using the System, the UN System and all authorized users acknowledge and agree to the full terms of this Agreement.
