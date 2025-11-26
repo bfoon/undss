@@ -13,12 +13,25 @@ from django.core.paginator import Paginator
 from django.utils.decorators import method_decorator
 from datetime import timedelta
 import csv
+import threading
+import logging
+
+
+from django.conf import settings
+from django.core.mail import send_mail
+from django.contrib.auth import get_user_model
 
 from .models import Visitor, VisitorLog, VisitorCard
-from .forms import VisitorForm, VisitorApprovalForm, QuickVisitorCheckForm,GateCheckForm
+from .forms import VisitorForm, VisitorApprovalForm, QuickVisitorCheckForm, GateCheckForm
 
+logger = logging.getLogger(__name__)
 
+User = get_user_model()
+
+# -------------------------------------------------------------------
 # Helper functions
+# -------------------------------------------------------------------
+
 def is_lsa(user):
     return user.is_authenticated and user.role == 'lsa'
 
@@ -32,6 +45,153 @@ def _gate_role(user):
     return user.is_authenticated and (
         getattr(user, 'role', None) in ('data_entry', 'lsa', 'soc') or user.is_superuser
     )
+
+
+def _send_notification(subject: str, message: str, recipients):
+    """
+    Central helper to send email notifications in the background using a thread.
+    Uses DEFAULT_FROM_EMAIL or EMAIL_HOST_USER.
+    Silently ignores if no sender or recipients.
+    """
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or getattr(settings, "EMAIL_HOST_USER", None)
+    if not from_email:
+        return
+
+    if isinstance(recipients, str):
+        recipients = [recipients]
+
+    emails = [e.strip() for e in recipients if e and str(e).strip()]
+    if not emails:
+        return
+
+    def _worker():
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=emails,
+                fail_silently=False,
+            )
+        except Exception as exc:
+            # Optional: log for debugging
+            logger.exception("Background email send failed: %s", exc)
+
+    # Fire-and-forget thread
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+def _notify_lsa_soc_new_request(visitor, request):
+    """
+    Notify all LSAs and SOC in the same agency (if available) when a new request is created.
+    """
+    # Prefer same-agency LSA+SOC, fallback to all if no agency
+    base_qs = User.objects.filter(role__in=['lsa', 'soc'], is_active=True)
+    if visitor.registered_by and getattr(visitor.registered_by, "agency_id", None):
+        base_qs = base_qs.filter(agency_id=visitor.registered_by.agency_id)
+
+    recipients = list(base_qs.values_list('email', flat=True))
+
+    if not recipients:
+        return
+
+    try:
+        detail_url = request.build_absolute_uri(
+            reverse('visitors:visitor_detail', kwargs={'pk': visitor.pk})
+        )
+    except Exception:
+        detail_url = ""
+
+    subject = f"[Visitor] New request: {visitor.full_name}"
+    message = (
+        f"Dear LSA/SOC,\n\n"
+        f"A new visitor request has been created and requires your review.\n\n"
+        f"Visitor: {visitor.full_name}\n"
+        f"Organization: {visitor.organization or 'N/A'}\n"
+        f"Purpose: {visitor.purpose_of_visit or 'N/A'}\n"
+        f"Expected date/time: {visitor.expected_date} {visitor.expected_time}\n"
+        f"Person/Dept to visit: {visitor.person_to_visit or 'N/A'}"
+        f" / {visitor.department_to_visit or 'N/A'}\n"
+        f"Requested by: {visitor.registered_by.get_full_name() or visitor.registered_by.username}\n\n"
+        f"You can review this request here:\n{detail_url}\n\n"
+        f"Best regards,\nUN Security / Common Services System"
+    )
+
+    _send_notification(subject, message, recipients)
+
+
+def _notify_requester_status_change(visitor, status_label: str, extra_notes: str = ""):
+    """
+    Notify the requester (registered_by) when status changes: approved, rejected, cancelled.
+    """
+    requester = getattr(visitor, "registered_by", None)
+    if not requester or not requester.email:
+        return
+
+    subject = f"[Visitor] Request {status_label}: {visitor.full_name}"
+    message = (
+        f"Hello {requester.get_full_name() or requester.username},\n\n"
+        f"Your visitor request for {visitor.full_name} has been {status_label}.\n\n"
+        f"Visitor: {visitor.full_name}\n"
+        f"Organization: {visitor.organization or 'N/A'}\n"
+        f"Purpose: {visitor.purpose_of_visit or 'N/A'}\n"
+        f"Expected date/time: {visitor.expected_date} {visitor.expected_time}\n\n"
+    )
+    if extra_notes:
+        message += f"Notes: {extra_notes}\n\n"
+
+    message += "Best regards,\nUN Security / Common Services System"
+
+    _send_notification(subject, message, requester.email)
+
+
+def _notify_requester_check_in(visitor, gate=None):
+    """
+    Notify requester when the visitor checks in.
+    """
+    requester = getattr(visitor, "registered_by", None)
+    if not requester or not requester.email:
+        return
+
+    subject = f"[Visitor] {visitor.full_name} has arrived"
+    message = (
+        f"Hello {requester.get_full_name() or requester.username},\n\n"
+        f"Your visitor {visitor.full_name} has CHECKED IN at the compound.\n\n"
+        f"Check-in time: {visitor.check_in_time.strftime('%Y-%m-%d %H:%M') if visitor.check_in_time else 'N/A'}\n"
+    )
+    if gate:
+        message += f"Gate: {gate}\n"
+
+    message += "\nBest regards,\nUN Security / Common Services System"
+    _send_notification(subject, message, requester.email)
+
+
+def _notify_requester_check_out(visitor, gate=None, duration_str=None):
+    """
+    Notify requester when the visitor checks out / leaves.
+    """
+    requester = getattr(visitor, "registered_by", None)
+    if not requester or not requester.email:
+        return
+
+    subject = f"[Visitor] {visitor.full_name} has left the compound"
+    message = (
+        f"Hello {requester.get_full_name() or requester.username},\n\n"
+        f"Your visitor {visitor.full_name} has CHECKED OUT from the compound.\n\n"
+        f"Check-out time: {visitor.check_out_time.strftime('%Y-%m-%d %H:%M') if visitor.check_out_time else 'N/A'}\n"
+    )
+    if duration_str:
+        message += f"Duration of visit: {duration_str}\n"
+    if gate:
+        message += f"Gate: {gate}\n"
+
+    message += "\nBest regards,\nUN Security / Common Services System"
+    _send_notification(subject, message, requester.email)
+
+
+# -------------------------------------------------------------------
+# Views
+# -------------------------------------------------------------------
 
 class VisitorListView(LoginRequiredMixin, ListView):
     model = Visitor
@@ -81,10 +241,9 @@ class VisitorListView(LoginRequiredMixin, ListView):
             'search_query': self.request.GET.get('search', ''),
             'filter_status': self.kwargs.get('filter_status', ''),
             'status_choices': Visitor.APPROVAL_STATUS,
-            'mine_only': mine_only,  # optional: show a hint like “Showing your requests only”
+            'mine_only': mine_only,
         })
         return ctx
-
 
 
 class VisitorDetailView(LoginRequiredMixin, DetailView):
@@ -108,7 +267,6 @@ class VisitorDetailView(LoginRequiredMixin, DetailView):
         return ctx
 
 
-
 class VisitorCreateView(LoginRequiredMixin, CreateView):
     model = Visitor
     form_class = VisitorForm
@@ -118,10 +276,13 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.registered_by = self.request.user
         response = super().form_valid(form)
+        visitor = form.instance
+
+        # Notify LSA/SOC of new request
+        _notify_lsa_soc_new_request(visitor, self.request)
 
         # Auto-approve if user is LSA
         if self.request.user.role == 'lsa':
-            visitor = form.instance
             visitor.status = 'approved'
             visitor.approved_by = self.request.user
             visitor.approval_date = timezone.now()
@@ -134,6 +295,9 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
                 notes='Auto-approved by LSA'
             )
             messages.success(self.request, 'Visitor registered and approved successfully.')
+
+            # Notify requester (in this case, the same LSA - but still consistent)
+            _notify_requester_status_change(visitor, 'approved')
         else:
             messages.success(self.request, 'Visitor registered successfully. Awaiting LSA approval.')
 
@@ -184,6 +348,9 @@ def approve_visitor(request, visitor_id):
                 )
                 messages.success(request, f'Visitor {visitor.full_name} approved.')
 
+                # Notify requester that their visitor was approved
+                _notify_requester_status_change(visitor, 'approved', notes)
+
             elif action == 'reject':
                 visitor.status = 'rejected'
                 visitor.rejection_reason = form.cleaned_data['rejection_reason']
@@ -196,6 +363,9 @@ def approve_visitor(request, visitor_id):
                     notes=visitor.rejection_reason
                 )
                 messages.success(request, f'Visitor {visitor.full_name} rejected.')
+
+                # Notify requester that request was rejected
+                _notify_requester_status_change(visitor, 'rejected', visitor.rejection_reason)
 
             return redirect('visitors:visitor_list')
     else:
@@ -221,13 +391,18 @@ def check_in_visitor(request, visitor_id):
     visitor.check_in_time = timezone.now()
     visitor.save()
 
+    gate = request.POST.get('gate', 'front')
+
     VisitorLog.objects.create(
         visitor=visitor,
         action='check_in',
         performed_by=request.user,
-        gate=request.POST.get('gate', 'front'),
+        gate=gate,
         notes=f'Checked in at {visitor.check_in_time.strftime("%H:%M")}'
     )
+
+    # Notify requester that visitor checked in
+    _notify_requester_check_in(visitor, gate=gate)
 
     return JsonResponse({
         'success': True,
@@ -254,13 +429,18 @@ def check_out_visitor(request, visitor_id):
     duration = visitor.check_out_time - visitor.check_in_time
     duration_str = str(duration).split('.')[0]  # Remove microseconds
 
+    gate = request.POST.get('gate', 'front')
+
     VisitorLog.objects.create(
         visitor=visitor,
         action='check_out',
         performed_by=request.user,
-        gate=request.POST.get('gate', 'front'),
+        gate=gate,
         notes=f'Checked out at {visitor.check_out_time.strftime("%H:%M")} (Duration: {duration_str})'
     )
+
+    # Notify requester that visitor left
+    _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
 
     return JsonResponse({
         'success': True,
@@ -329,14 +509,14 @@ def quick_visitor_check(request):
         try:
             # Try to find visitor by ID number, name, or database ID
             visitor = None
-            if visitor_id.isdigit():
+            if visitor_id and visitor_id.isdigit():
                 # Try database ID first
                 try:
                     visitor = Visitor.objects.get(id=visitor_id)
                 except Visitor.DoesNotExist:
                     pass
 
-            if not visitor:
+            if not visitor and visitor_id:
                 # Search by ID number or name
                 visitors = Visitor.objects.filter(
                     Q(id_number=visitor_id) |
@@ -356,6 +536,9 @@ def quick_visitor_check(request):
                     })
                 else:
                     return JsonResponse({'error': 'Visitor not found'})
+
+            if not visitor:
+                return JsonResponse({'error': 'Visitor not found'})
 
             if action == 'check_in':
                 return check_in_visitor(request, visitor.id)
@@ -457,6 +640,9 @@ def bulk_approve_visitors(request):
             )
             count += 1
 
+            # Notify requester for each approved visitor
+            _notify_requester_status_change(visitor, 'approved', 'Bulk approval')
+
         messages.success(request, f'{count} visitors approved successfully.')
 
     return redirect('visitors:pending_approvals')
@@ -476,10 +662,8 @@ def export_visitors(request):
         'Checked In', 'Check In Time', 'Checked Out', 'Check Out Time'
     ])
 
-    # Filter by query parameters
     queryset = Visitor.objects.all().select_related('registered_by', 'approved_by')
 
-    # Apply filters
     status = request.GET.get('status')
     if status:
         queryset = queryset.filter(status=status)
@@ -519,6 +703,7 @@ def export_visitors(request):
         ])
 
     return response
+
 
 @login_required
 def visitor_verify_page(request):
@@ -596,10 +781,11 @@ def visitor_verify_lookup_api(request):
         "approval": {
             "status": status,
             "is_cleared": is_cleared,
-            "code": None,  # you’re not using separate approval codes anymore
+            "code": None,
         }
     }
     return JsonResponse(data)
+
 
 # --- Lightweight approval actions to use on the Visitor detail page ---
 
@@ -620,6 +806,10 @@ def visitor_request_clearance(request, pk):
             notes="Clearance (re)requested."
         )
         messages.success(request, "Clearance requested from LSA.")
+
+        # Notify LSA/SOC about new (re)request
+        _notify_lsa_soc_new_request(visitor, request)
+
     return redirect("visitors:visitor_detail", pk=pk)
 
 
@@ -643,6 +833,10 @@ def visitor_lsa_approve(request, pk):
             notes="Approved on visitor detail page."
         )
         messages.success(request, f"Visitor {visitor.full_name} approved.")
+
+        # Notify requester
+        _notify_requester_status_change(visitor, 'approved')
+
     return redirect("visitors:visitor_detail", pk=pk)
 
 
@@ -670,6 +864,10 @@ def visitor_lsa_reject(request, pk):
             notes=note or "Rejected on visitor detail page."
         )
         messages.warning(request, f"Visitor {visitor.full_name} rejected.")
+
+        # Notify requester
+        _notify_requester_status_change(visitor, 'rejected', note)
+
     return redirect("visitors:visitor_detail", pk=pk)
 
 
@@ -677,7 +875,6 @@ def visitor_lsa_reject(request, pk):
 def visitor_cancel_request(request, pk):
     """
     Allow the original requester, LSA, or superuser to cancel a pending request.
-    Assumes you track the creator on Visitor as 'registered_by' (you already use it).
     """
     visitor = get_object_or_404(Visitor, pk=pk)
     can_cancel = (
@@ -699,7 +896,16 @@ def visitor_cancel_request(request, pk):
             notes="Request cancelled."
         )
         messages.info(request, "Visitor request cancelled.")
+
+        # Notify LSA/SOC that a request was cancelled (optional but useful)
+        _notify_lsa_soc_new_request(visitor, request)
+
+        # Notify requester themselves if someone else cancelled (LSA/admin)
+        if request.user != visitor.registered_by:
+            _notify_requester_status_change(visitor, 'cancelled')
+
     return redirect("visitors:visitor_detail", pk=pk)
+
 
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -709,6 +915,7 @@ def gate_check_view(request, pk):
       - Only guards/LSA/SOC/superuser can access (_gate_role)
       - If visitor missing id_number and action=check_in => require it
       - Enforces status rules: must be 'approved' to check in
+      - Sends emails on check-in / check-out
     """
     if not _gate_role(request.user):
         messages.error(request, "You don’t have permission to perform gate actions.")
@@ -766,6 +973,10 @@ def gate_check_view(request, pk):
                     gate=gate, notes=f"Issued card {card.number}"
                 )
                 messages.success(request, f"Checked in. Card {card.number} issued.")
+
+                # Email requester
+                _notify_requester_check_in(visitor, gate=gate)
+
                 return redirect('visitors:visitor_detail', pk=visitor.pk)
 
             except VisitorCard.DoesNotExist:
@@ -789,6 +1000,12 @@ def gate_check_view(request, pk):
                     visitor=visitor, action='check_out', performed_by=request.user,
                     gate=gate, notes="Checked out (no card on file)"
                 )
+
+                # Notify requester
+                duration = visitor.check_out_time - visitor.check_in_time if visitor.check_in_time else None
+                duration_str = str(duration).split('.')[0] if duration else None
+                _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
+
                 return redirect('visitors:visitor_detail', pk=visitor.pk)
 
             # return the card
@@ -811,6 +1028,12 @@ def gate_check_view(request, pk):
                 gate=gate, notes=f"Collected card {card.number}"
             )
             messages.success(request, f"Checked out. Card {card.number} collected.")
+
+            # Notify requester
+            duration = visitor.check_out_time - visitor.check_in_time if visitor.check_in_time else None
+            duration_str = str(duration).split('.')[0] if duration else None
+            _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
+
             return redirect('visitors:visitor_detail', pk=visitor.pk)
 
         else:
@@ -823,6 +1046,7 @@ def gate_check_view(request, pk):
         'form': form,
     })
 
+
 @login_required
 def visitor_card_list(request):
     # simple view to see cards
@@ -831,6 +1055,7 @@ def visitor_card_list(request):
     if q:
         qs = qs.filter(number__icontains=q)
     return render(request, 'visitors/card_list.html', {'cards': qs, 'q': q})
+
 
 @login_required
 def visitor_card_check_api(request):

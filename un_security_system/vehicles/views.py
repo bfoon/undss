@@ -2,27 +2,39 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.utils.decorators import method_decorator
 from django.contrib import messages
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.db.models import Q, Count, Exists, OuterRef
+from django.conf import settings
+from django.core.mail import send_mail
+from django.contrib.auth import get_user_model
 import csv
 import base64
 from io import BytesIO
 import random, string
-from django.urls import reverse
-from .models import (Vehicle, VehicleMovement,
-                     ParkingCard, AssetExit,
-                     AgencyApprover, ParkingCardRequest, Key, KeyLog,
-                     Package, PackageEvent)
-from .forms import (VehicleForm, ParkingCardForm,
-                    VehicleMovementForm, QuickVehicleCheckForm,
-                    AssetExitForm, AssetExitItemFormSet,
-                    ParkingCardRequestForm, KeyForm, KeyIssueForm, KeyReturnForm,
-                    PackageLogForm, PackageReceptionForm, PackageAgencyReceiveForm, PackageDeliverForm
-                    )
+import threading
+import logging
+
+from .models import (
+    Vehicle, VehicleMovement,
+    ParkingCard, AssetExit,
+    AgencyApprover, ParkingCardRequest, Key, KeyLog,
+    Package, PackageEvent
+)
+from .forms import (
+    VehicleForm, ParkingCardForm,
+    VehicleMovementForm, QuickVehicleCheckForm,
+    AssetExitForm, AssetExitItemFormSet,
+    ParkingCardRequestForm, KeyForm, KeyIssueForm, KeyReturnForm,
+    PackageLogForm, PackageReceptionForm, PackageAgencyReceiveForm, PackageDeliverForm
+)
+
+User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 def is_lsa(u): return u.is_authenticated and (getattr(u, 'role', '') == 'lsa' or u.is_superuser)
 def is_lsa_or_soc(user):
@@ -56,6 +68,96 @@ def is_agency_approver_for(user, agency_name: str) -> bool:
         return True
     # Designated approver record must exist for the given agency
     return AgencyApprover.objects.filter(user=user, agency_name=agency_name).exists()
+
+
+# =============================================================================
+# EMAIL / NOTIFICATION HELPERS
+# =============================================================================
+
+def _send_notification(subject: str, message: str, recipients):
+    """
+    Central helper to send email notifications in the background using a thread.
+    Uses DEFAULT_FROM_EMAIL or EMAIL_HOST_USER.
+    Silently ignores if no sender or recipients.
+    """
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or getattr(settings, "EMAIL_HOST_USER", None)
+    if not from_email:
+        return
+
+    if isinstance(recipients, str):
+        recipients = [recipients]
+
+    emails = [e.strip() for e in recipients if e and str(e).strip()]
+    if not emails:
+        return
+
+    def _worker():
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=emails,
+                fail_silently=False,
+            )
+        except Exception as exc:
+            # Optional: log for debugging
+            logger.exception("Background email send failed: %s", exc)
+
+    # Fire-and-forget thread
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+def _emails_for_roles(*roles, include_superusers: bool = False):
+    """
+    Return list of emails for active users having any of the given roles.
+    """
+    qs = User.objects.filter(is_active=True)
+    if roles:
+        qs = qs.filter(role__in=roles)
+    if include_superusers:
+        qs = qs | User.objects.filter(is_active=True, is_superuser=True)
+    return [e for e in qs.values_list("email", flat=True) if e]
+
+
+def _agency_focal_emails(agency_name: str):
+    """
+    Emails of agency focal points / approvers for the given agency name.
+    """
+    if not agency_name:
+        return []
+    qs = AgencyApprover.objects.filter(agency_name=agency_name).select_related("user")
+    return [a.user.email for a in qs if a.user and a.user.email]
+
+
+def _package_owner_emails(pkg: Package):
+    """
+    Try to infer the package 'owner' / intended recipient emails from common fields.
+    This is defensive and will just return [] if nothing matches.
+    """
+    emails = set()
+
+    # Try direct email fields on package
+    for attr in ["recipient_email", "for_recipient_email", "owner_email", "email"]:
+        val = getattr(pkg, attr, None)
+        if val:
+            emails.add(val)
+
+    # Try foreign key relations that might be user-like
+    for u_attr in ["for_recipient_user", "owner_user", "requested_by", "recipient_user"]:
+        u = getattr(pkg, u_attr, None)
+        if u and getattr(u, "email", None):
+            emails.add(u.email)
+
+    return list(emails)
+
+
+def _guard_team_emails():
+    """
+    Guards / control room team (data_entry + SOC + LSA).
+    """
+    return _emails_for_roles("data_entry", "soc", "lsa", include_superusers=True)
+
 
 # --------------------------------- Vehicle CRUD -------------------------------------
 
@@ -538,7 +640,7 @@ def export_parking_cards(request):
     return response
 
 
-# ---- Create / list / detail ----
+# ---- Asset Exit: Create / list / detail ----
 
 @login_required
 def asset_exit_new(request):
@@ -552,12 +654,47 @@ def asset_exit_new(request):
             obj.save()
             formset.instance = obj
             formset.save()
-            messages.success(request, 'Asset exit request submitted (awaiting LSA).')
+            messages.success(request, 'Asset exit request submitted (awaiting agency approval).')
+
+            # --- Notifications ---
+            # Notify agency approver(s)
+            agency_emails = _agency_focal_emails(obj.agency_name)
+            if agency_emails:
+                subject = f"[Assets] New asset exit request for {obj.agency_name}"
+                url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+                msg = (
+                    f"Dear colleague,\n\n"
+                    f"A new asset exit request has been submitted and is pending your approval.\n\n"
+                    f"Code: {obj.code}\n"
+                    f"Agency: {obj.agency_name}\n"
+                    f"Destination: {obj.destination}\n"
+                    f"Requested by: {request.user.get_full_name() or request.user.username}\n\n"
+                    f"Details: {url}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, agency_emails)
+
+            # Notify requester (confirmation)
+            if request.user.email:
+                subject = "[Assets] Asset exit request submitted"
+                url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+                msg = (
+                    f"Hello {request.user.get_full_name() or request.user.username},\n\n"
+                    f"Your asset exit request has been submitted and is pending agency approval.\n\n"
+                    f"Code: {obj.code}\n"
+                    f"Agency: {obj.agency_name}\n"
+                    f"Destination: {obj.destination}\n\n"
+                    f"Details: {url}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, request.user.email)
+
             return redirect('vehicles:asset_exit_detail', pk=obj.pk)
     else:
         form = AssetExitForm()
         formset = AssetExitItemFormSet()
     return render(request, 'vehicles/asset_exit_form.html', {'form': form, 'formset': formset})
+
 
 @login_required
 def my_asset_exits(request):
@@ -623,10 +760,12 @@ def my_asset_exits(request):
     }
     return render(request, "vehicles/asset_exit_list.html", context)
 
+
 @login_required
 def asset_exit_detail(request, pk):
     obj = get_object_or_404(AssetExit, pk=pk)
     return render(request, 'vehicles/asset_exit_detail.html', {'obj': obj})
+
 
 @login_required
 def asset_exit_agency_approve(request, pk):
@@ -641,6 +780,38 @@ def asset_exit_agency_approve(request, pk):
 
     obj.approve_by_agency(request.user)
     messages.success(request, 'Agency approved. Awaiting LSA clearance.')
+
+    # --- Notifications ---
+    detail_url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+
+    # Notify LSA / SOC
+    lsa_emails = _emails_for_roles("lsa", "soc", include_superusers=True)
+    if lsa_emails:
+        subject = f"[Assets] Asset exit pending LSA clearance ({obj.code})"
+        msg = (
+            f"Dear Security team,\n\n"
+            f"The following asset exit request has been approved by the agency and is pending LSA clearance:\n\n"
+            f"Code: {obj.code}\n"
+            f"Agency: {obj.agency_name}\n"
+            f"Destination: {obj.destination}\n"
+            f"Requester: {obj.requester.get_full_name() or obj.requester.username}\n\n"
+            f"Details: {detail_url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, lsa_emails)
+
+    # Notify requester
+    if obj.requester and obj.requester.email:
+        subject = "[Assets] Agency approved your asset exit request"
+        msg = (
+            f"Hello {obj.requester.get_full_name() or obj.requester.username},\n\n"
+            f"Your asset exit request ({obj.code}) has been approved by your agency.\n"
+            f"It is now pending LSA clearance.\n\n"
+            f"Details: {detail_url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, obj.requester.email)
+
     return redirect('vehicles:asset_exit_detail', pk=pk)
 
 
@@ -664,6 +835,7 @@ def asset_exit_print(request, pk):
     # Render a print-friendly template
     return render(request, 'vehicles/asset_exit_print.html', {'object': ax})
 
+
 @login_required
 def asset_exit_duplicate(request, pk):
     ax = get_object_or_404(AssetExit, pk=pk)
@@ -678,6 +850,7 @@ def asset_exit_duplicate(request, pk):
     # If you have related items, copy them as well here
     return redirect('vehicles:asset_exit_detail', pk=new_ax.pk)
 
+
 # ---- LSA actions ----
 
 @login_required
@@ -689,7 +862,40 @@ def asset_exit_lsa_clear(request, pk):
         return redirect('vehicles:asset_exit_detail', pk=pk)
     obj.clear_by_lsa(request.user)
     messages.success(request, 'Asset exit cleared by LSA.')
+
+    # --- Notifications ---
+    url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+
+    # Notify requester
+    if obj.requester and obj.requester.email:
+        subject = "[Assets] Your asset exit has been cleared by LSA"
+        msg = (
+            f"Hello {obj.requester.get_full_name() or obj.requester.username},\n\n"
+            f"Your asset exit request ({obj.code}) has been cleared by LSA.\n"
+            f"The assets can now be signed out at the gate.\n\n"
+            f"Details: {url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, obj.requester.email)
+
+    # Notify guard/Control room
+    guard_emails = _guard_team_emails()
+    if guard_emails:
+        subject = f"[Assets] Asset exit ready at gate ({obj.code})"
+        msg = (
+            f"Dear guards,\n\n"
+            f"The following asset exit has been cleared by LSA and can be signed out at the gate:\n\n"
+            f"Code: {obj.code}\n"
+            f"Agency: {obj.agency_name}\n"
+            f"Destination: {obj.destination}\n"
+            f"Requester: {obj.requester.get_full_name() or obj.requester.username}\n\n"
+            f"Details: {url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, guard_emails)
+
     return redirect('vehicles:asset_exit_detail', pk=pk)
+
 
 @login_required
 @user_passes_test(is_lsa)
@@ -700,7 +906,34 @@ def asset_exit_lsa_reject(request, pk):
         return redirect('vehicles:asset_exit_detail', pk=pk)
     obj.reject_by_lsa(request.user)
     messages.success(request, 'Asset exit rejected by LSA.')
+
+    url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+
+    # Notify requester
+    if obj.requester and obj.requester.email:
+        subject = "[Assets] Asset exit request rejected"
+        msg = (
+            f"Hello {obj.requester.get_full_name() or obj.requester.username},\n\n"
+            f"Your asset exit request ({obj.code}) has been rejected by LSA.\n\n"
+            f"Details: {url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, obj.requester.email)
+
+    # Notify agency focal(s)
+    focals = _agency_focal_emails(obj.agency_name)
+    if focals:
+        subject = f"[Assets] Asset exit request rejected ({obj.code})"
+        msg = (
+            f"Dear colleague,\n\n"
+            f"The asset exit request for {obj.agency_name} (code {obj.code}) has been rejected by LSA.\n\n"
+            f"Details: {url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, focals)
+
     return redirect('vehicles:asset_exit_detail', pk=pk)
+
 
 # ---- Requester cancel ----
 
@@ -715,7 +948,35 @@ def asset_exit_cancel(request, pk):
         obj.status = 'cancelled'
         obj.save(update_fields=['status'])
         messages.success(request, 'Request cancelled.')
+
+        url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+
+        # Notify agency focal(s)
+        focals = _agency_focal_emails(obj.agency_name)
+        if focals:
+            subject = f"[Assets] Asset exit request cancelled ({obj.code})"
+            msg = (
+                f"Dear colleague,\n\n"
+                f"The asset exit request for {obj.agency_name} (code {obj.code}) has been cancelled by the requester.\n\n"
+                f"Details: {url}\n\n"
+                f"Best regards,\nUN Security / Common Services System"
+            )
+            _send_notification(subject, msg, focals)
+
+        # Notify LSA team
+        lsa_emails = _emails_for_roles("lsa", "soc", include_superusers=True)
+        if lsa_emails:
+            subject = f"[Assets] Asset exit request cancelled ({obj.code})"
+            msg = (
+                f"Dear Security team,\n\n"
+                f"The asset exit request {obj.code} has been cancelled.\n\n"
+                f"Details: {url}\n\n"
+                f"Best regards,\nUN Security / Common Services System"
+            )
+            _send_notification(subject, msg, lsa_emails)
+
     return redirect('vehicles:asset_exit_detail', pk=pk)
+
 
 # ---- Guard verification (page + API) ----
 
@@ -723,6 +984,7 @@ def asset_exit_cancel(request, pk):
 @user_passes_test(is_data_entry)
 def asset_exit_verify_page(request):
     return render(request, 'vehicles/verify_asset_exit.html', {})
+
 
 @login_required
 def asset_exit_lookup_api(request):
@@ -749,6 +1011,7 @@ def asset_exit_lookup_api(request):
     except AssetExit.DoesNotExist:
         return JsonResponse({'found': False}, status=404)
 
+
 # ---- Guard mark sign-out / sign-in (optional) ----
 
 @login_required
@@ -760,7 +1023,21 @@ def asset_exit_mark_signed_out(request, pk):
         return redirect('vehicles:asset_exit_detail', pk=pk)
     obj.mark_signed_out(request.user)
     messages.success(request, 'Assets marked as signed out.')
+
+    # Notify requester
+    if obj.requester and obj.requester.email:
+        subject = "[Assets] Assets have been signed out"
+        url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+        msg = (
+            f"Hello {obj.requester.get_full_name() or obj.requester.username},\n\n"
+            f"The assets for exit request {obj.code} have been signed out at the gate.\n\n"
+            f"Details: {url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, obj.requester.email)
+
     return redirect('vehicles:asset_exit_detail', pk=pk)
+
 
 @login_required
 @user_passes_test(is_data_entry)
@@ -768,6 +1045,19 @@ def asset_exit_mark_signed_in(request, pk):
     obj = get_object_or_404(AssetExit, pk=pk)
     obj.mark_signed_in(request.user)
     messages.success(request, 'Assets marked as signed in.')
+
+    # Notify requester
+    if obj.requester and obj.requester.email:
+        subject = "[Assets] Assets returned to compound"
+        url = request.build_absolute_uri(reverse('vehicles:asset_exit_detail', args=[obj.pk]))
+        msg = (
+            f"Hello {obj.requester.get_full_name() or obj.requester.username},\n\n"
+            f"The assets for exit request {obj.code} have been signed back in at the gate.\n\n"
+            f"Details: {url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, obj.requester.email)
+
     return redirect('vehicles:asset_exit_detail', pk=pk)
 
 
@@ -792,6 +1082,7 @@ def asset_exit_qr_code(request, pk):
         messages.error(request, "QR code generation is not available on this server.")
         return redirect('vehicles:asset_exit_detail', pk=exit_obj.pk)
 
+
 def _is_lsa(user):
     return getattr(user, "role", None) == "lsa" or user.is_superuser
 
@@ -804,6 +1095,7 @@ def parking_card_print(request, pk):
         messages.error(request, "You do not have permission to print parking cards.")
         return redirect("vehicles:parking_card_list")
     return render(request, "vehicles/parking_card_print.html", {"card": card})
+
 
 @login_required
 def parking_card_duplicate(request, pk):
@@ -839,6 +1131,7 @@ def parking_card_duplicate(request, pk):
     messages.success(request, f"Duplicated card as {dup.card_number}. It is inactive until you activate it.")
     return redirect("vehicles:parking_card_detail", pk=dup.pk)
 
+
 @login_required
 def parking_card_delete(request, pk):
     card = get_object_or_404(ParkingCard, pk=pk)
@@ -867,6 +1160,32 @@ def pc_request_new(request):
             req.status = 'pending'
             req.save()
             messages.success(request, "Parking card request submitted. Awaiting LSA approval.")
+
+            # Notify LSA
+            lsa_emails = _emails_for_roles("lsa", "soc", include_superusers=True)
+            if lsa_emails:
+                url = request.build_absolute_uri(reverse('vehicles:pc_requests_pending'))
+                subject = "[Parking] New parking card request pending"
+                msg = (
+                    f"Dear Security team,\n\n"
+                    f"A new parking card request has been submitted.\n\n"
+                    f"Requested by: {request.user.get_full_name() or request.user.username}\n"
+                    f"Vehicle: {req.vehicle_plate} ({req.vehicle_make} {req.vehicle_model})\n\n"
+                    f"Pending list: {url}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, lsa_emails)
+
+            # Notify requester
+            if request.user.email:
+                subject = "[Parking] Parking card request submitted"
+                msg = (
+                    f"Hello {request.user.get_full_name() or request.user.username},\n\n"
+                    f"Your parking card request has been submitted and is pending approval.\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, request.user.email)
+
             return redirect('vehicles:my_pc_requests')
     else:
         # prefill with requester data
@@ -922,6 +1241,20 @@ def pc_request_approve(request, pk):
     req.save()
 
     messages.success(request, f"Request approved. Card {card.card_number} issued.")
+
+    # Notify requester
+    if req.requested_by and req.requested_by.email:
+        subject = "[Parking] Your parking card request has been approved"
+        msg = (
+            f"Hello {req.requested_by.get_full_name() or req.requested_by.username},\n\n"
+            f"Your parking card request has been approved.\n\n"
+            f"Card number: {card.card_number}\n"
+            f"Vehicle: {card.vehicle_plate} ({card.vehicle_make} {card.vehicle_model})\n"
+            f"Expiry date: {card.expiry_date}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, req.requested_by.email)
+
     return redirect('vehicles:pc_requests_pending')
 
 
@@ -931,9 +1264,22 @@ def pc_request_reject(request, pk):
     req.status = 'rejected'
     req.decided_by = request.user
     req.decided_at = timezone.now()
-    req.decision_notes = request.POST.get('reason', '')[:500]
+    reason = request.POST.get('reason', '')[:500]
+    req.decision_notes = reason
     req.save()
     messages.warning(request, "Request rejected.")
+
+    # Notify requester
+    if req.requested_by and req.requested_by.email:
+        subject = "[Parking] Your parking card request was rejected"
+        msg = (
+            f"Hello {req.requested_by.get_full_name() or req.requested_by.username},\n\n"
+            f"Your parking card request has been rejected.\n"
+            f"Reason: {reason or 'Not specified'}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, req.requested_by.email)
+
     return redirect('vehicles:pc_requests_pending')
 
 
@@ -947,10 +1293,25 @@ def pc_request_cancel(request, pk):
         req.decision_notes = 'Cancelled by requester'
         req.save()
         messages.info(request, "Request cancelled.")
+
+        # Notify LSA team
+        lsa_emails = _emails_for_roles("lsa", "soc", include_superusers=True)
+        if lsa_emails:
+            subject = "[Parking] Parking card request cancelled"
+            msg = (
+                f"Dear Security team,\n\n"
+                f"A parking card request by {request.user.get_full_name() or request.user.username} "
+                f"has been cancelled by the requester.\n\n"
+                f"Best regards,\nUN Security / Common Services System"
+            )
+            _send_notification(subject, msg, lsa_emails)
+
     return redirect('vehicles:my_pc_requests')
+
 
 def _gate_role(user):
     return user.is_authenticated and (getattr(user, 'role', None) in ('data_entry', 'lsa', 'soc') or user.is_superuser)
+
 
 # Inventory
 @method_decorator(login_required, name='dispatch')
@@ -1009,12 +1370,14 @@ class KeyListView(ListView):
         }
         return ctx
 
+
 @method_decorator([login_required, user_passes_test(_is_lsa)], name='dispatch')
 class KeyCreateView(CreateView):
     model = Key
     form_class = KeyForm
     template_name = 'vehicles/keys/key_form.html'
     success_url = reverse_lazy('vehicles:key_list')
+
 
 @method_decorator([login_required, user_passes_test(_is_lsa)], name='dispatch')
 class KeyUpdateView(UpdateView):
@@ -1023,11 +1386,13 @@ class KeyUpdateView(UpdateView):
     template_name = 'vehicles/keys/key_form.html'
     success_url = reverse_lazy('vehicles:key_list')
 
+
 @method_decorator(login_required, name='dispatch')
 class KeyDetailView(DetailView):
     model = Key
     template_name = 'vehicles/keys/key_detail.html'
     context_object_name = 'key'
+
 
 # Issue / Return
 @login_required
@@ -1052,6 +1417,7 @@ def key_issue(request, pk):
 
     return render(request, 'vehicles/keys/key_issue_form.html', {'key': key, 'form': form})
 
+
 @login_required
 @user_passes_test(_gate_role)
 def key_return(request, pk):
@@ -1074,6 +1440,7 @@ def key_return(request, pk):
         form = KeyReturnForm()
 
     return render(request, 'vehicles/keys/key_return_form.html', {'key': key, 'log': log, 'form': form})
+
 
 # Logs
 @method_decorator(login_required, name='dispatch')
@@ -1164,11 +1531,13 @@ class KeyLogListView(ListView):
 
         return ctx
 
+
 # Quick page (scan / type code, then issue/return)
 @login_required
 @user_passes_test(_gate_role)
 def quick_key_page(request):
     return render(request, 'vehicles/keys/quick_key.html')
+
 
 @login_required
 @user_passes_test(_gate_role)
@@ -1198,10 +1567,16 @@ def key_lookup_api(request):
         } if current else None)
     })
 
+
 def _new_tracking_code():
     stamp = timezone.now().strftime("%Y%m%d")
     suffix = "".join(random.choices(string.digits, k=4))
     return f"PKG-{stamp}-{suffix}"
+
+
+# =============================================================================
+# PACKAGES – with notifications
+# =============================================================================
 
 @login_required
 @user_passes_test(_is_guard)
@@ -1217,11 +1592,29 @@ def package_log_new(request):
             PackageEvent.objects.create(package=pkg, status="logged", who=request.user, note="Logged at gate")
             PackageEvent.objects.create(package=pkg, status="to_reception", who=request.user, note="Forwarded to reception")
             messages.success(request, f"Package logged. Tracking: {pkg.tracking_code}")
-            # TODO: notify reception by email/channel if you have it
+
+            # Notify reception & LSA/SOC
+            rec_emails = _emails_for_roles("reception", "lsa", "soc", include_superusers=True)
+            if rec_emails:
+                detail_url = request.build_absolute_uri(reverse("vehicles:package_detail", args=[pkg.pk]))
+                subject = f"[Packages] New package logged at gate ({pkg.tracking_code})"
+                msg = (
+                    f"Dear colleagues,\n\n"
+                    f"A new package has been logged at the gate and forwarded to Reception.\n\n"
+                    f"Tracking: {pkg.tracking_code}\n"
+                    f"Sender: {pkg.sender_name or pkg.sender_org or 'N/A'}\n"
+                    f"Destination agency: {pkg.destination_agency or 'N/A'}\n"
+                    f"For: {pkg.for_recipient or 'N/A'}\n\n"
+                    f"Details: {detail_url}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, rec_emails)
+
             return redirect("vehicles:package_detail", pk=pkg.pk)
     else:
         form = PackageLogForm()
     return render(request, "vehicles/packages/package_form.html", {"form": form, "is_guard": True})
+
 
 @login_required
 def package_list(request):
@@ -1253,10 +1646,12 @@ def package_list(request):
         "q": q, "status_filter": status
     })
 
+
 @login_required
 def package_detail(request, pk):
     pkg = get_object_or_404(Package, pk=pk)
     return render(request, "vehicles/packages/package_detail.html", {"package": pkg})
+
 
 @login_required
 @user_passes_test(_is_reception)
@@ -1271,13 +1666,45 @@ def package_mark_reception_received(request, pk):
             pkg.save()
             PackageEvent.objects.create(package=pkg, status="at_reception", who=request.user, note=form.cleaned_data.get("note",""))
             messages.success(request, "Package marked received at Reception.")
-            # notify agency focal/registry if email exists
+
+            # Notify agency focal / registry
+            agency_emails = _agency_focal_emails(pkg.destination_agency)
+            registry_emails = _emails_for_roles("registry", "agency_fp")
+            recipients = list(set(agency_emails + registry_emails))
+            if recipients:
+                detail_url = request.build_absolute_uri(reverse("vehicles:package_detail", args=[pkg.pk]))
+                subject = f"[Packages] Package arrived at Reception ({pkg.tracking_code})"
+                msg = (
+                    f"Dear colleagues,\n\n"
+                    f"A package for your agency has arrived at Reception.\n\n"
+                    f"Tracking: {pkg.tracking_code}\n"
+                    f"Destination agency: {pkg.destination_agency or 'N/A'}\n"
+                    f"For: {pkg.for_recipient or 'N/A'}\n\n"
+                    f"Details: {detail_url}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, recipients)
+
+            # Optionally notify package owner if we can detect an email
+            owner_emails = _package_owner_emails(pkg)
+            if owner_emails:
+                subject = "[Packages] Your package has reached Reception"
+                msg = (
+                    f"Hello,\n\n"
+                    f"A package addressed to you has arrived at UN House Reception.\n\n"
+                    f"Tracking: {pkg.tracking_code}\n"
+                    f"Agency: {pkg.destination_agency or 'N/A'}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, owner_emails)
+
             return redirect("vehicles:package_detail", pk=pkg.pk)
     else:
         form = PackageReceptionForm()
     return render(request, "vehicles/packages/package_action_form.html", {
         "package": pkg, "form": form, "title": "Receive at Reception", "action": "Receive"
     })
+
 
 @login_required
 @user_passes_test(_is_reception)
@@ -1288,8 +1715,38 @@ def package_send_to_agency(request, pk):
     pkg.save()
     PackageEvent.objects.create(package=pkg, status="to_agency", who=request.user, note="Sent to Agency/Registry")
     messages.info(request, "Package sent to Agency/Registry.")
-    # notify agency focal point via email if configured
+
+    # notify agency focal / registry & owner
+    agency_emails = _agency_focal_emails(pkg.destination_agency)
+    registry_emails = _emails_for_roles("registry", "agency_fp")
+    recipients = list(set(agency_emails + registry_emails))
+    if recipients:
+        detail_url = request.build_absolute_uri(reverse("vehicles:package_detail", args=[pkg.pk]))
+        subject = f"[Packages] Package sent to your agency ({pkg.tracking_code})"
+        msg = (
+            f"Dear colleagues,\n\n"
+            f"A package has been sent from Reception to your agency/registry.\n\n"
+            f"Tracking: {pkg.tracking_code}\n"
+            f"For: {pkg.for_recipient or 'N/A'}\n\n"
+            f"Details: {detail_url}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, recipients)
+
+    owner_emails = _package_owner_emails(pkg)
+    if owner_emails:
+        subject = "[Packages] Your package is on its way to your agency"
+        msg = (
+            f"Hello,\n\n"
+            f"Your package is on its way from Reception to your agency/registry.\n\n"
+            f"Tracking: {pkg.tracking_code}\n"
+            f"Agency: {pkg.destination_agency or 'N/A'}\n\n"
+            f"Best regards,\nUN Security / Common Services System"
+        )
+        _send_notification(subject, msg, owner_emails)
+
     return redirect("vehicles:package_detail", pk=pkg.pk)
+
 
 @login_required
 @user_passes_test(_is_agency_or_registry)
@@ -1304,12 +1761,27 @@ def package_mark_agency_received(request, pk):
             pkg.save()
             PackageEvent.objects.create(package=pkg, status="with_agency", who=request.user, note=form.cleaned_data.get("note",""))
             messages.success(request, "Package marked received by Agency/Registry.")
+
+            # Notify package owner
+            owner_emails = _package_owner_emails(pkg)
+            if owner_emails:
+                subject = "[Packages] Your package has reached your agency"
+                msg = (
+                    f"Hello,\n\n"
+                    f"Your package has been received by your agency/registry.\n\n"
+                    f"Tracking: {pkg.tracking_code}\n"
+                    f"Agency: {pkg.destination_agency or 'N/A'}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, owner_emails)
+
             return redirect("vehicles:package_detail", pk=pkg.pk)
     else:
         form = PackageAgencyReceiveForm()
     return render(request, "vehicles/packages/package_action_form.html", {
         "package": pkg, "form": form, "title": "Receive by Agency/Registry", "action": "Receive"
     })
+
 
 @login_required
 @user_passes_test(_is_agency_or_registry)
@@ -1325,12 +1797,38 @@ def package_mark_delivered(request, pk):
             pkg.save()
             PackageEvent.objects.create(package=pkg, status="delivered", who=request.user, note=form.cleaned_data.get("note",""))
             messages.success(request, "Package marked delivered.")
+
+            # Notify package owner
+            owner_emails = _package_owner_emails(pkg)
+            if owner_emails:
+                subject = "[Packages] Your package has been delivered"
+                msg = (
+                    f"Hello,\n\n"
+                    f"Your package has been delivered.\n\n"
+                    f"Tracking: {pkg.tracking_code}\n"
+                    f"Delivered to: {pkg.delivered_to}\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, owner_emails)
+
+            # Notify reception that package is fully delivered (closing loop)
+            rec_emails = _emails_for_roles("reception", "lsa", "soc", include_superusers=True)
+            if rec_emails:
+                subject = f"[Packages] Package delivered ({pkg.tracking_code})"
+                msg = (
+                    f"Dear colleagues,\n\n"
+                    f"The package with tracking {pkg.tracking_code} has been delivered to the final recipient.\n\n"
+                    f"Best regards,\nUN Security / Common Services System"
+                )
+                _send_notification(subject, msg, rec_emails)
+
             return redirect("vehicles:package_detail", pk=pkg.pk)
     else:
         form = PackageDeliverForm()
     return render(request, "vehicles/packages/package_action_form.html", {
         "package": pkg, "form": form, "title": "Deliver Package", "action": "Deliver"
     })
+
 
 # Public/simple tracking (optional)
 @login_required
@@ -1350,6 +1848,7 @@ def package_track_api(request):
             for e in pkg.events.all().order_by("-at")[:20]
         ],
     })
+
 
 class AssetExitQueueView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     model = AssetExit

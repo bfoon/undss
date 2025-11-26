@@ -3,21 +3,31 @@ from io import BytesIO
 from typing import Optional
 from django.db.models.functions import Coalesce
 
+from django.conf import settings
+from django.core.mail import send_mail
+from django.contrib.auth import get_user_model
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Q, Exists, OuterRef, QuerySet, Value, CharField
 from django.http import HttpResponse, HttpRequest
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, DetailView, FormView, UpdateView
+import threading
+import logging
+
 
 from un_security_system.roles import is_lsa_or_soc, is_not_guard
 from .forms import CommunicationDeviceForm, RadioCheckSessionForm
 from .models import CommunicationDevice, RadioCheckSession, RadioCheckEntry
 
+logger = logging.getLogger(__name__)
+
+User = get_user_model()
 
 # ============================================================================
 # PERMISSION HELPERS
@@ -33,6 +43,226 @@ class OnlyTeamMixin(UserPassesTestMixin):
 
     def test_func(self) -> bool:
         return is_lsa_or_soc(self.request.user)
+
+
+# ============================================================================
+# EMAIL / NOTIFICATION HELPERS
+# ============================================================================
+
+def _send_notification(subject: str, message: str, recipients):
+    """
+    Central helper to send email notifications in the background using a thread.
+    Uses DEFAULT_FROM_EMAIL or EMAIL_HOST_USER.
+    Silently ignores if no sender or recipients.
+    """
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or getattr(settings, "EMAIL_HOST_USER", None)
+    if not from_email:
+        return
+
+    if isinstance(recipients, str):
+        recipients = [recipients]
+
+    emails = [e.strip() for e in recipients if e and str(e).strip()]
+    if not emails:
+        return
+
+    def _worker():
+        try:
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=from_email,
+                recipient_list=emails,
+                fail_silently=False,
+            )
+        except Exception as exc:
+            # Optional: log for debugging
+            logger.exception("Background email send failed: %s", exc)
+
+    # Fire-and-forget thread
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+def _lsa_soc_users_qs():
+    """All active LSA/SOC + superusers."""
+    return User.objects.filter(
+        is_active=True
+    ).filter(
+        Q(role__in=["lsa", "soc"]) | Q(is_superuser=True)
+    )
+
+
+def _notify_device_status_change(device: CommunicationDevice, old_status: str, old_assigned_to):
+    """
+    Notify users when device assignment / status changes in ways that matter.
+    - If device is newly assigned to a user: notify them.
+    - If device is taken away/unassigned: notify previous user.
+    - If device is marked damaged/repair: notify last holder.
+    """
+    # Newly assigned
+    if device.assigned_to and (not old_assigned_to or device.assigned_to_id != old_assigned_to.id):
+        user = device.assigned_to
+        if user.email:
+            subject = f"[Comms] Device assigned to you: {device.call_sign or device.serial_number or device.imei}"
+            message = (
+                f"Hello {user.get_full_name() or user.username},\n\n"
+                f"A communication device has been assigned to you.\n\n"
+                f"Type: {device.get_device_type_display()}\n"
+                f"Call sign/ID: {device.call_sign or device.serial_number or device.imei or 'N/A'}\n"
+                f"Status: {device.get_status_display()}\n\n"
+                f"Please ensure it is kept charged and available for radio checks.\n\n"
+                f"Best regards,\nUN Security / Common Services System"
+            )
+            _send_notification(subject, message, user.email)
+
+    # Unassigned now, had old_assigned_to before
+    if old_assigned_to and not device.assigned_to:
+        if old_assigned_to.email:
+            subject = f"[Comms] Device removed from your profile"
+            message = (
+                f"Hello {old_assigned_to.get_full_name() or old_assigned_to.username},\n\n"
+                f"The communication device previously associated with you "
+                f"({device.call_sign or device.serial_number or device.imei or 'N/A'}) "
+                f"is no longer logged as 'with you' in the system.\n\n"
+                f"If this is unexpected, please contact Security or ICT.\n\n"
+                f"Best regards,\nUN Security / Common Services System"
+            )
+            _send_notification(subject, message, old_assigned_to.email)
+
+    # Marked damaged or repair – notify whoever last held it (old_assigned_to or current)
+    if device.status in ["damaged", "repair"]:
+        holder = device.assigned_to or old_assigned_to
+        if holder and holder.email:
+            subject = f"[Comms] Device marked as {device.get_status_display()}"
+            message = (
+                f"Hello {holder.get_full_name() or holder.username},\n\n"
+                f"The communication device ({device.call_sign or device.serial_number or device.imei or 'N/A'}) "
+                f"linked to you has been marked as '{device.get_status_display()}'.\n\n"
+                f"Best regards,\nUN Security / Common Services System"
+            )
+            _send_notification(subject, message, holder.email)
+
+
+def _notify_radio_check_started(session: RadioCheckSession, request: HttpRequest):
+    """
+    When a radio check starts:
+    - Notify all LSA/SOC
+    - Notify all users who currently have HF/VHF radios 'with_user'
+    """
+    # LSA/SOC & superusers
+    team_recipients = list(_lsa_soc_users_qs().values_list("email", flat=True))
+
+    # Users with radios
+    radios_qs = CommunicationDevice.objects.filter(
+        device_type__in=["hf", "vhf"],
+        status="with_user",
+        assigned_to__isnull=False,
+        assigned_to__is_active=True,
+    ).select_related("assigned_to")
+
+    radio_users = set()
+    for r in radios_qs:
+        if r.assigned_to and r.assigned_to.email:
+            radio_users.add(r.assigned_to.email)
+
+    all_recipients = list(set(team_recipients) | radio_users)
+    if not all_recipients:
+        return
+
+    try:
+        session_url = request.build_absolute_uri(
+            reverse("comms:check_run", kwargs={"pk": session.pk})
+        )
+    except Exception:
+        session_url = ""
+
+    subject = f"[Radio Check] Session started: {session.name}"
+    message = (
+        f"Dear colleagues,\n\n"
+        f"A radio check session has started.\n\n"
+        f"Name: {session.name}\n"
+        f"Started at: {session.started_at.strftime('%Y-%m-%d %H:%M') if hasattr(session, 'started_at') and session.started_at else 'N/A'}\n\n"
+        f"All radio holders should ensure their sets are ON and respond when called.\n"
+    )
+    if session_url:
+        message += f"\nSession details (for LSA/SOC):\n{session_url}\n"
+
+    message += "\nBest regards,\nUN Security / Common Services System"
+
+    _send_notification(subject, message, all_recipients)
+
+
+def _notify_user_missed_radio_check(user, device: CommunicationDevice, session: RadioCheckSession):
+    """
+    Notify an individual user that their radio did not respond in the check.
+    """
+    if not user or not user.email:
+        return
+
+    subject = "[Radio Check] No response from your radio"
+    message = (
+        f"Hello {user.get_full_name() or user.username},\n\n"
+        f"During the radio check session '{session.name}', your assigned radio did not respond.\n\n"
+        f"Device: {device.get_device_type_display()} - {device.call_sign or device.serial_number or device.imei or 'N/A'}\n"
+        f"Please ensure your radio is charged, powered on, and in working condition.\n"
+        f"If you believe this is an error, contact Security/ICT.\n\n"
+        f"Best regards,\nUN Security / Common Services System"
+    )
+    _send_notification(subject, message, user.email)
+
+
+def _notify_radio_check_report(session: RadioCheckSession):
+    """
+    Automatically generate and send a summary report of the radio check
+    to LSA/SOC and the session creator when the session ends.
+    """
+    entries = session.entries.select_related("device", "device__assigned_to").all()
+
+    total = entries.count()
+    responded = entries.filter(responded=True).count()
+    missed = entries.filter(responded=False).count()
+    pending = entries.filter(responded__isnull=True).count()
+
+    missed_lines = []
+    for e in entries.filter(responded=False):
+        dev = e.device
+        user = dev.assigned_to if dev else None
+        holder = (user.get_full_name() or user.username) if user else "Unassigned"
+        dev_label = dev.call_sign or dev.serial_number or dev.imei or "N/A"
+        missed_lines.append(f"- {dev_label} (Holder: {holder})")
+
+    try:
+        report_url = reverse("comms:export_check_xlsx", kwargs={"pk": session.pk})
+        # we’ll resolve absolute only if request is available; might not have here, so keep it relative
+    except Exception:
+        report_url = ""
+
+    subject = f"[Radio Check] Session report: {session.name}"
+    message = (
+        f"Dear Security team,\n\n"
+        f"The radio check session '{session.name}' has been completed.\n\n"
+        f"Started at: {session.started_at.strftime('%Y-%m-%d %H:%M') if hasattr(session, 'started_at') and session.started_at else 'N/A'}\n"
+        f"Ended at: {session.ended_at.strftime('%Y-%m-%d %H:%M') if hasattr(session, 'ended_at') and session.ended_at else 'N/A'}\n\n"
+        f"Summary:\n"
+        f"- Total radios: {total}\n"
+        f"- Responded: {responded}\n"
+        f"- Missed: {missed}\n"
+        f"- Pending/Not checked: {pending}\n\n"
+    )
+
+    if missed_lines:
+        message += "Radios that did NOT respond:\n" + "\n".join(missed_lines) + "\n\n"
+
+    if report_url:
+        message += f"Detailed export (XLSX): {report_url}\n\n"
+
+    message += "Best regards,\nUN Security / Common Services System"
+
+    recipients = list(_lsa_soc_users_qs().values_list("email", flat=True))
+    if session.created_by and session.created_by.email:
+        recipients.append(session.created_by.email)
+
+    _send_notification(subject, message, recipients)
 
 
 # ============================================================================
@@ -75,6 +305,10 @@ class DeviceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
         obj.status = "with_user"
         obj.save()
         messages.success(self.request, "Device recorded successfully.")
+
+        # Notify user (confirmation)
+        _notify_device_status_change(obj, old_status="available", old_assigned_to=None)
+
         return super().form_valid(form)
 
 
@@ -170,9 +404,6 @@ class UsersWithoutRadiosView(LoginRequiredMixin, OnlyTeamMixin, ListView):
     context_object_name = "users"
 
     def get_queryset(self) -> QuerySet:
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-
         radio_subq = CommunicationDevice.objects.filter(
             device_type__in=["hf", "vhf"],
             assigned_to=OuterRef("pk")
@@ -204,8 +435,18 @@ class CommunicationDeviceUpdateView(LoginRequiredMixin, OnlyTeamMixin, UpdateVie
 
     def form_valid(self, form):
         """Validate device-specific requirements before saving."""
+        device = self.get_object()
+        old_status = device.status
+        old_assigned_to = device.assigned_to
+
+        response = super().form_valid(form)
         messages.success(self.request, "Device updated successfully.")
-        return super().form_valid(form)
+
+        # After save, notify about important changes
+        self.object.refresh_from_db()
+        _notify_device_status_change(self.object, old_status, old_assigned_to)
+
+        return response
 
     def get_success_url(self):
         return reverse_lazy("comms:device_detail", args=[self.object.pk])
@@ -226,6 +467,9 @@ def radio_update_status(request: HttpRequest, pk: int):
         device_type__in=["hf", "vhf"]
     )
 
+    old_status = radio.status
+    old_assigned_to = radio.assigned_to
+
     new_status = request.POST.get("status")
     valid_statuses = dict(CommunicationDevice.STATUS).keys()
 
@@ -242,6 +486,8 @@ def radio_update_status(request: HttpRequest, pk: int):
             f"Status updated to {radio.get_status_display()}."
         )
 
+        _notify_device_status_change(radio, old_status, old_assigned_to)
+
     next_url = request.POST.get("next")
     return redirect(next_url or "comms:radios")
 
@@ -252,6 +498,9 @@ def radio_update_status(request: HttpRequest, pk: int):
 def device_mark_status(request: HttpRequest, pk: int):
     """Update any device status (LSA/SOC only)."""
     device = get_object_or_404(CommunicationDevice, pk=pk)
+
+    old_status = device.status
+    old_assigned_to = device.assigned_to
 
     new_status = request.POST.get("status", "").strip()
     valid_statuses = dict(CommunicationDevice.STATUS).keys()
@@ -269,6 +518,8 @@ def device_mark_status(request: HttpRequest, pk: int):
             f"Status updated to {device.get_status_display()}."
         )
 
+        _notify_device_status_change(device, old_status, old_assigned_to)
+
     next_url = request.POST.get("next")
     return redirect(next_url or "comms:device_detail", pk=device.pk)
 
@@ -285,6 +536,9 @@ class RadioCheckStartView(LoginRequiredMixin, OnlyTeamMixin, FormView):
     def form_valid(self, form):
         session = form.save(commit=False)
         session.created_by = self.request.user
+        # if your model has started_at, set it
+        if hasattr(session, "started_at") and not session.started_at:
+            session.started_at = timezone.now()
         session.save()
 
         # Pre-populate entries for all radios
@@ -305,6 +559,10 @@ class RadioCheckStartView(LoginRequiredMixin, OnlyTeamMixin, FormView):
         RadioCheckEntry.objects.bulk_create(bulk_entries)
 
         messages.success(self.request, "Radio check started.")
+
+        # Notify all relevant users about start
+        _notify_radio_check_started(session, self.request)
+
         return redirect("comms:check_run", pk=session.pk)
 
 
@@ -353,6 +611,33 @@ class RadioCheckRunView(LoginRequiredMixin, OnlyTeamMixin, DetailView):
                 entries_to_update,
                 ["responded", "noted_issue", "checked_by", "checked_at"]
             )
+
+        # If the form includes a "finish session" button named 'finish_session',
+        # treat this as the end of the radio check and trigger report + notifications.
+        if "finish_session" in request.POST:
+            # Mark session as ended if your model supports it
+            update_fields = []
+            if hasattr(session, "ended_at"):
+                session.ended_at = timezone.now()
+                update_fields.append("ended_at")
+            if hasattr(session, "status") and getattr(session, "status", None) != "completed":
+                session.status = "completed"
+                update_fields.append("status")
+            if update_fields:
+                session.save(update_fields=update_fields)
+
+            # Notify users whose radios did not respond
+            missed_entries = session.entries.select_related("device", "device__assigned_to").filter(responded=False)
+            for entry in missed_entries:
+                dev = entry.device
+                if dev and dev.assigned_to:
+                    _notify_user_missed_radio_check(dev.assigned_to, dev, session)
+
+            # Send summary report to LSA/SOC + creator
+            _notify_radio_check_report(session)
+
+            messages.success(request, "Radio check completed and report generated.")
+            return redirect("comms:check_run", pk=session.pk)
 
         messages.success(request, "Radio check updated.")
         return redirect("comms:check_run", pk=session.pk)
@@ -569,10 +854,6 @@ def export_check_xlsx(request: HttpRequest, pk: int) -> HttpResponse:
 @user_passes_test(is_lsa_or_soc)
 def export_users_without_radios_csv(request: HttpRequest) -> HttpResponse:
     """Export users without radios to CSV."""
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-
-    # Get the same queryset as the view
     radio_subq = CommunicationDevice.objects.filter(
         device_type__in=["hf", "vhf"],
         assigned_to=OuterRef("pk")
@@ -609,10 +890,6 @@ def export_users_without_radios_csv(request: HttpRequest) -> HttpResponse:
 @user_passes_test(is_lsa_or_soc)
 def export_users_without_radios_xlsx(request: HttpRequest) -> HttpResponse:
     """Export users without radios to XLSX (falls back to CSV)."""
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-
-    # Get the same queryset as the view
     radio_subq = CommunicationDevice.objects.filter(
         device_type__in=["hf", "vhf"],
         assigned_to=OuterRef("pk")
