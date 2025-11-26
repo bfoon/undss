@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -139,16 +140,80 @@ class ICTUserCreateView(ICTUserGuardMixin, CreateView):
         return kwargs
 
     def form_valid(self, form):
-        """Handle successful form submission."""
+        """
+        Handle successful form submission:
+        - Create user
+        - Send password setup / reset link to the new user's email (if present)
+        """
         response = super().form_valid(form)
 
-        # Provide detailed success message
         new_user = form.instance
-        messages.success(
-            self.request,
-            f'User "{new_user.username}" has been created successfully. '
-            f'They will need a password set before they can log in.'
-        )
+
+        # Build password reset / setup link for the new user
+        if new_user.email:
+            from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER
+            recipient = (new_user.email or "").strip()
+
+            if not from_email:
+                messages.warning(
+                    self.request,
+                    'User created, but email sending is not configured (no from address).'
+                )
+                return response
+
+            if not recipient:
+                messages.warning(
+                    self.request,
+                    f'User "{new_user.username}" created, but email address is invalid.'
+                )
+                return response
+
+            try:
+                uid = urlsafe_base64_encode(force_bytes(new_user.pk))
+                token = default_token_generator.make_token(new_user)
+
+                # Try built-in password_reset_confirm URL
+                try:
+                    reset_url = self.request.build_absolute_uri(
+                        reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
+                    )
+                except Exception:
+                    # Fallback to your own namespaced URL if any
+                    reset_url = self.request.build_absolute_uri(
+                        reverse('accounts:password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
+                    )
+
+                send_mail(
+                    subject='Your UN Security System account has been created',
+                    message=(
+                        f'Hello {new_user.get_full_name() or new_user.username},\n\n'
+                        f'An account has been created for you on the UN Security / Common Services platform.\n\n'
+                        f'Please click the link below to set your password and access the system:\n'
+                        f'{reset_url}\n\n'
+                        f'If you were not expecting this account, please contact ICT Support.\n\n'
+                        f'Best regards,\nICT Support Team'
+                    ),
+                    from_email=from_email,
+                    recipient_list=[recipient],
+                    fail_silently=False,
+                )
+
+                messages.success(
+                    self.request,
+                    f'User "{new_user.username}" has been created and a password setup link '
+                    f'has been emailed to {recipient}.'
+                )
+            except Exception as e:
+                messages.warning(
+                    self.request,
+                    f'User created, but failed to send email: {e}'
+                )
+        else:
+            messages.success(
+                self.request,
+                f'User "{new_user.username}" has been created successfully, '
+                f'but no email was sent because the user has no email address.'
+            )
 
         return response
 
@@ -233,6 +298,31 @@ def ict_user_set_password(request, pk):
                 target_user.must_change_password = False
                 target_user.save(update_fields=['must_change_password'])
 
+            # Send notification email
+            from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER
+            recipient = (target_user.email or "").strip()
+
+            if recipient and from_email:
+                try:
+                    send_mail(
+                        subject='Your password has been changed',
+                        message=(
+                            f'Hello {target_user.get_full_name() or target_user.username},\n\n'
+                            f'The password for your UN Security / Common Services account has just been set or '
+                            f'changed by your ICT Focal Point.\n\n'
+                            f'If you did not expect this change, please contact ICT Support immediately.\n\n'
+                            f'Best regards,\nICT Support Team'
+                        ),
+                        from_email=from_email,
+                        recipient_list=[recipient],
+                        fail_silently=False,
+                    )
+                except Exception as e:
+                    messages.warning(
+                        request,
+                        f'Password updated, but failed to send notification email: {e}'
+                    )
+
             messages.success(
                 request,
                 f'Password for "{target_user.username}" has been set successfully.'
@@ -281,43 +371,64 @@ def ict_user_send_reset_link(request, pk):
         reset_url = request.build_absolute_uri(
             reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
         )
-    except:
+    except Exception:
         # Fallback: use custom reset URL or admin
         try:
             reset_url = request.build_absolute_uri(
                 reverse('accounts:password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
             )
-        except:
+        except Exception:
             # Last resort: direct them to contact admin
             messages.warning(
                 request,
-                f'Password reset URL is not configured. Please set a password directly '
-                f'or contact the system administrator to configure password reset emails.'
+                'Password reset URL is not configured. Please set a password directly '
+                'or contact the system administrator to configure password reset emails.'
             )
             return redirect('accounts:ict_user_detail', pk=pk)
+
+    # Prepare email addresses safely
+    from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER
+    recipient = (target_user.email or "").strip()
+
+    if not from_email:
+        messages.error(
+            request,
+            'Email sending is not configured properly: from address is empty.'
+        )
+        return redirect('accounts:ict_user_detail', pk=pk)
+
+    if not recipient:
+        messages.error(
+            request,
+            f'User "{target_user.username}" has no valid email address.'
+        )
+        return redirect('accounts:ict_user_detail', pk=pk)
 
     # Send email
     try:
         send_mail(
             subject='Password Reset Request',
-            message=f'Hello {target_user.get_full_name() or target_user.username},\n\n'
-                    f'A password reset has been requested for your account.\n\n'
-                    f'Please click the following link to set your new password:\n{reset_url}\n\n'
-                    f'If you did not request this, please ignore this email.\n\n'
-                    f'Best regards,\nICT Support Team',
-            from_email=None,  # Uses DEFAULT_FROM_EMAIL from settings
-            recipient_list=[target_user.email],
+            message=(
+                f'Hello {target_user.get_full_name() or target_user.username},\n\n'
+                f'A password reset has been requested for your account.\n\n'
+                f'Please click the following link to set your new password:\n'
+                f'{reset_url}\n\n'
+                f'If you did not request this, please ignore this email.\n\n'
+                f'Best regards,\nICT Support Team'
+            ),
+            from_email=from_email,
+            recipient_list=[recipient],
             fail_silently=False,
         )
 
         messages.success(
             request,
-            f'Password reset link has been sent to {target_user.email}.'
+            f'Password reset link has been sent to {recipient}.'
         )
     except Exception as e:
         messages.error(
             request,
-            f'Failed to send email: {str(e)}'
+            f'Failed to send email: {e}'
         )
 
     return redirect('accounts:ict_user_detail', pk=pk)
