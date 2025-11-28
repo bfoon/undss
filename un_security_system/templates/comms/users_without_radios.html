@@ -39,79 +39,118 @@
     {% endfor %}
   {% endif %}
 
-  <div class="card shadow-sm">
-    <div class="card-header bg-white">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
-          <strong>{{ users|length }}</strong> user{{ users|length|pluralize }} without radio{{ users|length|pluralize }}
+  {% if users %}
+    <!-- Overall summary -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+            <strong>{{ users|length }}</strong> user{{ users|length|pluralize }} without radio{{ users|length|pluralize }}
+          </div>
         </div>
       </div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th style="width: 25%;">Username</th>
-            <th style="width: 30%;">Full Name</th>
-            <th style="width: 20%;">Role</th>
-            <th style="width: 25%;">Email</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for user in users %}
-            <tr>
-              <td>
-                <strong>{{ user.username }}</strong>
-              </td>
-              <td>
-                {% if user.get_full_name %}
-                  {{ user.get_full_name }}
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if user.role %}
-                  <span class="badge bg-info-subtle text-info">
-                    {{ user.get_role_display|default:user.role }}
-                  </span>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if user.email %}
-                  <a href="mailto:{{ user.email }}" class="text-decoration-none">
-                    <i class="bi bi-envelope me-1"></i>{{ user.email }}
-                  </a>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="4" class="text-center py-5">
-                <div class="text-success">
-                  <i class="bi bi-check-circle fs-1 d-block mb-2"></i>
-                  <strong>All users have radios assigned!</strong>
-                  <p class="text-muted small mb-0">Every active staff member has at least one HF or VHF radio.</p>
-                </div>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
 
-  {% if users %}
+    {# Group users by agency #}
+    {% regroup users by agency as agency_groups %}
+
+    {% for group in agency_groups %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+          <div>
+            {% if group.grouper %}
+              <strong>
+                {% if group.grouper.code %}
+                  {{ group.grouper.code }} – {{ group.grouper.name }}
+                {% else %}
+                  {{ group.grouper.name }}
+                {% endif %}
+              </strong>
+            {% else %}
+              <strong>No Agency / Unassigned</strong>
+            {% endif %}
+          </div>
+          <span class="badge bg-info-subtle text-info">
+            {{ group.list|length }} user{{ group.list|length|pluralize }}
+          </span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 20%;">Username</th>
+                <th style="width: 28%;">Full Name</th>
+                <th style="width: 18%;">Role</th>
+                <th style="width: 24%;">Email</th>
+                <th style="width: 10%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for user in group.list %}
+                <tr>
+                  <td>
+                    <strong>{{ user.username }}</strong>
+                  </td>
+                  <td>
+                    {% if user.get_full_name %}
+                      {{ user.get_full_name }}
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if user.role %}
+                      <span class="badge bg-info-subtle text-info">
+                        {{ user.get_role_display|default:user.role }}
+                      </span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if user.email %}
+                      <a href="mailto:{{ user.email }}" class="text-decoration-none">
+                        <i class="bi bi-envelope me-1"></i>{{ user.email }}
+                      </a>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if user.email %}
+                      <a href="mailto:{{ user.email }}?subject=Radio%20Allocation"
+                         class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-broadcast-pin me-1"></i>Contact
+                      </a>
+                    {% else %}
+                      <span class="text-muted small">No email</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endfor %}
+
     <div class="mt-3">
       <div class="alert alert-info mb-0">
         <i class="bi bi-info-circle me-2"></i>
-        <strong>Tip:</strong> You can assign radios to users from the 
+        <strong>Tip:</strong> You can assign radios to users from the
         <a href="{% url 'comms:radios' %}" class="alert-link">Radios List</a> page.
+      </div>
+    </div>
+  {% else %}
+    <div class="card shadow-sm">
+      <div class="card-body text-center py-5">
+        <div class="text-success">
+          <i class="bi bi-check-circle fs-1 d-block mb-2"></i>
+          <strong>All users have radios assigned!</strong>
+          <p class="text-muted small mb-0">Every active staff member has at least one HF or VHF radio.</p>
+        </div>
       </div>
     </div>
   {% endif %}

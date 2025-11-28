@@ -17,6 +17,7 @@ from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, DetailView, FormView, UpdateView
+from collections import defaultdict
 import threading
 import logging
 
@@ -330,7 +331,7 @@ class RadioListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
         qs = (
             CommunicationDevice.objects
             .filter(device_type__in=["hf", "vhf"])
-            .select_related("assigned_to")
+            .select_related("assigned_to", "assigned_to__agency")
             .order_by("call_sign")
         )
 
@@ -349,6 +350,7 @@ class RadioListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+
         base = CommunicationDevice.objects.filter(device_type__in=["hf", "vhf"])
         ctx["stats"] = {
             "total": base.count(),
@@ -357,9 +359,31 @@ class RadioListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
             "damaged": base.filter(status="damaged").count(),
             "repair": base.filter(status="repair").count(),
         }
-        # Preserve search parameters for pagination
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["status_filter"] = self.request.GET.get("status", "")
+
+        # ---- NEW: group radios by agency -----------------------------------
+        radios = ctx.get("radios")  # the paginated page object
+        groups = defaultdict(list)
+
+        for radio in radios:
+            user = getattr(radio, "assigned_to", None)
+            agency = getattr(user, "agency", None)
+
+            if agency:
+                label = f"{agency.code} – {agency.name}" if getattr(agency, "code", None) else agency.name
+            else:
+                label = "Unassigned / No Agency"
+
+            groups[label].append(radio)
+
+        # Sort: agencies alphabetically, keep "Unassigned / No Agency" last
+        grouped_list = sorted(
+            groups.items(),
+            key=lambda item: (item[0] == "Unassigned / No Agency", item[0].lower())
+        )
+
+        ctx["grouped_radios"] = grouped_list
         return ctx
 
 
@@ -399,11 +423,13 @@ class SatPhoneListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
 
 
 class UsersWithoutRadiosView(LoginRequiredMixin, OnlyTeamMixin, ListView):
-    """Display active staff users who do NOT have any HF/VHF radio assigned."""
     template_name = "comms/users_without_radios.html"
     context_object_name = "users"
 
     def get_queryset(self) -> QuerySet:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
         radio_subq = CommunicationDevice.objects.filter(
             device_type__in=["hf", "vhf"],
             assigned_to=OuterRef("pk")
@@ -413,7 +439,8 @@ class UsersWithoutRadiosView(LoginRequiredMixin, OnlyTeamMixin, ListView):
             .exclude(role__in=["guard", "data_entry"])
             .annotate(has_radio=Exists(radio_subq))
             .filter(has_radio=False)
-            .order_by("username")
+            .select_related("agency")                    # important
+            .order_by("agency__name", "username")        # for clean grouping
         )
 
 
@@ -575,18 +602,23 @@ class RadioCheckRunView(LoginRequiredMixin, OnlyTeamMixin, DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         session = self.object
-        entries = session.entries.all()
 
-        # Calculate stats
+        entries = (
+            session.entries
+            .select_related("device__assigned_to__agency")
+            .order_by("device__assigned_to__agency__name", "call_sign")
+        )
+
         responded_count = entries.filter(responded=True).count()
         missed_count = entries.filter(responded=False).count()
         pending_count = entries.filter(responded=None).count()
 
-        ctx['stats'] = {
-            'total': entries.count(),
-            'responded': responded_count,
-            'missed': missed_count,
-            'pending': pending_count,
+        ctx["entries"] = entries
+        ctx["stats"] = {
+            "total": entries.count(),
+            "responded": responded_count,
+            "missed": missed_count,
+            "pending": pending_count,
         }
         return ctx
 
@@ -679,11 +711,11 @@ def _create_xlsx_response(
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_radios_csv(request: HttpRequest) -> HttpResponse:
-    """Export radios to CSV."""
+    """Export radios to CSV, including Agency."""
     qs = (
         CommunicationDevice.objects
         .filter(device_type__in=["hf", "vhf"])
-        .select_related("assigned_to")
+        .select_related("assigned_to", "assigned_to__agency")
         .order_by("call_sign")
     )
 
@@ -693,14 +725,27 @@ def export_radios_csv(request: HttpRequest) -> HttpResponse:
     writer = csv.writer(response)
     writer.writerow([
         "Call Sign", "Type", "Status",
-        "Assigned To", "Serial", "Notes"
+        "Agency",          # <-- NEW COLUMN
+        "Assigned To",
+        "Serial", "Notes"
     ])
 
     for radio in qs:
+        # Build agency label if possible
+        agency_label = ""
+        user = radio.assigned_to
+        if user and getattr(user, "agency", None):
+            agency = user.agency
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
         writer.writerow([
             radio.call_sign,
             radio.get_device_type_display(),
             radio.get_status_display(),
+            agency_label,
             radio.assigned_to.username if radio.assigned_to else "",
             radio.serial_number or "",
             radio.notes or ""
@@ -712,27 +757,36 @@ def export_radios_csv(request: HttpRequest) -> HttpResponse:
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_radios_xlsx(request: HttpRequest) -> HttpResponse:
-    """Export radios to XLSX (falls back to CSV if openpyxl unavailable)."""
+    """Export radios to XLSX (falls back to CSV), including Agency."""
     qs = (
         CommunicationDevice.objects
         .filter(device_type__in=["hf", "vhf"])
-        .select_related("assigned_to")
+        .select_related("assigned_to", "assigned_to__agency")
         .order_by("call_sign")
     )
 
-    rows = [
-        [
+    rows = []
+    for r in qs:
+        agency_label = ""
+        user = r.assigned_to
+        if user and getattr(user, "agency", None):
+            agency = user.agency
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
+        rows.append([
             r.call_sign,
             r.get_device_type_display(),
             r.get_status_display(),
+            agency_label,    # <-- NEW COLUMN
             r.assigned_to.username if r.assigned_to else "",
             r.serial_number or "",
             r.notes or ""
-        ]
-        for r in qs
-    ]
+        ])
 
-    headers = ["Call Sign", "Type", "Status", "Assigned To", "Serial", "Notes"]
+    headers = ["Call Sign", "Type", "Status", "Agency", "Assigned To", "Serial", "Notes"]
     resp = _create_xlsx_response("radios.xlsx", headers, rows)
     return resp or export_radios_csv(request)
 
@@ -740,11 +794,11 @@ def export_radios_xlsx(request: HttpRequest) -> HttpResponse:
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_satphones_csv(request: HttpRequest) -> HttpResponse:
-    """Export satellite phones to CSV."""
+    """Export satellite phones to CSV, including Agency."""
     qs = (
         CommunicationDevice.objects
         .filter(device_type="satphone")
-        .select_related("assigned_to")
+        .select_related("assigned_to", "assigned_to__agency")
         .order_by("imei")
     )
 
@@ -752,15 +806,32 @@ def export_satphones_csv(request: HttpRequest) -> HttpResponse:
     response["Content-Disposition"] = 'attachment; filename="satphones.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(["IMEI", "Status", "Assigned To", "Serial", "Notes"])
+    writer.writerow([
+        "IMEI",
+        "Status",
+        "Agency",        # <-- NEW
+        "Assigned To",
+        "Serial",
+        "Notes",
+    ])
 
     for phone in qs:
+        agency_label = ""
+        user = phone.assigned_to
+        if user and getattr(user, "agency", None):
+            agency = user.agency
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
         writer.writerow([
             phone.imei or "",
             phone.get_status_display(),
+            agency_label,
             phone.assigned_to.username if phone.assigned_to else "",
             phone.serial_number or "",
-            phone.notes or ""
+            phone.notes or "",
         ])
 
     return response
@@ -769,26 +840,35 @@ def export_satphones_csv(request: HttpRequest) -> HttpResponse:
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_satphones_xlsx(request: HttpRequest) -> HttpResponse:
-    """Export satellite phones to XLSX (falls back to CSV)."""
+    """Export satellite phones to XLSX (falls back to CSV), including Agency."""
     qs = (
         CommunicationDevice.objects
         .filter(device_type="satphone")
-        .select_related("assigned_to")
+        .select_related("assigned_to", "assigned_to__agency")
         .order_by("imei")
     )
 
-    rows = [
-        [
+    rows = []
+    for p in qs:
+        agency_label = ""
+        user = p.assigned_to
+        if user and getattr(user, "agency", None):
+            agency = user.agency
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
+        rows.append([
             p.imei or "",
             p.get_status_display(),
+            agency_label,  # <-- NEW
             p.assigned_to.username if p.assigned_to else "",
             p.serial_number or "",
-            p.notes or ""
-        ]
-        for p in qs
-    ]
+            p.notes or "",
+        ])
 
-    headers = ["IMEI", "Status", "Assigned To", "Serial", "Notes"]
+    headers = ["IMEI", "Status", "Agency", "Assigned To", "Serial", "Notes"]
     resp = _create_xlsx_response("satphones.xlsx", headers, rows)
     return resp or export_satphones_csv(request)
 
@@ -796,7 +876,7 @@ def export_satphones_xlsx(request: HttpRequest) -> HttpResponse:
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_check_csv(request: HttpRequest, pk: int) -> HttpResponse:
-    """Export radio check session to CSV."""
+    """Export radio check session to CSV, including Agency."""
     session = get_object_or_404(RadioCheckSession, pk=pk)
 
     response = HttpResponse(content_type="text/csv")
@@ -804,65 +884,116 @@ def export_check_csv(request: HttpRequest, pk: int) -> HttpResponse:
 
     writer = csv.writer(response)
     writer.writerow([
-        "Session", "Started", "Call Sign", "Responded",
-        "Issue", "Checked By", "Checked At"
+        "Session",
+        "Started",
+        "Call Sign",
+        "Agency",        # <-- NEW
+        "Responded",
+        "Issue",
+        "Checked By",
+        "Checked At",
     ])
 
-    for entry in session.entries.select_related("checked_by").order_by("call_sign"):
+    entries = (
+        session.entries
+        .select_related("device__assigned_to__agency", "checked_by")
+        .order_by("call_sign")
+    )
+
+    for entry in entries:
         responded_display = {True: "YES", False: "NO", None: "—"}[entry.responded]
+
+        agency_label = ""
+        device = entry.device
+        user = getattr(device, "assigned_to", None) if device else None
+        if user and getattr(user, "agency", None):
+            agency = user.agency
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
         writer.writerow([
             session.name,
             session.started_at,
             entry.call_sign,
+            agency_label,
             responded_display,
             entry.noted_issue or "",
             entry.checked_by.username if entry.checked_by else "",
-            entry.checked_at or ""
+            entry.checked_at or "",
         ])
 
     return response
 
-
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_check_xlsx(request: HttpRequest, pk: int) -> HttpResponse:
-    """Export radio check session to XLSX (falls back to CSV)."""
+    """Export radio check session to XLSX (falls back to CSV), including Agency."""
     session = get_object_or_404(RadioCheckSession, pk=pk)
 
+    entries = (
+        session.entries
+        .select_related("device__assigned_to__agency", "checked_by")
+        .order_by("call_sign")
+    )
+
     rows = []
-    for entry in session.entries.select_related("checked_by").order_by("call_sign"):
+    for entry in entries:
         responded_display = {True: "YES", False: "NO", None: "—"}[entry.responded]
+
+        agency_label = ""
+        device = entry.device
+        user = getattr(device, "assigned_to", None) if device else None
+        if user and getattr(user, "agency", None):
+            agency = user.agency
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
         rows.append([
             session.name,
             session.started_at,
             entry.call_sign,
+            agency_label,   # <-- NEW
             responded_display,
             entry.noted_issue or "",
             entry.checked_by.username if entry.checked_by else "",
-            entry.checked_at or ""
+            entry.checked_at or "",
         ])
 
     headers = [
-        "Session", "Started", "Call Sign", "Responded",
-        "Issue", "Checked By", "Checked At"
+        "Session",
+        "Started",
+        "Call Sign",
+        "Agency",
+        "Responded",
+        "Issue",
+        "Checked By",
+        "Checked At",
     ]
     resp = _create_xlsx_response(f"radio_check_{session.pk}.xlsx", headers, rows)
     return resp or export_check_csv(request, pk)
 
-
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_users_without_radios_csv(request: HttpRequest) -> HttpResponse:
-    """Export users without radios to CSV."""
+    """Export users without radios to CSV, including Agency."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
     radio_subq = CommunicationDevice.objects.filter(
         device_type__in=["hf", "vhf"],
         assigned_to=OuterRef("pk")
     )
+
     users = (
         User.objects.filter(is_active=True)
         .exclude(role__in=["guard", "data_entry"])
         .annotate(has_radio=Exists(radio_subq))
         .filter(has_radio=False)
+        .select_related("agency")            # <-- important
         .order_by("username")
     )
 
@@ -870,17 +1001,36 @@ def export_users_without_radios_csv(request: HttpRequest) -> HttpResponse:
     response["Content-Disposition"] = 'attachment; filename="users_without_radios.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(["Username", "First Name", "Last Name", "Full Name", "Email", "Role"])
+    writer.writerow([
+        "Username",
+        "First Name",
+        "Last Name",
+        "Full Name",
+        "Email",
+        "Role",
+        "Agency",      # <-- NEW
+    ])
 
     for user in users:
+        # Build agency label if present
+        agency_label = ""
+        agency = getattr(user, "agency", None)
+        if agency:
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
         writer.writerow([
             user.username,
             user.first_name or "",
             user.last_name or "",
             user.get_full_name() or "",
             user.email or "",
-            user.get_role_display() if hasattr(user, 'get_role_display') else (
-                user.role if hasattr(user, 'role') else "")
+            user.get_role_display() if hasattr(user, "get_role_display") else (
+                user.role if hasattr(user, "role") else ""
+            ),
+            agency_label,
         ])
 
     return response
@@ -889,32 +1039,47 @@ def export_users_without_radios_csv(request: HttpRequest) -> HttpResponse:
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def export_users_without_radios_xlsx(request: HttpRequest) -> HttpResponse:
-    """Export users without radios to XLSX (falls back to CSV)."""
+    """Export users without radios to XLSX (falls back to CSV), including Agency."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
     radio_subq = CommunicationDevice.objects.filter(
         device_type__in=["hf", "vhf"],
         assigned_to=OuterRef("pk")
     )
+
     users = (
         User.objects.filter(is_active=True)
         .exclude(role__in=["guard", "data_entry"])
         .annotate(has_radio=Exists(radio_subq))
         .filter(has_radio=False)
+        .select_related("agency")            # <-- important
         .order_by("username")
     )
 
-    rows = [
-        [
+    rows = []
+    for user in users:
+        agency_label = ""
+        agency = getattr(user, "agency", None)
+        if agency:
+            if getattr(agency, "code", None):
+                agency_label = f"{agency.code} – {agency.name}"
+            else:
+                agency_label = agency.name
+
+        rows.append([
             user.username,
             user.first_name or "",
             user.last_name or "",
             user.get_full_name() or "",
             user.email or "",
-            user.get_role_display() if hasattr(user, 'get_role_display') else (
-                user.role if hasattr(user, 'role') else "")
-        ]
-        for user in users
-    ]
+            user.get_role_display() if hasattr(user, "get_role_display") else (
+                user.role if hasattr(user, "role") else ""
+            ),
+            agency_label,
+        ])
 
-    headers = ["Username", "First Name", "Last Name", "Full Name", "Email", "Role"]
+    headers = ["Username", "First Name", "Last Name", "Full Name", "Email", "Role", "Agency"]
     resp = _create_xlsx_response("users_without_radios.xlsx", headers, rows)
     return resp or export_users_without_radios_csv(request)
+

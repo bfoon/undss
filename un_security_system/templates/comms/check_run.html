@@ -108,96 +108,129 @@
   <!-- Entries form -->
   <form method="post">
     {% csrf_token %}
-    <div class="card shadow-sm">
-      <div class="table-responsive">
-        <table class="table align-middle mb-0" id="entriesTable">
-          <thead class="table-light">
-            <tr>
-              <th style="width: 16%;">Call Sign</th>
-              <th style="width: 14%;">Type</th>
-              <th style="width: 24%;">Assigned To</th>
-              <th style="width: 12%;">Status</th>
-              <th style="width: 12%;">Responded</th>
-              <th style="width: 22%;">Issue/Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for entry in session.entries.all %}
-              <tr class="entry-row"
-                  data-search="{{ entry.call_sign|default_if_none:'' }} {{ entry.device.assigned_to.get_full_name|default:entry.device.assigned_to.username|default:'' }} {{ entry.device.serial_number|default:'' }}">
-                <td>
-                  <strong>{{ entry.call_sign|default:"—" }}</strong>
-                  {% if entry.device.serial_number %}
-                    <div class="small text-muted">{{ entry.device.serial_number }}</div>
-                  {% endif %}
-                </td>
-                <td>
-                  <span class="badge bg-info-subtle text-info">
-                    {{ entry.device.get_device_type_display }}
-                  </span>
-                </td>
-                <td>
-                  {% if entry.device.assigned_to %}
-                    {{ entry.device.assigned_to.get_full_name|default:entry.device.assigned_to.username }}
-                  {% else %}
-                    <span class="text-muted">Unassigned</span>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if entry.device.status == "available" %}
-                    <span class="badge bg-success-subtle text-success">Available</span>
-                  {% elif entry.device.status == "with_user" %}
-                    <span class="badge bg-primary-subtle text-primary">With User</span>
-                  {% elif entry.device.status == "repair" %}
-                    <span class="badge bg-warning-subtle text-warning">Repair</span>
-                  {% elif entry.device.status == "damaged" %}
-                    <span class="badge bg-danger-subtle text-danger">Damaged</span>
-                  {% endif %}
-                </td>
-                <td>
-                  <div class="btn-group btn-group-sm" role="group">
-                    <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
-                           id="yes_{{ entry.pk }}" value="yes"
-                           {% if entry.responded == True %}checked{% endif %}
-                           autocomplete="off">
-                    <label class="btn btn-outline-success" for="yes_{{ entry.pk }}">
-                      <i class="bi bi-check2-circle"></i> Yes
-                    </label>
 
-                    <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
-                           id="no_{{ entry.pk }}" value="no"
-                           {% if entry.responded == False %}checked{% endif %}
-                           autocomplete="off">
-                    <label class="btn btn-outline-danger" for="no_{{ entry.pk }}">
-                      <i class="bi bi-x-circle"></i> No
-                    </label>
-                  </div>
-                  {% if entry.checked_at %}
-                    <div class="small text-muted mt-1">{{ entry.checked_at|date:"H:i" }}</div>
-                  {% endif %}
-                </td>
-                <td>
-                  <input type="text"
-                         name="issue_{{ entry.pk }}"
-                         class="form-control form-control-sm"
-                         placeholder="Issue or notes..."
-                         value="{{ entry.noted_issue|default:'' }}">
-                </td>
-              </tr>
-            {% empty %}
-              <tr>
-                <td colspan="6" class="text-center py-5">
-                  <div class="text-muted">
-                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                    No radios to check yet.
-                  </div>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    {% with entries=entries|default:session.entries.all %}
+      {% if entries %}
+        {# Group entries by agency of the assigned user #}
+        {% regroup entries by device.assigned_to.agency as agency_groups %}
+
+        {% for group in agency_groups %}
+          <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+              <div>
+                {% if group.grouper %}
+                  <strong>
+                    {% if group.grouper.code %}
+                      {{ group.grouper.code }} – {{ group.grouper.name }}
+                    {% else %}
+                      {{ group.grouper.name }}
+                    {% endif %}
+                  </strong>
+                {% else %}
+                  <strong>No Agency / Unassigned</strong>
+                {% endif %}
+              </div>
+              <span class="badge bg-info-subtle text-info">
+                {{ group.list|length }} radio{{ group.list|length|pluralize }}
+              </span>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table align-middle mb-0" id="entriesTable">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width: 16%;">Call Sign</th>
+                    <th style="width: 14%;">Type</th>
+                    <th style="width: 24%;">Assigned To</th>
+                    <th style="width: 12%;">Status</th>
+                    <th style="width: 12%;">Responded</th>
+                    <th style="width: 22%;">Issue/Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for entry in group.list %}
+                    <tr class="entry-row"
+                        data-search="{{ entry.call_sign|default_if_none:'' }} {{ entry.device.assigned_to.get_full_name|default:entry.device.assigned_to.username|default:'' }} {{ entry.device.serial_number|default:'' }} {% if entry.device.assigned_to and entry.device.assigned_to.agency %}{{ entry.device.assigned_to.agency.name }}{% endif %}">
+                      <td>
+                        <strong>{{ entry.call_sign|default:"—" }}</strong>
+                        {% if entry.device.serial_number %}
+                          <div class="small text-muted">{{ entry.device.serial_number }}</div>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <span class="badge bg-info-subtle text-info">
+                          {{ entry.device.get_device_type_display }}
+                        </span>
+                      </td>
+                      <td>
+                        {% if entry.device.assigned_to %}
+                          {{ entry.device.assigned_to.get_full_name|default:entry.device.assigned_to.username }}
+                        {% else %}
+                          <span class="text-muted">Unassigned</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if entry.device.status == "available" %}
+                          <span class="badge bg-success-subtle text-success">Available</span>
+                        {% elif entry.device.status == "with_user" %}
+                          <span class="badge bg-primary-subtle text-primary">With User</span>
+                        {% elif entry.device.status == "repair" %}
+                          <span class="badge bg-warning-subtle text-warning">Repair</span>
+                        {% elif entry.device.status == "damaged" %}
+                          <span class="badge bg-danger-subtle text-danger">Damaged</span>
+                        {% else %}
+                          <span class="badge bg-secondary-subtle text-secondary">
+                            {{ entry.device.get_status_display }}
+                          </span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                          <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
+                                 id="yes_{{ entry.pk }}" value="yes"
+                                 {% if entry.responded == True %}checked{% endif %}
+                                 autocomplete="off">
+                          <label class="btn btn-outline-success" for="yes_{{ entry.pk }}">
+                            <i class="bi bi-check2-circle"></i> Yes
+                          </label>
+
+                          <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
+                                 id="no_{{ entry.pk }}" value="no"
+                                 {% if entry.responded == False %}checked{% endif %}
+                                 autocomplete="off">
+                          <label class="btn btn-outline-danger" for="no_{{ entry.pk }}">
+                            <i class="bi bi-x-circle"></i> No
+                          </label>
+                        </div>
+                        {% if entry.checked_at %}
+                          <div class="small text-muted mt-1">{{ entry.checked_at|date:"H:i" }}</div>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <input type="text"
+                               name="issue_{{ entry.pk }}"
+                               class="form-control form-control-sm"
+                               placeholder="Issue or notes..."
+                               value="{{ entry.noted_issue|default:'' }}">
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="card shadow-sm">
+          <div class="card-body text-center py-5">
+            <div class="text-muted">
+              <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+              No radios to check yet.
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    {% endwith %}
 
     <div class="d-flex justify-content-end gap-2 mt-3">
       <a href="{% url 'comms:radios' %}" class="btn btn-outline-secondary">
@@ -233,17 +266,15 @@
   // Quick client-side filter
   document.addEventListener('DOMContentLoaded', function () {
     const input = document.getElementById('quickFilter');
-    const rows = document.querySelectorAll('#entriesTable tbody tr.entry-row');
+    const rows = document.querySelectorAll('tr.entry-row');
 
     if (input && rows.length) {
       input.addEventListener('input', function () {
         const q = this.value.toLowerCase();
-        let visible = 0;
         rows.forEach(r => {
           const hay = (r.getAttribute('data-search') || '').toLowerCase();
           const show = !q || hay.includes(q);
           r.style.display = show ? '' : 'none';
-          if (show) visible++;
         });
       });
     }
@@ -261,7 +292,6 @@
     const allRadios = document.querySelectorAll('input[type="radio"][name^="responded_"]');
     const radioGroups = {};
 
-    // Group radios by entry
     allRadios.forEach(radio => {
       const name = radio.name;
       if (!radioGroups[name]) {
@@ -287,8 +317,7 @@
       }
     });
 
-    // Update the display (using textContent for counts calculated on page)
-    const respondedEl = document.querySelector('.text-success.fs-5');
+    const respondedEl = document.getElementById('respondedCount');
     const missedEl = document.getElementById('missedCount');
     const pendingEl = document.getElementById('pendingCount');
 

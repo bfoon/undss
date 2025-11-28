@@ -70,6 +70,16 @@ def is_agency_approver_for(user, agency_name: str) -> bool:
     return AgencyApprover.objects.filter(user=user, agency_name=agency_name).exists()
 
 
+def can_view_all_packages(user):
+    """
+    Reception, Registry, Agency FP, LSA, SOC, Superuser can see all packages.
+    Everyone else is restricted to their own packages.
+    """
+    if not user.is_authenticated:
+        return False
+    role = getattr(user, "role", "") or ""
+    return user.is_superuser or role in ("reception", "registry", "agency_fp", "lsa", "soc")
+
 # =============================================================================
 # EMAIL / NOTIFICATION HELPERS
 # =============================================================================
@@ -1616,36 +1626,68 @@ def package_log_new(request):
     return render(request, "vehicles/packages/package_form.html", {"form": form, "is_guard": True})
 
 
+
 @login_required
 def package_list(request):
-    q = request.GET.get("q","").strip()
-    status = request.GET.get("status","")
+    q = (request.GET.get("q") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+    user = request.user
+    role = getattr(user, "role", "") or ""
+
+    # Base queryset
     qs = Package.objects.all()
 
-    # basic role-based default scoping (optional: show inboxes)
-    role = getattr(request.user, "role", "")
-    if role == "reception":
-        qs = qs.filter(Q(status__in=["to_reception","at_reception","to_agency"]))
-    elif role in ("registry", "agency_fp"):
-        qs = qs.filter(Q(status__in=["to_agency","with_agency","delivered"]))
-    # lsa/soc/guards see all; requesters not relevant here
+    # --- Visibility rules ---
+    if can_view_all_packages(user):
+        # Your previous inbox-style scoping for special roles
+        if role == "reception":
+            qs = qs.filter(Q(status__in=["to_reception", "at_reception", "to_agency"]))
+        elif role in ("registry", "agency_fp"):
+            qs = qs.filter(Q(status__in=["to_agency", "with_agency", "delivered"]))
+        # LSA/SOC/superuser: see all, no extra filter
+    else:
+        # Normal users: only packages "they own"
+        # Here we assume `for_recipient` holds the staff name or similar.
+        full_name = (user.get_full_name() or "").strip()
+        username = user.username
 
+        own_filter = Q(for_recipient__icontains=username)
+        if full_name:
+            own_filter = own_filter | Q(for_recipient__icontains=full_name)
+
+        qs = qs.filter(own_filter)
+
+    # --- Search filter ---
     if q:
         qs = qs.filter(
-            Q(tracking_code__icontains=q)|
-            Q(sender_name__icontains=q)|
-            Q(sender_org__icontains=q)|
-            Q(destination_agency__icontains=q)|
+            Q(tracking_code__icontains=q) |
+            Q(sender_name__icontains=q) |
+            Q(sender_org__icontains=q) |
+            Q(destination_agency__icontains=q) |
             Q(for_recipient__icontains=q)
         )
+
+    # --- Status filter ---
     if status:
         qs = qs.filter(status=status)
 
-    return render(request, "vehicles/packages/package_list.html", {
-        "packages": qs.select_related("logged_by","reception_received_by","agency_received_by","delivered_by")[:200],
-        "q": q, "status_filter": status
-    })
+    qs = qs.select_related(
+        "logged_by",
+        "reception_received_by",
+        "agency_received_by",
+        "delivered_by",
+    )
 
+    return render(
+        request,
+        "vehicles/packages/package_list.html",
+        {
+            "packages": qs[:200],
+            "q": q,
+            "status_filter": status,
+            "can_view_all": can_view_all_packages(user),
+        },
+    )
 
 @login_required
 def package_detail(request, pk):

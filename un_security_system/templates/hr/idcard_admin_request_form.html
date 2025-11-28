@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}ID Card Request for Staff{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h3 class="mb-1">
+        <i class="bi bi-person-badge me-2"></i> ID Card Request for Staff
+      </h3>
+      <p class="small text-muted mb-0">
+        LSA / SOC / Agency HR can initiate ID card requests for any employee.
+      </p>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.as_p }}
+
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <a href="{% url 'accounts:idcard_request_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Cancel
+          </a>
+          <button type="submit" class="btn btn-un-primary">
+            <i class="bi bi-send me-1"></i> Submit Request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

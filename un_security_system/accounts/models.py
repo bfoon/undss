@@ -10,27 +10,53 @@ class Agency(models.Model):
 
 class User(AbstractUser):
     ROLE_CHOICES = [
-        ('requester', 'Requester (Staff)'),  # <-- NEW
+        ('requester', 'Requester (Staff)'),
         ('data_entry', 'Data Entry (Security Guard)'),
         ('lsa', 'Local Security Associate'),
         ('soc', 'Security Operations Center'),
         ('reception', 'Receptionist'),
         ('registry', 'Registry'),
         ('ict_focal', 'ICT Focal Point'),
+
+        # 🔹 NEW ROLE
+        ('agency_hr', 'Agency HR'),
     ]
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='requester')
     phone = models.CharField(max_length=20, blank=True)
-    employee_id = models.CharField(max_length=20, unique=True, blank=True, null=True)
-    agency = models.ForeignKey(Agency, on_delete=models.SET_NULL, null=True, blank=True, related_name="users")
-    # NEW
+
+    employee_id = models.CharField(
+        max_length=20,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text="Staff ID number / badge ID"
+    )
+
+    # 🔹 New field to track expiry of ID card (or badge)
+    employee_id_expiry = models.DateField(
+        blank=True,
+        null=True,
+        help_text="Date the physical ID card expires"
+    )
+
+    agency = models.ForeignKey(
+        Agency,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users",
+        help_text="UN Agency the user belongs to"
+    )
+
+    # Password policy
     must_change_password = models.BooleanField(default=False)
     temp_password_set_at = models.DateTimeField(null=True, blank=True)
 
     def mark_temp_password(self):
         self.must_change_password = True
         self.temp_password_set_at = timezone.now()
-        self.save(update_fields=["must_change_password", "temp_password_set_at"])
+        self.save(update_fields=['must_change_password', 'temp_password_set_at'])
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
@@ -60,3 +86,5 @@ class SecurityIncident(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.severity}"
+
+from .hr.models import EmployeeIDCardRequest

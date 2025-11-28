@@ -133,141 +133,154 @@
     </div>
   </form>
 
-  <!-- Table -->
-  <div class="card shadow-sm">
-    {% if radios %}
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-          <thead class="table-light">
-            <tr>
-              <th style="width:14%">Call Sign</th>
-              <th style="width:10%">Type</th>
-              <th style="width:22%">Assigned To</th>
-              <th style="width:16%">Serial Number</th>
-              <th style="width:12%">Status</th>
-              <th style="width:16%">Notes</th>
-              <th style="width:10%" class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for radio in radios %}
-              <tr>
-                <td>
-                  <strong class="text-primary">{{ radio.call_sign|default:"—" }}</strong>
-                </td>
-                <td>
-                  <span class="badge bg-info-subtle text-info">
-                    {{ radio.get_device_type_display }}
-                  </span>
-                </td>
-                <td>
-                  {% if radio.assigned_to %}
-                    <i class="bi bi-person-circle text-muted me-1"></i>
-                    <a href="#" class="text-decoration-none">
-                      {{ radio.assigned_to.get_full_name|default:radio.assigned_to.username }}
-                    </a>
-                  {% else %}
-                    <span class="text-muted">Unassigned</span>
-                  {% endif %}
-                </td>
-                <td>
-                  <span class="text-muted small font-monospace">{{ radio.serial_number|default:"—" }}</span>
-                </td>
-                <td>
-                  {% if radio.status == "available" %}
-                    <span class="badge bg-success-subtle text-success">
-                      <i class="bi bi-check-circle me-1"></i>Available
-                    </span>
-                  {% elif radio.status == "with_user" %}
-                    <span class="badge bg-primary-subtle text-primary">
-                      <i class="bi bi-person-check me-1"></i>With User
-                    </span>
-                  {% elif radio.status == "repair" %}
-                    <span class="badge bg-warning-subtle text-warning">
-                      <i class="bi bi-wrench me-1"></i>Repair
-                    </span>
-                  {% elif radio.status == "damaged" %}
-                    <span class="badge bg-danger-subtle text-danger">
-                      <i class="bi bi-exclamation-triangle me-1"></i>Damaged
-                    </span>
-                  {% else %}
-                    <span class="badge bg-secondary-subtle text-secondary">{{ radio.get_status_display }}</span>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if radio.notes %}
-                    <span class="text-muted small" title="{{ radio.notes }}">
-                      {{ radio.notes|truncatewords:5 }}
-                    </span>
-                  {% else %}
-                    <span class="text-muted">—</span>
-                  {% endif %}
-                </td>
-                <td class="text-end">
-                  <div class="btn-group btn-group-sm">
-                    <a href="{% url 'comms:device_detail' radio.pk %}"
-                       class="btn btn-outline-primary"
-                       title="View Details">
-                      <i class="bi bi-eye"></i>
-                    </a>
-                    {% if user.role == "lsa" or user.role == "soc" or user.is_superuser %}
-                      <a href="{% url 'comms:device_edit' radio.pk %}"
-                         class="btn btn-outline-secondary"
-                         title="Edit">
-                        <i class="bi bi-pencil"></i>
-                      </a>
-                      <button type="button"
-                              class="btn btn-outline-info"
-                              data-bs-toggle="modal"
-                              data-bs-target="#statusModal{{ radio.pk }}"
-                              title="Change Status">
-                        <i class="bi bi-arrows-move"></i>
-                      </button>
-                    {% endif %}
-                  </div>
-                </td>
-              </tr>
+  <!-- Grouped Tables by Agency -->
+  <div class="mb-3">
+    {% if grouped_radios %}
+      {% for agency_label, radios_in_agency in grouped_radios %}
+        <div class="card shadow-sm mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+              <strong>{{ agency_label }}</strong>
+              <span class="badge bg-secondary-subtle text-secondary ms-2">
+                {{ radios_in_agency|length }} radio{{ radios_in_agency|length|pluralize }}
+              </span>
+            </div>
+          </div>
 
-              <!-- Status Change Modal -->
-              {% if user.role == "lsa" or user.role == "soc" or user.is_superuser %}
-                <div class="modal fade" id="statusModal{{ radio.pk }}" tabindex="-1">
-                  <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                      <div class="modal-header">
-                        <h5 class="modal-title">Change Status: {{ radio.call_sign }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:14%">Call Sign</th>
+                  <th style="width:10%">Type</th>
+                  <th style="width:22%">Assigned To</th>
+                  <th style="width:16%">Serial Number</th>
+                  <th style="width:12%">Status</th>
+                  <th style="width:16%">Notes</th>
+                  <th style="width:10%" class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for radio in radios_in_agency %}
+                  <tr>
+                    <td>
+                      <strong class="text-primary">{{ radio.call_sign|default:"—" }}</strong>
+                    </td>
+                    <td>
+                      <span class="badge bg-info-subtle text-info">
+                        {{ radio.get_device_type_display }}
+                      </span>
+                    </td>
+                    <td>
+                      {% if radio.assigned_to %}
+                        <i class="bi bi-person-circle text-muted me-1"></i>
+                        <a href="#" class="text-decoration-none">
+                          {{ radio.assigned_to.get_full_name|default:radio.assigned_to.username }}
+                        </a>
+                      {% else %}
+                        <span class="text-muted">Unassigned</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      <span class="text-muted small font-monospace">{{ radio.serial_number|default:"—" }}</span>
+                    </td>
+                    <td>
+                      {% if radio.status == "available" %}
+                        <span class="badge bg-success-subtle text-success">
+                          <i class="bi bi-check-circle me-1"></i>Available
+                        </span>
+                      {% elif radio.status == "with_user" %}
+                        <span class="badge bg-primary-subtle text-primary">
+                          <i class="bi bi-person-check me-1"></i>With User
+                        </span>
+                      {% elif radio.status == "repair" %}
+                        <span class="badge bg-warning-subtle text-warning">
+                          <i class="bi bi-wrench me-1"></i>Repair
+                        </span>
+                      {% elif radio.status == "damaged" %}
+                        <span class="badge bg-danger-subtle text-danger">
+                          <i class="bi bi-exclamation-triangle me-1"></i>Damaged
+                        </span>
+                      {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary">{{ radio.get_status_display }}</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if radio.notes %}
+                        <span class="text-muted small" title="{{ radio.notes }}">
+                          {{ radio.notes|truncatewords:5 }}
+                        </span>
+                      {% else %}
+                        <span class="text-muted">—</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-end">
+                      <div class="btn-group btn-group-sm">
+                        <a href="{% url 'comms:device_detail' radio.pk %}"
+                           class="btn btn-outline-primary"
+                           title="View Details">
+                          <i class="bi bi-eye"></i>
+                        </a>
+                        {% if user.role == "lsa" or user.role == "soc" or user.is_superuser %}
+                          <a href="{% url 'comms:device_edit' radio.pk %}"
+                             class="btn btn-outline-secondary"
+                             title="Edit">
+                            <i class="bi bi-pencil"></i>
+                          </a>
+                          <button type="button"
+                                  class="btn btn-outline-info"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#statusModal{{ radio.pk }}"
+                                  title="Change Status">
+                            <i class="bi bi-arrows-move"></i>
+                          </button>
+                        {% endif %}
                       </div>
-                      <form method="post" action="{% url 'comms:radio_update_status' radio.pk %}">
-                        {% csrf_token %}
-                        <div class="modal-body">
-                          <div class="mb-3">
-                            <label class="form-label fw-semibold">New Status</label>
-                            <select name="status" class="form-select" required>
-                              <option value="available" {% if radio.status == "available" %}selected{% endif %}>Available</option>
-                              <option value="with_user" {% if radio.status == "with_user" %}selected{% endif %}>With User</option>
-                              <option value="repair" {% if radio.status == "repair" %}selected{% endif %}>Under Repair</option>
-                              <option value="damaged" {% if radio.status == "damaged" %}selected{% endif %}>Damaged</option>
-                            </select>
-                            <div class="form-text">
-                              Note: Setting status to anything other than "With User" will unassign the radio.
-                            </div>
-                          </div>
-                        </div>
-                        <div class="modal-footer">
-                          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                          <button type="submit" class="btn btn-primary">Update Status</button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              {% endif %}
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
 
-      <!-- Pagination -->
+                  {% if user.role == "lsa" or user.role == "soc" or user.is_superuser %}
+                    <!-- Status Change Modal -->
+                    <div class="modal fade" id="statusModal{{ radio.pk }}" tabindex="-1">
+                      <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h5 class="modal-title">Change Status: {{ radio.call_sign }}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                          </div>
+                          <form method="post" action="{% url 'comms:radio_update_status' radio.pk %}">
+                            {% csrf_token %}
+                            <div class="modal-body">
+                              <div class="mb-3">
+                                <label class="form-label fw-semibold">New Status</label>
+                                <select name="status" class="form-select" required>
+                                  <option value="available" {% if radio.status == "available" %}selected{% endif %}>Available</option>
+                                  <option value="with_user" {% if radio.status == "with_user" %}selected{% endif %}>With User</option>
+                                  <option value="repair" {% if radio.status == "repair" %}selected{% endif %}>Under Repair</option>
+                                  <option value="damaged" {% if radio.status == "damaged" %}selected{% endif %}>Damaged</option>
+                                </select>
+                                <div class="form-text">
+                                  Note: Setting status to anything other than "With User" will unassign the radio.
+                                </div>
+                              </div>
+                            </div>
+                            <div class="modal-footer">
+                              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                              <button type="submit" class="btn btn-primary">Update Status</button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endfor %}
+
+      {# Pagination stays the same, using page_obj #}
       {% if is_paginated %}
         <div class="card-footer bg-light">
           <nav>
@@ -304,16 +317,18 @@
         </div>
       {% endif %}
     {% else %}
-      <div class="card-body text-center py-5">
-        <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
-        <h5 class="mb-1">No radios found</h5>
-        <p class="text-muted mb-0">
-          {% if search_query or status_filter %}
-            Try adjusting your filters or <a href="{% url 'comms:radios' %}">clear all filters</a>.
-          {% else %}
-            No radios have been added to the system yet.
-          {% endif %}
-        </p>
+      <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
+          <h5 class="mb-1">No radios found</h5>
+          <p class="text-muted mb-0">
+            {% if search_query or status_filter %}
+              Try adjusting your filters or <a href="{% url 'comms:radios' %}">clear all filters</a>.
+            {% else %}
+              No radios have been added to the system yet.
+            {% endif %}
+          </p>
+        </div>
       </div>
     {% endif %}
   </div>

@@ -383,7 +383,7 @@
       {% endif %}
 
       {# ===== Requesters (normal staff) ===== #}
-      {% if user.role == 'requester' or user.role == 'reception'  or user.role == 'registry' or user.role == 'ict_focal'  %}
+      {% if user.role == 'requester' or user.role == 'reception'  or user.role == 'registry' or user.role == 'ict_focal' or user.role == 'agency_hr'  %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
              aria-expanded="false">
@@ -412,6 +412,20 @@
             <li><a class="dropdown-item" href="{% url 'vehicles:my_pc_requests' %}">
               <i class="bi bi-card-list me-2"></i>My Parking Card Requests
             </a></li>
+
+              <li><hr class="dropdown-divider"></li>
+                <li class="dropdown-header">ID Cards</li>
+                <li>
+                  <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
+                    <i class="bi bi-credit-card me-2"></i> Request ID Card
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
+                    <i class="bi bi-card-list me-2"></i> My ID Card Requests
+                  </a>
+                </li>
+
 
             <li><hr class="dropdown-divider"></li>
 
@@ -490,6 +504,46 @@
   </ul>
 </li>
 {% endif %}
+
+{% if user.is_authenticated %}
+  {% if user.role == 'lsa' or user.role == 'soc' or user.role == 'agency_hr' or user.is_superuser %}
+    <li class="nav-item dropdown">
+      <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+         aria-expanded="false">
+        <i class="bi bi-person-badge me-1"></i> HR & ID Cards
+      </a>
+      <ul class="dropdown-menu">
+        <li class="dropdown-header">Monitoring</li>
+        <li>
+          <a class="dropdown-item" href="{% url 'accounts:expiring_ids' %}">
+            <i class="bi bi-exclamation-triangle me-2"></i> Expiring / Expired IDs
+          </a>
+        </li>
+
+        <li><hr class="dropdown-divider"></li>
+
+        <li class="dropdown-header">ID Card Requests</li>
+        <li>
+          <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
+            <i class="bi bi-credit-card-2-front me-2"></i> Request ID Card (Myself)
+          </a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="{% url 'accounts:idcard_request_for_user' %}">
+            <i class="bi bi-person-plus me-2"></i> Request for Staff
+          </a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="{% url 'accounts:idcard_request_list' %}">
+            <i class="bi bi-inbox me-2"></i> All ID Card Requests
+          </a>
+        </li>
+      </ul>
+    </li>
+  {% endif %}
+{% endif %}
+
+
 
 {% if user.is_authenticated and user.role == 'ict_focal' %}
 <li class="nav-item dropdown">

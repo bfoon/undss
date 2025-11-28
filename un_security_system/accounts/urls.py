@@ -1,67 +1,136 @@
-# accounts/urls.py
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views, views_ict
+from .hr import views_hr
 
 app_name = 'accounts'
 
 urlpatterns = [
+    # ------------------------------------------------------------------
     # Authentication
+    # ------------------------------------------------------------------
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('profile/', views.profile_view, name='profile'),
     path('change-password/', views.change_password_view, name='change_password'),
 
-    # Password Reset (Django built-in views)
-    path('password-reset/',
-         auth_views.PasswordResetView.as_view(
-             template_name='accounts/password_reset.html',
-             email_template_name='accounts/password_reset_email.html',
-             subject_template_name='accounts/password_reset_subject.txt',
-             success_url='/accounts/password-reset/done/'
-         ),
-         name='password_reset'),
-    path('password-reset/done/',
-         auth_views.PasswordResetDoneView.as_view(
-             template_name='accounts/password_reset_done.html'
-         ),
-         name='password_reset_done'),
-    path('password-reset-confirm/<uidb64>/<token>/',
-         auth_views.PasswordResetConfirmView.as_view(
-             template_name='accounts/password_reset_confirm.html',
-             success_url='/accounts/password-reset-complete/'
-         ),
-         name='password_reset_confirm'),
-    path('password-reset-complete/',
-         auth_views.PasswordResetCompleteView.as_view(
-             template_name='accounts/password_reset_complete.html'
-         ),
-         name='password_reset_complete'),
+    # ------------------------------------------------------------------
+    # Password Reset
+    # ------------------------------------------------------------------
+    path(
+        'password-reset/',
+        auth_views.PasswordResetView.as_view(
+            template_name='accounts/password_reset.html',
+            email_template_name='accounts/password_reset_email.html',
+            subject_template_name='accounts/password_reset_subject.txt',
+            success_url='/accounts/password-reset/done/'
+        ),
+        name='password_reset'
+    ),
+    path(
+        'password-reset/done/',
+        auth_views.PasswordResetDoneView.as_view(
+            template_name='accounts/password_reset_done.html'
+        ),
+        name='password_reset_done'
+    ),
+    path(
+        'password-reset-confirm/<uidb64>/<token>/',
+        auth_views.PasswordResetConfirmView.as_view(
+            template_name='accounts/password_reset_confirm.html',
+            success_url='/accounts/password-reset-complete/'
+        ),
+        name='password_reset_confirm'
+    ),
+    path(
+        'password-reset-complete/',
+        auth_views.PasswordResetCompleteView.as_view(
+            template_name='accounts/password_reset_complete.html'
+        ),
+        name='password_reset_complete'
+    ),
 
+    # ------------------------------------------------------------------
     # User Management (LSA)
+    # ------------------------------------------------------------------
     path('users/', views.UserListView.as_view(), name='user_list'),
     path('users/create/', views.UserCreateView.as_view(), name='user_create'),
     path('users/<int:pk>/edit/', views.UserUpdateView.as_view(), name='user_edit'),
     path('users/<int:pk>/toggle-status/', views.toggle_user_status, name='toggle_user_status'),
 
+    # ------------------------------------------------------------------
+    # HR / Employee ID features (using view_hr)
+    # LSA / SOC / agency_hr roles
+    # ------------------------------------------------------------------
+    path(
+        'hr/ids/expiring/',
+        views_hr.ExpiringIDListView.as_view(),
+        name='expiring_ids',
+    ),
+    path(
+        'hr/idcard/my/',
+        views_hr.my_idcard_request,
+        name='my_idcard_requests',
+    ),
+    path(
+        'hr/idcard/admin/',
+        views_hr.idcard_request_for_user,
+        name='idcard_request_for_user',
+    ),
+    path(
+        'hr/idcard/requests/',
+        views_hr.idcard_request_list,
+        name='idcard_request_list',
+    ),
+    path(
+        'hr/idcard/requests/<int:pk>/approve/',
+        views_hr.idcard_request_approve,
+        name='idcard_request_approve',
+    ),
+    path(
+        'hr/idcard/requests/<int:pk>/reject/',
+        views_hr.idcard_request_reject,
+        name='idcard_request_reject',
+    ),
+    path(
+        'hr/idcard/requests/<int:pk>/printed/',
+        views_hr.idcard_request_mark_printed,
+        name='idcard_request_mark_printed',
+    ),
+path(
+    'hr/idcard/requests/<int:pk>/issued/',
+    views_hr.idcard_request_mark_issued,
+    name='idcard_request_mark_issued'
+),
+
+    # ------------------------------------------------------------------
     # Activity Log
+    # ------------------------------------------------------------------
     path('activity/', views.user_activity_log, name='activity_log'),
     path('activity/<int:user_id>/', views.user_activity_log, name='user_activity_log'),
 
+    # ------------------------------------------------------------------
     # Security Incidents
+    # ------------------------------------------------------------------
     path('incidents/', views.SecurityIncidentListView.as_view(), name='incident_list'),
     path('incidents/create/', views.SecurityIncidentCreateView.as_view(), name='incident_create'),
     path('incidents/<int:pk>/', views.SecurityIncidentDetailView.as_view(), name='incident_detail'),
     path('incidents/<int:pk>/resolve/', views.resolve_incident, name='resolve_incident'),
 
-    # Analytics (LSA)
+    # ------------------------------------------------------------------
+    # Analytics
+    # ------------------------------------------------------------------
     path('analytics/', views.AccountAnalyticsView.as_view(), name='analytics'),
 
+    # ------------------------------------------------------------------
     # JSON APIs
+    # ------------------------------------------------------------------
     path('api/user-search/', views.user_search_api, name='user_search_api'),
     path('api/dashboard-stats/', views.dashboard_stats_api, name='dashboard_stats_api'),
 
+    # ------------------------------------------------------------------
     # ICT Focal Point User Management
+    # ------------------------------------------------------------------
     path('ict/users/', views_ict.ICTUserListView.as_view(), name='ict_user_list'),
     path('ict/users/create/', views_ict.ICTUserCreateView.as_view(), name='ict_user_create'),
     path('ict/users/<int:pk>/', views_ict.ICTUserDetailView.as_view(), name='ict_user_detail'),
