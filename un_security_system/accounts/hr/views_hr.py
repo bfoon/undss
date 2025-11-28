@@ -279,4 +279,28 @@ def idcard_request_mark_issued(request, pk):
     messages.success(request, "Request marked as issued.")
     return redirect("accounts:idcard_request_list")
 
+@login_required
+@user_passes_test(is_lsa_soc_or_hr)
+def idcard_request_detail(request, pk):
+    """
+    HR / LSA / SOC can view the full details of an ID card request.
+    Agency HR is limited to their own agency staff.
+    """
+    qs = EmployeeIDCardRequest.objects.select_related(
+        "for_user",
+        "requested_by",
+        "approver",
+        "printed_by",
+        "issued_by",
+    )
+
+    # Agency HR only sees requests for their agency’s staff
+    if getattr(request.user, "role", "") == "agency_hr" and request.user.agency_id:
+        qs = qs.filter(for_user__agency=request.user.agency)
+
+    obj = get_object_or_404(qs, pk=pk)
+
+    return render(request, "hr/idcard_request_detail.html", {"obj": obj})
+
+
 

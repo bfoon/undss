@@ -4,75 +4,381 @@
 {% block content %}
 <div class="container py-4">
 
-  <div class="d-flex justify-content-between align-items-start mb-3">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
       <h3 class="mb-1">
-        <i class="bi bi-exclamation-triangle text-danger me-2"></i>
-        Expiring / Expired ID Cards
+        <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+        Expiring ID Cards
       </h3>
       <p class="small text-muted mb-0">
-        Employees whose ID cards are expired or expiring within
-        <strong>{{ days }}</strong> day{{ days|pluralize }} (as of {{ today }})
+        Monitor and manage employee ID cards that require renewal
       </p>
     </div>
-    <div>
-      <form method="get" class="d-flex gap-2 align-items-center">
-        <label class="small text-muted mb-0">Days:</label>
-        <div class="input-group input-group-sm">
-          <input type="number" min="1" name="days" value="{{ days }}" class="form-control">
-          <button class="btn btn-un-primary">Update</button>
+    <a href="{% url 'accounts:idcard_request_list' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-list-check me-1"></i> View All Requests
+    </a>
+  </div>
+
+  <!-- Statistics Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-danger shadow-sm h-100">
+        <div class="card-body text-center">
+          <i class="bi bi-x-circle-fill text-danger fs-2 mb-2"></i>
+          <h4 class="mb-0 text-danger">{{ expired_count|default:0 }}</h4>
+          <small class="text-muted">Already Expired</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-warning shadow-sm h-100">
+        <div class="card-body text-center">
+          <i class="bi bi-clock-fill text-warning fs-2 mb-2"></i>
+          <h4 class="mb-0 text-warning">{{ expiring_count|default:0 }}</h4>
+          <small class="text-muted">Expiring Soon</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-info shadow-sm h-100">
+        <div class="card-body text-center">
+          <i class="bi bi-calendar-range-fill text-info fs-2 mb-2"></i>
+          <h4 class="mb-0 text-info">{{ days }}</h4>
+          <small class="text-muted">Day Window</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-primary shadow-sm h-100">
+        <div class="card-body text-center">
+          <i class="bi bi-people-fill text-primary fs-2 mb-2"></i>
+          <h4 class="mb-0 text-primary">{{ users|length|default:0 }}</h4>
+          <small class="text-muted">Total Employees</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        <!-- Days Threshold -->
+        <div class="col-md-3">
+          <label for="daysInput" class="form-label small text-muted mb-1">
+            <i class="bi bi-calendar-range me-1"></i> Days Threshold
+          </label>
+          <input type="number"
+                 id="daysInput"
+                 name="days"
+                 value="{{ days }}"
+                 min="1"
+                 max="365"
+                 class="form-control">
+          <div class="form-text">Show cards expiring within X days</div>
+        </div>
+
+        <!-- Status Filter -->
+        <div class="col-md-3">
+          <label for="statusFilter" class="form-label small text-muted mb-1">
+            <i class="bi bi-filter me-1"></i> Status
+          </label>
+          <select id="statusFilter" name="status" class="form-select">
+            <option value="">All Status</option>
+            <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>
+              Expired Only
+            </option>
+            <option value="expiring" {% if status_filter == 'expiring' %}selected{% endif %}>
+              Expiring Soon Only
+            </option>
+          </select>
+        </div>
+
+        <!-- Agency Filter -->
+        <div class="col-md-3">
+          <label for="agencyFilter" class="form-label small text-muted mb-1">
+            <i class="bi bi-building me-1"></i> Agency
+          </label>
+          <select id="agencyFilter" name="agency" class="form-select">
+            <option value="">All Agencies</option>
+            {% for agency in agencies %}
+              <option value="{{ agency.pk }}" {% if agency_filter == agency.pk|stringformat:"s" %}selected{% endif %}>
+                {{ agency.code }} - {{ agency.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="col-md-3">
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-fill">
+              <i class="bi bi-funnel me-1"></i> Apply
+            </button>
+            <a href="{% url 'accounts:expiring_ids' %}"
+               class="btn btn-outline-secondary"
+               title="Reset filters">
+              <i class="bi bi-x-lg"></i>
+            </a>
+          </div>
         </div>
       </form>
     </div>
   </div>
 
+  <!-- Info Alert -->
+  <div class="alert alert-info d-flex align-items-start mb-4">
+    <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+    <div class="flex-grow-1">
+      <strong>Viewing criteria:</strong> Showing employees with ID cards that have expired or will expire within
+      <strong>{{ days }} day{{ days|pluralize }}</strong> (as of {{ today|date:"F d, Y" }}).
+      {% if has_filters %}
+        <span class="badge bg-primary ms-2">Filtered</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Results Table -->
   {% if users %}
     <div class="card shadow-sm">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+          <i class="bi bi-table me-2"></i>{{ users|length }} Employee{{ users|length|pluralize }}
+        </span>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-primary" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i> Print
+          </button>
+          <button class="btn btn-sm btn-outline-success" onclick="exportToCSV()">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
+          </button>
+        </div>
+      </div>
       <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0" id="expiryTable">
           <thead class="table-light">
             <tr>
-              <th>Full Name</th>
-              <th>Username</th>
+              <th>Employee</th>
               <th>Agency</th>
               <th>Employee ID</th>
               <th>Expiry Date</th>
+              <th>Days Until Expiry</th>
               <th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
             {% for u in users %}
-              <tr>
-                <td>{{ u.get_full_name|default:u.username }}</td>
-                <td class="text-muted small">{{ u.username }}</td>
-                <td>{{ u.agency.code|default:"—" }}</td>
-                <td class="font-monospace">{{ u.employee_id|default:"—" }}</td>
+              <tr class="{% if u.employee_id_expiry < today %}table-danger{% elif u.days_until_expiry <= 7 %}table-warning{% endif %}">
+                <!-- Employee Info -->
+                <td>
+                  <div class="d-flex align-items-center">
+                    <div class="bg-{% if u.employee_id_expiry < today %}danger{% else %}warning{% endif %} bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-2"
+                         style="width: 36px; height: 36px;">
+                      <i class="bi bi-person text-{% if u.employee_id_expiry < today %}danger{% else %}warning{% endif %}"></i>
+                    </div>
+                    <div>
+                      <div class="fw-semibold">
+                        {{ u.get_full_name|default:u.username }}
+                      </div>
+                      <div class="small text-muted">
+                        <i class="bi bi-at"></i> {{ u.username }}
+                      </div>
+                      {% if u.email %}
+                        <div class="small text-muted">
+                          <i class="bi bi-envelope"></i> {{ u.email }}
+                        </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </td>
+
+                <!-- Agency -->
+                <td>
+                  {% if u.agency %}
+                    <span class="badge bg-light text-dark">
+                      {{ u.agency.code }}
+                    </span>
+                    <div class="small text-muted">{{ u.agency.name }}</div>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <!-- Employee ID -->
+                <td>
+                  {% if u.employee_id %}
+                    <code class="bg-light px-2 py-1 rounded">{{ u.employee_id }}</code>
+                  {% else %}
+                    <span class="text-muted">Not assigned</span>
+                  {% endif %}
+                </td>
+
+                <!-- Expiry Date -->
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    {% if u.employee_id_expiry < today %}
+                      <span class="badge bg-danger">
+                        <i class="bi bi-x-circle-fill me-1"></i> Expired
+                      </span>
+                    {% else %}
+                      <span class="badge bg-warning text-dark">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i> Expiring
+                      </span>
+                    {% endif %}
+                    <span class="small">{{ u.employee_id_expiry|date:"M d, Y" }}</span>
+                  </div>
+                </td>
+
+                <!-- Days Until Expiry -->
                 <td>
                   {% if u.employee_id_expiry < today %}
-                    <span class="badge bg-danger me-1">Expired</span>
+                    <span class="text-danger fw-semibold">
+                      <i class="bi bi-x-circle-fill me-1"></i>
+                      Expired
+                    </span>
+                  {% elif u.days_until_expiry <= 7 %}
+                    <span class="text-danger fw-semibold">
+                      <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                      {{ u.days_until_expiry }} day{{ u.days_until_expiry|pluralize }}
+                    </span>
+                  {% elif u.days_until_expiry <= 30 %}
+                    <span class="text-warning fw-semibold">
+                      <i class="bi bi-clock me-1"></i>
+                      {{ u.days_until_expiry }} day{{ u.days_until_expiry|pluralize }}
+                    </span>
                   {% else %}
-                    <span class="badge bg-warning me-1">Expiring</span>
+                    <span class="text-muted fw-semibold">
+                      <i class="bi bi-clock me-1"></i>
+                      {{ u.days_until_expiry }} day{{ u.days_until_expiry|pluralize }}
+                    </span>
                   {% endif %}
-                  {{ u.employee_id_expiry }}
                 </td>
+
+                <!-- Actions -->
                 <td class="text-end">
-                  <a href="{% url 'hr:idcard_request_for_user' %}?user={{ u.pk }}"
-                     class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-credit-card me-1"></i> Request New Card
-                  </a>
+                  <div class="btn-group btn-group-sm">
+                    <a href="{% url 'accounts:idcard_request_for_user' %}?user={{ u.pk }}"
+                       class="btn btn-{% if u.employee_id_expiry < today %}danger{% else %}warning text-dark{% endif %}"
+                       title="Request renewal">
+                      <i class="bi bi-credit-card me-1"></i> Renew Card
+                    </a>
+                    <a href="{% url 'accounts:user_detail' u.pk %}"
+                       class="btn btn-outline-secondary"
+                       title="View profile">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                  </div>
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+
+      <!-- Table Footer with Summary -->
+      <div class="card-footer bg-light text-muted small">
+        <div class="row">
+          <div class="col-md-6">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Legend:</strong>
+            <span class="badge bg-danger ms-2">Red</span> = Already expired
+            <span class="badge bg-warning text-dark ms-2">Yellow</span> = Expiring within 7 days
+          </div>
+          <div class="col-md-6 text-md-end">
+            Last updated: {{ today|date:"F d, Y H:i" }}
+          </div>
+        </div>
+      </div>
     </div>
+
   {% else %}
-    <div class="alert alert-success">
-      <i class="bi bi-check-circle-fill me-2"></i>
-      No ID cards are expired or expiring within {{ days }} day{{ days|pluralize }}.
+    <div class="card shadow-sm">
+      <div class="card-body text-center py-5">
+        <i class="bi bi-check-circle-fill text-success display-1 mb-3"></i>
+        <h5 class="text-success mb-2">All ID Cards Are Valid</h5>
+        <p class="text-muted mb-3">
+          {% if has_filters %}
+            No employees match your current filter criteria.
+          {% else %}
+            No ID cards are expired or expiring within {{ days }} day{{ days|pluralize }}.
+          {% endif %}
+        </p>
+        {% if has_filters %}
+          <a href="{% url 'accounts:expiring_idcards' %}" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-clockwise me-1"></i> Clear Filters
+          </a>
+        {% endif %}
+      </div>
     </div>
   {% endif %}
 
 </div>
+
+<style>
+  @media print {
+    .btn, .card-header > div, .alert, .card-footer {
+      display: none !important;
+    }
+  }
+
+  .table-danger {
+    background-color: rgba(220, 53, 69, 0.05);
+  }
+
+  .table-warning {
+    background-color: rgba(255, 193, 7, 0.05);
+  }
+
+  code {
+    font-size: 0.9em;
+  }
+
+  .badge {
+    font-weight: 500;
+  }
+</style>
+
+<script>
+function exportToCSV() {
+  const table = document.getElementById('expiryTable');
+  let csv = [];
+
+  // Headers
+  const headers = [];
+  table.querySelectorAll('thead th').forEach(th => {
+    headers.push(th.textContent.trim());
+  });
+  csv.push(headers.join(','));
+
+  // Rows
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    const row = [];
+    tr.querySelectorAll('td').forEach((td, index) => {
+      // Skip the last column (Actions)
+      if (index < tr.querySelectorAll('td').length - 1) {
+        let text = td.textContent.trim().replace(/\s+/g, ' ');
+        // Escape commas and quotes
+        if (text.includes(',') || text.includes('"')) {
+          text = '"' + text.replace(/"/g, '""') + '"';
+        }
+        row.push(text);
+      }
+    });
+    csv.push(row.join(','));
+  });
+
+  // Download
+  const csvContent = csv.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'expiring_id_cards_' + new Date().toISOString().split('T')[0] + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+</script>
 {% endblock %}

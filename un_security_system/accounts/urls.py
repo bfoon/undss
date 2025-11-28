@@ -83,6 +83,11 @@ urlpatterns = [
         name='idcard_request_list',
     ),
     path(
+            "hr/idcard/requests/<int:pk>/",
+            views_hr.idcard_request_detail,
+            name="idcard_request_detail",
+    ),
+    path(
         'hr/idcard/requests/<int:pk>/approve/',
         views_hr.idcard_request_approve,
         name='idcard_request_approve',
