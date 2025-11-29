@@ -1,0 +1,517 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ page_title }} · UN Security{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root {
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .page-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+  }
+
+  .back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: white;
+    color: #4a5568;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    transition: var(--transition);
+  }
+
+  .back-button:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+    color: #2d3748;
+    transform: translateX(-4px);
+  }
+
+  .form-card {
+    border: none;
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    background: white;
+  }
+
+  .form-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .form-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+  }
+
+  .form-header-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .form-header h4 {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    font-size: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .form-header .subtitle {
+    opacity: 0.95;
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+
+  .form-body {
+    padding: 2.5rem;
+  }
+
+  .alert {
+    border: none;
+    border-radius: 0.875rem;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: start;
+    gap: 1rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .alert-success {
+    background: linear-gradient(135deg, #d1f4e0 0%, #c6f6d5 100%);
+    color: #22543d;
+    border-left: 4px solid #48bb78;
+  }
+
+  .alert-danger {
+    background: linear-gradient(135deg, #fed7d7 0%, #fc8181 100%);
+    color: #742a2a;
+    border-left: 4px solid #f56565;
+  }
+
+  .alert-warning {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border-left: 4px solid #fbbf24;
+  }
+
+  .alert-info {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e40af;
+    border-left: 4px solid #60a5fa;
+  }
+
+  .form-group {
+    margin-bottom: 2rem;
+  }
+
+  .form-label {
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 0.625rem;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .required-indicator {
+    color: #e53e3e;
+    font-weight: 700;
+  }
+
+  .form-control {
+    padding: 0.875rem 1.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 0.75rem;
+    font-size: 0.95rem;
+    transition: var(--transition);
+    font-weight: 500;
+  }
+
+  .form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    outline: none;
+  }
+
+  .form-control::placeholder {
+    color: #a0aec0;
+    font-weight: 400;
+  }
+
+  .form-text {
+    color: #718096;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .form-text i {
+    margin-top: 0.125rem;
+    color: #667eea;
+  }
+
+  .switch-container {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border: 2px solid #e2e8f0;
+    border-radius: 0.875rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    transition: var(--transition);
+  }
+
+  .switch-container:hover {
+    border-color: #cbd5e0;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .form-check-input {
+    width: 3rem;
+    height: 1.5rem;
+    cursor: pointer;
+    border: 2px solid #cbd5e0;
+    transition: var(--transition);
+  }
+
+  .form-check-input:checked {
+    background-color: #48bb78;
+    border-color: #48bb78;
+  }
+
+  .form-check-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .form-check-label {
+    font-weight: 600;
+    color: #2d3748;
+    cursor: pointer;
+    font-size: 0.95rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .switch-description {
+    font-weight: 400;
+    color: #718096;
+    font-size: 0.875rem;
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid #f1f5f9;
+    margin-top: 1rem;
+  }
+
+  .btn {
+    padding: 0.875rem 2rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: var(--transition);
+    border: 2px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn-outline-secondary {
+    background: white;
+    border-color: #e2e8f0;
+    color: #4a5568;
+  }
+
+  .btn-outline-secondary:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+    color: #2d3748;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: transparent;
+    color: white;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .info-box {
+    background: linear-gradient(135deg, #ebf4ff 0%, #e0e7ff 100%);
+    border: 1px solid #c3dafe;
+    border-radius: 0.875rem;
+    padding: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .info-box-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .info-box-icon {
+    color: #4c51bf;
+    font-size: 1.5rem;
+  }
+
+  .info-box-title {
+    font-weight: 700;
+    color: #2d3748;
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .info-box-content {
+    color: #4a5568;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .info-box-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0 0;
+  }
+
+  .info-box-list li {
+    padding: 0.5rem 0;
+    display: flex;
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .info-box-list li i {
+    color: #4c51bf;
+    margin-top: 0.25rem;
+  }
+
+  @media (max-width: 768px) {
+    .page-container {
+      padding: 1rem;
+    }
+
+    .form-header {
+      padding: 1.5rem;
+    }
+
+    .form-body {
+      padding: 1.5rem;
+    }
+
+    .form-header h4 {
+      font-size: 1.5rem;
+    }
+
+    .btn {
+      padding: 0.75rem 1.5rem;
+      font-size: 0.875rem;
+    }
+
+    .form-actions {
+      flex-direction: column-reverse;
+      gap: 0.75rem;
+    }
+
+    .form-actions .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="mb-4">
+    <a href="{% url 'visitors:visitor_card_list' %}" class="back-button">
+      <i class="bi bi-arrow-left"></i>
+      <span>Back to Cards</span>
+    </a>
+  </div>
+
+  <div class="form-card">
+    <div class="form-header">
+      <div class="form-header-content">
+        <h4>
+          <i class="bi bi-credit-card-2-front-fill"></i>
+          {{ page_title }}
+        </h4>
+        <p class="subtitle mb-0">Add a new visitor access card to the inventory and tracking system</p>
+      </div>
+    </div>
+
+    <div class="form-body">
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+            <i class="bi bi-{% if message.tags == 'success' %}check-circle-fill{% elif message.tags == 'danger' %}exclamation-triangle-fill{% elif message.tags == 'warning' %}exclamation-circle-fill{% else %}info-circle-fill{% endif %}"></i>
+            <div>{{ message }}</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" novalidate id="cardForm">
+        {% csrf_token %}
+
+        <div class="form-group">
+          <label class="form-label">
+            <i class="bi bi-hash"></i>
+            Card Number
+            <span class="required-indicator">*</span>
+          </label>
+          <input type="text"
+                 name="number"
+                 class="form-control"
+                 value="{{ number }}"
+                 placeholder="e.g., VC-001, CARD-101, UN-VISITOR-0001"
+                 required
+                 autofocus>
+          <div class="form-text">
+            <i class="bi bi-lightbulb"></i>
+            <span>Enter the unique identifier printed on the physical card. This number must be unique.</span>
+          </div>
+        </div>
+
+        <div class="switch-container">
+          <div class="form-check form-switch">
+            <input class="form-check-input"
+                   type="checkbox"
+                   role="switch"
+                   id="isActiveSwitch"
+                   name="is_active"
+                   {% if is_active %}checked{% endif %}>
+            <label class="form-check-label" for="isActiveSwitch">
+              <span>Card is Active</span>
+              <span class="switch-description">
+                When enabled, this card will be available for issuance to visitors during check-in
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <a href="{% url 'visitors:visitor_card_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-x-lg"></i>
+            <span>Cancel</span>
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg"></i>
+            <span>Save Card</span>
+          </button>
+        </div>
+      </form>
+
+      <div class="info-box">
+        <div class="info-box-header">
+          <i class="bi bi-info-circle-fill info-box-icon"></i>
+          <h6 class="info-box-title">Card Management Guidelines</h6>
+        </div>
+        <p class="info-box-content">
+          Visitor access cards are critical security assets. Please ensure:
+        </p>
+        <ul class="info-box-list">
+          <li>
+            <i class="bi bi-check-circle-fill"></i>
+            <span>Card numbers are unique and match the physical cards exactly</span>
+          </li>
+          <li>
+            <i class="bi bi-check-circle-fill"></i>
+            <span>Only active cards can be issued to visitors during check-in</span>
+          </li>
+          <li>
+            <i class="bi bi-check-circle-fill"></i>
+            <span>Inactive cards should be used for damaged or lost cards that need replacement</span>
+          </li>
+          <li>
+            <i class="bi bi-check-circle-fill"></i>
+            <span>All cards are tracked throughout their lifecycle for security auditing</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Form validation
+    const form = document.getElementById('cardForm');
+    const cardNumberInput = form.querySelector('input[name="number"]');
+
+    form.addEventListener('submit', function(e) {
+      // Basic validation
+      if (!cardNumberInput.value.trim()) {
+        e.preventDefault();
+        alert('Please enter a card number');
+        cardNumberInput.focus();
+        return false;
+      }
+    });
+
+    // Auto-format card number (optional enhancement)
+    cardNumberInput.addEventListener('input', function(e) {
+      // Remove any characters that aren't alphanumeric or dashes
+      this.value = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    });
+
+    // Switch animation feedback
+    const switchInput = document.getElementById('isActiveSwitch');
+    const switchContainer = document.querySelector('.switch-container');
+
+    switchInput.addEventListener('change', function() {
+      if (this.checked) {
+        switchContainer.style.borderColor = '#48bb78';
+        switchContainer.style.background = 'linear-gradient(135deg, #d1f4e0 0%, #f0fff4 100%)';
+      } else {
+        switchContainer.style.borderColor = '#e2e8f0';
+        switchContainer.style.background = 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)';
+      }
+    });
+  });
+</script>
+{% endblock %}

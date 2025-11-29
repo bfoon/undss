@@ -354,6 +354,18 @@
         opacity: 0.7;
         margin-right: 0.5rem;
     }
+    .visitor-arrow-in {
+    color: #10b981; /* green */
+    font-size: 0.9rem;
+    margin-right: 2px;
+    }
+
+    .visitor-arrow-out {
+        color: #9ca3af; /* grey */
+        font-size: 0.9rem;
+        margin-right: 2px;
+    }
+
 
     /* Responsive */
     @media (max-width: 768px) {
@@ -380,7 +392,7 @@
 {% block content %}
 <div class="container-fluid" style="max-width: 1400px;">
 
-    <!-- Page Header -->
+     <!-- Page Header -->
     <div class="d-flex justify-content-between align-items-start mb-4 page-header">
         <div>
             <h2>
@@ -396,15 +408,39 @@
                     <span>Register Visitor</span>
                 </a>
             {% endif %}
+
+            {# NEW: Visitor Cards button #}
+            <a class="btn btn-outline-primary btn-professional"
+               href="{% url 'visitors:visitor_card_list' %}">
+                <i class="bi bi-credit-card-2-front"></i>
+                <span>Visitor Cards</span>
+            </a>
+
             <div class="dropdown">
-                <button class="btn btn-outline-secondary btn-professional dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <button class="btn btn-outline-secondary btn-professional dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown">
                     <i class="bi bi-download"></i>
                     <span>Export</span>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#"><i class="bi bi-file-earmark-excel"></i> Excel Format</a></li>
-                    <li><a class="dropdown-item" href="#"><i class="bi bi-file-earmark-pdf"></i> PDF Report</a></li>
-                    <li><a class="dropdown-item" href="#"><i class="bi bi-file-earmark-text"></i> CSV File</a></li>
+                    <li>
+                        <a class="dropdown-item"
+                           href="{% url 'visitors:visitor_export' %}?format=excel{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}{% if request.GET.status_filter %}&status_filter={{ request.GET.status_filter }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}">
+                            <i class="bi bi-file-earmark-excel"></i> Excel Format
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item"
+                           href="{% url 'visitors:visitor_export' %}?format=pdf{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}{% if request.GET.status_filter %}&status_filter={{ request.GET.status_filter }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}">
+                            <i class="bi bi-file-earmark-pdf"></i> PDF Report
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item"
+                           href="{% url 'visitors:visitor_export' %}?format=csv{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}{% if request.GET.status_filter %}&status_filter={{ request.GET.status_filter }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}">
+                            <i class="bi bi-file-earmark-text"></i> CSV File
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -413,10 +449,12 @@
     <!-- Statistics Dashboard -->
     <div class="row g-3 mb-4">
         <div class="col-lg-3 col-md-6">
-            <div class="card dashboard-card total shadow-sm">
-                <div class="card-body text-center py-3">
-                    <div class="stat-value">{{ total_count|default:visitors|length }}</div>
-                    <h6 class="stat-label mb-0">Total Visitors</h6>
+           <div class="card dashboard-card total shadow-sm">
+            <div class="card-body text-center py-3">
+                <div class="stat-value">
+                    {{ total_count }}
+                </div>
+                <h6 class="stat-label mb-0">Total Visitors</h6>
                 </div>
             </div>
         </div>
@@ -512,16 +550,24 @@
 
     <!-- Quick Filter Chips -->
     <div class="d-flex gap-2 mb-3 flex-wrap">
-        <a href="?status_filter=all" class="filter-chip {% if not request.GET.status_filter %}active{% endif %}">
+        {# All = no status_filter param #}
+        <a href="?{% if request.GET.search %}search={{ request.GET.search|urlencode }}&{% endif %}{% if request.GET.date_range %}date_range={{ request.GET.date_range }}&{% endif %}"
+           class="filter-chip {% if not request.GET.status_filter %}active{% endif %}">
             <i class="bi bi-grid"></i> All Visitors
         </a>
-        <a href="?status_filter=pending" class="filter-chip {% if request.GET.status_filter == 'pending' %}active{% endif %}">
+
+        <a href="?status_filter=pending{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}"
+           class="filter-chip {% if request.GET.status_filter == 'pending' %}active{% endif %}">
             <i class="bi bi-clock"></i> Pending
         </a>
-        <a href="?status_filter=approved" class="filter-chip {% if request.GET.status_filter == 'approved' %}active{% endif %}">
+
+        <a href="?status_filter=approved{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}"
+           class="filter-chip {% if request.GET.status_filter == 'approved' %}active{% endif %}">
             <i class="bi bi-check-circle"></i> Approved
         </a>
-        <a href="?status_filter=rejected" class="filter-chip {% if request.GET.status_filter == 'rejected' %}active{% endif %}">
+
+        <a href="?status_filter=rejected{% if request.GET.search %}&search={{ request.GET.search|urlencode }}{% endif %}{% if request.GET.date_range %}&date_range={{ request.GET.date_range }}{% endif %}"
+           class="filter-chip {% if request.GET.status_filter == 'rejected' %}active{% endif %}">
             <i class="bi bi-x-circle"></i> Rejected
         </a>
     </div>
@@ -567,7 +613,16 @@
                                     <span class="visitor-id">#{{ visitor.id }}</span>
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ visitor.name|default:visitor.full_name|default:"N/A" }}</div>
+                                    {% if visitor.checked_in and not visitor.checked_out %}
+                                        <i class="bi bi-arrow-up-short visitor-arrow-in"></i>
+                                    {% else %}
+                                        <i class="bi bi-arrow-down-short visitor-arrow-out"></i>
+                                    {% endif %}
+
+                                    <span class="fw-semibold text-dark">
+                                        {{ visitor.name|default:visitor.full_name|default:"N/A" }}
+                                    </span>
+
                                     {% if visitor.phone %}
                                         <div class="text-muted small">
                                             <i class="bi bi-telephone"></i> {{ visitor.phone }}

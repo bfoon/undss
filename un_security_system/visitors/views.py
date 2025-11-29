@@ -7,7 +7,7 @@ from django.urls import reverse_lazy, reverse
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
 from django.utils.decorators import method_decorator
@@ -15,6 +15,8 @@ from datetime import timedelta
 import csv
 import threading
 import logging
+from django.views.generic import TemplateView
+
 
 
 from django.conf import settings
@@ -203,23 +205,52 @@ class VisitorListView(LoginRequiredMixin, ListView):
         user = self.request.user
         qs = Visitor.objects.all()
 
-        # Non-privileged users (e.g., requester/staff) only see their own records
+        # Who can see everything
         privileged_roles = {'lsa', 'soc', 'data_entry'}
-        if not (user.is_superuser or getattr(user, 'role', None) in privileged_roles):
+        is_privileged = user.is_superuser or getattr(user, 'role', None) in privileged_roles
+
+        # Non-privileged users only see what they registered
+        if not is_privileged:
             qs = qs.filter(registered_by=user)
 
-        # URL-based status filter (takes precedence)
+        # --- Filters from URL kwarg (legacy) ---
         filter_status = self.kwargs.get('filter_status')
-        if filter_status:
+
+        # --- Filters from querystring ---
+        # Template uses "status_filter" and "date_range"
+        status_filter = self.request.GET.get('status_filter') or ''
+        search = (self.request.GET.get('search') or '').strip()
+        date_range = self.request.GET.get('date_range') or ''
+
+        # Valid status values (from your model choices)
+        valid_statuses = {choice[0] for choice in getattr(Visitor, 'APPROVAL_STATUS', [])}
+
+        # 1) URL path status has highest priority if valid
+        if filter_status and (not status_filter) and filter_status in valid_statuses:
             qs = qs.filter(status=filter_status)
+        # 2) Otherwise use querystring status_filter
+        elif status_filter and status_filter in valid_statuses:
+            qs = qs.filter(status=status_filter)
 
-        # Querystring filters
-        status = self.request.GET.get('status')
-        search = self.request.GET.get('search')
+        # --- Date range filter ---
+        if date_range:
+            today = timezone.now().date()
+            if date_range == 'today':
+                qs = qs.filter(registered_at__date=today)
+            elif date_range == 'week':
+                start = today - timezone.timedelta(days=7)
+                qs = qs.filter(
+                    registered_at__date__gte=start,
+                    registered_at__date__lte=today,
+                )
+            elif date_range == 'month':
+                start = today.replace(day=1)
+                qs = qs.filter(
+                    registered_at__date__gte=start,
+                    registered_at__date__lte=today,
+                )
 
-        if status and not filter_status:
-            qs = qs.filter(status=status)
-
+        # --- Search filter ---
         if search:
             qs = qs.filter(
                 Q(full_name__icontains=search) |
@@ -228,6 +259,7 @@ class VisitorListView(LoginRequiredMixin, ListView):
                 Q(phone__icontains=search)
             )
 
+        # Order newest first
         return qs.order_by('-registered_at')
 
     def get_context_data(self, **kwargs):
@@ -236,12 +268,19 @@ class VisitorListView(LoginRequiredMixin, ListView):
         privileged_roles = {'lsa', 'soc', 'data_entry'}
         mine_only = not (user.is_superuser or getattr(user, 'role', None) in privileged_roles)
 
+        qs = self.object_list  # filtered queryset
+
         ctx.update({
-            'status_filter': self.request.GET.get('status', ''),
+            'status_filter': self.request.GET.get('status_filter', ''),
             'search_query': self.request.GET.get('search', ''),
             'filter_status': self.kwargs.get('filter_status', ''),
-            'status_choices': Visitor.APPROVAL_STATUS,
+            'status_choices': getattr(Visitor, 'APPROVAL_STATUS', []),
             'mine_only': mine_only,
+
+            'total_count': qs.count(),
+            'pending_count': qs.filter(status='pending').count(),
+            'approved_count': qs.filter(status='approved').count(),
+            'checked_in_count': qs.filter(checked_in=True, checked_out=False).count(),
         })
         return ctx
 
@@ -1049,13 +1088,144 @@ def gate_check_view(request, pk):
 
 @login_required
 def visitor_card_list(request):
-    # simple view to see cards
     qs = VisitorCard.objects.all().order_by('number')
+
+    # Search
     q = (request.GET.get('q') or '').strip()
     if q:
-        qs = qs.filter(number__icontains=q)
-    return render(request, 'visitors/card_list.html', {'cards': qs, 'q': q})
+        qs = qs.filter(
+            Q(number__icontains=q)
+            # add more fields here if needed, e.g. holder name
+        )
 
+    # Status filter: all / available / in_use / inactive
+    flt = (request.GET.get('filter') or 'all').strip()
+
+    if flt == 'available':
+        qs = qs.filter(is_active=True, in_use=False)
+    elif flt == 'in_use':
+        qs = qs.filter(is_active=True, in_use=True)
+    elif flt == 'inactive':
+        qs = qs.filter(is_active=False)
+    # 'all' = no extra filter
+
+    # Pagination
+    paginator = Paginator(qs, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Stats
+    total_cards = VisitorCard.objects.count()
+    available_cards = VisitorCard.objects.filter(is_active=True, in_use=False).count()
+    in_use_cards = VisitorCard.objects.filter(is_active=True, in_use=True).count()
+    inactive_cards = VisitorCard.objects.filter(is_active=False).count()
+
+    # Permission to manage cards (edit/history/create)
+    can_manage_cards = (
+        request.user.is_superuser
+        or getattr(request.user, 'role', None) in {'lsa', 'soc', 'data_entry'}
+    )
+
+    context = {
+        'cards': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': page_obj.has_other_pages(),
+        'q': q,
+        'filter': flt,
+        'total_cards': total_cards,
+        'available_cards': available_cards,
+        'in_use_cards': in_use_cards,
+        'inactive_cards': inactive_cards,
+        'current_time': timezone.now(),
+        'can_manage_cards': can_manage_cards,
+    }
+    return render(request, 'visitors/card_list.html', context)
+
+@login_required
+def visitor_card_create(request):
+    """
+    Create a new visitor card.
+
+    Only LSA / SOC / data_entry / superuser can create cards.
+    """
+    user = request.user
+    allowed_roles = {'lsa', 'soc', 'data_entry'}
+    user_role = getattr(user, 'role', None)
+
+    if not (user.is_superuser or user_role in allowed_roles):
+        messages.error(request, "You do not have permission to create visitor cards.")
+        return redirect('visitors:visitor_card_list')
+
+    if request.method == "POST":
+        number = (request.POST.get("number") or "").strip()
+        is_active = bool(request.POST.get("is_active"))
+
+        if not number:
+            messages.error(request, "Card number is required.")
+            return render(request, "visitors/card_form.html", {
+                "number": number,
+                "is_active": is_active,
+                "page_title": "Create Visitor Card",
+            })
+
+        try:
+            VisitorCard.objects.create(
+                number=number,
+                is_active=is_active,
+                # sane defaults
+                in_use=False,
+            )
+        except IntegrityError:
+            messages.error(request, f"Card with number '{number}' already exists.")
+            return render(request, "visitors/card_form.html", {
+                "number": number,
+                "is_active": is_active,
+                "page_title": "Create Visitor Card",
+            })
+
+        messages.success(request, f"Visitor card '{number}' created successfully.")
+        # redirect back to list
+        return redirect("visitors:visitor_card_list")
+
+    # GET request – show empty form
+    context = {
+        "page_title": "Create Visitor Card",
+        "number": "",
+        "is_active": True,
+    }
+    return render(request, "visitors/card_form.html", context)
+
+
+@login_required
+def visitor_card_detail(request, pk):
+    card = get_object_or_404(VisitorCard, pk=pk)
+
+    # Only privileged users can toggle active status
+    user = request.user
+    can_manage = user.is_superuser or getattr(user, "role", "") in ["lsa", "soc", "data_entry"]
+
+    if request.method == "POST" and can_manage:
+        action = request.POST.get("action")
+
+        if action == "activate":
+            if not card.is_active:
+                card.is_active = True
+                card.save(update_fields=["is_active"])
+                messages.success(request, f"Card {card.number} has been activated.")
+        elif action == "deactivate":
+            if card.is_active:
+                card.is_active = False
+                card.save(update_fields=["is_active"])
+                messages.success(request, f"Card {card.number} has been deactivated.")
+
+        return redirect("visitors:visitor_card_detail", pk=card.pk)
+
+    context = {
+        "card": card,
+        "can_manage": can_manage,
+    }
+    return render(request, "visitors/card_detail.html", context)
 
 @login_required
 def visitor_card_check_api(request):
@@ -1073,3 +1243,45 @@ def visitor_card_check_api(request):
         })
     except VisitorCard.DoesNotExist:
         return JsonResponse({'ok': True, 'exists': False, 'available': False})
+
+class VisitorReportView(LoginRequiredMixin, TemplateView):
+    """
+    Simple reports page for visitors – totals, by status, by date.
+    """
+    template_name = "visitors/visitor_reports.html"
+
+    def get_queryset_base(self):
+        user = self.request.user
+        qs = Visitor.objects.all()
+
+        privileged_roles = {'lsa', 'soc', 'data_entry'}
+        if not (user.is_superuser or getattr(user, 'role', None) in privileged_roles):
+            qs = qs.filter(registered_by=user)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        qs = self.get_queryset_base()
+        today = timezone.now().date()
+
+        ctx["total_visitors"] = qs.count()
+        ctx["pending_count"] = qs.filter(status="pending").count()
+        ctx["approved_count"] = qs.filter(status="approved").count()
+        ctx["rejected_count"] = qs.filter(status="rejected").count()
+        ctx["cancelled_count"] = qs.filter(status="cancelled").count()
+
+        ctx["today_visitors"] = qs.filter(
+            Q(registered_at__date=today) | Q(created_at__date=today)
+        ).count()
+
+        # Simple last 7 days trend
+        last_7_days = []
+        for i in range(7):
+            day = today - timedelta(days=i)
+            c = qs.filter(
+                Q(registered_at__date=day) | Q(created_at__date=day)
+            ).count()
+            last_7_days.append({"date": day, "count": c})
+        ctx["last_7_days"] = list(reversed(last_7_days))
+
+        return ctx

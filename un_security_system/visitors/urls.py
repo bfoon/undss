@@ -10,6 +10,8 @@ urlpatterns = [
     path('<int:pk>/', views.VisitorDetailView.as_view(), name='visitor_detail'),
     path('<int:pk>/edit/', views.VisitorUpdateView.as_view(), name='visitor_edit'),
     path('<int:visitor_id>/approve/', views.approve_visitor, name='approve_visitor'),
+    path("export/", views.export_visitors, name="visitor_export"),
+    path("reports/", views.VisitorReportView.as_view(), name="visitor_reports"),
 
     # actions from the detail page
     path('<int:pk>/request-clearance/', views.visitor_request_clearance, name='visitor_request_clearance'),
@@ -47,6 +49,8 @@ urlpatterns = [
     path('verify/', views.visitor_verify_page, name='visitor_verify_page'),
     path('api/verify-lookup/', views.visitor_verify_lookup_api, name='visitor_verify_lookup_api'),
 
-    path('cards/', views.visitor_card_list, name='visitor_card_list'),                 # optional list
+    path('cards/', views.visitor_card_list, name='visitor_card_list'),
+    path('cards/create/', views.visitor_card_create, name='visitor_card_create'),
+    path('cards/<int:pk>/', views.visitor_card_detail, name='visitor_card_detail'),
     path('api/cards/check/', views.visitor_card_check_api, name='visitor_card_check'),
 ]

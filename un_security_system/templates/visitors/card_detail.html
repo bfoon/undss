@@ -1,0 +1,600 @@
+{% extends "base.html" %}
+{% block title %}Visitor Card {{ card.number }} · UN Security{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root {
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    --gradient-warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .page-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+  }
+
+  .back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: white;
+    color: #4a5568;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .back-button:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+    color: #2d3748;
+    transform: translateX(-4px);
+  }
+
+  .alert {
+    border: none;
+    border-radius: 0.875rem;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: start;
+    gap: 1rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .alert-success {
+    background: linear-gradient(135deg, #d1f4e0 0%, #c6f6d5 100%);
+    color: #22543d;
+    border-left: 4px solid #48bb78;
+  }
+
+  .alert-danger {
+    background: linear-gradient(135deg, #fed7d7 0%, #fc8181 100%);
+    color: #742a2a;
+    border-left: 4px solid #f56565;
+  }
+
+  .alert-warning {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border-left: 4px solid #fbbf24;
+  }
+
+  .alert-info {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e40af;
+    border-left: 4px solid #60a5fa;
+  }
+
+  .detail-card {
+    border: none;
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .card-header-custom {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-header-custom::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+  }
+
+  .card-header-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .card-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .card-number-display {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 1.25rem;
+  }
+
+  .action-form {
+    display: inline-block;
+  }
+
+  .action-btn {
+    padding: 0.625rem 1.5rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: var(--transition);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+
+  .action-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .detail-grid {
+    display: grid;
+    gap: 2rem;
+    padding: 2.5rem;
+  }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-radius: 0.875rem;
+    border: 1px solid #e2e8f0;
+    transition: var(--transition);
+  }
+
+  .detail-row:hover {
+    border-color: #cbd5e0;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .detail-label {
+    font-weight: 700;
+    color: #2d3748;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .detail-label i {
+    color: #667eea;
+    font-size: 1.1rem;
+  }
+
+  .detail-value {
+    color: #4a5568;
+    font-size: 0.95rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+  }
+
+  .card-number-badge {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #667eea;
+    padding: 0.625rem 1.25rem;
+    background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+    border: 2px solid #c3dafe;
+    border-radius: 0.75rem;
+    display: inline-block;
+  }
+
+  .status-badge {
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    font-weight: 700;
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+  }
+
+  .badge-active {
+    background: linear-gradient(135deg, #d1f4e0 0%, #c6f6d5 100%);
+    color: #22543d;
+    border: 2px solid #9ae6b4;
+  }
+
+  .badge-inactive {
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e0 100%);
+    color: #2d3748;
+    border: 2px solid #a0aec0;
+  }
+
+  .badge-in-use {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border: 2px solid #fbbf24;
+  }
+
+  .badge-available {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e40af;
+    border: 2px solid #60a5fa;
+  }
+
+  .visitor-link {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    padding: 0.5rem 1rem;
+    background: #f0f4ff;
+    border-radius: 0.5rem;
+  }
+
+  .visitor-link:hover {
+    color: #5a67d8;
+    background: #e0e7ff;
+    gap: 0.75rem;
+  }
+
+  .timestamp-value {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    color: #2d3748;
+  }
+
+  .timestamp-value i {
+    color: #667eea;
+  }
+
+  .empty-value {
+    color: #a0aec0;
+    font-style: italic;
+    font-weight: 500;
+  }
+
+  .status-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .status-card {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    transition: var(--transition);
+  }
+
+  .status-card:hover {
+    border-color: #cbd5e0;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .status-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .status-card-icon {
+    font-size: 1.5rem;
+    color: #667eea;
+  }
+
+  .status-card-title {
+    font-weight: 700;
+    color: #2d3748;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-card-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #4a5568;
+  }
+
+  @media (max-width: 768px) {
+    .page-container {
+      padding: 1rem;
+    }
+
+    .card-header-custom {
+      padding: 1.5rem;
+    }
+
+    .card-header-content {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .card-header-title {
+      font-size: 1.5rem;
+    }
+
+    .detail-grid {
+      padding: 1.5rem;
+      gap: 1rem;
+    }
+
+    .detail-row {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      padding: 1rem;
+    }
+
+    .status-summary {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="mb-4">
+    <a href="{% url 'visitors:visitor_card_list' %}" class="back-button">
+      <i class="bi bi-arrow-left"></i>
+      <span>Back to Cards</span>
+    </a>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+        <i class="bi bi-{% if message.tags == 'success' %}check-circle-fill{% elif message.tags == 'danger' %}exclamation-triangle-fill{% elif message.tags == 'warning' %}exclamation-circle-fill{% else %}info-circle-fill{% endif %}"></i>
+        <div>{{ message }}</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Status Summary Cards -->
+  <div class="status-summary">
+    <div class="status-card">
+      <div class="status-card-header">
+        <i class="bi bi-credit-card-2-front-fill status-card-icon"></i>
+        <div class="status-card-title">Card Status</div>
+      </div>
+      <div class="status-card-value">
+        {% if card.is_active %}
+          <span class="text-success">Active</span>
+        {% else %}
+          <span class="text-secondary">Inactive</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="status-card">
+      <div class="status-card-header">
+        <i class="bi bi-activity status-card-icon"></i>
+        <div class="status-card-title">Usage Status</div>
+      </div>
+      <div class="status-card-value">
+        {% if card.in_use %}
+          <span class="text-warning">In Use</span>
+        {% else %}
+          <span class="text-primary">Available</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if card.issued_to %}
+    <div class="status-card">
+      <div class="status-card-header">
+        <i class="bi bi-person-badge-fill status-card-icon"></i>
+        <div class="status-card-title">Current Holder</div>
+      </div>
+      <div class="status-card-value">
+        {{ card.issued_to.full_name|truncatewords:3 }}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Main Detail Card -->
+  <div class="detail-card">
+    <div class="card-header-custom">
+      <div class="card-header-content">
+        <div>
+          <h5 class="card-header-title">
+            <i class="bi bi-credit-card-2-front-fill"></i>
+            <span>Visitor Card</span>
+          </h5>
+          <div class="card-number-display">{{ card.number }}</div>
+        </div>
+        {% if can_manage %}
+          <form method="post" class="action-form" onsubmit="return confirm('Are you sure you want to {% if card.is_active %}deactivate{% else %}activate{% endif %} this card?');">
+            {% csrf_token %}
+            {% if card.is_active %}
+              <input type="hidden" name="action" value="deactivate">
+              <button type="submit" class="action-btn">
+                <i class="bi bi-slash-circle"></i>
+                <span>Deactivate Card</span>
+              </button>
+            {% else %}
+              <input type="hidden" name="action" value="activate">
+              <button type="submit" class="action-btn">
+                <i class="bi bi-check-circle"></i>
+                <span>Activate Card</span>
+              </button>
+            {% endif %}
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-row">
+        <div class="detail-label">
+          <i class="bi bi-hash"></i>
+          <span>Card Number</span>
+        </div>
+        <div class="detail-value">
+          <span class="card-number-badge">{{ card.number }}</span>
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">
+          <i class="bi bi-activity"></i>
+          <span>Active Status</span>
+        </div>
+        <div class="detail-value">
+          {% if card.is_active %}
+            <span class="status-badge badge-active">
+              <i class="bi bi-check-circle-fill"></i>
+              <span>Active</span>
+            </span>
+          {% else %}
+            <span class="status-badge badge-inactive">
+              <i class="bi bi-x-circle-fill"></i>
+              <span>Inactive</span>
+            </span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">
+          <i class="bi bi-toggle2-on"></i>
+          <span>Usage Status</span>
+        </div>
+        <div class="detail-value">
+          {% if card.in_use %}
+            <span class="status-badge badge-in-use">
+              <i class="bi bi-exclamation-circle-fill"></i>
+              <span>In Use</span>
+            </span>
+          {% else %}
+            <span class="status-badge badge-available">
+              <i class="bi bi-check-circle-fill"></i>
+              <span>Available</span>
+            </span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">
+          <i class="bi bi-person-badge"></i>
+          <span>Current Holder</span>
+        </div>
+        <div class="detail-value">
+          {% if card.issued_to %}
+            <a href="{% url 'visitors:visitor_detail' card.issued_to_id %}" class="visitor-link">
+              <i class="bi bi-person-fill"></i>
+              <span>{{ card.issued_to.full_name }}</span>
+            </a>
+          {% else %}
+            <span class="empty-value">No current holder</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">
+          <i class="bi bi-calendar-check"></i>
+          <span>Issued At</span>
+        </div>
+        <div class="detail-value">
+          {% if card.issued_at %}
+            <div class="timestamp-value">
+              <i class="bi bi-clock"></i>
+              <span>{{ card.issued_at|date:"M d, Y - H:i" }}</span>
+            </div>
+          {% else %}
+            <span class="empty-value">Not currently issued</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">
+          <i class="bi bi-calendar-x"></i>
+          <span>Returned At</span>
+        </div>
+        <div class="detail-value">
+          {% if card.returned_at %}
+            <div class="timestamp-value">
+              <i class="bi bi-clock-history"></i>
+              <span>{{ card.returned_at|date:"M d, Y - H:i" }}</span>
+            </div>
+          {% else %}
+            <span class="empty-value">Not yet returned</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add smooth animations on page load
+    const detailRows = document.querySelectorAll('.detail-row');
+    detailRows.forEach((row, index) => {
+      row.style.opacity = '0';
+      row.style.transform = 'translateY(20px)';
+      setTimeout(() => {
+        row.style.transition = 'all 0.4s ease';
+        row.style.opacity = '1';
+        row.style.transform = 'translateY(0)';
+      }, index * 50);
+    });
+
+    // Enhanced alert auto-dismiss
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(alert => {
+      setTimeout(() => {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+      }, 5000);
+    });
+  });
+</script>
+{% endblock %}

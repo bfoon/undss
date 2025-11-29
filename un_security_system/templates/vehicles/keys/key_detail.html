@@ -23,15 +23,29 @@
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
           <div class="btn-group" role="group">
-            {% if user.role == 'lsa' %}
-              <a class="btn btn-outline-primary" href="{% url 'vehicles:key_edit' key.pk %}">
-                <i class="bi bi-pencil me-1"></i>Edit
-              </a>
-            {% endif %}
-            <a class="btn btn-outline-secondary" href="{% url 'vehicles:key_list' %}">
-              <i class="bi bi-arrow-left me-1"></i>Back
-            </a>
-          </div>
+  {% if user.role == 'lsa' or user.is_superuser %}
+    <a class="btn btn-outline-primary" href="{% url 'vehicles:key_edit' key.pk %}">
+      <i class="bi bi-pencil me-1"></i>Edit
+    </a>
+
+    <form action="{% url 'vehicles:key_toggle_active' key.pk %}" method="post" class="d-inline">
+      {% csrf_token %}
+      {% if key.is_active %}
+        <button type="submit" class="btn btn-outline-danger">
+          <i class="bi bi-slash-circle me-1"></i>Deactivate
+        </button>
+      {% else %}
+        <button type="submit" class="btn btn-outline-success">
+          <i class="bi bi-check-circle me-1"></i>Activate
+        </button>
+      {% endif %}
+    </form>
+  {% endif %}
+  <a class="btn btn-outline-secondary" href="{% url 'vehicles:key_list' %}">
+    <i class="bi bi-arrow-left me-1"></i>Back
+  </a>
+</div>
+
         </div>
       </div>
     </div>
@@ -57,7 +71,16 @@
         <!-- Status Card -->
         <div class="card status-card shadow-sm mb-4">
           <div class="card-body text-center p-4">
-            {% if key.is_out %}
+            {% if not key.is_active %}
+            <div class="status-badge status-out mb-3">
+              <i class="bi bi-slash-circle"></i>
+            </div>
+            <h4 class="status-title text-muted mb-2">Inactive Key</h4>
+            <p class="status-subtitle text-muted mb-4">
+              This key is deactivated and cannot be issued until it is activated by LSA.
+            </p>
+          {% else %}
+            {% if key.is_out and key.current_log %}
               <div class="status-badge status-out mb-3">
                 <i class="bi bi-box-arrow-right"></i>
               </div>
@@ -76,6 +99,7 @@
                 <i class="bi bi-box-arrow-right me-2"></i>Issue Key
               </a>
             {% endif %}
+          {% endif %}
           </div>
         </div>
 
@@ -120,6 +144,24 @@
                   </span>
                 </div>
               </div>
+
+              <div class="info-item">
+              <div class="info-item-label">
+                <i class="bi bi-power"></i>
+                <span>Status</span>
+              </div>
+              <div class="info-item-value">
+                {% if key.is_active %}
+                  <span class="badge bg-success">
+                    <i class="bi bi-check-circle-fill me-1"></i>Active
+                  </span>
+                {% else %}
+                  <span class="badge bg-secondary">
+                    <i class="bi bi-slash-circle me-1"></i>Inactive
+                  </span>
+                {% endif %}
+              </div>
+            </div>
 
               <div class="info-item">
                 <div class="info-item-label">

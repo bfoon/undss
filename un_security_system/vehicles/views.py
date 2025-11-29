@@ -6,7 +6,7 @@ from django.urls import reverse_lazy, reverse
 from django.utils.decorators import method_decorator
 from django.contrib import messages
 from django.utils import timezone
-from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseNotAllowed
 from django.db.models import Q, Count, Exists, OuterRef
 from django.conf import settings
 from django.core.mail import send_mail
@@ -79,6 +79,33 @@ def can_view_all_packages(user):
         return False
     role = getattr(user, "role", "") or ""
     return user.is_superuser or role in ("reception", "registry", "agency_fp", "lsa", "soc")
+
+def _is_lsa(user):
+    return user.is_authenticated and (getattr(user, "role", "") == "lsa" or user.is_superuser)
+
+
+@login_required
+def key_toggle_active(request, pk):
+    """
+    Activate or deactivate a key (LSA / superuser only).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    if not _is_lsa(request.user):
+        return HttpResponseForbidden("You are not allowed to change key status.")
+
+    key = get_object_or_404(Key, pk=pk)
+    key.is_active = not key.is_active
+    key.save(update_fields=["is_active"])
+
+    if key.is_active:
+        messages.success(request, f"Key {key.code} has been activated and can now be issued.")
+    else:
+        messages.warning(request, f"Key {key.code} has been deactivated and can no longer be issued.")
+
+    return redirect("vehicles:key_detail", pk=key.pk)
+
 
 # =============================================================================
 # EMAIL / NOTIFICATION HELPERS

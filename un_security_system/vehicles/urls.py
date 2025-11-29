@@ -85,6 +85,7 @@ urlpatterns = [
     path('keys/create/', views.KeyCreateView.as_view(), name='key_create'),
     path('keys/<int:pk>/', views.KeyDetailView.as_view(), name='key_detail'),
     path('keys/<int:pk>/edit/', views.KeyUpdateView.as_view(), name='key_edit'),
+    path("keys/<int:pk>/toggle-active/", views.key_toggle_active, name="key_toggle_active"),
 
     path('keys/<int:pk>/issue/', views.key_issue, name='key_issue'),
     path('keys/<int:pk>/return/', views.key_return, name='key_return'),

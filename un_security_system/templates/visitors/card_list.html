@@ -3,72 +3,118 @@
 
 {% block extra_css %}
 <style>
+  :root {
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    --gradient-warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --gradient-secondary: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .page-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-radius: 1rem;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .page-header h3 {
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 0.5rem;
+  }
+
+  .page-header p {
+    color: #718096;
+    font-size: 0.95rem;
+  }
+
   .stats-card {
     border: none;
-    border-radius: 0.75rem;
-    transition: all 0.3s;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 1rem;
+    transition: var(--transition);
     color: white;
+    overflow: hidden;
+    position: relative;
+    box-shadow: var(--shadow-md);
+  }
+
+  .stats-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100px;
+    height: 100px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(30%, -30%);
+  }
+
+  .stats-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .stats-card.total {
+    background: var(--gradient-primary);
   }
 
   .stats-card.available {
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    background: var(--gradient-success);
   }
 
   .stats-card.in-use {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: var(--gradient-warning);
   }
 
   .stats-card.inactive {
-    background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
+    background: var(--gradient-secondary);
+  }
+
+  .stats-card .card-body {
+    position: relative;
+    z-index: 1;
+    padding: 1.75rem;
   }
 
   .stats-card .display-4 {
-    font-size: 2.5rem;
-    font-weight: 700;
+    font-size: 2.75rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
   }
 
-  .card-number {
-    font-family: 'Courier New', monospace;
-    font-weight: 700;
-    font-size: 1.1rem;
-    color: #0d6efd;
-  }
-
-  .status-badge {
-    padding: 0.375rem 0.75rem;
-    border-radius: 1rem;
+  .stats-card .stats-label {
+    font-size: 0.9rem;
     font-weight: 600;
-    font-size: 0.875rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.95;
   }
 
-  .badge-active { background: #d1e7dd; color: #0f5132; }
-  .badge-inactive { background: #e2e3e5; color: #41464b; }
-  .badge-in-use { background: #fff3cd; color: #856404; }
-  .badge-available { background: #d1f4e0; color: #0f5132; }
-
-  .filter-btn {
-    transition: all 0.2s;
+  .stats-card .stats-icon {
+    position: absolute;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 3rem;
+    opacity: 0.2;
   }
 
-  .filter-btn.active {
-    background: #0d6efd;
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(13, 110, 253, 0.3);
+  .controls-card {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid #e2e8f0;
   }
 
-  .table-hover tbody tr {
-    transition: all 0.2s;
-  }
-
-  .table-hover tbody tr:hover {
-    background: #f8f9fa;
-    transform: scale(1.01);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  .controls-card .card-body {
+    padding: 1.5rem;
   }
 
   .search-container {
@@ -77,121 +123,423 @@
 
   .search-icon {
     position: absolute;
-    left: 1rem;
+    left: 1.25rem;
     top: 50%;
     transform: translateY(-50%);
-    color: #6c757d;
+    color: #a0aec0;
+    font-size: 1.1rem;
+    z-index: 1;
   }
 
   .search-input {
-    padding-left: 2.75rem;
-    border-radius: 2rem;
+    padding: 0.875rem 1.25rem 0.875rem 3.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 0.75rem;
+    transition: var(--transition);
+    font-size: 0.95rem;
+  }
+
+  .search-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    outline: none;
+  }
+
+  .filter-section {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-weight: 600;
+    color: #4a5568;
+    font-size: 0.9rem;
+  }
+
+  .filter-btn {
+    padding: 0.625rem 1.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: white;
+    color: #4a5568;
+    font-weight: 600;
+    font-size: 0.875rem;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+  }
+
+  .filter-btn:hover {
+    border-color: #cbd5e0;
+    background: #f7fafc;
+    transform: translateY(-1px);
+  }
+
+  .filter-btn.active {
+    background: #667eea;
+    border-color: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  }
+
+  .data-table-card {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+  }
+
+  .table {
+    margin-bottom: 0;
+  }
+
+  .table thead {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  }
+
+  .table thead th {
+    padding: 1.25rem 1.5rem;
+    font-weight: 700;
+    color: #2d3748;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #e2e8f0;
+  }
+
+  .table tbody td {
+    padding: 1.25rem 1.5rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .table-hover tbody tr {
+    transition: var(--transition);
+    cursor: pointer;
+  }
+
+  .table-hover tbody tr:hover {
+    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    box-shadow: inset 0 0 0 1px #e2e8f0;
+  }
+
+  .card-number {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #667eea;
+    padding: 0.375rem 0.75rem;
+    background: #f0f4ff;
+    border-radius: 0.5rem;
+    display: inline-block;
+  }
+
+  .status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 0.625rem;
+    font-weight: 600;
+    font-size: 0.813rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+  }
+
+  .badge-active {
+    background: linear-gradient(135deg, #d1f4e0 0%, #c6f6d5 100%);
+    color: #22543d;
+    border: 1px solid #9ae6b4;
+  }
+
+  .badge-inactive {
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e0 100%);
+    color: #2d3748;
+    border: 1px solid #a0aec0;
+  }
+
+  .badge-in-use {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border: 1px solid #fbbf24;
+  }
+
+  .badge-available {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e40af;
+    border: 1px solid #60a5fa;
+  }
+
+  .visitor-link {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+  }
+
+  .visitor-link:hover {
+    color: #5a67d8;
+    gap: 0.75rem;
+  }
+
+  .timestamp-display {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .timestamp-date {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 0.9rem;
+  }
+
+  .timestamp-time {
+    color: #718096;
+    font-size: 0.813rem;
+  }
+
+  .action-btn {
+    padding: 0.5rem 0.875rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+    background: white;
+    color: #4a5568;
+    font-size: 0.875rem;
+    transition: var(--transition);
+    cursor: pointer;
+  }
+
+  .action-btn:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+    transform: translateY(-1px);
+  }
+
+  .action-btn.btn-primary {
+    background: #667eea;
+    border-color: #667eea;
+    color: white;
+  }
+
+  .action-btn.btn-primary:hover {
+    background: #5a67d8;
+    border-color: #5a67d8;
   }
 
   .empty-state {
-    padding: 4rem 2rem;
+    padding: 5rem 2rem;
     text-align: center;
   }
 
   .empty-state-icon {
-    font-size: 4rem;
-    color: #dee2e6;
-    margin-bottom: 1rem;
+    font-size: 5rem;
+    color: #cbd5e0;
+    margin-bottom: 1.5rem;
+    animation: float 3s ease-in-out infinite;
   }
 
-  .action-btn-sm {
-    padding: 0.25rem 0.75rem;
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .empty-state h5 {
+    color: #4a5568;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+  }
+
+  .empty-state p {
+    color: #718096;
+    max-width: 500px;
+    margin: 0 auto 1.5rem;
+  }
+
+  .footer-stats {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    padding: 1.25rem 1.5rem;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .footer-stats .text-muted {
+    color: #718096;
     font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .info-card {
+    border: none;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, #ebf4ff 0%, #e0e7ff 100%);
+    border: 1px solid #c3dafe;
+    margin-top: 2rem;
+  }
+
+  .info-card .card-body {
+    padding: 1.5rem;
+  }
+
+  .info-card .info-icon {
+    color: #4c51bf;
+    font-size: 1.5rem;
+  }
+
+  .info-card h6 {
+    color: #2d3748;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+  }
+
+  .info-card p {
+    color: #4a5568;
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .btn-group {
+    display: inline-flex;
+    gap: 0.5rem;
   }
 
   @media (max-width: 768px) {
     .stats-card .display-4 {
       font-size: 2rem;
     }
+
+    .page-header {
+      padding: 1.5rem;
+    }
+
+    .filter-section {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .filter-btn {
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 576px) {
+    .table thead th,
+    .table tbody td {
+      padding: 1rem;
+      font-size: 0.85rem;
+    }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 1200px;">
+<div class="container" style="max-width: 1400px;">
 
-  <!-- Header -->
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-      <h3 class="mb-1"><i class="bi bi-credit-card-2-front-fill"></i> Visitor Cards Management</h3>
-      <p class="text-muted mb-0">Track and manage visitor access cards</p>
+   <!-- Header -->
+  <div class="page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+      <div>
+        <h3><i class="bi bi-credit-card-2-front-fill me-2"></i>Visitor Cards Management</h3>
+        <p class="mb-0">Comprehensive tracking and management of visitor access cards</p>
+      </div>
+      <div class="d-flex flex-column align-items-end gap-2">
+        <div class="text-end">
+          <div class="text-muted small mb-1">Last Updated</div>
+          <div class="fw-semibold">{{ current_time|default:"Just now" }}</div>
+        </div>
+
+        {# Create Card button – only for LSA / SOC / data_entry / superuser #}
+        {% if user.is_superuser or user.role == 'lsa' or user.role == 'soc' or user.role == 'data_entry' %}
+          <a href="{% url 'visitors:visitor_card_create' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i>
+            Create Card
+          </a>
+        {% endif %}
+      </div>
     </div>
   </div>
+
 
   <!-- Statistics Cards -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-3 col-sm-6">
-      <div class="card stats-card shadow-sm">
+  <div class="row g-4 mb-4">
+    <div class="col-lg-3 col-md-6">
+      <div class="card stats-card total">
         <div class="card-body text-center">
-          <div class="display-4 mb-2">{{ total_cards|default:0 }}</div>
-          <div class="opacity-75">Total Cards</div>
+          <i class="bi bi-collection stats-icon"></i>
+          <div class="display-4">{{ total_cards|default:0 }}</div>
+          <div class="stats-label">Total Cards</div>
         </div>
       </div>
     </div>
-    <div class="col-md-3 col-sm-6">
-      <div class="card stats-card available shadow-sm">
+    <div class="col-lg-3 col-md-6">
+      <div class="card stats-card available">
         <div class="card-body text-center">
-          <div class="display-4 mb-2">{{ available_cards|default:0 }}</div>
-          <div class="opacity-75">Available</div>
+          <i class="bi bi-check-circle stats-icon"></i>
+          <div class="display-4">{{ available_cards|default:0 }}</div>
+          <div class="stats-label">Available</div>
         </div>
       </div>
     </div>
-    <div class="col-md-3 col-sm-6">
-      <div class="card stats-card in-use shadow-sm">
+    <div class="col-lg-3 col-md-6">
+      <div class="card stats-card in-use">
         <div class="card-body text-center">
-          <div class="display-4 mb-2">{{ in_use_cards|default:0 }}</div>
-          <div class="opacity-75">In Use</div>
+          <i class="bi bi-person-badge stats-icon"></i>
+          <div class="display-4">{{ in_use_cards|default:0 }}</div>
+          <div class="stats-label">In Use</div>
         </div>
       </div>
     </div>
-    <div class="col-md-3 col-sm-6">
-      <div class="card stats-card inactive shadow-sm">
+    <div class="col-lg-3 col-md-6">
+      <div class="card stats-card inactive">
         <div class="card-body text-center">
-          <div class="display-4 mb-2">{{ inactive_cards|default:0 }}</div>
-          <div class="opacity-75">Inactive</div>
+          <i class="bi bi-slash-circle stats-icon"></i>
+          <div class="display-4">{{ inactive_cards|default:0 }}</div>
+          <div class="stats-label">Inactive</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Search and Filter Bar -->
-  <div class="card shadow-sm mb-4">
+  <!-- Search and Filter Controls -->
+  <div class="controls-card card mb-4">
     <div class="card-body">
-      <div class="row g-3 align-items-center">
-        <div class="col-md-6">
+      <div class="row g-4 align-items-center">
+        <div class="col-lg-5 col-md-12">
           <form method="get" class="search-container">
             <i class="bi bi-search search-icon"></i>
             <input
               name="q"
               value="{{ q }}"
               class="form-control search-input"
-              placeholder="Search by card number..."
+              placeholder="Search by card number or holder name..."
               autocomplete="off">
           </form>
         </div>
-        <div class="col-md-6">
-          <div class="d-flex gap-2 flex-wrap">
-            <span class="text-muted small align-self-center me-2">Filter:</span>
+        <div class="col-lg-7 col-md-12">
+          <div class="filter-section">
+            <span class="filter-label">Filter by Status:</span>
             <a href="?filter=all{% if q %}&q={{ q }}{% endif %}"
-               class="btn btn-sm filter-btn {% if not filter or filter == 'all' %}active{% endif %}">
-              <i class="bi bi-grid"></i> All
+               class="filter-btn {% if not filter or filter == 'all' %}active{% endif %}">
+              <i class="bi bi-grid-3x3-gap-fill"></i> All Cards
             </a>
             <a href="?filter=available{% if q %}&q={{ q }}{% endif %}"
-               class="btn btn-sm filter-btn {% if filter == 'available' %}active{% endif %}">
-              <i class="bi bi-check-circle"></i> Available
+               class="filter-btn {% if filter == 'available' %}active{% endif %}">
+              <i class="bi bi-check-circle-fill"></i> Available
             </a>
             <a href="?filter=in_use{% if q %}&q={{ q }}{% endif %}"
-               class="btn btn-sm filter-btn {% if filter == 'in_use' %}active{% endif %}">
-              <i class="bi bi-exclamation-circle"></i> In Use
+               class="filter-btn {% if filter == 'in_use' %}active{% endif %}">
+              <i class="bi bi-exclamation-circle-fill"></i> In Use
             </a>
             <a href="?filter=inactive{% if q %}&q={{ q }}{% endif %}"
-               class="btn btn-sm filter-btn {% if filter == 'inactive' %}active{% endif %}">
-              <i class="bi bi-x-circle"></i> Inactive
+               class="filter-btn {% if filter == 'inactive' %}active{% endif %}">
+              <i class="bi bi-x-circle-fill"></i> Inactive
             </a>
           </div>
         </div>
@@ -199,125 +547,117 @@
     </div>
   </div>
 
-  <!-- Cards Table -->
-  <div class="card shadow-sm">
+  <!-- Cards Data Table -->
+  <div class="data-table-card card">
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
+      <table class="table table-hover mb-0">
+        <thead>
           <tr>
-            <th class="ps-4">
-              <i class="bi bi-hash"></i> Card Number
-            </th>
-            <th>
-              <i class="bi bi-toggle-on"></i> Status
-            </th>
-            <th>
-              <i class="bi bi-person-badge"></i> Current Holder
-            </th>
-            <th>
-              <i class="bi bi-clock"></i> Issued At
-            </th>
-            <th>
-              <i class="bi bi-clock-history"></i> Returned At
-            </th>
-            <th class="text-end pe-4">Actions</th>
+            <th><i class="bi bi-hash me-2"></i>Card Number</th>
+            <th><i class="bi bi-activity me-2"></i>Active Status</th>
+            <th><i class="bi bi-toggle2-on me-2"></i>Usage Status</th>
+            <th><i class="bi bi-person-badge me-2"></i>Current Holder</th>
+            <th><i class="bi bi-calendar-check me-2"></i>Issued At</th>
+            <th><i class="bi bi-calendar-x me-2"></i>Returned At</th>
+            <th class="text-end"><i class="bi bi-gear me-2"></i>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for c in cards %}
             <tr>
-              <td class="ps-4">
+              <td>
                 <span class="card-number">{{ c.number }}</span>
               </td>
               <td>
-                <div class="d-flex flex-column gap-1">
-                  {% if c.is_active %}
-                    <span class="status-badge badge-active">
-                      <i class="bi bi-check-circle-fill"></i> Active
-                    </span>
-                  {% else %}
-                    <span class="status-badge badge-inactive">
-                      <i class="bi bi-x-circle-fill"></i> Inactive
-                    </span>
-                  {% endif %}
-
-                  {% if c.in_use %}
-                    <span class="status-badge badge-in-use">
-                      <i class="bi bi-exclamation-circle-fill"></i> In Use
-                    </span>
-                  {% else %}
-                    <span class="status-badge badge-available">
-                      <i class="bi bi-check-circle-fill"></i> Available
-                    </span>
-                  {% endif %}
-                </div>
+                {% if c.is_active %}
+                  <span class="status-badge badge-active">
+                    <i class="bi bi-check-circle-fill"></i> Active
+                  </span>
+                {% else %}
+                  <span class="status-badge badge-inactive">
+                    <i class="bi bi-x-circle-fill"></i> Inactive
+                  </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if c.in_use %}
+                  <span class="status-badge badge-in-use">
+                    <i class="bi bi-exclamation-circle-fill"></i> In Use
+                  </span>
+                {% else %}
+                  <span class="status-badge badge-available">
+                    <i class="bi bi-check-circle-fill"></i> Available
+                  </span>
+                {% endif %}
               </td>
               <td>
                 {% if c.issued_to %}
-                  <a href="{% url 'visitors:visitor_detail' c.issued_to_id %}" class="text-decoration-none">
-                    <i class="bi bi-person-fill"></i> {{ c.issued_to.full_name }}
+                  <a href="{% url 'visitors:visitor_detail' c.issued_to_id %}" class="visitor-link">
+                    <i class="bi bi-person-fill"></i>
+                    <span>{{ c.issued_to.full_name }}</span>
                   </a>
                 {% else %}
-                  <span class="text-muted">—</span>
+                  <span class="text-muted fw-medium">—</span>
                 {% endif %}
               </td>
               <td>
                 {% if c.issued_at %}
-                  <div class="small">
-                    <div class="fw-semibold">{{ c.issued_at|date:"M d, Y" }}</div>
-                    <div class="text-muted">{{ c.issued_at|date:"H:i" }}</div>
+                  <div class="timestamp-display">
+                    <div class="timestamp-date">{{ c.issued_at|date:"M d, Y" }}</div>
+                    <div class="timestamp-time">{{ c.issued_at|date:"H:i" }}</div>
                   </div>
                 {% else %}
-                  <span class="text-muted">—</span>
+                  <span class="text-muted fw-medium">—</span>
                 {% endif %}
               </td>
               <td>
                 {% if c.returned_at %}
-                  <div class="small">
-                    <div class="fw-semibold">{{ c.returned_at|date:"M d, Y" }}</div>
-                    <div class="text-muted">{{ c.returned_at|date:"H:i" }}</div>
+                  <div class="timestamp-display">
+                    <div class="timestamp-date">{{ c.returned_at|date:"M d, Y" }}</div>
+                    <div class="timestamp-time">{{ c.returned_at|date:"H:i" }}</div>
                   </div>
                 {% else %}
-                  <span class="text-muted">—</span>
+                  <span class="text-muted fw-medium">—</span>
                 {% endif %}
               </td>
-              <td class="text-end pe-4">
-                <div class="btn-group btn-group-sm">
-                  {% if c.issued_to %}
-                    <a href="{% url 'visitors:visitor_detail' c.issued_to_id %}"
-                       class="btn btn-outline-primary action-btn-sm"
-                       title="View Visitor">
-                      <i class="bi bi-eye"></i>
-                    </a>
-                  {% endif %}
-                  {% if user.is_authenticated and user.role in 'lsa,soc,data_entry' or user.is_superuser %}
-                    <button class="btn btn-outline-secondary action-btn-sm"
-                            title="Edit Card"
-                            onclick="alert('Edit card functionality')">
-                      <i class="bi bi-pencil"></i>
-                    </button>
-                  {% endif %}
-                </div>
-              </td>
+              <td class="text-end">
+              <div class="btn-group">
+                {% if c.issued_to %}
+                  <a href="{% url 'visitors:visitor_detail' c.issued_to_id %}"
+                     class="action-btn btn-primary"
+                     title="View Visitor Details">
+                    <i class="bi bi-eye-fill"></i>
+                  </a>
+                {% endif %}
+
+                <a href="{% url 'visitors:visitor_card_detail' c.pk %}"
+                   class="action-btn"
+                   title="View Card Detail">
+                  <i class="bi bi-credit-card-2-front"></i>
+                </a>
+              </div>
+            </td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="6" class="border-0">
+              <td colspan="7" class="border-0">
                 <div class="empty-state">
                   <div class="empty-state-icon">
                     <i class="bi bi-inbox"></i>
                   </div>
-                  <h5 class="text-muted mb-2">No Cards Found</h5>
-                  <p class="text-muted mb-3">
+                  <h5>No Cards Found</h5>
+                  <p>
                     {% if q %}
-                      No cards match your search "{{ q }}". Try a different search term.
+                      We couldn't find any visitor cards matching "{{ q }}".
+                      Please try a different search term or clear your filters.
                     {% else %}
-                      There are no visitor cards in the system yet.
+                      There are currently no visitor cards in the system.
+                      Cards will appear here once they are added to the database.
                     {% endif %}
                   </p>
                   {% if q %}
-                    <a href="{% url 'visitors:visitor_cards' %}" class="btn btn-outline-primary">
-                      <i class="bi bi-arrow-counterclockwise"></i> Clear Search
+                    <a href="{% url 'visitors:visitor_cards' %}" class="btn btn-primary">
+                      <i class="bi bi-arrow-counterclockwise me-2"></i>Clear Search & Filters
                     </a>
                   {% endif %}
                 </div>
@@ -329,33 +669,36 @@
     </div>
 
     {% if cards %}
-      <div class="card-footer bg-light">
-        <div class="d-flex justify-content-between align-items-center">
-          <div class="text-muted small">
-            Showing {{ cards|length }} card{{ cards|length|pluralize }}
-            {% if q %} matching "{{ q }}"{% endif %}
+      <div class="footer-stats">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+          <div class="text-muted">
+            <i class="bi bi-list-ul me-2"></i>
+            Displaying <strong>{{ cards|length }}</strong> card{{ cards|length|pluralize }}
+            {% if q %} matching <strong>"{{ q }}"</strong>{% endif %}
+            {% if filter and filter != 'all' %} with status <strong>{{ filter|title }}</strong>{% endif %}
           </div>
           <div>
-            <!-- Pagination could go here -->
+            <!-- Pagination controls can be added here -->
           </div>
         </div>
       </div>
     {% endif %}
   </div>
 
-  <!-- Help Card -->
-  <div class="card border-0 bg-light mt-4">
+  <!-- Information Card -->
+  <div class="info-card card">
     <div class="card-body">
       <div class="d-flex gap-3">
-        <div class="text-primary">
-          <i class="bi bi-info-circle-fill fs-4"></i>
+        <div class="info-icon">
+          <i class="bi bi-info-circle-fill"></i>
         </div>
         <div>
-          <h6 class="mb-2">About Visitor Cards</h6>
-          <p class="text-muted small mb-0">
-            Visitor access cards are issued during check-in and must be returned upon check-out.
-            Cards marked as "Inactive" are not available for assignment.
-            Use the search and filter options above to quickly find specific cards or view cards by status.
+          <h6>Visitor Card Management Guidelines</h6>
+          <p class="mb-0">
+            Visitor access cards are issued during the check-in process and must be returned upon departure.
+            Each card is tracked throughout its lifecycle, ensuring accountability and security.
+            Cards marked as "Inactive" are temporarily unavailable for assignment and require administrative review.
+            Use the search and filter tools to efficiently locate specific cards or view cards by their current status.
           </p>
         </div>
       </div>
@@ -365,8 +708,8 @@
 </div>
 
 <script>
-  // Auto-submit search on input (with debounce)
   document.addEventListener('DOMContentLoaded', function() {
+    // Auto-submit search with debounce
     const searchInput = document.querySelector('.search-input');
     if (searchInput) {
       let debounceTimer;
@@ -374,9 +717,28 @@
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           this.form.submit();
-        }, 500);
+        }, 600);
       });
     }
+
+    // Add loading indicator to table on form submit
+    const searchForm = document.querySelector('.search-container');
+    if (searchForm) {
+      searchForm.addEventListener('submit', function() {
+        const tbody = document.querySelector('tbody');
+        if (tbody) {
+          tbody.style.opacity = '0.5';
+        }
+      });
+    }
+
+    // Add smooth scroll to top on filter change
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
   });
 </script>
 {% endblock %}
