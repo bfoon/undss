@@ -12,6 +12,11 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import ListView, CreateView, UpdateView, DetailView, TemplateView
 from django.contrib.auth.views import PasswordChangeView
+from .models import TrustedDevice, OneTimeCode
+from .utils import create_otp_for_user, send_otp_email, remember_device
+from datetime import timedelta
+from django.views.decorators.http import require_http_methods
+
 
 from .forms import (
     LoginForm,
@@ -43,6 +48,16 @@ class LSARequiredMixin(UserPassesTestMixin):
 
 
 # --------------------------- Auth views -----------------------------
+DEVICE_COOKIE_NAME = "trusted_device_id"
+DEVICE_COOKIE_AGE = 30 * 24 * 60 * 60  # 30 days
+
+
+def _get_client_ip(request):
+    xff = request.META.get("HTTP_X_FORWARDED_FOR")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "")
+
 
 def login_view(request):
     if request.user.is_authenticated:
@@ -52,15 +67,63 @@ def login_view(request):
         form = LoginForm(request.POST, request=request)
         if form.is_valid():
             user = form.user
-            login(request, user)
-            messages.success(request, f'Welcome back, {user.first_name or user.username}!')
-            return redirect('accounts:profile')
+
+            # 1) Check if this device is already trusted for this user
+            device_id = request.COOKIES.get(DEVICE_COOKIE_NAME)
+            trusted = None
+            if device_id:
+                trusted = TrustedDevice.objects.filter(
+                    user=user,
+                    device_id=device_id,
+                    expires_at__gt=timezone.now(),
+                    is_active=True,
+                ).first()
+
+            # 1a) If trusted device is valid -> normal login, no OTP
+            if trusted:
+                login(request, user)
+                trusted.expires_at = timezone.now() + timedelta(days=30)
+                trusted.save(update_fields=["expires_at"])
+
+                messages.success(request, f'Welcome back, {user.first_name or user.username}!')
+                response = redirect('accounts:profile')
+                response.set_cookie(
+                    DEVICE_COOKIE_NAME,
+                    device_id,
+                    max_age=DEVICE_COOKIE_AGE,
+                    httponly=True,
+                    secure=False,   # set to True in production (HTTPS)
+                    samesite="Lax",
+                )
+                return response
+
+            # 2) Not yet trusted: kick off OTP flow
+            import uuid
+            new_device_id = device_id or uuid.uuid4().hex
+            ip = _get_client_ip(request)
+            ua = request.META.get("HTTP_USER_AGENT", "")
+
+            otp = create_otp_for_user(user, new_device_id, ip_address=ip, user_agent=ua)
+
+            # DEBUG: confirm this path is hit
+            # print("Sending OTP", otp.code, "to", user.email)
+
+            send_otp_email(user, otp.code)
+
+            # Store pending info in session
+            request.session["otp_user_id"] = user.pk
+            request.session["otp_device_id"] = new_device_id
+
+            messages.info(
+                request,
+                "We have sent a verification code to your email. "
+                "Please enter it to complete your login."
+            )
+            return redirect('accounts:otp_verify')
     else:
         form = LoginForm(request=request)
 
-    # Template suggestion: templates/accounts/login.html
     return render(request, 'accounts/login.html', {'form': form})
-
 
 @login_required
 def logout_view(request):
@@ -99,6 +162,71 @@ def change_password_view(request):
     # Template suggestion: templates/accounts/change_password.html
     return render(request, 'accounts/change_password.html', {'form': form})
 
+
+@require_http_methods(["GET", "POST"])
+def otp_verify_view(request):
+    user_id = request.session.get("otp_user_id")
+    device_id = request.session.get("otp_device_id")
+
+    if not user_id or not device_id:
+        messages.error(request, "Your verification session has expired. Please login again.")
+        return redirect("accounts:login")
+
+    user = User.objects.filter(pk=user_id).first()
+    if not user:
+        messages.error(request, "Invalid user for verification. Please login again.")
+        return redirect("accounts:login")
+
+    if request.method == "POST":
+        code_entered = (request.POST.get("code") or "").strip()
+        if not code_entered:
+            messages.error(request, "Please enter the code you received.")
+        else:
+            otp = OneTimeCode.objects.filter(
+                user=user,
+                device_id=device_id,
+                code=code_entered,
+                is_used=False,
+                expires_at__gt=timezone.now(),
+            ).order_by("-created_at").first()
+
+            if not otp:
+                messages.error(request, "Invalid or expired code. Please try again.")
+            else:
+                # Mark OTP as used
+                otp.is_used = True
+                otp.save(update_fields=["is_used"])
+
+                # Mark this device as trusted for 30 days
+                remember_device(
+                    user=user,
+                    device_id=device_id,
+                    user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                    ip_address=_get_client_ip(request),
+                )
+
+                # Final login
+                login(request, user)
+                messages.success(request, f"Welcome, {user.first_name or user.username}! Device verified.")
+
+                # Clean up session
+                for key in ("otp_user_id", "otp_device_id"):
+                    if key in request.session:
+                        del request.session[key]
+
+                # Set device cookie
+                response = redirect("accounts:profile")
+                response.set_cookie(
+                    DEVICE_COOKIE_NAME,
+                    device_id,
+                    max_age=DEVICE_COOKIE_AGE,
+                    httponly=True,
+                    secure=True,
+                    samesite="Lax",
+                )
+                return response
+
+    return render(request, "accounts/otp_verify.html", {"user": user})
 
 
 class PasswordChangeAndClearFlagView(PasswordChangeView):

@@ -224,115 +224,143 @@
 </div>
 
 <div class="row g-4">
-    <!-- Profile Information -->
+    <!-- LEFT COLUMN: TABS (Profile Info & Security Actions) -->
     <div class="col-lg-4">
         <div class="card profile-card">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="bi bi-person me-2"></i>
-                    Profile Information
-                </h5>
+            <div class="card-header pb-0 border-bottom-0">
+                <ul class="nav nav-tabs card-header-tabs" id="profileSecurityTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active"
+                                id="profile-info-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#profile-info-pane"
+                                type="button"
+                                role="tab"
+                                aria-controls="profile-info-pane"
+                                aria-selected="true">
+                            <i class="bi bi-person me-2"></i>
+                            Profile Information
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link"
+                                id="security-actions-tab"
+                                data-bs-toggle="tab"
+                                data-bs-target="#security-actions-pane"
+                                type="button"
+                                role="tab"
+                                aria-controls="security-actions-pane"
+                                aria-selected="false">
+                            <i class="bi bi-shield-lock me-2"></i>
+                            Security Actions
+                        </button>
+                    </li>
+                </ul>
             </div>
-            <div class="card-body">
-                <div class="profile-info-item">
-                    <div class="profile-info-label">
-                        <i class="bi bi-envelope me-1"></i>
-                        Email Address
-                    </div>
-                    <div class="profile-info-value">{{ user.email|default:"Not provided" }}</div>
-                </div>
 
-                <div class="profile-info-item">
-                    <div class="profile-info-label">
-                        <i class="bi bi-telephone me-1"></i>
-                        Phone Number
-                    </div>
-                    <div class="profile-info-value">
-                        {% if user.phone %}
-                            {{ user.phone }}
-                        {% else %}
-                            <span class="text-muted">Not provided</span>
-                        {% endif %}
-                    </div>
-                </div>
-
-                {% if user.department %}
-                <div class="profile-info-item">
-                    <div class="profile-info-label">
-                        <i class="bi bi-building me-1"></i>
-                        Department
-                    </div>
-                    <div class="profile-info-value">{{ user.department }}</div>
-                </div>
-                {% endif %}
-
-                {% if user.office_location %}
-                <div class="profile-info-item">
-                    <div class="profile-info-label">
-                        <i class="bi bi-geo-alt me-1"></i>
-                        Office Location
-                    </div>
-                    <div class="profile-info-value">{{ user.office_location }}</div>
-                </div>
-                {% endif %}
-
-                <div class="profile-info-item">
-                    <div class="profile-info-label">
-                        <i class="bi bi-clock me-1"></i>
-                        Last Login
-                    </div>
-                    <div class="profile-info-value">
-                        {% if user.last_login %}
-                            {{ user.last_login|date:"M j, Y H:i" }}
-                        {% else %}
-                            <span class="text-muted">Never logged in</span>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Security Actions Card -->
-        <div class="card security-card mt-4 mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="bi bi-shield-lock me-2"></i>
-                    Security Actions
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="d-grid gap-2">
-                    <a class="btn btn-outline-primary" href="{% url 'accounts:change_password' %}">
-                        <i class="bi bi-key me-2"></i>Change Password
-                    </a>
-                    <button class="btn btn-outline-secondary" onclick="alert('Two-factor authentication setup coming soon!')">
-                        <i class="bi bi-phone me-2"></i>Setup 2FA
-                    </button>
-                    <button class="btn btn-outline-info" onclick="alert('Login history feature coming soon!')">
-                        <i class="bi bi-clock-history me-2"></i>Login History
-                    </button>
-                </div>
-
-                <div class="security-status">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <small class="text-muted d-block">Account Security</small>
-                            <small class="fw-medium text-success">Good</small>
+            <div class="card-body tab-content">
+                <!-- TAB 1: Profile Information -->
+                <div class="tab-pane fade show active"
+                     id="profile-info-pane"
+                     role="tabpanel"
+                     aria-labelledby="profile-info-tab">
+                    <div class="profile-info-item">
+                        <div class="profile-info-label">
+                            <i class="bi bi-envelope me-1"></i>
+                            Email Address
                         </div>
-                        <i class="bi bi-shield-check text-success fs-5"></i>
+                        <div class="profile-info-value">{{ user.email|default:"Not provided" }}</div>
                     </div>
-                    <div class="password-strength">
-                        <div class="password-strength-bar strength-good"></div>
+
+                    <div class="profile-info-item">
+                        <div class="profile-info-label">
+                            <i class="bi bi-telephone me-1"></i>
+                            Phone Number
+                        </div>
+                        <div class="profile-info-value">
+                            {% if user.phone %}
+                                {{ user.phone }}
+                            {% else %}
+                                <span class="text-muted">Not provided</span>
+                            {% endif %}
+                        </div>
                     </div>
-                    <small class="text-muted mt-1 d-block">
-                        Regular password updates recommended
-                    </small>
+
+                    {% if user.department %}
+                    <div class="profile-info-item">
+                        <div class="profile-info-label">
+                            <i class="bi bi-building me-1"></i>
+                            Department
+                        </div>
+                        <div class="profile-info-value">{{ user.department }}</div>
+                    </div>
+                    {% endif %}
+
+                    {% if user.office_location %}
+                    <div class="profile-info-item">
+                        <div class="profile-info-label">
+                            <i class="bi bi-geo-alt me-1"></i>
+                            Office Location
+                        </div>
+                        <div class="profile-info-value">{{ user.office_location }}</div>
+                    </div>
+                    {% endif %}
+
+                    <div class="profile-info-item">
+                        <div class="profile-info-label">
+                            <i class="bi bi-clock me-1"></i>
+                            Last Login
+                        </div>
+                        <div class="profile-info-value">
+                            {% if user.last_login %}
+                                {{ user.last_login|date:"M j, Y H:i" }}
+                            {% else %}
+                                <span class="text-muted">Never logged in</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: Security Actions -->
+                <div class="tab-pane fade"
+                     id="security-actions-pane"
+                     role="tabpanel"
+                     aria-labelledby="security-actions-tab">
+                    <div class="d-grid gap-2 mb-3">
+                        <a class="btn btn-outline-primary" href="{% url 'accounts:change_password' %}">
+                            <i class="bi bi-key me-2"></i>Change Password
+                        </a>
+                        <button class="btn btn-outline-secondary" type="button"
+                                onclick="alert('Two-factor authentication setup coming soon!')">
+                            <i class="bi bi-phone me-2"></i>Setup 2FA
+                        </button>
+                        <button class="btn btn-outline-info" type="button"
+                                onclick="alert('Login history feature coming soon!')">
+                            <i class="bi bi-clock-history me-2"></i>Login History
+                        </button>
+                    </div>
+
+                    <div class="security-status">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <small class="text-muted d-block">Account Security</small>
+                                <small class="fw-medium text-success">Good</small>
+                            </div>
+                            <i class="bi bi-shield-check text-success fs-5"></i>
+                        </div>
+                        <div class="password-strength">
+                            <div class="password-strength-bar strength-good"></div>
+                        </div>
+                        <small class="text-muted mt-1 d-block">
+                            Regular password updates recommended
+                        </small>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Profile Form -->
+    <!-- RIGHT COLUMN: Profile Form & Activity (unchanged) -->
     <div class="col-lg-8">
         <div class="card profile-form-card">
             <div class="card-header">
@@ -536,14 +564,16 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Clear the flag when form is submitted successfully
-    form.addEventListener('submit', function() {
-        formChanged = false;
-    });
+    if (form) {
+        form.addEventListener('submit', function() {
+            formChanged = false;
+        });
 
-    // Auto-focus first input field
-    const firstInput = form.querySelector('input:not([type="hidden"]), select, textarea');
-    if (firstInput) {
-        firstInput.focus();
+        // Auto-focus first input field
+        const firstInput = form.querySelector('input:not([type="hidden"]), select, textarea');
+        if (firstInput) {
+            firstInput.focus();
+        }
     }
 });
 </script>

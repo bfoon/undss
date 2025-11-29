@@ -23,6 +23,12 @@ def _gen_temp_password(length=12):
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
+def _gen_otp_code(length=6):
+    """Generate a numeric OTP code (e.g. 6 digits)."""
+    digits = string.digits
+    return ''.join(secrets.choice(digits) for _ in range(length))
+
+
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     fieldsets = (
@@ -53,7 +59,24 @@ class UserAdmin(DjangoUserAdmin):
                 )
             },
         ),
-        ("Password policy", {"fields": ("must_change_password", "temp_password_set_at")}),
+        (
+            "Password policy",
+            {
+                "fields": (
+                    "must_change_password",
+                    "temp_password_set_at",
+                )
+            },
+        ),
+        (
+            "OTP / Device login",
+            {
+                "fields": (
+                    "otp_code",
+                    "otp_expires_at",
+                )
+            },
+        ),
         ("Important dates", {"fields": ("last_login", "date_joined")}),
     )
 
@@ -110,8 +133,17 @@ class UserAdmin(DjangoUserAdmin):
         "agency__code",
     )
     ordering = ("username",)
+
+    readonly_fields = (
+        "temp_password_set_at",
+        "otp_code",
+        "otp_expires_at",
+    )
+
     actions = [
         "generate_temporary_passwords",
+        "generate_login_otps",
+        "clear_otps",
         "activate_users",
         "deactivate_users",
         "clear_must_change_flag",
@@ -120,6 +152,8 @@ class UserAdmin(DjangoUserAdmin):
     def get_full_name(self, obj):
         return (f"{obj.first_name} {obj.last_name}").strip() or "-"
     get_full_name.short_description = "Full name"
+
+    # ---------- TEMP PASSWORD ACTION ----------
 
     @admin.action(description="Generate temporary passwords (CSV) & require change")
     def generate_temporary_passwords(self, request, queryset):
@@ -147,6 +181,49 @@ class UserAdmin(DjangoUserAdmin):
 
         messages.success(request, f"Temporary passwords generated for {count} user(s).")
         return resp
+
+    # ---------- OTP ACTIONS ----------
+
+    @admin.action(description="Generate OTP codes (CSV, 15 min expiry)")
+    def generate_login_otps(self, request, queryset):
+        """
+        Generate OTP codes for selected users, valid for 15 minutes.
+        Returns a CSV with the OTPs (for manual sending or debugging).
+        In production you would normally *send* the OTP via email/SMS instead.
+        """
+        resp = HttpResponse(content_type="text/csv")
+        resp["Content-Disposition"] = (
+            f'attachment; filename="user_otps_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        )
+        writer = csv.writer(resp)
+        writer.writerow(["username", "email", "staff_id", "otp_code", "otp_expires_at"])
+
+        expiry = timezone.now() + timezone.timedelta(minutes=15)
+        count = 0
+
+        for user in queryset:
+            code = _gen_otp_code()
+            user.otp_code = code
+            user.otp_expires_at = expiry
+            user.save(update_fields=["otp_code", "otp_expires_at"])
+            writer.writerow([
+                user.username,
+                user.email,
+                user.employee_id or "",
+                code,
+                expiry.isoformat(),
+            ])
+            count += 1
+
+        messages.success(request, f"OTP codes generated for {count} user(s).")
+        return resp
+
+    @admin.action(description="Clear OTP codes")
+    def clear_otps(self, request, queryset):
+        updated = queryset.update(otp_code=None, otp_expires_at=None)
+        messages.success(request, f"Cleared OTP data for {updated} user(s).")
+
+    # ---------- SIMPLE STATUS ACTIONS ----------
 
     @admin.action(description="Activate selected users")
     def activate_users(self, request, queryset):

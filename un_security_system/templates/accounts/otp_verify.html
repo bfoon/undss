@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Login – One-Time Code</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css">
+  <style>
+    :root {
+      --primary: #1a56db;
+      --primary-dark: #1e429f;
+      --secondary: #64748b;
+      --border: #e2e8f0;
+      --bg-subtle: #f8fafc;
+      --success: #059669;
+      --warning: #d97706;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-subtle);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .verify-container {
+      max-width: 480px;
+      width: 100%;
+    }
+
+    .verify-card {
+      background: white;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+
+    .card-header-custom {
+      padding: 2rem 2rem 1.5rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-icon {
+      width: 56px;
+      height: 56px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+    }
+
+    .header-icon i {
+      font-size: 1.5rem;
+      color: white;
+    }
+
+    .card-header-custom h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin: 0 0 0.5rem;
+    }
+
+    .card-header-custom p {
+      color: var(--secondary);
+      font-size: 0.9375rem;
+      margin: 0;
+    }
+
+    .card-body-custom {
+      padding: 2rem;
+    }
+
+    .info-alert {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .info-alert i {
+      color: var(--primary);
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      margin-top: 0.125rem;
+    }
+
+    .info-alert-content p {
+      color: #1e40af;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .email-display {
+      color: #0f172a;
+      font-weight: 600;
+      font-size: 0.875rem;
+      display: inline-block;
+      margin-top: 0.25rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-label-custom {
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+      display: block;
+    }
+
+    .code-input {
+      padding: 0.875rem 1rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 1.25rem;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: 0.5rem;
+      font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+      transition: border-color 0.15s ease;
+      width: 100%;
+    }
+
+    .code-input:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
+    }
+
+    .code-input::placeholder {
+      letter-spacing: normal;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 0.875rem;
+      font-weight: 400;
+      color: #94a3b8;
+    }
+
+    .submit-btn {
+      padding: 0.875rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9375rem;
+      background: var(--primary);
+      border: none;
+      color: white;
+      width: 100%;
+      transition: background-color 0.15s ease;
+      cursor: pointer;
+    }
+
+    .submit-btn:hover {
+      background: var(--primary-dark);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .notice-box {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .notice-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 0.375rem;
+      font-size: 0.875rem;
+    }
+
+    .notice-header i {
+      color: var(--success);
+      font-size: 1rem;
+    }
+
+    .notice-box p {
+      color: var(--secondary);
+      font-size: 0.8125rem;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 1.5rem 0;
+    }
+
+    .action-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .action-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: color 0.15s ease;
+    }
+
+    .action-link:hover {
+      color: var(--primary-dark);
+    }
+
+    .action-link i {
+      font-size: 1rem;
+    }
+
+    @media (max-width: 576px) {
+      .card-header-custom {
+        padding: 1.5rem 1.5rem 1.25rem;
+      }
+
+      .card-body-custom {
+        padding: 1.5rem;
+      }
+
+      .card-header-custom h1 {
+        font-size: 1.375rem;
+      }
+
+      .header-icon {
+        width: 48px;
+        height: 48px;
+      }
+
+      .header-icon i {
+        font-size: 1.25rem;
+      }
+
+      .code-input {
+        font-size: 1.125rem;
+        letter-spacing: 0.375rem;
+      }
+    }
+
+    .spinner-border-sm {
+      width: 1rem;
+      height: 1rem;
+      border-width: 0.15em;
+    }
+  </style>
+</head>
+<body>
+  <div class="verify-container">
+    <div class="verify-card">
+      <div class="card-header-custom">
+        <div class="header-icon">
+          <i class="bi bi-shield-lock"></i>
+        </div>
+        <h1>Verify Your Identity</h1>
+        <p>Enter the verification code sent to your email</p>
+      </div>
+
+      <div class="card-body-custom">
+        <div class="info-alert">
+          <i class="bi bi-envelope"></i>
+          <div class="info-alert-content">
+            <p>
+              A 6-digit verification code has been sent to your email.<br>
+            </p>
+          </div>
+        </div>
+
+        <form method="post" id="verifyForm">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label-custom" for="codeInput">
+              Verification Code
+            </label>
+            <input type="text"
+                   name="code"
+                   id="codeInput"
+                   class="form-control code-input"
+                   placeholder="000000"
+                   autocomplete="one-time-code"
+                   inputmode="numeric"
+                   pattern="[0-9]{6}"
+                   maxlength="6"
+                   required
+                   autofocus>
+          </div>
+
+          <button class="btn submit-btn" type="submit" id="submitBtn">
+            Verify and Continue
+          </button>
+        </form>
+
+        <div class="notice-box">
+          <div class="notice-header">
+            <i class="bi bi-shield-check"></i>
+            <span>Trusted Device</span>
+          </div>
+          <p>
+            This device will remain trusted for 30 days. You won't need to verify again during this period.
+          </p>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="action-links">
+          <a href="#" class="action-link" id="resendLink">
+            <i class="bi bi-arrow-clockwise"></i>
+            <span>Resend verification code</span>
+          </a>
+          <a href="#" class="action-link" id="helpLink">
+            <i class="bi bi-question-circle"></i>
+            <span>Need help?</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const codeInput = document.getElementById('codeInput');
+      const form = document.getElementById('verifyForm');
+      const submitBtn = document.getElementById('submitBtn');
+      const resendLink = document.getElementById('resendLink');
+      const helpLink = document.getElementById('helpLink');
+
+      // Auto-format code input (numbers only)
+      codeInput.addEventListener('input', function(e) {
+        this.value = this.value.replace(/[^0-9]/g, '');
+
+        // Auto-submit when 6 digits are entered
+        if (this.value.length === 6) {
+          setTimeout(() => {
+            form.submit();
+          }, 200);
+        }
+      });
+
+      // Paste handling for verification codes
+      codeInput.addEventListener('paste', function(e) {
+        e.preventDefault();
+        const pastedData = e.clipboardData.getData('text');
+        const numbers = pastedData.replace(/[^0-9]/g, '').slice(0, 6);
+        this.value = numbers;
+
+        if (numbers.length === 6) {
+          setTimeout(() => {
+            form.submit();
+          }, 200);
+        }
+      });
+
+      // Add loading state to submit button
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
+        submitBtn.disabled = true;
+        
+        // Simulate form submission
+        setTimeout(() => {
+          alert('Code verified successfully!');
+          submitBtn.innerHTML = 'Verify and Continue';
+          submitBtn.disabled = false;
+          codeInput.value = '';
+          codeInput.focus();
+        }, 1500);
+      });
+
+      // Resend code handler
+      resendLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        alert('A new verification code has been sent to your email.');
+      });
+
+      // Help handler
+      helpLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        alert('For assistance, please contact support@example.com');
+      });
+
+      // Focus input on page load
+      codeInput.focus();
+    });
+  </script>
+</body>
+</html>
