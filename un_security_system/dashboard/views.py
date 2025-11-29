@@ -1,4 +1,3 @@
-# dashboard/views.py
 from datetime import timedelta
 import csv
 
@@ -52,82 +51,152 @@ def vehicles_in_compound_estimate():
     """
     Heuristic: a vehicle is 'inside' if its last movement is 'entry'.
     """
-    # last movement per vehicle
-    last_moves = (VehicleMovement.objects
-                  .values('vehicle_id')
-                  .annotate(last_ts=Max('timestamp'))
-                  )
+    last_moves = (
+        VehicleMovement.objects
+        .values('vehicle_id')
+        .annotate(last_ts=Max('timestamp'))
+    )
     inside_count = 0
     if last_moves:
-        # build a map: vehicle_id -> last_ts
         last_map = {row['vehicle_id']: row['last_ts'] for row in last_moves}
-        # fetch those movements and check type
         for vid, ts in last_map.items():
-            mv = (VehicleMovement.objects
-                  .filter(vehicle_id=vid, timestamp=ts)
-                  .only('movement_type')
-                  .first())
+            mv = (
+                VehicleMovement.objects
+                .filter(vehicle_id=vid, timestamp=ts)
+                .only('movement_type')
+                .first()
+            )
             if mv and mv.movement_type == 'entry':
                 inside_count += 1
     return inside_count
 
 
-def base_dashboard_context():
+def base_dashboard_context(user):
+    """
+    Build base stats for the dashboards.
+
+    - Everyone sees *their* visitor stats:
+        my_visitors_total
+        my_pending_visitors
+        my_visitors_with_vehicle
+        my_visitors_today
+
+    - LSA / SOC see these same keys but as GLOBAL totals.
+    """
     today = timezone.now().date()
+
+    # ---------- MY VISITORS ----------
+    # Adjust 'requested_by' to whatever field links Visitor -> User in your app.
+    if user.is_authenticated:
+        my_visitors = Visitor.objects.filter(registered_by=user)
+    else:
+        my_visitors = Visitor.objects.none()
+
+    my_visitors_total = my_visitors.count()
+    my_pending_visitors = my_visitors.filter(status='pending').count()
+
+    # "Visitors with vehicle" – here I assume you have a boolean field `has_vehicle`
+    # on Visitor. If you store this differently, adjust this filter.
+    my_visitors_with_vehicle = my_visitors.filter(has_vehicle=True).count()
+
+    my_visitors_today = my_visitors.filter(registered_at__date=today).count()
+
+    # ---------- GLOBAL VISITOR STATS ----------
+    total_visitors_today = Visitor.objects.filter(registered_at__date=today).count()
+    pending_approvals = Visitor.objects.filter(status='pending').count()
+    active_visitors = Visitor.objects.filter(checked_in=True, checked_out=False).count()
+    vehicles_in_compound = vehicles_in_compound_estimate()
+    movements_today = VehicleMovement.objects.filter(timestamp__date=today).count()
+
+    # ---------- LSA / SOC override behaviour ----------
+    is_lsa_or_soc = _is_lsa_or_soc(user)
+
+    if is_lsa_or_soc:
+        # For LSA / SOC, the "my_*" cards should show global totals
+        my_visitors_total = Visitor.objects.count()
+        my_pending_visitors = pending_approvals
+        my_visitors_with_vehicle = Visitor.objects.filter(has_vehicle=True).count()
+        my_visitors_today = total_visitors_today
+
     ctx = {
         'today': today,
-        'total_visitors_today': Visitor.objects.filter(registered_at__date=today).count(),
-        'pending_approvals': Visitor.objects.filter(status='pending').count(),
-        'active_visitors': Visitor.objects.filter(checked_in=True, checked_out=False).count(),
-        'vehicles_in_compound': vehicles_in_compound_estimate(),
-        'movements_today': VehicleMovement.objects.filter(timestamp__date=today).count(),
+
+        # Per-user metrics (overridden to global for LSA / SOC)
+        'my_visitors_total': my_visitors_total,
+        'my_pending_visitors': my_pending_visitors,
+        'my_visitors_with_vehicle': my_visitors_with_vehicle,
+        'my_visitors_today': my_visitors_today,
+
+        # Global metrics (you can still show these in separate “global” cards if you like)
+        'total_visitors_today': total_visitors_today,
+        'pending_approvals': pending_approvals,
+        'active_visitors': active_visitors,
+        'vehicles_in_compound': vehicles_in_compound,
+        'movements_today': movements_today,
+
+        # flag for templates
+        'is_lsa_or_soc': is_lsa_or_soc,
     }
     return ctx
+
 
 
 # ------------------------------ main dashboard ------------------------------
 
 class DashboardView(LoginRequiredMixin, TemplateView):
-    template_name = 'dashboard/dashboard.html'  # create this
+    template_name = 'dashboard/dashboard.html'
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         user = self.request.user
         today = timezone.now().date()
 
-        ctx.update(base_dashboard_context())
+        ctx.update(base_dashboard_context(user))
 
         # Recent items for all roles
-        ctx['recent_movements'] = VehicleMovement.objects.select_related('vehicle').order_by('-timestamp')[:10]
+        ctx['recent_movements'] = (
+            VehicleMovement.objects
+            .select_related('vehicle')
+            .order_by('-timestamp')[:10]
+        )
         ctx['recent_visitors'] = Visitor.objects.order_by('-registered_at')[:10]
 
         # Role-specific extras
         if is_lsa(user) or is_soc(user):
-            ctx['recent_incidents'] = SecurityIncident.objects.filter(reported_at__date=today).order_by('-reported_at')[:5]
+            ctx['recent_incidents'] = (
+                SecurityIncident.objects
+                .filter(reported_at__date=today)
+                .order_by('-reported_at')[:5]
+            )
 
         return ctx
+
 
 
 # ------------------------- role-specific dashboards -------------------------
 
 class DataEntryDashboardView(LoginRequiredMixin, DataEntryRequiredMixin, TemplateView):
-    template_name = 'dashboard/data_entry_dashboard.html'  # create this
+    template_name = 'dashboard/data_entry_dashboard.html'
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx.update(base_dashboard_context())
-        # Gate-focused quick stats
-        ctx['recent_movements'] = VehicleMovement.objects.select_related('vehicle').order_by('-timestamp')[:15]
+        ctx.update(base_dashboard_context(self.request.user))
+        ctx['recent_movements'] = (
+            VehicleMovement.objects
+            .select_related('vehicle')
+            .order_by('-timestamp')[:15]
+        )
         ctx['recent_visitor_logs'] = VisitorLog.objects.order_by('-timestamp')[:15]
         return ctx
 
 
+
 class LSADashboardView(LoginRequiredMixin, LSARequiredMixin, TemplateView):
-    template_name = 'dashboard/lsa_dashboard.html'  # create this
+    template_name = 'dashboard/lsa_dashboard.html'
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx.update(base_dashboard_context())
+        ctx.update(base_dashboard_context(self.request.user))
         today = timezone.now().date()
         ctx['recent_incidents'] = SecurityIncident.objects.order_by('-reported_at')[:10]
         ctx['open_incidents'] = SecurityIncident.objects.filter(resolved=False).count()
@@ -135,14 +204,15 @@ class LSADashboardView(LoginRequiredMixin, LSARequiredMixin, TemplateView):
         return ctx
 
 
+
 class SOCDashboardView(LoginRequiredMixin, SOCRequiredMixin, TemplateView):
-    template_name = 'dashboard/soc_dashboard.html'  # create this
+    template_name = 'dashboard/soc_dashboard.html'
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx.update(base_dashboard_context())
-        # Live feed sections populated by APIs / websockets on the page
+        ctx.update(base_dashboard_context(self.request.user))
         return ctx
+
 
 
 # ----------------------------- analytics & reports -----------------------------

@@ -36,10 +36,10 @@
     }
 
     .stat-number {
-        font-size: 2.5rem;
+        font-size: 2.2rem;
         font-weight: 700;
         line-height: 1;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.35rem;
     }
 
     .quick-action-btn {
@@ -96,8 +96,10 @@
                         Security Operations Dashboard
                     </h1>
                     <p class="mb-0 opacity-90">
-                        Welcome back, <strong>{{ user.get_full_name|default:user.username }}</strong>
-                        • {{ user.get_role_display }} • {% now "l, F j, Y" %}
+                        Welcome back,
+                        <strong>{{ user.get_full_name|default:user.username }}</strong>
+                        • {{ user.get_role_display|default:user.role }}
+                        • {% now "l, F j, Y" %}
                     </p>
                 </div>
                 <div class="col-lg-4 text-lg-end">
@@ -114,19 +116,34 @@
     </div>
 </div>
 
-<!-- Key Metrics -->
+{# ---------------------------------------------------- #}
+{#   ROW 1 – MY VISITORS (per user; LSA/SOC see all)   #}
+{# ---------------------------------------------------- #}
 <div class="row g-4 mb-4">
     <div class="col-lg-3 col-md-6">
         <div class="card stat-card text-center">
             <div class="card-body p-4">
-                <div class="stat-icon" style="background-color: rgba(0, 158, 219, 0.1); color: var(--un-blue);">
+                <div class="stat-icon"
+                     style="background-color: rgba(0, 158, 219, 0.1); color: var(--un-blue);">
                     <i class="bi bi-people-fill"></i>
                 </div>
-                <div class="stat-number text-un-primary" id="active-visitors">
-                    {{ active_visitors|default:0 }}
+                <div class="stat-number text-un-primary" id="my-visitors-total">
+                    {{ my_visitors_total|default:0 }}
                 </div>
-                <h6 class="card-title text-muted mb-0">Active Visitors</h6>
-                <small class="text-muted">Currently on premises</small>
+                <h6 class="card-title text-muted mb-0">
+                    {% if is_lsa_or_soc %}
+                      Visitor Requests (All)
+                    {% else %}
+                      My Visitor Requests
+                    {% endif %}
+                </h6>
+                <small class="text-muted">
+                    {% if is_lsa_or_soc %}
+                      All visitor requests in the system
+                    {% else %}
+                      Requests you have submitted
+                    {% endif %}
+                </small>
             </div>
         </div>
     </div>
@@ -134,14 +151,28 @@
     <div class="col-lg-3 col-md-6">
         <div class="card stat-card text-center">
             <div class="card-body p-4">
-                <div class="stat-icon" style="background-color: rgba(253, 126, 20, 0.1); color: var(--warning-color);">
+                <div class="stat-icon"
+                     style="background-color: rgba(253, 126, 20, 0.1); color: var(--warning-color);">
                     <i class="bi bi-clock-fill"></i>
                 </div>
-                <div class="stat-number" style="color: var(--warning-color);" id="pending-approvals">
-                    {{ pending_approvals|default:0 }}
+                <div class="stat-number" style="color: var(--warning-color);"
+                     id="my-pending-visitors">
+                    {{ my_pending_visitors|default:0 }}
                 </div>
-                <h6 class="card-title text-muted mb-0">Pending Approvals</h6>
-                <small class="text-muted">Require attention</small>
+                <h6 class="card-title text-muted mb-0">
+                    {% if is_lsa_or_soc %}
+                      Pending Requests (All)
+                    {% else %}
+                      My Pending Requests
+                    {% endif %}
+                </h6>
+                <small class="text-muted">
+                    {% if is_lsa_or_soc %}
+                      Awaiting approval from all users
+                    {% else %}
+                      Your visitors still pending approval
+                    {% endif %}
+                </small>
             </div>
         </div>
     </div>
@@ -149,14 +180,28 @@
     <div class="col-lg-3 col-md-6">
         <div class="card stat-card text-center">
             <div class="card-body p-4">
-                <div class="stat-icon" style="background-color: rgba(25, 135, 84, 0.1); color: var(--success-color);">
+                <div class="stat-icon"
+                     style="background-color: rgba(25, 135, 84, 0.1); color: var(--success-color);">
                     <i class="bi bi-car-front-fill"></i>
                 </div>
-                <div class="stat-number" style="color: var(--success-color);" id="vehicles-in-compound">
-                    {{ vehicles_in_compound|default:0 }}
+                <div class="stat-number" style="color: var(--success-color);"
+                     id="my-visitors-with-vehicle">
+                    {{ my_visitors_with_vehicle|default:0 }}
                 </div>
-                <h6 class="card-title text-muted mb-0">Vehicles On-Site</h6>
-                <small class="text-muted">In compound</small>
+                <h6 class="card-title text-muted mb-0">
+                    {% if is_lsa_or_soc %}
+                      Visitors With Vehicles (All)
+                    {% else %}
+                      My Visitors With Vehicles
+                    {% endif %}
+                </h6>
+                <small class="text-muted">
+                    {% if is_lsa_or_soc %}
+                      Visitors (system-wide) arriving with vehicles
+                    {% else %}
+                      Your visitors who bring vehicles
+                    {% endif %}
+                </small>
             </div>
         </div>
     </div>
@@ -164,21 +209,108 @@
     <div class="col-lg-3 col-md-6">
         <div class="card stat-card text-center">
             <div class="card-body p-4">
-                <div class="stat-icon" style="background-color: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
+                <div class="stat-icon"
+                     style="background-color: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
                     <i class="bi bi-calendar-day-fill"></i>
                 </div>
-                <div class="stat-number" style="color: #0dcaf0;">
-                    {{ total_visitors_today|default:0 }}
+                <div class="stat-number" style="color: #0dcaf0;"
+                     id="my-visitors-today">
+                    {{ my_visitors_today|default:0 }}
                 </div>
-                <h6 class="card-title text-muted mb-0">Today's Visitors</h6>
-                <small class="text-muted">Total registered</small>
+                <h6 class="card-title text-muted mb-0">
+                    {% if is_lsa_or_soc %}
+                      Visitors Today (All)
+                    {% else %}
+                      My Visitors Today
+                    {% endif %}
+                </h6>
+                <small class="text-muted">
+                    {% if is_lsa_or_soc %}
+                      All visitors registered today
+                    {% else %}
+                      Visitors you registered today
+                    {% endif %}
+                </small>
             </div>
         </div>
     </div>
 </div>
 
+{# ---------------------------------------------------- #}
+{#   ROW 2 – GLOBAL STATS (only for LSA / SOC)         #}
+{# ---------------------------------------------------- #}
+{% if is_lsa_or_soc %}
+<div class="row g-4 mb-4">
+    <div class="col-lg-3 col-md-6">
+        <div class="card stat-card text-center">
+            <div class="card-body p-4">
+                <div class="stat-icon"
+                     style="background-color: rgba(0, 158, 219, 0.1); color: var(--un-blue);">
+                    <i class="bi bi-people"></i>
+                </div>
+                <div class="stat-number text-un-primary">
+                    {{ global_visitors_total|default:0 }}
+                </div>
+                <h6 class="card-title text-muted mb-0">Total Visitors (All Time)</h6>
+                <small class="text-muted">All visitors recorded in the system</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="card stat-card text-center">
+            <div class="card-body p-4">
+                <div class="stat-icon"
+                     style="background-color: rgba(253, 126, 20, 0.1); color: var(--warning-color);">
+                    <i class="bi bi-clock-history"></i>
+                </div>
+                <div class="stat-number" style="color: var(--warning-color);">
+                    {{ pending_approvals|default:0 }}
+                </div>
+                <h6 class="card-title text-muted mb-0">Pending Approvals (Global)</h6>
+                <small class="text-muted">All visitors waiting for approval</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="card stat-card text-center">
+            <div class="card-body p-4">
+                <div class="stat-icon"
+                     style="background-color: rgba(25, 135, 84, 0.1); color: var(--success-color);">
+                    <i class="bi bi-car-front"></i>
+                </div>
+                <div class="stat-number" style="color: var(--success-color);">
+                    {{ vehicles_in_compound|default:0 }}
+                </div>
+                <h6 class="card-title text-muted mb-0">Vehicles On-Site (Estimate)</h6>
+                <small class="text-muted">Based on last gate movement</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+        <div class="card stat-card text-center">
+            <div class="card-body p-4">
+                <div class="stat-icon"
+                     style="background-color: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
+                    <i class="bi bi-calendar-check"></i>
+                </div>
+                <div class="stat-number" style="color: #0dcaf0;">
+                    {{ total_visitors_today|default:0 }}
+                </div>
+                <h6 class="card-title text-muted mb-0">Visitors Today (Global)</h6>
+                <small class="text-muted">All agencies combined</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ---------------------------------------------------- #}
+{#   QUICK ACTIONS FOR DATA ENTRY                      #}
+{# ---------------------------------------------------- #}
 {% if user.role == 'data_entry' %}
-<!-- Quick Actions for Data Entry Guards -->
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
@@ -221,6 +353,9 @@
 </div>
 {% endif %}
 
+{# ---------------------------------------------------- #}
+{#   LSA / SOC: Recent Activities & Alerts             #}
+{# ---------------------------------------------------- #}
 {% if user.role == 'lsa' or user.role == 'soc' %}
 <div class="row g-4">
   <div class="col-lg-8">
@@ -229,13 +364,17 @@
         <h5><i class="bi bi-activity me-2"></i>Recent Security Activities</h5>
       </div>
       <div class="card-body p-0">
-        <!-- Live content area -->
         <div id="recent-activities"
              hx-get="{% url 'dashboard:recent_activities_partial' %}"
              hx-trigger="load, every 10s"
              hx-target="#recent-activities"
              hx-swap="innerHTML">
-          {% include "dashboard/_recent_activities.html" with rows=recent_activities now=now %}
+          {# Initial content (fallback); will be replaced by HTMX #}
+          {% if recent_activities %}
+            {% include "dashboard/_recent_activities.html" with rows=recent_activities now=today %}
+          {% else %}
+            <div class="p-3 text-muted small">Loading activities…</div>
+          {% endif %}
         </div>
       </div>
       <div class="card-footer bg-light">
@@ -257,7 +396,11 @@
              hx-trigger="load, every 15s"
              hx-target="#recent-incidents"
              hx-swap="innerHTML">
-          {% include "dashboard/_recent_incidents.html" with recent_incidents=recent_incidents %}
+          {% if recent_incidents %}
+            {% include "dashboard/_recent_incidents.html" with recent_incidents=recent_incidents %}
+          {% else %}
+            <div class="p-3 text-muted small">Loading incidents…</div>
+          {% endif %}
         </div>
       </div>
       <div class="card-footer bg-light">
@@ -270,8 +413,11 @@
 </div>
 {% endif %}
 
-<!-- Parking Card Check Modal -->
-<div class="modal fade" id="parkingCardModal" tabindex="-1" aria-labelledby="parkingCardModalLabel" aria-hidden="true">
+{# ---------------------------------------------------- #}
+{#   Parking Card Check Modal                          #}
+{# ---------------------------------------------------- #}
+<div class="modal fade" id="parkingCardModal" tabindex="-1"
+     aria-labelledby="parkingCardModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-un-primary text-white">
@@ -279,7 +425,8 @@
                     <i class="bi bi-credit-card me-2"></i>
                     Parking Card Verification
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white"
+                        data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="parking-card-form" class="mb-3">
@@ -322,202 +469,144 @@ function updateClock() {
         second: '2-digit',
         hour12: true
     });
-    document.getElementById('current-time').textContent = timeString;
+    const el = document.getElementById('current-time');
+    if (el) {
+        el.textContent = timeString;
+    }
 }
-
-// Update clock every second
 setInterval(updateClock, 1000);
-updateClock(); // Initial call
+updateClock();
 
-// Real-time dashboard updates
-function updateDashboard() {
-    fetch('/dashboard/api/', {
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
+// Parking card validation
+const parkingForm = document.getElementById('parking-card-form');
+if (parkingForm) {
+    parkingForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const cardNumber = document.getElementById('card-number').value.trim();
+        const resultDiv = document.getElementById('card-result');
+
+        if (!cardNumber) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Please enter a parking card number
+                </div>
+            `;
+            resultDiv.classList.remove('d-none');
+            return;
         }
-    })
-    .then(response => {
-        if (!response.ok) throw new Error('Network response was not ok');
-        return response.json();
-    })
-    .then(data => {
-        // Update metrics with animation
-        animateNumber('active-visitors', data.active_visitors);
-        animateNumber('pending-approvals', data.pending_approvals);
-        animateNumber('vehicles-in-compound', data.vehicles_in_compound);
 
-        // Update recent activities
-        const activitiesDiv = document.getElementById('recent-activities');
-        if (activitiesDiv && data.recent_activities) {
-            activitiesDiv.innerHTML = '';
-            data.recent_activities.forEach(activity => {
-                const activityElement = document.createElement('div');
-                activityElement.className = 'activity-item';
-                activityElement.innerHTML = `
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <strong>${escapeHtml(activity.description)}</strong>
-                            <div class="text-muted small">by ${escapeHtml(activity.user)}</div>
+        // Show loading state
+        resultDiv.innerHTML = `
+            <div class="text-center py-3">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Verifying...</span>
+                </div>
+                <div class="mt-2">Verifying parking card...</div>
+            </div>
+        `;
+        resultDiv.classList.remove('d-none');
+
+        fetch(`/vehicles/validate-parking-card/?card_number=${encodeURIComponent(cardNumber)}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.valid) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                            <div>
+                                <h6 class="mb-0">Valid Parking Card</h6>
+                                <small>Card is active and authorized</small>
+                            </div>
                         </div>
-                        <small class="text-muted">${new Date(activity.timestamp).toLocaleTimeString()}</small>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Card Holder</small>
+                                    <strong>${escapeHtml(data.owner_name || 'N/A')}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Department</small>
+                                    <strong>${escapeHtml(data.department || 'N/A')}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Vehicle Plate</small>
+                                    <strong>${escapeHtml(data.vehicle_plate || 'N/A')}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Expiry Date</small>
+                                    <strong>${escapeHtml(data.expiry_date || 'N/A')}</strong>
+                                </div>
+                            </div>
+                            ${data.phone ? `
+                            <div class="col-12">
+                                <div class="border rounded p-2">
+                                    <small class="text-muted d-block">Contact</small>
+                                    <strong>${escapeHtml(data.phone)}</strong>
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
                     </div>
                 `;
-                activitiesDiv.appendChild(activityElement);
-            });
-        }
-    })
-    .catch(error => {
-        console.warn('Dashboard update failed:', error);
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-x-circle-fill fs-4 me-3"></i>
+                            <div>
+                                <h6 class="mb-0">Invalid Parking Card</h6>
+                                <small>${escapeHtml(data.error || 'Card not found or expired')}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        })
+        .catch(() => {
+            resultDiv.innerHTML = `
+                <div class="alert alert-warning">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+                        <div>
+                            <h6 class="mb-0">Verification Error</h6>
+                            <small>Unable to verify card. Please check your connection and try again.</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
     });
-}
-
-// Animate number changes
-function animateNumber(elementId, newValue) {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-
-    const currentValue = parseInt(element.textContent) || 0;
-    if (currentValue === newValue) return;
-
-    element.style.transition = 'transform 0.3s ease';
-    element.style.transform = 'scale(1.1)';
-
-    setTimeout(() => {
-        element.textContent = newValue;
-        element.style.transform = 'scale(1)';
-    }, 150);
 }
 
 // Escape HTML for security
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = text || '';
     return div.innerHTML;
 }
 
-// Update dashboard every 30 seconds
-setInterval(updateDashboard, 30000);
-
-// Parking card validation
-document.getElementById('parking-card-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    const cardNumber = document.getElementById('card-number').value.trim();
-    const resultDiv = document.getElementById('card-result');
-
-    if (!cardNumber) {
-        resultDiv.innerHTML = `
-            <div class="alert alert-warning">
-                <i class="bi bi-exclamation-triangle me-2"></i>
-                Please enter a parking card number
-            </div>
-        `;
-        resultDiv.classList.remove('d-none');
-        return;
-    }
-
-    // Show loading state
-    resultDiv.innerHTML = `
-        <div class="text-center py-3">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Verifying...</span>
-            </div>
-            <div class="mt-2">Verifying parking card...</div>
-        </div>
-    `;
-    resultDiv.classList.remove('d-none');
-
-    fetch(`/vehicles/validate-parking-card/?card_number=${encodeURIComponent(cardNumber)}`, {
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.valid) {
-            resultDiv.innerHTML = `
-                <div class="alert alert-success">
-                    <div class="d-flex align-items-center mb-3">
-                        <i class="bi bi-check-circle-fill fs-4 me-3"></i>
-                        <div>
-                            <h6 class="mb-0">Valid Parking Card</h6>
-                            <small>Card is active and authorized</small>
-                        </div>
-                    </div>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="border rounded p-2">
-                                <small class="text-muted d-block">Card Holder</small>
-                                <strong>${escapeHtml(data.owner_name || 'N/A')}</strong>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="border rounded p-2">
-                                <small class="text-muted d-block">Department</small>
-                                <strong>${escapeHtml(data.department || 'N/A')}</strong>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="border rounded p-2">
-                                <small class="text-muted d-block">Vehicle Plate</small>
-                                <strong>${escapeHtml(data.vehicle_plate || 'N/A')}</strong>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="border rounded p-2">
-                                <small class="text-muted d-block">Expiry Date</small>
-                                <strong>${escapeHtml(data.expiry_date || 'N/A')}</strong>
-                            </div>
-                        </div>
-                        ${data.phone ? `
-                        <div class="col-12">
-                            <div class="border rounded p-2">
-                                <small class="text-muted d-block">Contact</small>
-                                <strong>${escapeHtml(data.phone)}</strong>
-                            </div>
-                        </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-        } else {
-            resultDiv.innerHTML = `
-                <div class="alert alert-danger">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-x-circle-fill fs-4 me-3"></i>
-                        <div>
-                            <h6 class="mb-0">Invalid Parking Card</h6>
-                            <small>${escapeHtml(data.error || 'Card not found or expired')}</small>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-    })
-    .catch(error => {
-        resultDiv.innerHTML = `
-            <div class="alert alert-warning">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
-                    <div>
-                        <h6 class="mb-0">Verification Error</h6>
-                        <small>Unable to verify card. Please check your connection and try again.</small>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-});
-
 // Clear form when modal is hidden
-document.getElementById('parkingCardModal').addEventListener('hidden.bs.modal', function() {
-    document.getElementById('card-number').value = '';
-    document.getElementById('card-result').classList.add('d-none');
-});
+const parkingModal = document.getElementById('parkingCardModal');
+if (parkingModal) {
+    parkingModal.addEventListener('hidden.bs.modal', function() {
+        document.getElementById('card-number').value = '';
+        document.getElementById('card-result').classList.add('d-none');
+    });
 
-// Focus input when modal is shown
-document.getElementById('parkingCardModal').addEventListener('shown.bs.modal', function() {
-    document.getElementById('card-number').focus();
-});
+    parkingModal.addEventListener('shown.bs.modal', function() {
+        document.getElementById('card-number').focus();
+    });
+}
 </script>
 {% endblock %}
