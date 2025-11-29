@@ -83,6 +83,16 @@ urlpatterns = [
         name='idcard_request_list',
     ),
     path(
+        "idcard/requests/<int:pk>/download-form/",
+        views_hr.idcard_request_download_form,
+         name="idcard_request_download_form"
+    ),
+    path(
+        "hr/idcard/requests/<int:pk>/edit/",
+        views_hr.idcard_request_edit,
+        name="idcard_request_edit",
+    ),
+    path(
             "hr/idcard/requests/<int:pk>/",
             views_hr.idcard_request_detail,
             name="idcard_request_detail",

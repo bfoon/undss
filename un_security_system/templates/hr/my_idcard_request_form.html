@@ -56,7 +56,8 @@
           </h5>
         </div>
         <div class="card-body p-4">
-          <form method="post" novalidate id="idCardRequestForm">
+          <!-- 🔸 enctype added -->
+          <form method="post" enctype="multipart/form-data" novalidate id="idCardRequestForm">
             {% csrf_token %}
 
             <!-- Display non-field errors -->
@@ -73,7 +74,7 @@
               </div>
             {% endif %}
 
-            <!-- Employee Selection -->
+            <!-- Employee (for_user) — often hidden or readonly in self-service form -->
             {% if form.for_user %}
               <div class="mb-4">
                 <label for="{{ form.for_user.id_for_label }}" class="form-label fw-semibold">
@@ -153,9 +154,34 @@
               </div>
             {% endif %}
 
+            <!-- 🔸 File Upload: Request Form (PDF / Word) -->
+            {% if form.request_form %}
+              <div class="mb-4">
+                <label for="{{ form.request_form.id_for_label }}" class="form-label fw-semibold">
+                  <i class="bi bi-file-earmark-arrow-up me-1"></i>
+                  Upload Signed Request Form (PDF / Word)
+                  {% if form.request_form.field.required %}
+                    <span class="text-danger">*</span>
+                  {% endif %}
+                </label>
+                {{ form.request_form }}
+                <div class="form-text">
+                  Upload the completed / signed HR request form if applicable.
+                  Allowed formats: PDF, DOC, DOCX. Max size: 5 MB.
+                </div>
+                {% if form.request_form.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.request_form.errors %}
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
+
             <!-- Any other fields not explicitly handled -->
             {% for field in form %}
-              {% if field.name != 'for_user' and field.name != 'request_type' and field.name != 'reason' %}
+              {% if field.name != 'for_user' and field.name != 'request_type' and field.name != 'reason' and field.name != 'request_form' %}
                 <div class="mb-4">
                   <label for="{{ field.id_for_label }}" class="form-label fw-semibold">
                     {{ field.label }}
@@ -252,7 +278,6 @@
 </div>
 
 <style>
-  /* Form styling */
   .form-control, .form-select {
     border-radius: 0.375rem;
     border: 1px solid #ced4da;
@@ -279,17 +304,14 @@
     font-size: 0.875rem;
   }
 
-  /* Required asterisk */
   .text-danger {
     font-weight: bold;
   }
 
-  /* Card hover effects */
   .card {
     transition: transform 0.2s ease;
   }
 
-  /* Help section icons */
   .bi-clock, .bi-camera-video, .bi-envelope, .bi-telephone {
     font-size: 1.25rem;
   }
@@ -297,32 +319,31 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Add Bootstrap validation classes to form fields
   const form = document.getElementById('idCardRequestForm');
   const formControls = form.querySelectorAll('.form-control, .form-select');
 
-  // Add Bootstrap classes to form fields
   formControls.forEach(function(field) {
     if (field.classList.contains('is-invalid') || field.parentElement.querySelector('.invalid-feedback')) {
       field.classList.add('is-invalid');
     }
   });
 
-  // Form submission handler
   form.addEventListener('submit', function(e) {
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
   });
 
-  // Request type helper
   const requestTypeField = document.querySelector('[name="request_type"]');
   if (requestTypeField) {
     requestTypeField.addEventListener('change', function() {
       const reasonField = document.querySelector('[name="reason"]');
-      if (reasonField && this.value === 'replacement') {
+      if (!reasonField) return;
+      if (this.value === 'replacement') {
         reasonField.placeholder = 'Please specify if the card was lost, stolen, or damaged...';
-      } else if (reasonField) {
+      } else if (this.value === 'renewal') {
+        reasonField.placeholder = 'Card expired or expiring soon. Add any extra details...';
+      } else {
         reasonField.placeholder = 'Provide details about your request...';
       }
     });

@@ -8,6 +8,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import ListView, CreateView
+import os
+from django.http import FileResponse, Http404, HttpResponseForbidden
 
 from .notifications import notify_users_by_role, notify_users_direct
 from .forms import EmployeeIDCardRequestForm, EmployeeIDCardAdminRequestForm
@@ -196,6 +198,115 @@ def idcard_request_list(request):
 
 
 @login_required
+@user_passes_test(is_lsa_soc_or_hr)  # only LSA/SOC/HR gets in
+def idcard_request_download_form(request, pk):
+    """
+    Allow LSA / SOC / Agency HR of that agency to download the attached request form.
+    """
+    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
+
+    user = request.user
+    role = getattr(user, "role", "")
+
+    # Agency HR must match agency of the employee
+    if role == "agency_hr":
+        if not user.agency or not obj.for_user.agency or user.agency_id != obj.for_user.agency_id:
+            return HttpResponseForbidden("You are not allowed to access this file.")
+
+    # LSA and SOC (and superuser) are already allowed by is_lsa_soc_or_hr
+    if not obj.request_form:
+        raise Http404("No form uploaded for this request.")
+
+    return FileResponse(
+        obj.request_form.open("rb"),
+        as_attachment=True,
+        filename=obj.request_form_filename or "request_form",
+    )
+
+@login_required
+def idcard_request_download_form(request, pk):
+    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
+    user = request.user
+    role = getattr(user, "role", "")
+
+    allowed = False
+
+    # Owner / requester
+    if user == obj.for_user or user == obj.requested_by:
+        allowed = True
+    # LSA & SOC
+    elif role in ("lsa", "soc") or user.is_superuser:
+        allowed = True
+    # Agency HR for same agency
+    elif role == "agency_hr" and user.agency_id == getattr(obj.for_user, "agency_id", None):
+        allowed = True
+
+    if not allowed:
+        return HttpResponseForbidden("You are not allowed to access this file.")
+
+    if not obj.request_form:
+        raise Http404("No form uploaded for this request.")
+
+    return FileResponse(
+        obj.request_form.open("rb"),
+        as_attachment=True,
+        filename=obj.request_form_filename or "request_form",
+    )
+
+@login_required
+@user_passes_test(is_lsa_soc_or_hr)
+def idcard_request_edit(request, pk):
+    """
+    Edit an existing ID card request (for_user, request_type, reason, request_form).
+    LSA / SOC can edit all; Agency HR can only edit requests for staff in their own agency.
+    """
+    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
+
+    # Agency HR restriction: only requests from their own agency
+    if getattr(request.user, "role", "") == "agency_hr":
+        if not obj.for_user.agency_id or obj.for_user.agency_id != request.user.agency_id:
+            messages.error(request, "You can only edit ID card requests for staff in your agency.")
+            return redirect("accounts:idcard_request_detail", pk=obj.pk)
+
+    if request.method == "POST":
+        form = EmployeeIDCardAdminRequestForm(
+            request.POST,
+            request.FILES,
+            instance=obj,
+        )
+
+        # Limit employee choices for Agency HR
+        if getattr(request.user, "role", "") == "agency_hr":
+            form.fields["for_user"].queryset = User.objects.filter(
+                is_active=True,
+                agency=request.user.agency,
+            ).order_by("last_name", "first_name")
+
+        if form.is_valid():
+            form.save()
+            messages.success(request, "ID card request updated.")
+            return redirect("accounts:idcard_request_detail", pk=obj.pk)
+    else:
+        form = EmployeeIDCardAdminRequestForm(instance=obj)
+
+        # Limit employee choices for Agency HR
+        if getattr(request.user, "role", "") == "agency_hr":
+            form.fields["for_user"].queryset = User.objects.filter(
+                is_active=True,
+                agency=request.user.agency,
+            ).order_by("last_name", "first_name")
+
+    return render(
+        request,
+        "hr/idcard_admin_request_form.html",  # reuse same form template
+        {
+            "form": form,
+            "obj": obj,
+            "is_edit": True,  # optional flag if you want to tweak heading/button text in template
+        },
+    )
+
+@login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_approve(request, pk):
     """
@@ -237,6 +348,7 @@ def idcard_request_reject(request, pk):
 
     messages.warning(request, "Request rejected.")
     return redirect("accounts:idcard_request_list")
+
 
 
 @login_required

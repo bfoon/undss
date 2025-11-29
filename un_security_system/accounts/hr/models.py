@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+import os
 
 User = settings.AUTH_USER_MODEL
 
@@ -33,6 +34,14 @@ class EmployeeIDCardRequest(models.Model):
     request_type = models.CharField(max_length=20, choices=REQUEST_TYPE_CHOICES, default="new")
     reason = models.TextField(blank=True)
 
+    # 🔹 NEW: attach the scanned/signed request form
+    request_form = models.FileField(
+        upload_to="idcard_requests/forms/",
+        null=True,
+        blank=True,
+        help_text="Signed request form (PDF or Word).",
+    )
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="submitted")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -57,28 +66,18 @@ class EmployeeIDCardRequest(models.Model):
     # ---- Workflow helpers ----
 
     def mark_call_for_photo(self, user):
-        """
-        Step 1 after submission:
-        LSA / SOC / HR says 'come for photo'.
-        """
         self.status = "photo_pending"
         self.approver = user
         self.approved_at = timezone.now()
         self.save(update_fields=["status", "approver", "approved_at", "updated_at"])
 
     def mark_printed(self, user):
-        """
-        Step 2: card has been physically printed.
-        """
         self.status = "printed"
         self.printed_by = user
         self.printed_at = timezone.now()
         self.save(update_fields=["status", "printed_by", "printed_at", "updated_at"])
 
     def mark_issued(self, user):
-        """
-        Step 3: card has been issued to the staff member.
-        """
         self.status = "issued"
         self.issued_by = user
         self.issued_at = timezone.now()
@@ -89,3 +88,9 @@ class EmployeeIDCardRequest(models.Model):
         self.approver = user
         self.approved_at = timezone.now()
         self.save(update_fields=["status", "approver", "approved_at", "updated_at"])
+
+    @property
+    def request_form_filename(self):
+        if self.request_form:
+            return os.path.basename(self.request_form.name)
+        return ""

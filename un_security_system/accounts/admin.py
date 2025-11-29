@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils import timezone
 from django.http import HttpResponse
 from django.contrib import messages
-from .models import User, SecurityIncident, Agency  # <-- import Agency
+from .models import User, SecurityIncident, Agency, EmployeeIDCardRequest
 import csv, secrets, string
 
 
@@ -35,8 +35,8 @@ class UserAdmin(DjangoUserAdmin):
                     "last_name",
                     "email",
                     "phone",
-                    "employee_id",
-                    "agency",      # <-- include agency here
+                    "employee_id",   # Staff ID
+                    "agency",
                 )
             },
         ),
@@ -69,25 +69,31 @@ class UserAdmin(DjangoUserAdmin):
                     "password2",
                     "role",
                     "phone",
-                    "employee_id",
-                    "agency",     # <-- include agency on user creation
+                    "employee_id",   # Staff ID on creation
+                    "agency",
                 ),
             },
         ),
     )
 
+    # helper so label shows "Staff ID" instead of "employee_id"
+    def staff_id(self, obj):
+        return obj.employee_id or ""
+    staff_id.short_description = "Staff ID"
+
     list_display = (
         "username",
         "get_full_name",
+        "staff_id",          # <-- Staff ID column
         "email",
-        "agency",              # <-- visible in list
+        "agency",
         "role",
         "is_active",
         "must_change_password",
     )
     list_filter = (
         "role",
-        "agency",              # <-- filter by agency
+        "agency",
         "is_active",
         "must_change_password",
         "is_staff",
@@ -100,7 +106,7 @@ class UserAdmin(DjangoUserAdmin):
         "email",
         "employee_id",
         "phone",
-        "agency__name",        # <-- search by agency
+        "agency__name",
         "agency__code",
     )
     ordering = ("username",)
@@ -119,7 +125,7 @@ class UserAdmin(DjangoUserAdmin):
     def generate_temporary_passwords(self, request, queryset):
         """
         Sets a random temporary password for selected users, marks them to change at next login,
-        and returns a CSV with username/email/temp_password. (Safer than printing on screen.)
+        and returns a CSV with username/email/temp_password/staff_id.
         """
         resp = HttpResponse(content_type="text/csv")
         resp["Content-Disposition"] = (
@@ -127,7 +133,7 @@ class UserAdmin(DjangoUserAdmin):
             f'{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
         )
         writer = csv.writer(resp)
-        writer.writerow(["username", "email", "temporary_password", "must_change_password"])
+        writer.writerow(["username", "email", "staff_id", "temporary_password", "must_change_password"])
 
         count = 0
         for user in queryset:
@@ -136,7 +142,7 @@ class UserAdmin(DjangoUserAdmin):
             user.must_change_password = True
             user.temp_password_set_at = timezone.now()
             user.save(update_fields=["password", "must_change_password", "temp_password_set_at"])
-            writer.writerow([user.username, user.email, temp, "yes"])
+            writer.writerow([user.username, user.email, user.employee_id or "", temp, "yes"])
             count += 1
 
         messages.success(request, f"Temporary passwords generated for {count} user(s).")
@@ -160,12 +166,25 @@ class UserAdmin(DjangoUserAdmin):
 
 @admin.register(SecurityIncident)
 class SecurityIncidentAdmin(admin.ModelAdmin):
+    def reported_agency(self, obj):
+        if obj.reported_by and obj.reported_by.agency:
+            return obj.reported_by.agency.code or obj.reported_by.agency.name
+        return ""
+    reported_agency.short_description = "Agency"
+
+    def reported_staff_id(self, obj):
+        if obj.reported_by:
+            return obj.reported_by.employee_id or ""
+        return ""
+    reported_staff_id.short_description = "Staff ID"
+
     list_display = (
         "title",
         "severity",
         "location",
         "reported_by",
-        "reported_agency",   # <-- show agency of reporter
+        "reported_staff_id",   # <-- Staff ID visible here too
+        "reported_agency",
         "reported_at",
         "resolved",
         "resolved_by",
@@ -175,25 +194,20 @@ class SecurityIncidentAdmin(admin.ModelAdmin):
         "severity",
         "resolved",
         "reported_at",
-        "reported_by__agency",  # <-- filter by agency
+        "reported_by__agency",
     )
     search_fields = (
         "title",
         "description",
         "location",
         "reported_by__username",
+        "reported_by__employee_id",
         "reported_by__agency__name",
         "reported_by__agency__code",
     )
     date_hierarchy = "reported_at"
     actions = ["export_csv", "mark_resolved", "mark_unresolved"]
     ordering = ("-reported_at",)
-
-    def reported_agency(self, obj):
-        return getattr(obj.reported_by.agency, "code", None) or getattr(
-            obj.reported_by.agency, "name", ""
-        ) if obj.reported_by and obj.reported_by.agency else ""
-    reported_agency.short_description = "Agency"
 
     @admin.action(description="Export selected to CSV")
     def export_csv(self, request, queryset):
@@ -202,7 +216,7 @@ class SecurityIncidentAdmin(admin.ModelAdmin):
         writer = csv.writer(resp)
         writer.writerow([
             "Title", "Severity", "Location",
-            "Reported By", "Reported By Agency",
+            "Reported By", "Reported By Staff ID", "Reported By Agency",
             "Reported At (UTC)",
             "Resolved", "Resolved By", "Resolved At (UTC)",
         ])
@@ -212,6 +226,7 @@ class SecurityIncidentAdmin(admin.ModelAdmin):
                 i.severity,
                 i.location,
                 getattr(i.reported_by, "username", "") or "",
+                getattr(i.reported_by, "employee_id", "") or "",
                 getattr(getattr(i.reported_by, "agency", None), "code", "")
                     or getattr(getattr(i.reported_by, "agency", None), "name", ""),
                 timezone.localtime(i.reported_at).isoformat() if i.reported_at else "",
@@ -228,3 +243,191 @@ class SecurityIncidentAdmin(admin.ModelAdmin):
     @admin.action(description="Mark as unresolved")
     def mark_unresolved(self, request, queryset):
         queryset.update(resolved=False, resolved_by=None, resolved_at=None)
+
+@admin.register(EmployeeIDCardRequest)
+class EmployeeIDCardRequestAdmin(admin.ModelAdmin):
+    """
+    Admin for Staff ID Card requests (HR flow).
+    Shows Staff ID, Agency, and full lifecycle: requested → approved → printed → issued.
+    """
+
+    # Small helpers so the list is nice & readable
+    def staff_id(self, obj):
+        return obj.for_user.employee_id or ""
+    staff_id.short_description = "Staff ID"
+
+    def employee_name(self, obj):
+        u = obj.for_user
+        if not u:
+            return "-"
+        full = f"{u.first_name} {u.last_name}".strip()
+        return full or u.username
+    employee_name.short_description = "Employee"
+
+    def agency(self, obj):
+        u = obj.for_user
+        if u and u.agency:
+            return u.agency.code or u.agency.name
+        return ""
+    agency.short_description = "Agency"
+
+    def requested_by_name(self, obj):
+        u = obj.requested_by
+        if not u:
+            return ""
+        full = f"{u.first_name} {u.last_name}".strip()
+        return full or u.username
+    requested_by_name.short_description = "Requested By"
+
+    list_display = (
+        "id",
+        "employee_name",
+        "staff_id",
+        "agency",
+        "request_type",
+        "status",
+        "requested_by_name",
+        "created_at",
+        "approved_at",
+        "printed_at",
+        "issued_at",
+    )
+
+    list_filter = (
+        "status",
+        "request_type",
+        "for_user__agency",
+        "created_at",
+        "approved_at",
+        "printed_at",
+        "issued_at",
+    )
+
+    search_fields = (
+        "for_user__username",
+        "for_user__first_name",
+        "for_user__last_name",
+        "for_user__employee_id",
+        "for_user__agency__code",
+        "for_user__agency__name",
+        "requested_by__username",
+        "requested_by__first_name",
+        "requested_by__last_name",
+        "reason",
+    )
+
+    date_hierarchy = "created_at"
+    ordering = ("-created_at",)
+
+    # Optional: restrict what fields are editable in admin if you want
+    readonly_fields = (
+        "created_at",
+        "approved_at",
+        "printed_at",
+        "issued_at",
+        "request_type",
+        "for_user",
+        "requested_by",
+    )
+
+    # Bulk actions to drive the flow from admin side if needed
+    actions = [
+        "action_mark_approved",
+        "action_mark_printed",
+        "action_mark_issued",
+        "export_to_csv",
+    ]
+
+    @admin.action(description="Mark selected requests as APPROVED")
+    def action_mark_approved(self, request, queryset):
+        count = 0
+        for obj in queryset:
+            # use your model helper if you have it
+            if hasattr(obj, "mark_approved"):
+                obj.mark_approved(request.user)
+            else:
+                obj.status = "approved"
+                obj.approver = request.user
+                obj.approved_at = timezone.now()
+                obj.save()
+            count += 1
+        messages.success(request, f"{count} request(s) marked as approved.")
+
+    @admin.action(description="Mark selected requests as PRINTED")
+    def action_mark_printed(self, request, queryset):
+        count = 0
+        for obj in queryset:
+            if hasattr(obj, "mark_printed"):
+                obj.mark_printed(request.user)
+            else:
+                obj.status = "printed"
+                obj.printed_by = request.user
+                obj.printed_at = timezone.now()
+                obj.save()
+            count += 1
+        messages.success(request, f"{count} request(s) marked as printed.")
+
+    @admin.action(description="Mark selected requests as ISSUED")
+    def action_mark_issued(self, request, queryset):
+        count = 0
+        for obj in queryset:
+            if hasattr(obj, "mark_issued"):
+                obj.mark_issued(request.user)
+            else:
+                obj.status = "issued"
+                obj.issued_by = request.user
+                obj.issued_at = timezone.now()
+                obj.save()
+            count += 1
+        messages.success(request, f"{count} request(s) marked as issued.")
+
+    @admin.action(description="Export selected requests to CSV")
+    def export_to_csv(self, request, queryset):
+        resp = HttpResponse(content_type="text/csv")
+        resp["Content-Disposition"] = 'attachment; filename="idcard_requests.csv"'
+        writer = csv.writer(resp)
+        writer.writerow([
+            "ID",
+            "Employee Username",
+            "Employee Name",
+            "Staff ID",
+            "Agency",
+            "Request Type",
+            "Status",
+            "Requested By",
+            "Reason",
+            "Created At",
+            "Approved At",
+            "Printed At",
+            "Issued At",
+        ])
+        for obj in queryset.select_related("for_user", "requested_by", "for_user__agency"):
+            u = obj.for_user
+            full = ""
+            username = ""
+            staff_id = ""
+            agency_code = ""
+
+            if u:
+                username = u.username
+                full = (f"{u.first_name} {u.last_name}").strip() or u.username
+                staff_id = u.employee_id or ""
+                if u.agency:
+                    agency_code = u.agency.code or u.agency.name
+
+            writer.writerow([
+                obj.pk,
+                username,
+                full,
+                staff_id,
+                agency_code,
+                obj.get_request_type_display() if hasattr(obj, "get_request_type_display") else obj.request_type,
+                obj.get_status_display() if hasattr(obj, "get_status_display") else obj.status,
+                self.requested_by_name(obj),
+                obj.reason or "",
+                obj.created_at.isoformat() if obj.created_at else "",
+                getattr(obj, "approved_at", "") or "",
+                getattr(obj, "printed_at", "") or "",
+                getattr(obj, "issued_at", "") or "",
+            ])
+        return resp

@@ -153,16 +153,6 @@
               <div class="text-break">{{ obj.reason|linebreaksbr }}</div>
             </div>
           {% endif %}
-
-          <!-- Rejection Reason -->
-          {% if obj.status == "rejected" and obj.rejection_reason %}
-            <div class="mt-3 p-3 bg-danger bg-opacity-10 border border-danger rounded">
-              <div class="small text-danger mb-2">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i> Rejection Reason
-              </div>
-              <div class="text-break">{{ obj.rejection_reason|linebreaksbr }}</div>
-            </div>
-          {% endif %}
         </div>
       </div>
 
@@ -381,6 +371,34 @@
         </div>
       </div>
 
+      <!-- Attached Request Form -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0">
+            <i class="bi bi-file-earmark-text me-2"></i> Request Form
+          </h5>
+        </div>
+        <div class="card-body">
+          {% if obj.request_form %}
+            <p class="small text-muted mb-2">
+              Signed HR request form attached by requester / HR.
+            </p>
+            <a href="{{ obj.request_form.url }}" class="btn btn-outline-primary w-100 mb-2" target="_blank" download>
+              <i class="bi bi-download me-2"></i> Download Request Form
+            </a>
+            <div class="small text-muted">
+              <i class="bi bi-info-circle me-1"></i>
+              File: {{ obj.request_form.name|slice:"40" }}
+            </div>
+          {% else %}
+            <div class="alert alert-light mb-0">
+              <i class="bi bi-info-circle me-2"></i>
+              <small>No request form uploaded.</small>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
       <!-- Progress Card -->
       <div class="card shadow-sm mb-4">
         <div class="card-header bg-light">
@@ -424,7 +442,8 @@
             <a href="{% url 'accounts:idcard_request_list' %}" class="btn btn-outline-secondary">
               <i class="bi bi-arrow-left me-2"></i> Back to List
             </a>
-            {% if perms.accounts.change_idcardrequest %}
+            {% if perms.accounts.change_employeeidcardrequest %}
+              {# Only show edit if you later add an edit view #}
               <a href="{% url 'accounts:idcard_request_edit' obj.pk %}" class="btn btn-outline-primary">
                 <i class="bi bi-pencil me-2"></i> Edit Request
               </a>
