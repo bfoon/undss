@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+{% block title %}Registration Link Details{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <!-- Header Section -->
+      <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+          <h1 class="h3 mb-2">
+            <i class="bi bi-info-circle me-2 text-primary"></i>Registration Link Details
+          </h1>
+          <p class="text-muted mb-0">
+            <i class="bi bi-person-badge me-1"></i>
+            Created by: <strong>{{ invite.created_by.get_full_name|default:invite.created_by.username }}</strong>
+            <span class="mx-2">•</span>
+            <span class="small">{{ invite.created_at|date:"F d, Y \a\t g:i A" }}</span>
+          </p>
+        </div>
+        <a href="{% url 'accounts:registration_links_list' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back to List
+        </a>
+      </div>
+
+      <!-- Status Alert -->
+      <div class="mb-4">
+        {% if not invite.is_active %}
+          <div class="alert alert-secondary border-secondary d-flex align-items-center" role="alert">
+            <i class="bi bi-slash-circle-fill me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Link Deactivated</h4>
+              <p class="mb-0 small">
+                This registration link was manually deactivated and cannot be used until it is reactivated.
+              </p>
+            </div>
+          </div>
+        {% elif invite.is_expired %}
+          <div class="alert alert-secondary border-secondary d-flex align-items-center" role="alert">
+            <i class="bi bi-x-circle-fill me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Link Expired</h4>
+              <p class="mb-0 small">This registration link has expired and can no longer be used for new registrations.</p>
+            </div>
+          </div>
+        {% elif invite.remaining_uses <= 0 %}
+          <div class="alert alert-warning border-warning d-flex align-items-center" role="alert">
+            <i class="bi bi-dash-circle-fill me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Usage Limit Reached</h4>
+              <p class="mb-0 small">All {{ invite.max_uses }} registration slot{{ invite.max_uses|pluralize }} have been used. This link is no longer accepting new registrations.</p>
+            </div>
+          </div>
+        {% else %}
+          <div class="alert alert-success border-success d-flex align-items-center" role="alert">
+            <i class="bi bi-check-circle-fill me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Link Active</h4>
+              <p class="mb-0 small">This registration link is currently active and ready to use. {{ invite.remaining_uses }} registration{{ invite.remaining_uses|pluralize }} remaining.</p>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Main Details Card -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-light border-bottom py-3">
+          <h2 class="h6 mb-0">
+            <i class="bi bi-link-45deg me-2"></i>Link Information
+          </h2>
+        </div>
+
+        <div class="card-body p-4">
+          <!-- Registration URL Section -->
+          <div class="mb-4">
+            <label class="form-label fw-semibold text-dark mb-2">
+              <i class="bi bi-globe me-1"></i>Full Registration URL
+            </label>
+            {% url 'accounts:register_with_invite' invite.code as rel_url %}
+            {% with full_url=request.scheme|add:"://"|add:request.get_host|add:rel_url %}
+              <div class="input-group mb-2">
+                <input
+                  type="text"
+                  class="form-control font-monospace"
+                  value="{{ full_url }}"
+                  readonly
+                  id="invite-url"
+                  style="background-color: #f8f9fa; font-size: 0.875rem;"
+                >
+                <button
+                  class="btn btn-primary px-4"
+                  type="button"
+                  onclick="copyToClipboard()"
+                  id="copy-btn"
+                >
+                  <i class="bi bi-clipboard me-1"></i>Copy
+                </button>
+              </div>
+            {% endwith %}
+            <small class="text-muted">
+              <i class="bi bi-info-circle me-1"></i>Share this URL with authorized personnel to enable registration
+            </small>
+          </div>
+
+          <!-- Quick Stats Grid -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <div class="stat-card p-3 border rounded bg-light">
+                <div class="d-flex align-items-center mb-2">
+                  <div class="stat-icon bg-primary bg-opacity-10 rounded-circle p-2 me-2">
+                    <i class="bi bi-hourglass-split text-primary"></i>
+                  </div>
+                  <span class="text-muted small">Valid Duration</span>
+                </div>
+                <div class="fs-3 fw-bold text-dark">{{ invite.valid_for_hours }}</div>
+                <small class="text-muted">hour{{ invite.valid_for_hours|pluralize }}</small>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="stat-card p-3 border rounded bg-light">
+                <div class="d-flex align-items-center mb-2">
+                  <div class="stat-icon bg-success bg-opacity-10 rounded-circle p-2 me-2">
+                    <i class="bi bi-check-circle text-success"></i>
+                  </div>
+                  <span class="text-muted small">Registrations Used</span>
+                </div>
+                <div class="fs-3 fw-bold text-dark">{{ invite.used_count }}</div>
+                <small class="text-muted">of {{ invite.max_uses }} allowed</small>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="stat-card p-3 border rounded bg-light">
+                <div class="d-flex align-items-center mb-2">
+                  <div class="stat-icon bg-info bg-opacity-10 rounded-circle p-2 me-2">
+                    <i class="bi bi-inbox text-info"></i>
+                  </div>
+                  <span class="text-muted small">Remaining Slots</span>
+                </div>
+                <div class="fs-3 fw-bold text-dark">{{ invite.remaining_uses }}</div>
+                <small class="text-muted">available</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Usage Progress Bar -->
+          <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-semibold text-dark">Usage Progress</span>
+              <span class="text-muted small">
+                {{ invite.used_count }} / {{ invite.max_uses }} ({% widthratio invite.used_count invite.max_uses 100 %}%)
+              </span>
+            </div>
+            <div class="progress" style="height: 12px;">
+              {% widthratio invite.used_count invite.max_uses 100 as usage_percent %}
+              <div class="progress-bar {% if usage_percent >= 100 %}bg-danger{% elif usage_percent >= 80 %}bg-warning{% elif usage_percent >= 50 %}bg-info{% else %}bg-success{% endif %}"
+                   role="progressbar"
+                   style="width: {{ usage_percent }}%"
+                   aria-valuenow="{{ usage_percent }}"
+                   aria-valuemin="0"
+                   aria-valuemax="100">
+                {{ usage_percent }}%
+              </div>
+            </div>
+          </div>
+
+          <!-- Detailed Information Table -->
+          <div class="mb-4">
+            <h3 class="h6 fw-semibold mb-3 text-dark">
+              <i class="bi bi-list-ul me-2"></i>Detailed Information
+            </h3>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <tbody>
+                  <tr>
+                    <td class="fw-semibold text-dark" style="width: 35%;">
+                      <i class="bi bi-calendar-plus me-2 text-primary"></i>Created At
+                    </td>
+                    <td>
+                      <div class="d-flex flex-column">
+                        <span>{{ invite.created_at|date:"F d, Y" }}</span>
+                        <small class="text-muted">{{ invite.created_at|date:"g:i A" }} ({{ invite.created_at|timesince }} ago)</small>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="fw-semibold text-dark">
+                      <i class="bi bi-calendar-x me-2 text-danger"></i>Expires At
+                    </td>
+                    <td>
+                      <div class="d-flex flex-column">
+                        <span>{{ invite.expires_at|date:"F d, Y" }}</span>
+                        <small class="text-muted">{{ invite.expires_at|date:"g:i A" }}</small>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="fw-semibold text-dark">
+                      <i class="bi bi-clock-history me-2 text-info"></i>Validity Period
+                    </td>
+                    <td>{{ invite.valid_for_hours }} hour{{ invite.valid_for_hours|pluralize }}</td>
+                  </tr>
+                  <tr>
+                    <td class="fw-semibold text-dark">
+                      <i class="bi bi-hash me-2 text-secondary"></i>Invite Code
+                    </td>
+                    <td>
+                      <code class="bg-light px-2 py-1 rounded">{{ invite.code }}</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="fw-semibold text-dark">
+                      <i class="bi bi-person-circle me-2 text-success"></i>Created By
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="avatar-placeholder bg-primary bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                          <i class="bi bi-person text-primary"></i>
+                        </div>
+                        <span>{{ invite.created_by.get_full_name|default:invite.created_by.username }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="fw-semibold text-dark">
+                      <i class="bi bi-activity me-2 text-warning"></i>Current Status
+                    </td>
+                    <td>
+                      {% if invite.is_expired %}
+                        <span class="badge bg-secondary me-1">
+                          <i class="bi bi-clock-history me-1"></i>Expired
+                        </span>
+                        {% if invite.is_active %}
+                          <span class="badge bg-success">
+                            <i class="bi bi-check-circle me-1"></i>Active Flag (no longer usable)
+                          </span>
+                        {% else %}
+                          <span class="badge bg-dark">
+                            <i class="bi bi-slash-circle me-1"></i>Deactivated
+                          </span>
+                        {% endif %}
+                      {% elif not invite.is_active %}
+                        <span class="badge bg-secondary">
+                          <i class="bi bi-slash-circle me-1"></i>Manually Deactivated
+                        </span>
+                      {% elif invite.remaining_uses <= 0 %}
+                        <span class="badge bg-warning text-dark">
+                          <i class="bi bi-dash-circle me-1"></i>Usage Limit Reached
+                        </span>
+                      {% else %}
+                        <span class="badge bg-success">
+                          <i class="bi bi-check-circle me-1"></i>Active & Available
+                        </span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Security Notice -->
+          <div class="alert alert-info border-info mb-0">
+            <div class="d-flex">
+              <i class="bi bi-shield-lock-fill me-3 fs-5"></i>
+              <div>
+                <h4 class="alert-heading h6 mb-2">Security Guidelines</h4>
+                <ul class="mb-0 small ps-3">
+                  <li>Share this link only through secure, encrypted communication channels</li>
+                  <li>Verify recipient identity before distributing registration access</li>
+                  <li>Monitor link usage regularly through the registration links management dashboard</li>
+                  <li>Report any suspicious activity or unauthorized access attempts immediately</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Footer with Actions -->
+        <div class="card-footer bg-light border-top py-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <a href="{% url 'accounts:registration_links_list' %}" class="btn btn-outline-secondary">
+              <i class="bi bi-arrow-left me-1"></i>Back to List
+            </a>
+            <div class="d-flex gap-2">
+              <form method="post" action="{% url 'accounts:registration_link_toggle_active' invite.id %}">
+                {% csrf_token %}
+                {% if invite.is_active %}
+                  <button type="submit" class="btn btn-outline-danger">
+                    <i class="bi bi-slash-circle me-1"></i>Deactivate Link
+                  </button>
+                {% else %}
+                  <button type="submit" class="btn btn-outline-success">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Activate Link
+                  </button>
+                {% endif %}
+              </form>
+
+              <a href="{% url 'accounts:create_registration_link' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i>Create New Link
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional Information + Registered Users -->
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card border-0 bg-light h-100">
+            <div class="card-body">
+              <h3 class="h6 mb-3">
+                <i class="bi bi-graph-up me-2 text-primary"></i>Usage Analytics
+              </h3>
+              <div class="d-flex justify-content-between mb-2">
+                <span class="text-muted small">Completion Rate</span>
+                <span class="fw-semibold">{% widthratio invite.used_count invite.max_uses 100 %}%</span>
+              </div>
+              <div class="d-flex justify-content-between mb-2">
+                <span class="text-muted small">Slots Available</span>
+                <span class="fw-semibold">{{ invite.remaining_uses }}</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span class="text-muted small">Time Remaining</span>
+                <span class="fw-semibold">
+                  {% if invite.is_expired %}
+                    Expired
+                  {% else %}
+                    {{ invite.expires_at|timeuntil }}
+                  {% endif %}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="card border-0 bg-light h-100">
+            <div class="card-body">
+              <h3 class="h6 mb-3">
+                <i class="bi bi-info-circle me-2 text-primary"></i>Link Management
+              </h3>
+              <p class="small text-muted mb-3">
+                Use the registration links dashboard to view all active and expired links,
+                track usage patterns, and manage access control effectively.
+              </p>
+              <a href="{% url 'accounts:registration_links_list' %}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-list-ul me-1"></i>View All Links
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {% if registrations %}
+          <div class="col-12">
+            <div class="card shadow-sm border-0 mb-4">
+              <div class="card-header bg-light border-bottom py-3">
+                <h2 class="h6 mb-0">
+                  <i class="bi bi-people me-2"></i>Registered Users ({{ registrations|length }})
+                </h2>
+              </div>
+              <div class="card-body p-0">
+                <div style="max-height: 260px; overflow-y: auto;">
+                  <ul class="list-group list-group-flush">
+                    {% for reg in registrations %}
+                      <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <!-- User info -->
+                          <div>
+                            <div class="fw-semibold">
+                              {{ reg.user.get_full_name|default:reg.user.username }}
+                              {% if reg.user.is_active %}
+                                <span class="badge bg-success ms-2 small">Active</span>
+                              {% else %}
+                                <span class="badge bg-warning text-dark ms-2 small">Inactive</span>
+                              {% endif %}
+                            </div>
+                            <div class="small text-muted">
+                              {% if reg.user.email %}
+                                <i class="bi bi-envelope me-1"></i>{{ reg.user.email }}
+                              {% endif %}
+                            </div>
+                          </div>
+
+                          <!-- Right side: date + activate/deactivate -->
+                          <div class="text-end">
+                            <div class="small text-muted">
+                              <div>{{ reg.created_at|date:"M d, Y" }}</div>
+                              <div>{{ reg.created_at|date:"g:i A" }}</div>
+                            </div>
+
+                            {% if request.user.agency_id and reg.user.agency_id == request.user.agency_id %}
+                              <form method="post"
+                                    action="{% url 'accounts:ict_user_toggle_status' reg.user.pk %}"
+                                    class="mt-2">
+                                {% csrf_token %}
+                                {% if reg.user.is_active %}
+                                  <button type="submit"
+                                          class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-person-dash me-1"></i>Deactivate
+                                  </button>
+                                {% else %}
+                                  <button type="submit"
+                                          class="btn btn-sm btn-outline-success">
+                                    <i class="bi bi-person-check me-1"></i>Activate
+                                  </button>
+                                {% endif %}
+                              </form>
+                            {% endif %}
+                          </div>
+                        </div>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div class="col-12">
+            <div class="card shadow-sm border-0 mb-4">
+              <div class="card-body text-center text-muted small py-4">
+                <i class="bi bi-people mb-2 d-block fs-3"></i>
+                No users have registered with this link yet.
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyToClipboard() {
+  const input = document.getElementById('invite-url');
+  const button = document.getElementById('copy-btn');
+  const originalHTML = button.innerHTML;
+
+  navigator.clipboard.writeText(input.value).then(() => {
+    // Success feedback
+    button.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
+    button.classList.remove('btn-primary');
+    button.classList.add('btn-success');
+
+    setTimeout(() => {
+      button.innerHTML = originalHTML;
+      button.classList.remove('btn-success');
+      button.classList.add('btn-primary');
+    }, 2000);
+  }).catch(err => {
+    button.innerHTML = '<i class="bi bi-x-lg me-1"></i>Failed';
+    button.classList.remove('btn-primary');
+    button.classList.add('btn-danger');
+
+    setTimeout(() => {
+      button.innerHTML = originalHTML;
+      button.classList.remove('btn-danger');
+      button.classList.add('btn-primary');
+    }, 2000);
+    console.error('Copy failed:', err);
+  });
+}
+</script>
+
+<style>
+  .stat-card {
+    transition: all 0.3s ease;
+  }
+  .stat-card:hover {
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.075);
+    transform: translateY(-2px);
+  }
+  .stat-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .progress {
+    border-radius: 6px;
+  }
+  .progress-bar {
+    transition: width 0.6s ease;
+  }
+  .card {
+    border-radius: 0.5rem;
+  }
+  .table tbody tr {
+    transition: background-color 0.2s ease;
+  }
+  .table tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+  }
+  code {
+    font-size: 0.875rem;
+  }
+  .avatar-placeholder {
+    flex-shrink: 0;
+  }
+  .font-monospace {
+    font-size: 0.875rem;
+  }
+</style>
+{% endblock %}

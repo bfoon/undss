@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Invalid Registration Link{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+      <div class="card shadow-sm border-0">
+        <div class="card-body text-center p-5">
+          <div class="error-icon mb-4">
+            <i class="bi bi-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
+          </div>
+
+          <h2 class="h3 mb-3">Registration Link Expired</h2>
+
+          <p class="text-muted mb-4">
+            Unfortunately, this registration link is no longer valid and cannot be used to create an account.
+          </p>
+
+          {% if invite.expires_at %}
+          <div class="alert alert-light border" role="alert">
+            <small class="text-muted d-block mb-1">Expiration Date</small>
+            <strong>{{ invite.expires_at|date:"F d, Y \a\t g:i A" }}</strong>
+          </div>
+          {% endif %}
+
+          {% if not invite.is_active %}
+            <div class="alert alert-secondary">
+                <i class="bi bi-slash-circle me-2"></i>
+                This registration link was manually deactivated by ICT.
+            </div>
+        {% endif %}
+          <div class="d-grid gap-2 mt-4">
+            <a href="/" class="btn btn-primary">
+              <i class="bi bi-house-door me-2"></i>Return to Home
+            </a>
+            <a href="#" class="btn btn-outline-secondary">
+              <i class="bi bi-envelope me-2"></i>Contact Support
+            </a>
+          </div>
+
+          <div class="mt-4 pt-3 border-top">
+            <p class="text-muted small mb-0">
+              Need a new registration link? Please contact your administrator or support team for assistance.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .error-icon {
+    animation: fadeIn 0.5s ease-in;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .card {
+    border-radius: 0.75rem;
+  }
+
+  .alert-light {
+    background-color: #f8f9fa;
+  }
+</style>
+{% endblock %}

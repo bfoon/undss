@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register – Create Account</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css">
+  <style>
+    :root {
+      --primary: #1a56db;
+      --primary-dark: #1e429f;
+      --secondary: #64748b;
+      --border: #e2e8f0;
+      --bg-subtle: #f8fafc;
+      --success: #059669;
+      --warning: #d97706;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-subtle);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .register-container {
+      max-width: 540px;
+      width: 100%;
+    }
+
+    .register-card {
+      background: white;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+
+    .card-header-custom {
+      padding: 2rem 2rem 1.5rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-icon {
+      width: 56px;
+      height: 56px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+    }
+
+    .header-icon i {
+      font-size: 1.5rem;
+      color: white;
+    }
+
+    .card-header-custom h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin: 0 0 0.5rem;
+    }
+
+    .card-header-custom p {
+      color: var(--secondary);
+      font-size: 0.9375rem;
+      margin: 0;
+    }
+
+    .card-body-custom {
+      padding: 2rem;
+    }
+
+    .info-alert {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .info-alert i {
+      color: var(--primary);
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      margin-top: 0.125rem;
+    }
+
+    .info-alert-content p {
+      color: #1e40af;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-label-custom {
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+      display: block;
+    }
+
+    .form-label-custom .required {
+      color: #dc2626;
+      margin-left: 0.25rem;
+    }
+
+    .form-control-custom {
+      padding: 0.75rem 1rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      transition: border-color 0.15s ease;
+      width: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .form-control-custom:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
+    }
+
+    .form-control-custom::placeholder {
+      color: #94a3b8;
+    }
+
+    .form-help-text {
+      font-size: 0.8125rem;
+      color: var(--secondary);
+      margin-top: 0.375rem;
+      display: block;
+    }
+
+    .password-requirements {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.875rem;
+      margin-top: 0.5rem;
+    }
+
+    .password-requirements p {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #0f172a;
+      margin: 0 0 0.5rem;
+    }
+
+    .password-requirements ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .password-requirements li {
+      font-size: 0.8125rem;
+      color: var(--secondary);
+      padding-left: 1.25rem;
+      position: relative;
+      margin-bottom: 0.25rem;
+    }
+
+    .password-requirements li:before {
+      content: "•";
+      position: absolute;
+      left: 0.5rem;
+    }
+
+    .submit-btn {
+      padding: 0.875rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9375rem;
+      background: var(--success);
+      border: none;
+      color: white;
+      width: 100%;
+      transition: background-color 0.15s ease;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .submit-btn:hover {
+      background: #047857;
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .submit-btn i {
+      font-size: 1rem;
+    }
+
+    .invite-info {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .invite-info-header {
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .invite-info-header i {
+      color: var(--secondary);
+      font-size: 1rem;
+    }
+
+    .invite-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .invite-stat {
+      background: white;
+      padding: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .invite-stat-label {
+      font-size: 0.75rem;
+      color: var(--secondary);
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .invite-stat-value {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .errorlist {
+      list-style: none;
+      padding: 0;
+      margin: 0.375rem 0 0;
+    }
+
+    .errorlist li {
+      color: #dc2626;
+      font-size: 0.8125rem;
+      padding: 0.375rem 0.75rem;
+      background: #fef2f2;
+      border-radius: 6px;
+      margin-top: 0.25rem;
+    }
+
+    @media (max-width: 576px) {
+      .card-header-custom {
+        padding: 1.5rem 1.5rem 1.25rem;
+      }
+
+      .card-body-custom {
+        padding: 1.5rem;
+      }
+
+      .card-header-custom h1 {
+        font-size: 1.375rem;
+      }
+
+      .header-icon {
+        width: 48px;
+        height: 48px;
+      }
+
+      .header-icon i {
+        font-size: 1.25rem;
+      }
+
+      .invite-info-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .spinner-border-sm {
+      width: 1rem;
+      height: 1rem;
+      border-width: 0.15em;
+    }
+  </style>
+</head>
+<body>
+  <div class="register-container">
+    <div class="register-card">
+      <div class="card-header-custom">
+        <div class="header-icon">
+          <i class="bi bi-person-plus"></i>
+        </div>
+        <h1>Create an Account</h1>
+        <p>Complete your registration to get started</p>
+      </div>
+
+      <div class="card-body-custom">
+        <div class="info-alert">
+          <i class="bi bi-shield-check"></i>
+          <div class="info-alert-content">
+            <p>
+              You are using a secure registration link authorized by ICT. This link is valid for a limited time and number of uses.
+            </p>
+          </div>
+        </div>
+
+        <form method="post" id="registrationForm">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label-custom" for="username">
+              Username<span class="required">*</span>
+            </label>
+            <input type="text"
+                   name="username"
+                   id="username"
+                   class="form-control-custom"
+                   placeholder="Enter your username"
+                   required
+                   autofocus
+                   value="{{ form_data.username|default:'' }}">
+            {% if errors.username %}
+              <ul class="errorlist"><li>{{ errors.username }}</li></ul>
+            {% endif %}
+            <span class="form-help-text">Choose a unique username for your account</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label-custom" for="email">
+              Email Address<span class="required">*</span>
+            </label>
+            <input type="email"
+                   name="email"
+                   id="email"
+                   class="form-control-custom"
+                   placeholder="you@example.com"
+                   required>
+            <span class="form-help-text">We'll send verification codes to this email</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label-custom" for="password1">
+              Password<span class="required">*</span>
+            </label>
+            <input type="password"
+                   name="password1"
+                   id="password1"
+                   class="form-control-custom"
+                   placeholder="Create a strong password"
+                   required>
+            <div class="password-requirements">
+              <p>Password must contain:</p>
+              <ul>
+                <li>At least 8 characters</li>
+                <li>One uppercase letter</li>
+                <li>One lowercase letter</li>
+                <li>One number</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label-custom" for="password2">
+              Confirm Password<span class="required">*</span>
+            </label>
+            <input type="password"
+                   name="password2"
+                   id="password2"
+                   class="form-control-custom"
+                   placeholder="Re-enter your password"
+                   required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label-custom" for="first_name">
+              First Name<span class="required">*</span>
+            </label>
+            <input type="text"
+                   name="first_name"
+                   id="first_name"
+                   class="form-control-custom"
+                   placeholder="Enter your first name"
+                   required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label-custom" for="last_name">
+              Last Name<span class="required">*</span>
+            </label>
+            <input type="text"
+                   name="last_name"
+                   id="last_name"
+                   class="form-control-custom"
+                   placeholder="Enter your last name"
+                   required>
+          </div>
+
+          <button class="btn submit-btn" type="submit" id="submitBtn">
+            <i class="bi bi-person-plus"></i>
+            <span>Complete Registration</span>
+          </button>
+        </form>
+
+        <div class="invite-info">
+          <div class="invite-info-header">
+            <i class="bi bi-info-circle"></i>
+            <span>Registration Link Details</span>
+          </div>
+          <div class="invite-info-grid">
+            <div class="invite-stat">
+              <div class="invite-stat-label">Remaining Uses</div>
+              <div class="invite-stat-value">{{ invite.remaining_uses }} registrations</div>
+            </div>
+            <div class="invite-stat">
+              <div class="invite-stat-label">Expires</div>
+              <div class="invite-stat-value">{{ invite.expires_at }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('registrationForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const password1 = document.getElementById('password1');
+    const password2 = document.getElementById('password2');
+
+    // Password match validation
+    password2.addEventListener('input', function() {
+      if (password1.value !== password2.value && password2.value !== '') {
+        password2.setCustomValidity('Passwords do not match');
+      } else {
+        password2.setCustomValidity('');
+      }
+    });
+
+    password1.addEventListener('input', function() {
+      if (password2.value !== '' && password1.value !== password2.value) {
+        password2.setCustomValidity('Passwords do not match');
+      } else {
+        password2.setCustomValidity('');
+      }
+    });
+
+    // Real form submission: no fake alert, no preventDefault
+    form.addEventListener('submit', function(e) {
+      // Let the browser block invalid form submission
+      if (!form.checkValidity()) {
+        e.preventDefault();
+        form.reportValidity();
+        return;
+      }
+
+      // Now we allow the POST to go to Django
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating Account...';
+      submitBtn.disabled = true;
+      // DO NOT call e.preventDefault() here
+    });
+  });
+</script>
+
+</body>
+</html>

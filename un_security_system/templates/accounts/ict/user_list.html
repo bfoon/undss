@@ -4,23 +4,34 @@
 {% block content %}
 <div class="container py-4">
   <!-- Header Section -->
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-      <h2 class="mb-1">
-        <i class="bi bi-people me-2"></i> Agency Users
-      </h2>
-      <p class="text-muted mb-0">
-        <i class="bi bi-building me-1"></i>
-        <span class="fw-semibold">{{ my_agency|default:"No Agency Assigned" }}</span>
-        {% if total_agency_users %}
-          <span class="badge bg-secondary ms-2">{{ total_agency_users }} total</span>
-        {% endif %}
-      </p>
-    </div>
+<<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="mb-1">
+      <i class="bi bi-people me-2"></i> Agency Users
+    </h2>
+    <p class="text-muted mb-0">
+      <i class="bi bi-building me-1"></i>
+      <span class="fw-semibold">{{ my_agency|default:"No Agency Assigned" }}</span>
+      {% if total_agency_users %}
+        <span class="badge bg-secondary ms-2">{{ total_agency_users }} total</span>
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="d-flex gap-2">
+    <!-- Existing Add User Button -->
     <a class="btn btn-primary" href="{% url 'accounts:ict_user_create' %}">
       <i class="bi bi-person-plus me-1"></i> Add New User
     </a>
+
+    <!-- NEW Registration Links Button -->
+    <a class="btn btn-warning" href="{% url 'accounts:registration_links_list' %}">
+      <i class="bi bi-link-45deg me-1"></i> Registration Links
+    </a>
   </div>
+</div>
+
+
 
   <!-- Search and Filters -->
   <form method="get" class="card shadow-sm mb-4">

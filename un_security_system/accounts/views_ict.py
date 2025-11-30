@@ -1,11 +1,12 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
+import threading
 from django.db import models
 from django.http import HttpResponseForbidden, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,11 +14,84 @@ from django.urls import reverse_lazy, reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.views.generic import ListView, CreateView, UpdateView, DetailView
+from .models import RegistrationInvite, RegistrationInviteUsage
+from .utils import is_ict_focal_point
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import login
+from django.utils import timezone
+from django.db.models import Sum, F
 
-from .forms import ICTUserCreateForm, ICTUserUpdateForm
+from .forms import ICTUserCreateForm, ICTUserUpdateForm, RegistrationInviteForm
+from .forms import CustomUserRegistrationForm as UserCreationForm
+
 from .permissions import is_ict_focal
 
 User = get_user_model()
+
+
+def send_account_activation_email_async(user):
+    """Send an account activated email in the background."""
+
+    def _send():
+        if not user.email:
+            return
+
+        subject = "Your UN Security Management System account has been activated"
+        message = (
+            f"Dear {user.get_full_name() or user.username},\n\n"
+            "We are pleased to inform you that your account on the UN Security Management System "
+            "has now been activated. You may now log in using your username and password via the portal.\n\n"
+            "If you experience any issues, please contact the ICT department of your agency.\n\n"
+            "Best regards,\n"
+            "UN Security Management System ICT Team"
+        )
+
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+        if from_email:
+            try:
+                send_mail(subject, message, from_email, [user.email], fail_silently=True)
+            except Exception:
+                pass
+
+    threading.Thread(target=_send, daemon=True).start()
+
+def send_registration_email_async(user, first_name):
+    """
+    Send the 'account created, pending activation' email in a background thread.
+    """
+    def _send():
+        # Build email content
+        subject = "Your UN Security Management System account request"
+        display_name = first_name or user.username or "User"
+        message = (
+            f"Dear {display_name},\n\n"
+            "Your account has been created in the UN Security Management System, "
+            "but it is not yet active.\n\n"
+            "Your profile is now pending activation by the ICT focal point / ICT department "
+            "of your agency. You will be able to sign in once your account is approved.\n\n"
+            "If you need urgent access, please contact the ICT department of your agency.\n\n"
+            "Best regards,\n"
+            "UN Security Management System ICT Team"
+        )
+
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+        if not from_email or not user.email:
+            return  # nothing to send
+
+        try:
+            send_mail(
+                subject,
+                message,
+                from_email,
+                [user.email],
+                fail_silently=True,
+            )
+        except Exception:
+            # Don't crash the thread if email fails
+            pass
+
+    # Start background thread (daemon=True so it won't block shutdown)
+    threading.Thread(target=_send, daemon=True).start()
 
 
 class ICTUserGuardMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -433,7 +507,6 @@ def ict_user_send_reset_link(request, pk):
 
     return redirect('accounts:ict_user_detail', pk=pk)
 
-
 @login_required
 def ict_user_toggle_status(request, pk):
     """Toggle user active/inactive status."""
@@ -454,16 +527,230 @@ def ict_user_toggle_status(request, pk):
         messages.error(request, 'User not found in your agency.')
         return redirect('accounts:ict_user_list')
 
-    # Prevent ICT focal from deactivating themselves
+    # Prevent ICT focal from deactivating themselves 😂
     if target_user.id == request.user.id:
         messages.error(request, "You cannot deactivate your own account.")
         return redirect('accounts:ict_user_detail', pk=pk)
 
-    # Toggle status
-    target_user.is_active = not target_user.is_active
+    # Determine current action
+    activating = not target_user.is_active
+
+    # Apply the change
+    target_user.is_active = activating
     target_user.save(update_fields=['is_active'])
 
-    status = 'activated' if target_user.is_active else 'deactivated'
+    status = 'activated' if activating else 'deactivated'
     messages.success(request, f'User "{target_user.username}" has been {status}.')
 
+    # 🚀 If activated, send async notification email
+    if activating:
+        send_account_activation_email_async(target_user)
+
     return redirect('accounts:ict_user_detail', pk=pk)
+
+
+
+@login_required
+@user_passes_test(is_ict_focal_point)
+def create_registration_link(request):
+    """
+    ICT focal point generates a new registration link.
+    - Default max_uses = 100 (from model)
+    - valid_for_hours < 24 (enforced by form)
+    """
+    if request.method == "POST":
+        form = RegistrationInviteForm(request.POST)
+        if form.is_valid():
+            invite = form.save(commit=False)
+            invite.created_by = request.user
+            invite.save()
+
+            # Build the full URL that new users will use
+            invite_url = request.build_absolute_uri(
+                reverse("accounts:register_with_invite", args=[invite.code])
+            )
+
+            return render(
+                request,
+                "accounts/invite_created.html",
+                {"invite": invite, "invite_url": invite_url},
+            )
+    else:
+        form = RegistrationInviteForm()
+
+    return render(
+        request,
+        "accounts/create_invite.html",
+        {"form": form},
+    )
+
+
+def register_with_invite(request, code):
+    invite = get_object_or_404(RegistrationInvite, code=code)
+
+    # If link is expired / full / manually deactivated
+    if not invite.can_be_used:
+        if not invite.is_active:
+            error_msg = "This registration link has been deactivated by ICT and is no longer usable."
+        elif invite.is_expired:
+            error_msg = "This registration link has expired and is no longer valid."
+        else:
+            error_msg = "This registration link has reached its maximum number of allowed registrations."
+
+        messages.error(request, error_msg)
+        return render(request, "accounts/invite_invalid.html", {"invite": invite})
+
+    errors = {}
+    form_data = {}
+
+    if request.method == "POST":
+        username = (request.POST.get("username") or "").strip()
+        email = (request.POST.get("email") or "").strip()
+        first_name = (request.POST.get("first_name") or "").strip()
+        last_name = (request.POST.get("last_name") or "").strip()
+        password1 = request.POST.get("password1") or ""
+        password2 = request.POST.get("password2") or ""
+
+        form_data = {
+            "username": username,
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+        }
+
+        # --- Basic validation ---
+        if not username:
+            errors["username"] = "Username is required."
+        if not email:
+            errors["email"] = "Email is required."
+        if not first_name:
+            errors["first_name"] = "First name is required."
+        if not last_name:
+            errors["last_name"] = "Last name is required."
+        if not password1 or not password2:
+            errors["password"] = "Both password fields are required."
+        elif password1 != password2:
+            errors["password"] = "Passwords do not match."
+
+        if password1 and len(password1) < 8:
+            errors["password"] = "Password must be at least 8 characters long."
+
+        if username and User.objects.filter(username=username).exists():
+            errors["username"] = "This username is already taken."
+
+        if email and User.objects.filter(email=email).exists():
+            errors["email"] = "An account with this email already exists."
+
+        if not errors:
+            # Create user as INACTIVE (pending activation)
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password1,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            user.is_active = False
+
+            # Same agency as the ICT focal point who created the invite
+            if hasattr(user, "agency") and hasattr(invite.created_by, "agency"):
+                user.agency = invite.created_by.agency
+
+            user.save()
+
+            # Mark invite as used
+            invite.mark_used()
+
+            # ✅ RECORD USAGE HERE
+            RegistrationInviteUsage.objects.create(
+                invite=invite,
+                user=user,
+            )
+
+            # Send pending-activation email (async, if you added that helper)
+            # send_registration_email_async(user, first_name)
+
+            messages.success(
+                request,
+                "Your account has been created and is pending activation by your ICT department. "
+                "You will receive an email or can contact your ICT focal point for follow-up."
+            )
+            return redirect("accounts:login")
+
+    # GET or invalid POST
+    return render(
+        request,
+        "accounts/register_with_invite.html",
+        {
+            "invite": invite,
+            "errors": errors,
+            "form_data": form_data,
+        },
+    )
+
+
+@login_required
+@user_passes_test(is_ict_focal_point)
+def registration_links_list(request):
+    """
+    Show all registration links created by the logged-in ICT focal point.
+    """
+    invites_qs = (
+        RegistrationInvite.objects
+        .filter(created_by=request.user)
+        .order_by('-created_at')
+    )
+
+    # Limit table rows to 5 (but use full data for summaries)
+    invites_display = invites_qs[:5]
+
+    # Totals for the footer (use full queryset)
+    total_links = invites_qs.count()
+
+    active_links = invites_qs.filter(
+        expires_at__gt=timezone.now(),
+        max_uses__gt=F("used_count"),
+    ).count()
+
+    total_registrations = invites_qs.aggregate(
+        total=Sum("used_count")
+    )["total"] or 0
+
+    return render(
+        request,
+        "accounts/registration_links_list.html",
+        {
+            "invites": invites_display,  # limited query for display
+            "total_links": total_links,  # full queryset numbers
+            "active_links": active_links,
+            "total_registrations": total_registrations,
+        },
+    )
+
+
+@login_required
+@user_passes_test(is_ict_focal_point)
+def registration_link_detail(request, pk):
+    """
+    Show detailed information about a specific registration link.
+    """
+    invite = get_object_or_404(RegistrationInvite, pk=pk, created_by=request.user)
+    registrations = invite.registrations.select_related("user")
+    return render(
+        request,
+        "accounts/registration_link_detail.html",
+        {"invite": invite, "registrations": registrations},
+    )
+
+@login_required
+@user_passes_test(is_ict_focal_point)
+def registration_link_toggle_active(request, pk):
+    invite = get_object_or_404(RegistrationInvite, pk=pk, created_by=request.user)
+
+    invite.is_active = not invite.is_active
+    invite.save(update_fields=["is_active"])
+
+    status = "activated" if invite.is_active else "deactivated"
+    messages.success(request, f'Registration link "{invite.code}" has been {status}.')
+
+    return redirect("accounts:registration_link_detail", pk=pk)

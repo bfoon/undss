@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Registration Link Generated{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <!-- Header Section -->
+      <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+          <h1 class="h3 mb-2">
+            <i class="bi bi-link-45deg me-2 text-primary"></i>Registration Link Generated
+          </h1>
+          <p class="text-muted mb-0">
+            <i class="bi bi-shield-check me-1"></i>
+            Created by: <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+            <span class="mx-2">•</span>
+            <span class="small">{{ invite.created_at|date:"F d, Y \a\t g:i A" }}</span>
+          </p>
+        </div>
+        <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back to Users
+        </a>
+      </div>
+
+      <!-- Main Card -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-success text-white py-3">
+          <div class="d-flex align-items-center">
+            <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+            <h2 class="h5 mb-0">Link Successfully Created</h2>
+          </div>
+        </div>
+
+        <div class="card-body p-4">
+          <!-- Registration Link Section -->
+          <div class="mb-4">
+            <label class="form-label fw-semibold text-dark mb-2">
+              <i class="bi bi-link-45deg me-1"></i>Registration URL
+            </label>
+            <div class="input-group">
+              <input
+                type="text"
+                class="form-control form-control-lg font-monospace"
+                value="{{ invite_url }}"
+                readonly
+                id="invite-url"
+                style="background-color: #f8f9fa;"
+              >
+              <button
+                class="btn btn-primary px-4"
+                type="button"
+                onclick="copyToClipboard()"
+                id="copy-btn"
+              >
+                <i class="bi bi-clipboard me-1"></i>Copy
+              </button>
+            </div>
+            <small class="text-muted mt-1 d-block">
+              <i class="bi bi-info-circle me-1"></i>Click the copy button to share this link with authorized personnel
+            </small>
+          </div>
+
+          <!-- Link Configuration Details -->
+          <div class="mb-4">
+            <h3 class="h6 fw-semibold mb-3 text-dark">Link Configuration</h3>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <div class="detail-card p-3 border rounded">
+                  <div class="d-flex align-items-center mb-2">
+                    <div class="icon-wrapper bg-primary bg-opacity-10 rounded-circle p-2 me-2">
+                      <i class="bi bi-person-plus-fill text-primary"></i>
+                    </div>
+                    <span class="text-muted small">Maximum Uses</span>
+                  </div>
+                  <div class="fs-4 fw-bold text-dark">{{ invite.max_uses }}</div>
+                  <small class="text-muted">registration{{ invite.max_uses|pluralize }}</small>
+                </div>
+              </div>
+
+              <div class="col-md-4">
+                <div class="detail-card p-3 border rounded">
+                  <div class="d-flex align-items-center mb-2">
+                    <div class="icon-wrapper bg-info bg-opacity-10 rounded-circle p-2 me-2">
+                      <i class="bi bi-clock-history text-info"></i>
+                    </div>
+                    <span class="text-muted small">Valid Duration</span>
+                  </div>
+                  <div class="fs-4 fw-bold text-dark">{{ invite.valid_for_hours }}</div>
+                  <small class="text-muted">hour{{ invite.valid_for_hours|pluralize }}</small>
+                </div>
+              </div>
+
+              <div class="col-md-4">
+                <div class="detail-card p-3 border rounded">
+                  <div class="d-flex align-items-center mb-2">
+                    <div class="icon-wrapper bg-danger bg-opacity-10 rounded-circle p-2 me-2">
+                      <i class="bi bi-calendar-event text-danger"></i>
+                    </div>
+                    <span class="text-muted small">Expires On</span>
+                  </div>
+                  <div class="fw-bold text-dark small">{{ invite.expires_at|date:"M j, Y" }}</div>
+                  <small class="text-muted">{{ invite.expires_at|date:"g:i A" }}</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Important Notice -->
+          <div class="alert alert-warning border-warning mb-0">
+            <div class="d-flex">
+              <div class="flex-shrink-0">
+                <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <h4 class="alert-heading h6 mb-2">Important Security Notice</h4>
+                <p class="mb-2 small">
+                  This registration link provides access to create new user accounts. Please ensure it is only shared with authorized personnel.
+                </p>
+                <ul class="mb-0 small ps-3">
+                  <li>Link will expire after <strong>{{ invite.valid_for_hours }} hour{{ invite.valid_for_hours|pluralize }}</strong></li>
+                  <li>Maximum of <strong>{{ invite.max_uses }} registration{{ invite.max_uses|pluralize }}</strong> allowed</li>
+                  <li>Link becomes invalid after either condition is met</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Footer with Actions -->
+        <div class="card-footer bg-light border-top py-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <a href="{% url 'accounts:create_registration_link' %}" class="btn btn-outline-primary">
+              <i class="bi bi-plus-circle me-1"></i>Create Another Link
+            </a>
+            <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-primary">
+              <i class="bi bi-people-fill me-1"></i>View User Management
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions Panel -->
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card border-0 bg-light h-100">
+            <div class="card-body">
+              <h3 class="h6 mb-2">
+                <i class="bi bi-question-circle me-1"></i>Next Steps
+              </h3>
+              <p class="small text-muted mb-0">
+                Share the registration link with the intended recipient via secure communication channels.
+                Monitor link usage in the user management dashboard.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card border-0 bg-light h-100">
+            <div class="card-body">
+              <h3 class="h6 mb-2">
+                <i class="bi bi-shield-lock me-1"></i>Security Best Practices
+              </h3>
+              <p class="small text-muted mb-0">
+                Use encrypted communication methods when sharing registration links.
+                Verify recipient identity before distribution and track link usage regularly.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyToClipboard() {
+  const input = document.getElementById('invite-url');
+  const button = document.getElementById('copy-btn');
+  const originalHTML = button.innerHTML;
+
+  navigator.clipboard.writeText(input.value).then(() => {
+    // Success feedback
+    button.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
+    button.classList.remove('btn-primary');
+    button.classList.add('btn-success');
+
+    // Reset after 2 seconds
+    setTimeout(() => {
+      button.innerHTML = originalHTML;
+      button.classList.remove('btn-success');
+      button.classList.add('btn-primary');
+    }, 2000);
+  }).catch(err => {
+    // Error feedback
+    button.innerHTML = '<i class="bi bi-x-lg me-1"></i>Failed';
+    button.classList.remove('btn-primary');
+    button.classList.add('btn-danger');
+
+    setTimeout(() => {
+      button.innerHTML = originalHTML;
+      button.classList.remove('btn-danger');
+      button.classList.add('btn-primary');
+    }, 2000);
+  });
+}
+</script>
+
+<style>
+  .detail-card {
+    transition: all 0.3s ease;
+    background-color: #ffffff;
+  }
+
+  .detail-card:hover {
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.075);
+    transform: translateY(-2px);
+  }
+
+  .icon-wrapper {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .font-monospace {
+    font-size: 0.875rem;
+  }
+
+  .card {
+    border-radius: 0.5rem;
+  }
+
+  .card-header {
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+  }
+
+  .form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+  }
+</style>
+{% endblock %}

@@ -3,7 +3,7 @@ from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.contrib.auth import authenticate
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column
-from .models import User, SecurityIncident
+from .models import User, SecurityIncident, RegistrationInvite
 from django.core.exceptions import ValidationError
 
 
@@ -374,3 +374,30 @@ class ICTUserUpdateForm(forms.ModelForm):
                 raise ValidationError('You can only edit users in your own agency.')
 
         return cleaned_data
+
+class CustomUserRegistrationForm(UserCreationForm):
+    email = forms.EmailField(required=True)
+    phone = forms.CharField(required=False)
+
+    class Meta:
+        model = User
+        fields = ["username", "email", "phone", "password1", "password2"]
+
+class RegistrationInviteForm(forms.ModelForm):
+    class Meta:
+        model = RegistrationInvite
+        fields = ["max_uses", "valid_for_hours"]
+        widgets = {
+            "max_uses": forms.NumberInput(attrs={"min": 1}),
+            "valid_for_hours": forms.NumberInput(attrs={"min": 1, "max": 23}),
+        }
+
+    def clean_valid_for_hours(self):
+        value = self.cleaned_data.get("valid_for_hours") or 12
+        if value <= 0:
+            raise forms.ValidationError("Validity must be at least 1 hour.")
+        if value >= 24:
+            raise forms.ValidationError(
+                "Validity must be less than 24 hours (max 23)."
+            )
+        return value

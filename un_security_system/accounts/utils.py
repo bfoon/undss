@@ -83,3 +83,7 @@ def remember_device(user, device_id, user_agent="", ip_address=""):
         },
     )
     return device
+
+def is_ict_focal_point(user):
+    # Adjust to your real logic
+    return user.is_authenticated and getattr(user, "role", "") == "ict_focal"

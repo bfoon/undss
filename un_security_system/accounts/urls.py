@@ -154,4 +154,29 @@ path(
     path('ict/users/<int:pk>/set-password/', views_ict.ict_user_set_password, name='ict_user_set_password'),
     path('ict/users/<int:pk>/send-reset-link/', views_ict.ict_user_send_reset_link, name='ict_user_send_reset_link'),
     path('ict/users/<int:pk>/toggle-status/', views_ict.ict_user_toggle_status, name='ict_user_toggle_status'),
+    path(
+        "invites/create/",
+        views_ict.create_registration_link,
+        name="create_registration_link",
+    ),
+    path(
+        "register/<str:code>/",
+        views_ict.register_with_invite,
+        name="register_with_invite",
+    ),
+    path(
+        "invites/",
+        views_ict.registration_links_list,
+        name="registration_links_list",
+    ),
+    path(
+        "invites/<int:pk>/",
+        views_ict.registration_link_detail,
+        name="registration_link_detail",
+    ),
+    path(
+        "invites/<int:pk>/toggle/",
+        views_ict.registration_link_toggle_active,
+        name="registration_link_toggle_active",
+    ),
 ]
