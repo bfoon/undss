@@ -100,7 +100,7 @@ class AssetExit(models.Model):
     agency_name = models.CharField(max_length=120)
     reason = models.CharField(max_length=255, help_text="Why the assets are exiting (e.g., repair, transfer)")
     destination = models.CharField(max_length=200, help_text="Where assets are going")
-    expected_date = models.DateField()
+    expected_date = models.DateField(null=True, blank=True,)
     escort_required = models.BooleanField(default=False, help_text="Tick if security escort is required")
     status = models.CharField(max_length=20, choices=STATUS, default='pending')
 

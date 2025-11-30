@@ -1,0 +1,444 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Visitor Reports & Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+  .reports-header {
+    background: linear-gradient(135deg, var(--un-blue) 0%, var(--un-dark-blue) 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .reports-header h1 {
+    font-size: 1.6rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .reports-header small {
+    opacity: 0.9;
+  }
+
+  .stat-card {
+    border: none;
+    border-radius: 12px;
+    height: 100%;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+  }
+
+  .stat-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    font-size: 1.4rem;
+  }
+
+  .stat-number {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .filter-card {
+    border-radius: 12px;
+  }
+
+  .table thead th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .status-badge {
+    font-size: 0.75rem;
+  }
+
+  .reports-summary {
+    font-size: 0.85rem;
+  }
+
+  .scroll-hint {
+    font-size: 0.8rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="reports-header d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+      <h1 class="mb-1">
+        <i class="bi bi-clipboard-data me-2"></i>
+        Visitor Reports &amp; Analytics
+      </h1>
+      <small>
+        Detailed overview of visitors registered in the UN Security Management System.
+      </small>
+    </div>
+    <div class="text-end">
+      <small class="d-block">
+        <i class="bi bi-calendar3 me-1"></i>
+        {% now "l, F j, Y" %}
+      </small>
+      <small id="reports-current-time"></small>
+    </div>
+  </div>
+
+  <!-- Top Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3 col-sm-6">
+      <div class="card stat-card p-3">
+        <div class="stat-icon" style="background: rgba(0,158,219,0.1); color: var(--un-blue);">
+          <i class="bi bi-people-fill"></i>
+        </div>
+        <div class="stat-number text-un-primary">
+          {{ total_visitors|default:0 }}
+        </div>
+        <div class="text-muted small">Total Visitors (All Time)</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+      <div class="card stat-card p-3">
+        <div class="stat-icon" style="background: rgba(13,202,240,0.1); color:#0dcaf0;">
+          <i class="bi bi-calendar-day"></i>
+        </div>
+        <div class="stat-number">
+          {{ visitors_today|default:0 }}
+        </div>
+        <div class="text-muted small">Visitors Today</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+      <div class="card stat-card p-3">
+        <div class="stat-icon" style="background: rgba(25,135,84,0.1); color:var(--success-color);">
+          <i class="bi bi-check-circle-fill"></i>
+        </div>
+        <div class="stat-number" style="color:var(--success-color);">
+          {{ approved_count|default:0 }}
+        </div>
+        <div class="text-muted small">Approved / Completed</div>
+      </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+      <div class="card stat-card p-3">
+        <div class="stat-icon" style="background: rgba(253,126,20,0.1); color:var(--warning-color);">
+          <i class="bi bi-clock-history"></i>
+        </div>
+        <div class="stat-number" style="color:var(--warning-color);">
+          {{ pending_count|default:0 }}
+        </div>
+        <div class="text-muted small">Pending Requests</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters + Export -->
+  <div class="card filter-card shadow-sm mb-4">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <h5 class="mb-0">
+          <i class="bi bi-funnel me-2"></i>Filter Visitor Records
+        </h5>
+        <small class="text-muted">
+          Narrow down by date range, status, vehicles, or host.
+        </small>
+      </div>
+      <div class="d-flex gap-2">
+        {# Export buttons – wire to your URLs in the view #}
+        <a href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}export=csv"
+           class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-file-earmark-spreadsheet me-1"></i>Export CSV
+        </a>
+        <a href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}export=pdf"
+           class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+        </a>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold">
+            <i class="bi bi-calendar-range me-1"></i>From Date
+          </label>
+          <input type="date"
+                 name="date_from"
+                 value="{{ request.GET.date_from }}"
+                 class="form-control form-control-sm">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold">
+            <i class="bi bi-calendar-range me-1"></i>To Date
+          </label>
+          <input type="date"
+                 name="date_to"
+                 value="{{ request.GET.date_to }}"
+                 class="form-control form-control-sm">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">
+            <i class="bi bi-flag me-1"></i>Status
+          </label>
+          <select name="status" class="form-select form-select-sm">
+            <option value="">All</option>
+            <option value="pending"  {% if request.GET.status == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="approved" {% if request.GET.status == 'approved' %}selected{% endif %}>Approved</option>
+            <option value="completed" {% if request.GET.status == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="rejected" {% if request.GET.status == 'rejected' %}selected{% endif %}>Rejected</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">
+            <i class="bi bi-car-front me-1"></i>Vehicle
+          </label>
+          <select name="with_vehicle" class="form-select form-select-sm">
+            <option value="">All</option>
+            <option value="1" {% if request.GET.with_vehicle == '1' %}selected{% endif %}>With vehicle</option>
+            <option value="0" {% if request.GET.with_vehicle == '0' %}selected{% endif %}>No vehicle</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold">
+            <i class="bi bi-search me-1"></i>Search
+          </label>
+          <input type="text"
+                 name="q"
+                 value="{{ request.GET.q }}"
+                 class="form-control form-control-sm"
+                 placeholder="Visitor / host / plate">
+        </div>
+        <div class="col-12 d-flex justify-content-end gap-2">
+          <a href="{% url 'dashboard:visitor_reports' %}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-circle me-1"></i>Clear
+          </a>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-funnel me-1"></i>Apply Filters
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card shadow-sm">
+    {% if page_obj and page_obj.object_list %}
+      <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h5 class="mb-0">
+            <i class="bi bi-list-ul me-2"></i>Visitor Records
+          </h5>
+          <small class="text-muted reports-summary">
+            Showing {{ page_obj.start_index }}–{{ page_obj.end_index }}
+            of {{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}
+            {% if request.GET.q %}
+              • Search: "<strong>{{ request.GET.q }}</strong>"
+            {% endif %}
+          </small>
+        </div>
+        <small class="text-muted scroll-hint">
+          <i class="bi bi-arrows-expand me-1"></i>Scroll horizontally on small screens
+        </small>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Visitor</th>
+              <th>Host Staff</th>
+              <th>Agency / Office</th>
+              <th>Purpose</th>
+              <th>Vehicle</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in page_obj.object_list %}
+              <tr>
+                <td>
+                  <div class="d-flex flex-column">
+                    <span class="fw-semibold">{{ v.visit_date|date:"M j, Y" }}</span>
+                    <small class="text-muted">{{ v.visit_time|time:"H:i" }}</small>
+                  </div>
+                </td>
+                <td>
+                  <div class="fw-semibold">
+                    {{ v.visitor_name|default:"(No name)" }}
+                  </div>
+                  <small class="text-muted">
+                    {% if v.visitor_id_type and v.visitor_id_number %}
+                      {{ v.visitor_id_type }} – {{ v.visitor_id_number }}
+                    {% endif %}
+                  </small>
+                </td>
+                <td>
+                  <div class="fw-semibold">
+                    {{ v.host.get_full_name|default:v.host.username }}
+                  </div>
+                  <small class="text-muted">
+                    {% if v.host.department %}{{ v.host.department }}{% endif %}
+                  </small>
+                </td>
+                <td>
+                  <small class="text-muted d-block">
+                    {% if v.agency %}<i class="bi bi-building me-1"></i>{{ v.agency.name }}{% endif %}
+                  </small>
+                  <small class="text-muted">
+                    {% if v.office_location %}<i class="bi bi-geo-alt me-1"></i>{{ v.office_location }}{% endif %}
+                  </small>
+                </td>
+                <td>
+                  <small class="text-muted">
+                    {{ v.purpose|truncatechars:40|default:"—" }}
+                  </small>
+                </td>
+                <td>
+                  {% if v.has_vehicle %}
+                    <span class="badge bg-success-subtle text-success status-badge">
+                      <i class="bi bi-car-front me-1"></i>
+                      {{ v.vehicle_plate|default:"Vehicle" }}
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary-subtle text-muted status-badge">
+                      <i class="bi bi-person-walking me-1"></i>Walk-in
+                    </span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if v.status == 'pending' %}
+                    <span class="badge bg-warning text-dark status-badge">
+                      <i class="bi bi-clock me-1"></i>Pending
+                    </span>
+                  {% elif v.status == 'approved' %}
+                    <span class="badge bg-info text-dark status-badge">
+                      <i class="bi bi-check2-circle me-1"></i>Approved
+                    </span>
+                  {% elif v.status == 'completed' %}
+                    <span class="badge bg-success status-badge">
+                      <i class="bi bi-check-circle-fill me-1"></i>Completed
+                    </span>
+                  {% elif v.status == 'rejected' %}
+                    <span class="badge bg-danger status-badge">
+                      <i class="bi bi-x-circle-fill me-1"></i>Rejected
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary status-badge">Unknown</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if page_obj.paginator.num_pages > 1 %}
+        <div class="card-footer bg-light">
+          <nav aria-label="Visitor report pagination">
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+              {% if page_obj.has_previous %}
+                <li class="page-item">
+                  <a class="page-link"
+                     href="?page=1{% if request.GET %}&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}{% endif %}">
+                    <i class="bi bi-chevron-double-left"></i>
+                  </a>
+                </li>
+                <li class="page-item">
+                  <a class="page-link"
+                     href="?page={{ page_obj.previous_page_number }}{% if request.GET %}&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}{% endif %}">
+                    <i class="bi bi-chevron-left"></i>
+                  </a>
+                </li>
+              {% else %}
+                <li class="page-item disabled">
+                  <span class="page-link"><i class="bi bi-chevron-double-left"></i></span>
+                </li>
+                <li class="page-item disabled">
+                  <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                </li>
+              {% endif %}
+
+              <li class="page-item disabled">
+                <span class="page-link">
+                  Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+              </li>
+
+              {% if page_obj.has_next %}
+                <li class="page-item">
+                  <a class="page-link"
+                     href="?page={{ page_obj.next_page_number }}{% if request.GET %}&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}{% endif %}">
+                    <i class="bi bi-chevron-right"></i>
+                  </a>
+                </li>
+                <li class="page-item">
+                  <a class="page-link"
+                     href="?page={{ page_obj.paginator.num_pages }}{% if request.GET %}&{{ request.GET.urlencode|cut:'page='|cut:'page=' }}{% endif %}">
+                    <i class="bi bi-chevron-double-right"></i>
+                  </a>
+                </li>
+              {% else %}
+                <li class="page-item disabled">
+                  <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                </li>
+                <li class="page-item disabled">
+                  <span class="page-link"><i class="bi bi-chevron-double-right"></i></span>
+                </li>
+              {% endif %}
+            </ul>
+          </nav>
+        </div>
+      {% endif %}
+
+    {% else %}
+      <div class="card-body text-center py-5">
+        <div class="mb-3">
+          <i class="bi bi-clipboard-x text-muted" style="font-size: 3rem;"></i>
+        </div>
+        <h5 class="mb-2">No visitor records found</h5>
+        <p class="text-muted mb-3">
+          Try changing the date range or filters to broaden your search.
+        </p>
+        <a href="{% url 'dashboard:visitor_reports' %}" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Filters
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Small clock in header
+  function updateReportsClock() {
+    const el = document.getElementById('reports-current-time');
+    if (!el) return;
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  }
+  updateReportsClock();
+  setInterval(updateReportsClock, 1000);
+</script>
+{% endblock %}

@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.views.generic import ListView, CreateView, UpdateView, DetailView, TemplateView
 from django.contrib.auth.views import PasswordChangeView
 from .models import TrustedDevice, OneTimeCode
-from .utils import create_otp_for_user, send_otp_email, remember_device
+from .utils import create_otp_for_user, send_otp_email_async as send_otp_email, remember_device
 from datetime import timedelta
 from django.views.decorators.http import require_http_methods
 

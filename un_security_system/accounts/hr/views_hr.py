@@ -9,6 +9,8 @@ from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import ListView, CreateView
 import os
+from django.db.models import Count, Q
+from django.core.paginator import Paginator
 from django.http import FileResponse, Http404, HttpResponseForbidden
 
 from .notifications import notify_users_by_role, notify_users_direct
@@ -97,6 +99,85 @@ def my_idcard_request(request):
         form = EmployeeIDCardRequestForm()
 
     return render(request, "hr/my_idcard_request_form.html", {"form": form})
+
+
+@login_required
+def my_id_card_requests(request):
+    """
+    Show ID card requests related to the currently logged-in user.
+    - Requests they submitted (requested_by)
+    - You can also include for_user=request.user if you want.
+    Includes small stats and filters.
+    """
+
+    # ----- Base queryset: only this user's requests -----
+    qs = (
+        EmployeeIDCardRequest.objects
+        .filter(
+            Q(requested_by=request.user) |
+            Q(for_user=request.user)
+        )
+        .select_related("for_user", "requested_by", "approver", "printed_by", "issued_by")
+        .order_by("-created_at")
+    )
+
+    # ------------- Filters -------------
+    status = (request.GET.get("status") or "").strip()
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to = (request.GET.get("date_to") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    if status:
+        # must be one of: submitted, photo_pending, printed, issued, rejected
+        qs = qs.filter(status=status)
+
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+
+    if q:
+        qs = qs.filter(
+            Q(reason__icontains=q) |
+            Q(for_user__first_name__icontains=q) |
+            Q(for_user__last_name__icontains=q) |
+            Q(for_user__username__icontains=q) |
+            Q(requested_by__first_name__icontains=q) |
+            Q(requested_by__last_name__icontains=q) |
+            Q(requested_by__username__icontains=q)
+        )
+
+    # ------------- Stats -------------
+    total_requests = qs.count()
+    # "pending" = submitted + waiting for photo
+    pending_count = qs.filter(status__in=["submitted", "photo_pending"]).count()
+    printed_count = qs.filter(status="printed").count()
+    issued_count = qs.filter(status="issued").count()
+    rejected_count = qs.filter(status="rejected").count()
+
+    # Optional: an "approved-ish" counter (everything beyond submitted)
+    approved_count = qs.filter(status__in=["photo_pending", "printed", "issued"]).count()
+
+    # ------------- Pagination -------------
+    paginator = Paginator(qs, 10)  # 10 per page
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        "page_obj": page_obj,
+        "total_requests": total_requests,
+        "pending_count": pending_count,
+        "approved_count": approved_count,
+        "printed_count": printed_count,
+        "issued_count": issued_count,
+        "rejected_count": rejected_count,
+        "status": status,
+        "date_from": date_from,
+        "date_to": date_to,
+        "q": q,
+    }
+    return render(request, "hr/my_id_card_requests.html", context)
 
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)

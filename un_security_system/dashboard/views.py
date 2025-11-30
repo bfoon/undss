@@ -15,6 +15,10 @@ from vehicles.models import VehicleMovement, Vehicle, PackageEvent, AssetExit
 from accounts.models import SecurityIncident
 from incidents.models import IncidentReport
 
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 
 # ----------------------------- role helpers -----------------------------
 
@@ -108,6 +112,18 @@ def base_dashboard_context(user):
     vehicles_in_compound = vehicles_in_compound_estimate()
     movements_today = VehicleMovement.objects.filter(timestamp__date=today).count()
 
+    # ----- ICT Focal Point agency user stats -----
+    agency_users_total = 0
+    agency_users_active = 0
+    agency_users_inactive = 0
+    is_ict_focal = (getattr(user, "role", None) == "ict_focal")
+
+    if is_ict_focal and user.agency_id:
+        agency_qs = User.objects.filter(agency=user.agency)
+        agency_users_total = agency_qs.count()
+        agency_users_active = agency_qs.filter(is_active=True).count()
+        agency_users_inactive = agency_qs.filter(is_active=False).count()
+
     # ---------- LSA / SOC override behaviour ----------
     is_lsa_or_soc = _is_lsa_or_soc(user)
 
@@ -117,6 +133,8 @@ def base_dashboard_context(user):
         my_pending_visitors = pending_approvals
         my_visitors_with_vehicle = Visitor.objects.filter(has_vehicle=True).count()
         my_visitors_today = total_visitors_today
+
+
 
     ctx = {
         'today': today,
@@ -136,6 +154,12 @@ def base_dashboard_context(user):
 
         # flag for templates
         'is_lsa_or_soc': is_lsa_or_soc,
+
+        # 🔹 ICT focal stats
+        "is_ict_focal": is_ict_focal,
+        "agency_users_total": agency_users_total,
+        "agency_users_active": agency_users_active,
+        "agency_users_inactive": agency_users_inactive,
     }
     return ctx
 

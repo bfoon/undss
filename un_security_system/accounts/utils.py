@@ -1,13 +1,13 @@
 import uuid
 import secrets
 import random
+import threading  # 👈 add this
 from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 
 from .models import OneTimeCode, TrustedDevice
-
 
 
 def create_otp_for_user(user, device_id, ip_address=None, user_agent=""):
@@ -37,10 +37,9 @@ def create_otp_for_user(user, device_id, ip_address=None, user_agent=""):
     return otp
 
 
-def send_otp_email(user, code):
+def _send_otp_email_sync(user, code):
     """
-    Send the OTP to the user's email.
-    Make sure EMAIL_BACKEND & SMTP settings are configured in settings.py.
+    INTERNAL: synchronous email sending.
     """
     if not user.email:
         # You might want to log this or show a message instead
@@ -69,6 +68,25 @@ def send_otp_email(user, code):
     )
 
 
+def send_otp_email_async(user, code):
+    """
+    Public helper: send OTP email in a background thread so
+    the login request is not blocked by SMTP.
+    """
+
+    def _target():
+        try:
+            _send_otp_email_sync(user, code)
+        except Exception:
+            # Optional: log the exception instead of crashing the thread
+            # import logging
+            # logging.getLogger(__name__).exception("Failed to send OTP email")
+            pass
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+
+
 def remember_device(user, device_id, user_agent="", ip_address=""):
     now = timezone.now()
     expires_at = now + timedelta(days=30)
@@ -83,6 +101,7 @@ def remember_device(user, device_id, user_agent="", ip_address=""):
         },
     )
     return device
+
 
 def is_ict_focal_point(user):
     # Adjust to your real logic

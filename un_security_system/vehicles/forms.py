@@ -244,10 +244,14 @@ class AssetExitForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # ✅ Make expected_date NOT required on the form
+        self.fields['expected_date'].required = False
+
         self.helper = FormHelper()
         self.helper.form_method = 'post'
         self.helper.layout = Layout(
-            Fieldset('Request Details',
+            Fieldset(
+                'Request Details',
                 'agency_name', 'reason',
                 Row(
                     Column('destination', css_class='col-md-6'),
@@ -259,6 +263,7 @@ class AssetExitForm(forms.ModelForm):
                 'notes',
             ),
         )
+
 
 class AssetExitItemForm(forms.ModelForm):
     class Meta:

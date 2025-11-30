@@ -237,6 +237,74 @@
 </div>
 
 {# ---------------------------------------------------- #}
+{#   ROW 1b – ICT FOCAL: AGENCY USER STATS             #}
+{# ---------------------------------------------------- #}
+{% if is_ict_focal %}
+<div class="row g-4 mb-4">
+    <div class="col-lg-4 col-md-6">
+        <div class="card stat-card text-center">
+            <div class="card-body p-4">
+                <div class="stat-icon"
+                     style="background-color: rgba(0, 158, 219, 0.1); color: var(--un-blue);">
+                    <i class="bi bi-building"></i>
+                </div>
+                <div class="stat-number text-un-primary">
+                    {{ agency_users_total|default:0 }}
+                </div>
+                <h6 class="card-title text-muted mb-0">
+                    Users in My Agency
+                </h6>
+                <small class="text-muted">
+                    Total user accounts linked to {{ user.agency.name|default:"my agency" }}
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 col-md-6">
+        <div class="card stat-card text-center">
+            <div class="card-body p-4">
+                <div class="stat-icon"
+                     style="background-color: rgba(25, 135, 84, 0.1); color: var(--success-color);">
+                    <i class="bi bi-person-check-fill"></i>
+                </div>
+                <div class="stat-number" style="color: var(--success-color);">
+                    {{ agency_users_active|default:0 }}
+                </div>
+                <h6 class="card-title text-muted mb-0">
+                    Active Users
+                </h6>
+                <small class="text-muted">
+                    Accounts currently enabled in your agency
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 col-md-6">
+        <div class="card stat-card text-center">
+            <div class="card-body p-4">
+                <div class="stat-icon"
+                     style="background-color: rgba(220, 53, 69, 0.1); color: #dc3545;">
+                    <i class="bi bi-person-dash-fill"></i>
+                </div>
+                <div class="stat-number" style="color: #dc3545;">
+                    {{ agency_users_inactive|default:0 }}
+                </div>
+                <h6 class="card-title text-muted mb-0">
+                    Inactive Users
+                </h6>
+                <small class="text-muted">
+                    Accounts disabled or awaiting activation
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
+{# ---------------------------------------------------- #}
 {#   ROW 2 – GLOBAL STATS (only for LSA / SOC)         #}
 {# ---------------------------------------------------- #}
 {% if is_lsa_or_soc %}
