@@ -179,6 +179,26 @@ def my_id_card_requests(request):
     }
     return render(request, "hr/my_id_card_requests.html", context)
 
+
+@login_required
+def my_id_card_request_detail(request, pk):
+    """
+    Show full details for a single ID card request belonging to the
+    currently logged-in user.
+    """
+    card_request = get_object_or_404(
+        EmployeeIDCardRequest,
+
+        Q(requested_by=request.user) |
+        Q(for_user=request.user),
+        pk=pk,
+    )
+    return render(
+        request,
+        "hr/my_id_card_request_detail.html",  # template path, change if needed
+        {"card_request": card_request},
+    )
+
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_for_user(request):

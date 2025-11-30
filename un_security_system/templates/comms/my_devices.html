@@ -15,11 +15,23 @@
           <p class="text-muted mb-0">Manage your communications equipment</p>
         </div>
       </div>
-      {% if can_add %}
-        <a class="btn btn-primary rounded-pill px-4 shadow-sm" href="{% url 'comms:device_create' %}">
-          <i class="bi bi-plus-circle me-2"></i>Add New Device
-        </a>
-      {% endif %}
+
+      <div class="d-flex align-items-center gap-2">
+        {% if can_add %}
+          <a class="btn btn-primary rounded-pill px-4 shadow-sm" href="{% url 'comms:device_create' %}">
+            <i class="bi bi-plus-circle me-2"></i>Add New Device
+          </a>
+        {% endif %}
+        <!-- NATO Phonetic Alphabet Icon (right-hand side, middle) -->
+        <button type="button"
+                class="btn btn-light rounded-circle shadow-sm d-flex align-items-center justify-content-center"
+                style="width: 42px; height: 42px;"
+                data-bs-toggle="modal"
+                data-bs-target="#phoneticAlphabetModal"
+                title="NATO phonetic alphabet guide">
+          <i class="bi bi-broadcast-pin text-primary"></i>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -89,16 +101,131 @@
             <!-- Card Footer with Actions -->
             <div class="card-footer bg-light border-0 px-4 py-3">
               <div class="d-flex gap-2">
-                <a href="#" class="btn btn-sm btn-outline-primary rounded-pill flex-grow-1">
-                  <i class="bi bi-pencil me-1"></i>Edit
-                </a>
-                <a href="{% url 'comms:device_detail' d.pk %}" class="btn btn-sm btn-outline-secondary rounded-pill flex-grow-1">
-                  <i class="bi bi-eye me-1"></i>View
-                </a>
+                {% if d.is_radio %}
+                  {# Radio: show “Radio check” and “Readiness & care” modals #}
+                  <button type="button"
+                          class="btn btn-sm btn-outline-primary rounded-pill flex-grow-1"
+                          data-bs-toggle="modal"
+                          data-bs-target="#radioCheckModal-{{ d.pk }}">
+                    <i class="bi bi-broadcast-pin me-1"></i>Radio check
+                  </button>
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary rounded-pill flex-grow-1"
+                          data-bs-toggle="modal"
+                          data-bs-target="#radioCareModal-{{ d.pk }}">
+                    <i class="bi bi-heart-pulse me-1"></i>Readiness & care
+                  </button>
+                {% else %}
+                  {# Non-radio devices: keep normal actions #}
+                  <a href="#" class="btn btn-sm btn-outline-primary rounded-pill flex-grow-1">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                  </a>
+                  <a href="{% url 'comms:device_detail' d.pk %}" class="btn btn-sm btn-outline-secondary rounded-pill flex-grow-1">
+                    <i class="bi bi-eye me-1"></i>View
+                  </a>
+                {% endif %}
               </div>
             </div>
           </div>
         </div>
+
+        {% if d.is_radio %}
+          {# Radio Check Modal #}
+          <div class="modal fade" id="radioCheckModal-{{ d.pk }}" tabindex="-1" aria-labelledby="radioCheckLabel-{{ d.pk }}" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content rounded-4">
+                <div class="modal-header border-0">
+                  <h5 class="modal-title" id="radioCheckLabel-{{ d.pk }}">
+                    How to do a radio check
+                  </h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                  <p class="mb-3 text-muted">
+                    Use this procedure to request a radio check from <strong>Sierra Base</strong> (Security Base) using your call sign.
+                  </p>
+                  <ol class="ps-3">
+                    <li>Ensure your radio is switched on and on the <strong>primary security channel</strong>.</li>
+                    <li>Check that the <strong>volume</strong> is turned up and the antenna is firmly attached.</li>
+                    <li>Press and hold the PTT (push-to-talk) button.</li>
+                    <li>Call clearly:
+                      <div class="mt-2 p-2 bg-light rounded small">
+                        <em>
+                          “Sierra Base, this is {{ d.call_sign|default:"[your call sign]" }},<br>
+                          radio check, over.”
+                        </em>
+                      </div>
+                      <div class="mt-1 small text-muted">
+                        Example (phonetic): <em>“Sierra Base, this is Bravo Delta One Two, radio check, over.”</em>
+                      </div>
+                    </li>
+                    <li>Release the PTT and wait for a response such as:
+                      <div class="mt-2 p-2 bg-light rounded small">
+                        <em>
+                          “{{ d.call_sign|default:"Your call sign" }}, Sierra Base, reading you loud and clear, over.”
+                        </em>
+                      </div>
+                    </li>
+                    <li>Acknowledge and close:
+                      <div class="mt-2 p-2 bg-light rounded small">
+                        <em>
+                          “Sierra Base, {{ d.call_sign|default:"[your call sign]" }}, copy, out.”
+                        </em>
+                      </div>
+                    </li>
+                  </ol>
+                  <p class="mt-3 small text-muted">
+                    Use the NATO phonetic alphabet for letters (e.g. B.D-12 → <strong>Bravo Delta One Two</strong>).
+                    Keep radio traffic short, clear and professional. Use plain language unless instructed to use specific codes.
+                  </p>
+                </div>
+                <div class="modal-footer border-0">
+                  <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-dismiss="modal">
+                    Got it
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# Radio Readiness & Care Modal #}
+          <div class="modal fade" id="radioCareModal-{{ d.pk }}" tabindex="-1" aria-labelledby="radioCareLabel-{{ d.pk }}" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content rounded-4">
+                <div class="modal-header border-0">
+                  <h5 class="modal-title" id="radioCareLabel-{{ d.pk }}">
+                    Keeping your radio ready, healthy & available
+                  </h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                  <p class="mb-3 text-muted">
+                    Follow these good practices to ensure your radio is always ready for emergencies.
+                  </p>
+                  <ul class="ps-3">
+                    <li><strong>Charge daily:</strong> Place the radio on charge at the end of your shift or day.</li>
+                    <li><strong>Keep it powered on:</strong> During working hours, keep the radio turned on and on the assigned channel.</li>
+                    <li><strong>Check before duty:</strong> At the start of each duty period, do a quick radio check with <strong>Sierra Base</strong>.</li>
+                    <li><strong>Protect from damage:</strong> Avoid dropping the radio and keep it away from water, extreme heat, and dust.</li>
+                    <li><strong>Antenna & accessories:</strong> Ensure the antenna, battery and belt clip are properly attached and not cracked or loose.</li>
+                    <li><strong>Spare battery (if provided):</strong> Keep a charged spare battery where possible.</li>
+                    <li><strong>Report issues:</strong> If you notice low audio, damaged parts or frequent loss of signal, report it to ICT/Security immediately.</li>
+                    <li><strong>Do not re-label:</strong> Do not change the call sign label or tamper with programming stickers.</li>
+                  </ul>
+                  <p class="mt-3 small text-muted">
+                    This device is part of the UN Security Management System. Treat it as life-safety equipment: if it fails, report it without delay.
+                  </p>
+                </div>
+                <div class="modal-footer border-0">
+                  <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-dismiss="modal">
+                    Understood
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
       {% endfor %}
     </div>
 
@@ -119,7 +246,10 @@
         </div>
       </div>
       <h3 class="mb-3 fw-bold">No Devices Yet</h3>
-      <p class="text-muted mb-4">You haven't registered any communication devices.<br>Get started by adding your first device.</p>
+      <p class="text-muted mb-4">
+        You haven't registered any communication devices.<br>
+        Get started by adding your first device.
+      </p>
       {% if can_add %}
         <a class="btn btn-primary rounded-pill px-4 shadow-sm" href="{% url 'comms:device_create' %}">
           <i class="bi bi-plus-circle me-2"></i>Add Your First Device
@@ -127,6 +257,54 @@
       {% endif %}
     </div>
   {% endif %}
+</div>
+
+{# NATO PHONETIC ALPHABET MODAL (global) #}
+<div class="modal fade" id="phoneticAlphabetModal" tabindex="-1" aria-labelledby="phoneticAlphabetLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content rounded-4">
+      <div class="modal-header border-0">
+        <h5 class="modal-title" id="phoneticAlphabetLabel">NATO Phonetic Alphabet – Call Sign Guide</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">
+          Use this standard alphabet when spelling out call signs, names, locations or codes over the radio
+          to avoid confusion. Example: <strong>B.D-12 → “Bravo Delta One Two”</strong>.
+        </p>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Letter</th><th>Word</th>
+                <th>Letter</th><th>Word</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>A</td><td>Alfa</td><td>N</td><td>November</td></tr>
+              <tr><td>B</td><td>Bravo</td><td>O</td><td>Oscar</td></tr>
+              <tr><td>C</td><td>Charlie</td><td>P</td><td>Papa</td></tr>
+              <tr><td>D</td><td>Delta</td><td>Q</td><td>Quebec</td></tr>
+              <tr><td>E</td><td>Echo</td><td>R</td><td>Romeo</td></tr>
+              <tr><td>F</td><td>Foxtrot</td><td>S</td><td>Sierra</td></tr>
+              <tr><td>G</td><td>Golf</td><td>T</td><td>Tango</td></tr>
+              <tr><td>H</td><td>Hotel</td><td>U</td><td>Uniform</td></tr>
+              <tr><td>I</td><td>India</td><td>V</td><td>Victor</td></tr>
+              <tr><td>J</td><td>Juliett</td><td>W</td><td>Whiskey</td></tr>
+              <tr><td>K</td><td>Kilo</td><td>X</td><td>X-ray</td></tr>
+              <tr><td>L</td><td>Lima</td><td>Y</td><td>Yankee</td></tr>
+              <tr><td>M</td><td>Mike</td><td>Z</td><td>Zulu</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-dismiss="modal">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -143,10 +321,7 @@
     transition: all 0.2s ease;
   }
 
-  .btn-outline-primary:hover {
-    transform: scale(1.05);
-  }
-
+  .btn-outline-primary:hover,
   .btn-outline-secondary:hover {
     transform: scale(1.05);
   }

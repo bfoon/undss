@@ -79,6 +79,11 @@ urlpatterns = [
         name="my_id_card_requests"
     ),
     path(
+            "my-id-requests/<int:pk>/",
+        views_hr.my_id_card_request_detail,
+        name="my_id_card_request_detail",
+    ),
+    path(
         'hr/idcard/admin/',
         views_hr.idcard_request_for_user,
         name='idcard_request_for_user',

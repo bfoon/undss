@@ -1,0 +1,425 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}ID Card Request Details{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <!-- Header Section -->
+      <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+          <h2 class="mb-2">
+            <i class="bi bi-credit-card-2-front me-2 text-primary"></i>ID Card Request Details
+          </h2>
+          <p class="text-muted mb-0">
+            <i class="bi bi-hash me-1"></i>
+            Reference: <strong class="text-dark">{{ card_request.reference }}</strong>
+            <span class="mx-2">•</span>
+            <span class="small">Submitted {{ card_request.created_at|naturaltime }}</span>
+          </p>
+        </div>
+        <a href="{% url 'accounts:my_id_card_requests' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back to Requests
+        </a>
+      </div>
+
+      <!-- Status Alert -->
+      <div class="mb-4">
+        {% if card_request.status == 'submitted' %}
+          <div class="alert alert-warning border-warning d-flex align-items-center" role="alert">
+            <i class="bi bi-clock-history me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Request Submitted</h4>
+              <p class="mb-0 small">Your ID card request has been submitted and is awaiting review by the security team.</p>
+            </div>
+          </div>
+        {% elif card_request.status == 'photo_pending' %}
+          <div class="alert alert-info border-info d-flex align-items-center" role="alert">
+            <i class="bi bi-camera me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Photo Pending</h4>
+              <p class="mb-0 small">Your request is approved. Please submit your photo to proceed with card printing.</p>
+            </div>
+          </div>
+        {% elif card_request.status == 'printed' %}
+          <div class="alert alert-success border-success d-flex align-items-center" role="alert">
+            <i class="bi bi-printer me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Card Printed</h4>
+              <p class="mb-0 small">Your ID card has been printed and is ready for pickup.</p>
+            </div>
+          </div>
+        {% elif card_request.status == 'issued' %}
+          <div class="alert alert-success border-success d-flex align-items-center" role="alert">
+            <i class="bi bi-check-circle me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Card Issued</h4>
+              <p class="mb-0 small">Your ID card has been successfully issued and delivered.</p>
+            </div>
+          </div>
+        {% elif card_request.status == 'rejected' %}
+          <div class="alert alert-danger border-danger d-flex align-items-center" role="alert">
+            <i class="bi bi-x-circle me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Request Rejected</h4>
+              <p class="mb-0 small">Your ID card request was not approved. Please contact the security team for more information.</p>
+            </div>
+          </div>
+        {% else %}
+          <div class="alert alert-secondary border-secondary d-flex align-items-center" role="alert">
+            <i class="bi bi-info-circle me-3 fs-4"></i>
+            <div>
+              <h4 class="alert-heading h6 mb-1">Status: {{ card_request.get_status_display }}</h4>
+              <p class="mb-0 small">Your request is currently being processed.</p>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="row g-4">
+        <!-- Request Information Card -->
+        <div class="col-lg-8">
+          <div class="card shadow-sm border-0">
+            <div class="card-header bg-light border-bottom py-3">
+              <h3 class="h6 mb-0">
+                <i class="bi bi-file-text me-2"></i>Request Information
+              </h3>
+            </div>
+            <div class="card-body p-4">
+              <div class="row g-4">
+                <div class="col-12">
+                  <div class="info-item">
+                    <label class="info-label">
+                      <i class="bi bi-calendar-plus me-2 text-primary"></i>Submitted On
+                    </label>
+                    <div class="info-value">
+                      <span class="text-dark fw-semibold">{{ card_request.created_at|date:"F d, Y" }}</span>
+                      <span class="text-muted ms-2">at {{ card_request.created_at|date:"g:i A" }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="info-item">
+                    <label class="info-label">
+                      <i class="bi bi-clock-history me-2 text-primary"></i>Last Updated
+                    </label>
+                    <div class="info-value">
+                      <span class="text-dark">{{ card_request.updated_at|naturaltime }}</span>
+                      <small class="text-muted ms-2">({{ card_request.updated_at|date:"M d, Y g:i A" }})</small>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="info-item">
+                    <label class="info-label">
+                      <i class="bi bi-tag me-2 text-primary"></i>Request Type
+                    </label>
+                    <div class="info-value">
+                      <span class="badge bg-secondary bg-opacity-10 text-dark border px-3 py-2">
+                        {{ card_request.get_request_type_display }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="info-item">
+                    <label class="info-label">
+                      <i class="bi bi-file-earmark-text me-2 text-primary"></i>Purpose / Reason
+                    </label>
+                    <div class="info-value">
+                      {% if card_request.reason %}
+                        <p class="text-dark mb-0">{{ card_request.reason }}</p>
+                      {% else %}
+                        <span class="text-muted">No reason provided</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="info-item">
+                    <label class="info-label">
+                      <i class="bi bi-flag me-2 text-primary"></i>Current Status
+                    </label>
+                    <div class="info-value">
+                      {% if card_request.status == 'submitted' %}
+                        <span class="badge bg-warning text-dark px-3 py-2">
+                          <i class="bi bi-inbox me-1"></i>Submitted
+                        </span>
+                      {% elif card_request.status == 'photo_pending' %}
+                        <span class="badge bg-info px-3 py-2">
+                          <i class="bi bi-camera me-1"></i>Photo Pending
+                        </span>
+                      {% elif card_request.status == 'printed' %}
+                        <span class="badge bg-success px-3 py-2">
+                          <i class="bi bi-printer me-1"></i>Printed
+                        </span>
+                      {% elif card_request.status == 'issued' %}
+                        <span class="badge bg-success px-3 py-2">
+                          <i class="bi bi-check-circle me-1"></i>Issued
+                        </span>
+                      {% elif card_request.status == 'rejected' %}
+                        <span class="badge bg-danger px-3 py-2">
+                          <i class="bi bi-x-circle me-1"></i>Rejected
+                        </span>
+                      {% else %}
+                        <span class="badge bg-secondary px-3 py-2">{{ card_request.get_status_display }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <div class="info-item mb-0">
+                    <label class="info-label">
+                      <i class="bi bi-person-badge me-2 text-primary"></i>For User
+                    </label>
+                    <div class="info-value">
+                      <div class="d-flex align-items-center">
+                        <div class="avatar-circle bg-primary bg-opacity-10 rounded-circle me-3 d-flex align-items-center justify-content-center"
+                             style="width: 40px; height: 40px;">
+                          <i class="bi bi-person text-primary"></i>
+                        </div>
+                        <div>
+                          <div class="fw-semibold text-dark">
+                            {{ card_request.for_user.get_full_name|default:card_request.for_user.username }}
+                          </div>
+                          <small class="text-muted">{{ card_request.for_user.email }}</small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status & Photo Card -->
+        <div class="col-lg-4">
+          <!-- Timeline/Status Card -->
+          <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-light border-bottom py-3">
+              <h3 class="h6 mb-0">
+                <i class="bi bi-list-check me-2"></i>Request Timeline
+              </h3>
+            </div>
+            <div class="card-body p-4">
+              <div class="timeline">
+                <div class="timeline-item {% if card_request.status == 'submitted' %}active{% else %}completed{% endif %}">
+                  <div class="timeline-marker"></div>
+                  <div class="timeline-content">
+                    <div class="timeline-title">Submitted</div>
+                    <small class="text-muted">{{ card_request.created_at|date:"M d, Y" }}</small>
+                  </div>
+                </div>
+
+                <div class="timeline-item {% if card_request.status == 'photo_pending' %}active{% elif card_request.status == 'printed' or card_request.status == 'issued' %}completed{% endif %}">
+                  <div class="timeline-marker"></div>
+                  <div class="timeline-content">
+                    <div class="timeline-title">Photo Upload</div>
+                    <small class="text-muted">
+                      {% if card_request.status == 'photo_pending' or card_request.status == 'printed' or card_request.status == 'issued' %}
+                        In Progress
+                      {% else %}
+                        Pending
+                      {% endif %}
+                    </small>
+                  </div>
+                </div>
+
+                <div class="timeline-item {% if card_request.status == 'printed' %}active{% elif card_request.status == 'issued' %}completed{% endif %}">
+                  <div class="timeline-marker"></div>
+                  <div class="timeline-content">
+                    <div class="timeline-title">Printed</div>
+                    <small class="text-muted">
+                      {% if card_request.status == 'printed' or card_request.status == 'issued' %}
+                        Completed
+                      {% else %}
+                        Pending
+                      {% endif %}
+                    </small>
+                  </div>
+                </div>
+
+                <div class="timeline-item {% if card_request.status == 'issued' %}completed{% endif %}">
+                  <div class="timeline-marker"></div>
+                  <div class="timeline-content">
+                    <div class="timeline-title">Issued</div>
+                    <small class="text-muted">
+                      {% if card_request.status == 'issued' %}
+                        Completed
+                      {% else %}
+                        Pending
+                      {% endif %}
+                    </small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Photo Card -->
+          {% if card_request.photo %}
+          <div class="card shadow-sm border-0">
+            <div class="card-header bg-light border-bottom py-3">
+              <h3 class="h6 mb-0">
+                <i class="bi bi-image me-2"></i>ID Photo
+              </h3>
+            </div>
+            <div class="card-body p-4 text-center">
+              <div class="photo-container">
+                <img src="{{ card_request.photo.url }}"
+                     alt="ID photo"
+                     class="img-fluid rounded shadow-sm"
+                     style="max-height: 280px; max-width: 100%;">
+              </div>
+              <small class="text-muted d-block mt-3">
+                <i class="bi bi-check-circle me-1"></i>Photo uploaded successfully
+              </small>
+            </div>
+          </div>
+          {% else %}
+          <div class="card shadow-sm border-0">
+            <div class="card-header bg-light border-bottom py-3">
+              <h3 class="h6 mb-0">
+                <i class="bi bi-image me-2"></i>ID Photo
+              </h3>
+            </div>
+            <div class="card-body p-4 text-center">
+              <div class="empty-photo py-5">
+                <i class="bi bi-camera" style="font-size: 3rem; color: #dee2e6;"></i>
+                <p class="text-muted mt-3 mb-0">No photo uploaded yet</p>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="d-flex justify-content-between mt-4">
+        <a href="{% url 'accounts:my_id_card_requests' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back to Requests
+        </a>
+        {% if card_request.status == 'photo_pending' %}
+          <a href="{% url 'accounts:upload_id_photo' card_request.id %}" class="btn btn-primary">
+            <i class="bi bi-camera me-1"></i>Upload Photo
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .info-item {
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+    margin-bottom: 1.5rem;
+  }
+
+  .info-item:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  .info-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+  }
+
+  .info-value {
+    font-size: 0.95rem;
+  }
+
+  .card {
+    border-radius: 0.75rem;
+  }
+
+  .avatar-circle {
+    flex-shrink: 0;
+  }
+
+  .timeline {
+    position: relative;
+    padding-left: 2rem;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 2px;
+    background: #e9ecef;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-bottom: 2rem;
+  }
+
+  .timeline-item:last-child {
+    padding-bottom: 0;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    left: -1.65rem;
+    top: 0.25rem;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: #e9ecef;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px #e9ecef;
+  }
+
+  .timeline-item.active .timeline-marker {
+    background: #0d6efd;
+    box-shadow: 0 0 0 2px #0d6efd;
+  }
+
+  .timeline-item.completed .timeline-marker {
+    background: #198754;
+    box-shadow: 0 0 0 2px #198754;
+  }
+
+  .timeline-title {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.25rem;
+  }
+
+  .timeline-item.active .timeline-title {
+    color: #0d6efd;
+  }
+
+  .timeline-item.completed .timeline-title {
+    color: #198754;
+  }
+
+  .photo-container {
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    display: inline-block;
+  }
+
+  .empty-photo {
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+  }
+</style>
+{% endblock %}
