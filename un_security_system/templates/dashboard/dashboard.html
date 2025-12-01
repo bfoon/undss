@@ -376,6 +376,68 @@
 {% endif %}
 
 {# ---------------------------------------------------- #}
+{#   QUICK REQUEST CARDS – for normal staff/users      #}
+{#   (NOT data_entry, NOT LSA/SOC)                     #}
+{# ---------------------------------------------------- #}
+{% if user.role != 'data_entry' and not is_lsa_or_soc %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-lightning-charge-fill me-2"></i>
+                    Quick Requests
+                </h5>
+                <small class="text-muted">
+                    Submit access and security-related requests
+                </small>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- Request Visitor Access -->
+                    <div class="col-lg-4 col-md-6">
+                        <a href="{% url 'visitors:visitor_create' %}"
+                           class="btn quick-action-btn w-100 d-flex flex-column justify-content-center align-items-center">
+                            <i class="bi bi-person-badge-fill fs-2 text-un-primary mb-2"></i>
+                            <strong>Request Visitor Access</strong>
+                            <small class="text-muted text-center">
+                                Pre-register a visitor for access to UN House
+                            </small>
+                        </a>
+                    </div>
+
+                    <!-- Request Staff ID Card -->
+                    <div class="col-lg-4 col-md-6">
+                        <a href="{% url 'accounts:my_idcard_requests' %}"
+                           class="btn quick-action-btn w-100 d-flex flex-column justify-content-center align-items-center">
+                            <i class="bi bi-card-heading fs-2 text-success mb-2"></i>
+                            <strong>Request Staff ID Card</strong>
+                            <small class="text-muted text-center">
+                                Submit/renew your UN staff ID card request
+                            </small>
+                        </a>
+                    </div>
+
+                    <!-- Request Asset Exit -->
+                    <div class="col-lg-4 col-md-6">
+                        <a href="{% url 'vehicles:asset_exit_new' %}"
+                           class="btn quick-action-btn w-100 d-flex flex-column justify-content-center align-items-center">
+                            <i class="bi bi-box-arrow-up-right fs-2 text-warning mb-2"></i>
+                            <strong>Request Asset Exit</strong>
+                            <small class="text-muted text-center">
+                                Request authorization to move assets off-site
+                            </small>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
+{# ---------------------------------------------------- #}
 {#   QUICK ACTIONS FOR DATA ENTRY                      #}
 {# ---------------------------------------------------- #}
 {% if user.role == 'data_entry' %}
