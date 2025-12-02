@@ -96,19 +96,71 @@
                   </div>
                 </div>
               {% endif %}
+
+              {# ========= NEW: Radio check performance bar (radios only) ========= #}
+            {% if d.is_radio %}
+            <div class="mb-2">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <small class="text-muted">
+                  Radio check performance
+                </small>
+
+                {% if d.check_rate != None %}
+                  <small class="fw-semibold">
+                    {{ d.check_rate }}%
+                    {% if d.check_rate >= 80 %}
+                      <span class="text-success ms-1">Good</span>
+                    {% elif d.check_rate >= 40 %}
+                      <span class="text-warning ms-1">Needs attention</span>
+                    {% else %}
+                      <span class="text-danger ms-1">Poor</span>
+                    {% endif %}
+                  </small>
+                {% else %}
+                  <small class="text-muted fst-italic">
+                    No checks recorded yet
+                  </small>
+                {% endif %}
+              </div>
+
+              {% if d.check_rate != None %}
+                <div class="check-progress">
+                  <div class="check-progress-bar check-progress-bar-{{ d.check_bar_class }}"
+                       style="width: {{ d.check_rate }}%;"></div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-1 small text-muted">
+                  <span>{{ d.check_responded }} responded</span>
+                  <span>{{ d.check_missed }} missed</span>
+                </div>
+              {% endif %}
+            </div>
+
+            <p class="mt-1 mb-0 small text-muted">
+              Keep your radio <strong>ON</strong> and respond to checks to stay in the green.
+            </p>
+          {% endif %}
+
+              {# ========= END new section ========= #}
             </div>
 
             <!-- Card Footer with Actions -->
             <div class="card-footer bg-light border-0 px-4 py-3">
               <div class="d-flex gap-2">
                 {% if d.is_radio %}
-                  {# Radio: show “Radio check” and “Readiness & care” modals #}
+                  {# Radio: show “Radio check”, “History”, and “Readiness & care” #}
                   <button type="button"
                           class="btn btn-sm btn-outline-primary rounded-pill flex-grow-1"
                           data-bs-toggle="modal"
                           data-bs-target="#radioCheckModal-{{ d.pk }}">
                     <i class="bi bi-broadcast-pin me-1"></i>Radio check
                   </button>
+
+                  <a href="{% url 'comms:device_check_history' d.pk %}"
+                     class="btn btn-sm btn-outline-dark rounded-pill flex-grow-1">
+                    <i class="bi bi-clock-history me-1"></i>History
+                  </a>
+
                   <button type="button"
                           class="btn btn-sm btn-outline-secondary rounded-pill flex-grow-1"
                           data-bs-toggle="modal"
@@ -345,6 +397,32 @@
 
   .card-header {
     border-bottom: none;
+  }
+
+  /* New check performance bar */
+  .check-progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: #f1f3f5;
+    overflow: hidden;
+  }
+
+  .check-progress-bar {
+    height: 100%;
+    transition: width 0.4s ease;
+  }
+
+  .check-progress-bar-good {
+    background: #198754; /* green */
+  }
+
+  .check-progress-bar-medium {
+    background: #ffc107; /* amber */
+  }
+
+  .check-progress-bar-low {
+    background: #dc3545; /* red */
   }
 </style>
 {% endblock %}

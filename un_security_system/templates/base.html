@@ -26,8 +26,8 @@
             --danger-color: #dc3545;
         }
         html, body {
-                 height: 100%;
-                    }
+            height: 100%;
+        }
 
         body {
             background-color: var(--un-light-gray);
@@ -259,357 +259,377 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-<div class="collapse navbar-collapse" id="navbarNav">
-  <ul class="navbar-nav me-auto">
-    <li class="nav-item">
-      <a class="nav-link" href="{% url 'dashboard:dashboard' %}">
-        <i class="bi bi-speedometer2" aria-hidden="true"></i> Dashboard
-      </a>
-    </li>
-
-    {% if user.is_authenticated %}
-
-      {# ===== Guards / LSA / SOC ===== #}
-      {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-             aria-expanded="false">
-            <i class="bi bi-people" aria-hidden="true"></i> Visitor Management
-          </a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{% url 'visitors:visitor_list' %}">
-              <i class="bi bi-list-ul me-2"></i>All Visitors
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'visitors:visitor_create' %}">
-              <i class="bi bi-person-plus me-2"></i>Register New Visitor
-            </a></li>
-            {% if user.role == 'lsa' %}
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{% url 'visitors:visitor_verify_page' %}">
-                <i class="bi bi-check-circle me-2"></i>Verify Clearance (Gate)
-              </a></li>
-            {% endif %}
-          </ul>
-        </li>
-
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-             aria-expanded="false">
-            <i class="bi bi-car-front" aria-hidden="true"></i> Vehicles & Assets
-          </a>
-          <ul class="dropdown-menu">
-
-            <li class="dropdown-header">Vehicle Management</li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:vehicle_list' %}">
-              <i class="bi bi-list-ul me-2"></i>All Vehicles
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:record_movement' %}">
-              <i class="bi bi-arrow-left-right me-2"></i>Record Movement
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:movement_list' %}">
-              <i class="bi bi-clock-history me-2"></i>Movement Log
-            </a></li>
-
-              <li><hr class="dropdown-divider"></li>
-
-                <li class="dropdown-header">Key Control</li>
-                <li><a class="dropdown-item" href="{% url 'vehicles:key_list' %}">
-                  <i class="bi bi-key me-2" aria-hidden="true"></i>Keys Inventory
-                </a></li>
-                <li><a class="dropdown-item" href="{% url 'vehicles:quick_key' %}">
-                  <i class="bi bi-qr-code-scan me-2" aria-hidden="true"></i>Quick Issue/Return
-                </a></li>
-                <li><a class="dropdown-item" href="{% url 'vehicles:key_logs' %}">
-                  <i class="bi bi-clipboard-check me-2" aria-hidden="true"></i>Key Logs
-                </a></li>
-
-
-            {% if user.role == 'lsa' %}
-              <li class="dropdown-header mt-2">Parking Cards (LSA)</li>
-              <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_list' %}">
-                <i class="bi bi-credit-card me-2"></i>All Parking Cards
-              </a></li>
-              <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_create' %}">
-                <i class="bi bi-plus-circle me-2"></i>Issue Parking Card
-              </a></li>
-              <li class="dropdown-header mt-2">Parking Card Requests (Staff → LSA)</li>
-              <li><a class="dropdown-item" href="{% url 'vehicles:pc_requests_pending' %}">
-                <i class="bi bi-inbox me-2"></i>Pending Requests
-              </a></li>
-            {% endif %}
-
-
-              <li><hr class="dropdown-divider"></li>
-
-              <li class="dropdown-header">Packages & Mailroom</li>
-                <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
-                  <i class="bi bi-box-seam me-2"></i>Packages
-                </a></li>
-
-                {% if user.role in 'data_entry lsa soc' or user.is_superuser %}
-                  <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
-                    <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
-                  </a></li>
-                {% endif %}
-
-            <li><hr class="dropdown-divider"></li>
-            {% if user.role in 'lsa,soc' %}
-              <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_queue' %}">
-                <i class="bi bi-inboxes me-2"></i>Asset Exit Review
-              </a></li>
-            {% endif %}
-              {% if user.role == 'data_entry' %}
-            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_approved_list' %}">
-              <i class="bi bi-shield-check me-2"></i>Approved Asset Exits (Gate)
-            </a></li>
-              {% endif %}
-
-            <li class="dropdown-header">Asset Exit</li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
-              <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
-              <i class="bi bi-file-text me-2"></i>My Asset Requests
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_verify_page' %}">
-              <i class="bi bi-shield-check me-2"></i>Verify Asset Exit
-            </a></li>
-              <li><a class="dropdown-item" href="{% url 'incidents:triage' %}">
-                <i class="bi bi-life-preserver"></i> Incident Triage
-              </a>
-            </li>
-          </ul>
-        </li>
-      {% endif %}
-
-      {# ===== Requesters (normal staff) ===== #}
-      {% if user.role == 'requester' or user.role == 'reception'  or user.role == 'registry' or user.role == 'ict_focal' or user.role == 'agency_hr'  %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-             aria-expanded="false">
-            <i class="bi bi-people" aria-hidden="true"></i> Visitors
-          </a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{% url 'visitors:visitor_create' %}">
-              <i class="bi bi-person-plus me-2"></i>Request Visitor Approval
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'visitors:visitor_list' %}">
-              <i class="bi bi-list-ul me-2"></i>My Visitors
-            </a></li>
-          </ul>
-        </li>
-
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-             aria-expanded="false">
-            <i class="bi bi-credit-card" aria-hidden="true"></i> Cards & Assets
-          </a>
-          <ul class="dropdown-menu">
-            <li class="dropdown-header">Parking Card Request</li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:pc_request_new' %}">
-              <i class="bi bi-plus-circle me-2"></i>New Parking Card Request
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:my_pc_requests' %}">
-              <i class="bi bi-card-list me-2"></i>My Parking Card Requests
-            </a></li>
-
-              <li><hr class="dropdown-divider"></li>
-                <li class="dropdown-header">ID Cards</li>
-                <li>
-                  <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
-                    <i class="bi bi-credit-card me-2"></i> Request ID Card
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="{% url 'accounts:my_id_card_requests' %}">
-                    <i class="bi bi-card-list me-2"></i> My ID Card Requests
+            <div class="collapse navbar-collapse" id="navbarNav">
+              <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'dashboard:dashboard' %}">
+                    <i class="bi bi-speedometer2" aria-hidden="true"></i> Dashboard
                   </a>
                 </li>
 
+                {% if user.is_authenticated %}
 
-            <li><hr class="dropdown-divider"></li>
+                  {# ===== Guards / LSA / SOC ===== #}
+                  {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+                    <li class="nav-item dropdown">
+                      <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                         aria-expanded="false">
+                        <i class="bi bi-people" aria-hidden="true"></i> Visitor Management
+                      </a>
+                      <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'visitors:visitor_list' %}">
+                          <i class="bi bi-list-ul me-2"></i>All Visitors
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'visitors:visitor_create' %}">
+                          <i class="bi bi-person-plus me-2"></i>Register New Visitor
+                        </a></li>
+                        {% if user.role == 'lsa' or user.role == 'soc' %}
+                          <li><hr class="dropdown-divider"></li>
+                          <li><a class="dropdown-item" href="{% url 'visitors:visitor_verify_page' %}">
+                            <i class="bi bi-check-circle me-2"></i>Verify Clearance (Gate)
+                          </a></li>
+                        {% endif %}
+                      </ul>
+                    </li>
 
-            <li class="dropdown-header">Asset Exit</li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
-              <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
-              <i class="bi bi-file-text me-2"></i>My Asset Requests
-            </a></li>
+                    <li class="nav-item dropdown">
+                      <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                         aria-expanded="false">
+                        <i class="bi bi-car-front" aria-hidden="true"></i> Vehicles & Assets
+                      </a>
+                      <ul class="dropdown-menu">
 
-              <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-header">Vehicle Management</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:vehicle_list' %}">
+                          <i class="bi bi-list-ul me-2"></i>All Vehicles
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:record_movement' %}">
+                          <i class="bi bi-arrow-left-right me-2"></i>Record Movement
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:movement_list' %}">
+                          <i class="bi bi-clock-history me-2"></i>Movement Log
+                        </a></li>
 
-              <li class="dropdown-header">Packages & Mailroom</li>
-                <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
-                  <i class="bi bi-box-seam me-2"></i>Packages
-                </a></li>
+                        <li><hr class="dropdown-divider"></li>
 
-                {% if user.role in 'data_entry lsa soc' or user.is_superuser %}
-                  <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
-                    <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
-                  </a></li>
+                        <li class="dropdown-header">Key Control</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:key_list' %}">
+                          <i class="bi bi-key me-2" aria-hidden="true"></i>Keys Inventory
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:quick_key' %}">
+                          <i class="bi bi-qr-code-scan me-2" aria-hidden="true"></i>Quick Issue/Return
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:key_logs' %}">
+                          <i class="bi bi-clipboard-check me-2" aria-hidden="true"></i>Key Logs
+                        </a></li>
+
+                        {% if user.role == 'lsa' %}
+                          <li class="dropdown-header mt-2">Parking Cards (LSA)</li>
+                          <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_list' %}">
+                            <i class="bi bi-credit-card me-2"></i>All Parking Cards
+                          </a></li>
+                          <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_create' %}">
+                            <i class="bi bi-plus-circle me-2"></i>Issue Parking Card
+                          </a></li>
+                          <li class="dropdown-header mt-2">Parking Card Requests (Staff → LSA)</li>
+                          <li><a class="dropdown-item" href="{% url 'vehicles:pc_requests_pending' %}">
+                            <i class="bi bi-inbox me-2"></i>Pending Requests
+                          </a></li>
+                        {% endif %}
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li class="dropdown-header">Packages & Mailroom</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
+                          <i class="bi bi-box-seam me-2"></i>Packages
+                        </a></li>
+
+                        {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' or user.is_superuser %}
+                          <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
+                            <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
+                          </a></li>
+                        {% endif %}
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        {% if user.role == 'lsa' or user.role == 'soc' %}
+                          <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_queue' %}">
+                            <i class="bi bi-inboxes me-2"></i>Asset Exit Review
+                          </a></li>
+                        {% endif %}
+                        {% if user.role == 'data_entry' %}
+                          <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_approved_list' %}">
+                            <i class="bi bi-shield-check me-2"></i>Approved Asset Exits (Gate)
+                          </a></li>
+                        {% endif %}
+
+                        <li class="dropdown-header">Asset Exit</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
+                          <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
+                          <i class="bi bi-file-text me-2"></i>My Asset Requests
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_verify_page' %}">
+                          <i class="bi bi-shield-check me-2"></i>Verify Asset Exit
+                        </a></li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'incidents:triage' %}">
+                            <i class="bi bi-life-preserver"></i> Incident Triage
+                          </a>
+                        </li>
+                      </ul>
+                    </li>
+                  {% endif %}
+
+                  {# ===== Requesters (normal staff) ===== #}
+                  {% if user.role == 'requester' or user.role == 'reception' or user.role == 'registry' or user.role == 'ict_focal' or user.role == 'agency_hr' %}
+                    <li class="nav-item dropdown">
+                      <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                         aria-expanded="false">
+                        <i class="bi bi-people" aria-hidden="true"></i> Visitors
+                      </a>
+                      <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'visitors:visitor_create' %}">
+                          <i class="bi bi-person-plus me-2"></i>Request Visitor Approval
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'visitors:visitor_list' %}">
+                          <i class="bi bi-list-ul me-2"></i>My Visitors
+                        </a></li>
+                      </ul>
+                    </li>
+
+                    <li class="nav-item dropdown">
+                      <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                         aria-expanded="false">
+                        <i class="bi bi-credit-card" aria-hidden="true"></i> Cards & Assets
+                      </a>
+                      <ul class="dropdown-menu">
+                        <li class="dropdown-header">Parking Card Request</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:pc_request_new' %}">
+                          <i class="bi bi-plus-circle me-2"></i>New Parking Card Request
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:my_pc_requests' %}">
+                          <i class="bi bi-card-list me-2"></i>My Parking Card Requests
+                        </a></li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-header">ID Cards</li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
+                            <i class="bi bi-credit-card me-2"></i> Request ID Card
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:my_id_card_requests' %}">
+                            <i class="bi bi-card-list me-2"></i> My ID Card Requests
+                          </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li class="dropdown-header">Asset Exit</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
+                          <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
+                          <i class="bi bi-file-text me-2"></i>My Asset Requests
+                        </a></li>
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li class="dropdown-header">Packages & Mailroom</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
+                          <i class="bi bi-box-seam me-2"></i>Packages
+                        </a></li>
+
+                        {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' or user.is_superuser %}
+                          <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
+                            <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
+                          </a></li>
+                        {% endif %}
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li class="dropdown-header">Incident</li>
+                        <li><a class="dropdown-item" href="{% url 'incidents:new' %}">
+                          <i class="bi bi-shield-exclamation"></i> Report Incident</a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'incidents:my_incidents' %}">
+                            <i class="bi bi-clipboard-pulse"></i> My Incidents
+                          </a>
+                        </li>
+                      </ul>
+                    </li>
+
+                  {% endif %}
+
                 {% endif %}
 
-              <li><hr class="dropdown-divider"></li>
+                {% if user.is_authenticated %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="commsDropdown" role="button"
+                     data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-broadcast me-1"></i> Communications
+                  </a>
 
-            <li class="dropdown-header">Incident</li>
-              <li><a class="dropdown-item" href="{% url 'incidents:new' %}">
-                <i class="bi bi-shield-exclamation"></i> Report Incident</a>
-              </li>
-            <li>
-              <a class="dropdown-item" href="{% url 'incidents:my_incidents' %}">
-                <i class="bi bi-clipboard-pulse"></i> My Incidents
-              </a>
-            </li>
-          </ul>
-        </li>
+                  <ul class="dropdown-menu" aria-labelledby="commsDropdown">
 
-      {% endif %}
+                    {% if user.role != 'guard' and user.role != 'data_entry' %}
+                      <li>
+                        <a class="dropdown-item" href="{% url 'comms:my_devices' %}">
+                          <i class="bi bi-broadcast-pin me-2"></i> My Radios & Sat Phones
+                        </a>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                    {% endif %}
 
-    {% endif %}
-      {% if user.is_authenticated %}
-<li class="nav-item dropdown">
-  <a class="nav-link dropdown-toggle" href="#" id="commsDropdown" role="button"
-     data-bs-toggle="dropdown" aria-expanded="false">
-    <i class="bi bi-broadcast me-1"></i> Communications
-  </a>
+                    {% if user.role == 'lsa' or user.role == 'soc' %}
+                      <li class="dropdown-header">LSA / SOC Panel</li>
+                      <li><a class="dropdown-item" href="{% url 'comms:radios' %}">
+                          <i class="bi bi-radioactive me-2"></i> All Radios
+                      </a></li>
+                      <li><a class="dropdown-item" href="{% url 'comms:satphones' %}">
+                          <i class="bi bi-phone me-2"></i> Sat Phones
+                      </a></li>
+                      <li><a class="dropdown-item" href="{% url 'comms:users_without_radios' %}">
+                          <i class="bi bi-person-dash me-2"></i> Users Without Radios
+                      </a></li>
+                      <li><a class="dropdown-item" href="{% url 'comms:check_start' %}">
+                          <i class="bi bi-activity me-2"></i> Start Radio Check
+                      </a></li>
+                    {% endif %}
 
-  <ul class="dropdown-menu" aria-labelledby="commsDropdown">
+                  </ul>
+                </li>
+                {% endif %}
 
-    {% if user.role != 'guard' and user.role != 'data_entry' %}
-      <li>
-        <a class="dropdown-item" href="{% url 'comms:my_devices' %}">
-          <i class="bi bi-broadcast-pin me-2"></i> My Radios & Sat Phones
-        </a>
-      </li>
-      <li><hr class="dropdown-divider"></li>
-    {% endif %}
+                {# === Rooms & Bookings (new feature under Accounts) === #}
+                {% if user.is_authenticated %}
+                  <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                       aria-expanded="false">
+                      <i class="bi bi-door-open me-1"></i> Rooms & Bookings
+                    </a>
+                    <ul class="dropdown-menu">
+                      <li>
+                        <a class="dropdown-item" href="{% url 'accounts:room_list' %}">
+                          <i class="bi bi-calendar-week me-2"></i> All Rooms & Schedules
+                        </a>
+                      </li>
+                      {% if user.is_superuser or user.role == 'lsa' or user.role == 'soc' or user.role == 'agency_hr' or user.role == 'ict_focal' %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-header">Approver Panel</li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:room_approvals' %}">
+                            <i class="bi bi-clipboard-check me-2"></i> My Room Approvals
+                          </a>
+                        </li>
+                      {% endif %}
+                    </ul>
+                  </li>
+                {% endif %}
 
-    {% if user.role in 'lsa,soc' %}
-      <li class="dropdown-header">LSA / SOC Panel</li>
-      <li><a class="dropdown-item" href="{% url 'comms:radios' %}">
-          <i class="bi bi-radioactive me-2"></i> All Radios
-      </a></li>
-      <li><a class="dropdown-item" href="{% url 'comms:satphones' %}">
-          <i class="bi bi-phone me-2"></i> Sat Phones
-      </a></li>
-      <li><a class="dropdown-item" href="{% url 'comms:users_without_radios' %}">
-          <i class="bi bi-person-dash me-2"></i> Users Without Radios
-      </a></li>
-      <li><a class="dropdown-item" href="{% url 'comms:check_start' %}">
-          <i class="bi bi-activity me-2"></i> Start Radio Check
-      </a></li>
-    {% endif %}
+                {% if user.is_authenticated %}
+                  {% if user.role == 'lsa' or user.role == 'soc' or user.role == 'agency_hr' or user.is_superuser %}
+                    <li class="nav-item dropdown">
+                      <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                         aria-expanded="false">
+                        <i class="bi bi-person-badge me-1"></i> HR & ID Cards
+                      </a>
+                      <ul class="dropdown-menu">
+                        <li class="dropdown-header">Monitoring</li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:expiring_ids' %}">
+                            <i class="bi bi-exclamation-triangle me-2"></i> Expiring / Expired IDs
+                          </a>
+                        </li>
 
-  </ul>
-</li>
-{% endif %}
+                        <li><hr class="dropdown-divider"></li>
 
-{% if user.is_authenticated %}
-  {% if user.role == 'lsa' or user.role == 'soc' or user.role == 'agency_hr' or user.is_superuser %}
-    <li class="nav-item dropdown">
-      <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-         aria-expanded="false">
-        <i class="bi bi-person-badge me-1"></i> HR & ID Cards
-      </a>
-      <ul class="dropdown-menu">
-        <li class="dropdown-header">Monitoring</li>
-        <li>
-          <a class="dropdown-item" href="{% url 'accounts:expiring_ids' %}">
-            <i class="bi bi-exclamation-triangle me-2"></i> Expiring / Expired IDs
-          </a>
-        </li>
+                        <li class="dropdown-header">ID Card Requests</li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
+                            <i class="bi bi-credit-card-2-front me-2"></i> Request ID Card (Myself)
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:idcard_request_for_user' %}">
+                            <i class="bi bi-person-plus me-2"></i> Request for Staff
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:idcard_request_list' %}">
+                            <i class="bi bi-inbox me-2"></i> All ID Card Requests
+                          </a>
+                        </li>
+                      </ul>
+                    </li>
+                  {% endif %}
+                {% endif %}
 
-        <li><hr class="dropdown-divider"></li>
+                {% if user.is_authenticated and user.role == 'ict_focal' %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                    <i class="bi bi-person-gear me-1"></i> ICT Console
+                  </a>
+                  <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="{% url 'accounts:ict_user_list' %}">
+                      <i class="bi bi-people me-2"></i> Agency Users
+                    </a></li>
+                    <li><a class="dropdown-item" href="{% url 'accounts:ict_user_create' %}">
+                      <i class="bi bi-person-plus me-2"></i> Create User
+                    </a></li>
+                  </ul>
+                </li>
+                {% endif %}
+              </ul>
 
-        <li class="dropdown-header">ID Card Requests</li>
-        <li>
-          <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
-            <i class="bi bi-credit-card-2-front me-2"></i> Request ID Card (Myself)
-          </a>
-        </li>
-        <li>
-          <a class="dropdown-item" href="{% url 'accounts:idcard_request_for_user' %}">
-            <i class="bi bi-person-plus me-2"></i> Request for Staff
-          </a>
-        </li>
-        <li>
-          <a class="dropdown-item" href="{% url 'accounts:idcard_request_list' %}">
-            <i class="bi bi-inbox me-2"></i> All ID Card Requests
-          </a>
-        </li>
-      </ul>
-    </li>
-  {% endif %}
-{% endif %}
-
-
-
-{% if user.is_authenticated and user.role == 'ict_focal' %}
-<li class="nav-item dropdown">
-  <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-    <i class="bi bi-person-gear me-1"></i> ICT Console
-  </a>
-  <ul class="dropdown-menu">
-    <li><a class="dropdown-item" href="{% url 'accounts:ict_user_list' %}">
-      <i class="bi bi-people me-2"></i> Agency Users
-    </a></li>
-    <li><a class="dropdown-item" href="{% url 'accounts:ict_user_create' %}">
-      <i class="bi bi-person-plus me-2"></i> Create User
-    </a></li>
-  </ul>
-</li>
-{% endif %}
-
-  </ul>
-
-  <ul class="navbar-nav">
-    {% if user.is_authenticated %}
-  <li class="nav-item dropdown">
-    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-       aria-expanded="false">
-      <i class="bi bi-person-circle" aria-hidden="true"></i>
-      <span>{{ user.get_full_name|default:user.username }}</span>
-    </a>
-    <ul class="dropdown-menu dropdown-menu-end">
-      <li class="dropdown-item-text">
-        <div class="d-flex flex-column">
-          <span class="fw-medium">{{ user.get_full_name|default:user.username }}</span>
-          <small class="text-muted">
-            {% if user.role %}
-              {{ user.get_role_display|default:user.role }}
-            {% else %}
-              User
-            {% endif %}
-          </small>
-        </div>
-      </li>
-      <li><hr class="dropdown-divider"></li>
-      <li>
-        <a class="dropdown-item" href="{% url 'accounts:profile' %}">
-          <i class="bi bi-person me-2"></i>My Profile
-        </a>
-      </li>
-      <li>
-        <a class="dropdown-item" href="{% url 'accounts:logout' %}">
-          <i class="bi bi-box-arrow-right me-2"></i>Sign Out
-        </a>
-      </li>
-    </ul>
-  </li>
-{% else %}
-  <!-- Shown for anonymous users (e.g. registration, login, invite pages) -->
-  <li class="nav-item">
-    <a class="nav-link" href="{% url 'accounts:login' %}">
-      <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
-    </a>
-  </li>
-{% endif %}
-
-  </ul>
-</div>
-
-
+              <ul class="navbar-nav">
+                {% if user.is_authenticated %}
+                  <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                       aria-expanded="false">
+                      <i class="bi bi-person-circle" aria-hidden="true"></i>
+                      <span>{{ user.get_full_name|default:user.username }}</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li class="dropdown-item-text">
+                        <div class="d-flex flex-column">
+                          <span class="fw-medium">{{ user.get_full_name|default:user.username }}</span>
+                          <small class="text-muted">
+                            {% if user.role %}
+                              {{ user.get_role_display|default:user.role }}
+                            {% else %}
+                              User
+                            {% endif %}
+                          </small>
+                        </div>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <a class="dropdown-item" href="{% url 'accounts:profile' %}">
+                          <i class="bi bi-person me-2"></i>My Profile
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" href="{% url 'accounts:logout' %}">
+                          <i class="bi bi-box-arrow-right me-2"></i>Sign Out
+                        </a>
+                      </li>
+                    </ul>
+                  </li>
+                {% else %}
+                  <!-- Shown for anonymous users (e.g. registration, login, invite pages) -->
+                  <li class="nav-item">
+                    <a class="nav-link" href="{% url 'accounts:login' %}">
+                      <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+                    </a>
+                  </li>
+                {% endif %}
+              </ul>
+            </div>
         </div>
     </nav>
 

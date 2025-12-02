@@ -1,0 +1,674 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ room.name }} – Schedule{% endblock %}
+
+{% block extra_css %}
+<style>
+    .room-header-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .room-header-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+    }
+
+    .room-stat {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 1rem;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .room-stat .number {
+        font-size: 1.75rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .room-stat .label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-top: 0.25rem;
+    }
+
+    .timeline-view {
+        position: relative;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+    }
+
+    .timeline-hour {
+        position: relative;
+        height: 60px;
+        border-left: 2px solid #dee2e6;
+        padding-left: 3rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .timeline-label {
+        position: absolute;
+        left: 0;
+        top: -8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #6c757d;
+        width: 2.5rem;
+        text-align: right;
+    }
+
+    .timeline-booking {
+        position: absolute;
+        left: 3rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.5rem;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .timeline-booking:hover {
+        transform: scale(1.02);
+        z-index: 10;
+    }
+
+    .booking-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid transparent;
+    }
+
+    .booking-card:hover {
+        border-left-color: #667eea;
+        transform: translateX(4px);
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important;
+    }
+
+    .duration-bar {
+        width: 100%;
+        max-width: 200px;
+        height: 8px;
+        border-radius: 999px;
+        background-color: #e9ecef;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .duration-bar-fill {
+        height: 100%;
+        transition: width 0.5s ease;
+        border-radius: 999px;
+    }
+
+    .duration-light { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
+    .duration-medium { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
+    .duration-heavy { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
+
+    .status-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .status-approved {
+        background: #d1f4e0;
+        color: #0f6938;
+    }
+
+    .status-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+    }
+
+    .quick-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .quick-info-item {
+        background: white;
+        padding: 1rem;
+        border-radius: 12px;
+        border: 2px solid #e9ecef;
+        text-align: center;
+    }
+
+    .quick-info-item i {
+        font-size: 1.5rem;
+        color: #667eea;
+        margin-bottom: 0.5rem;
+    }
+
+    .quick-info-item .value {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .quick-info-item .label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+
+    .hint-card {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: none;
+        border-left: 4px solid #f59e0b;
+    }
+
+    .approver-badge {
+        background: rgba(245, 158, 11, 0.1);
+        border: 2px solid #f59e0b;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .calendar-toggle {
+        background: white;
+        border-radius: 12px;
+        padding: 0.5rem;
+        display: inline-flex;
+        gap: 0.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .calendar-toggle button {
+        padding: 0.5rem 1rem;
+        border: none;
+        background: transparent;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .calendar-toggle button.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .empty-state-mini {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+    }
+
+    .empty-state-mini i {
+        font-size: 3rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .room-header-card {
+            padding: 1.5rem;
+        }
+        .timeline-view {
+            overflow-x: auto;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- ===================== ROOM HEADER ===================== -->
+    <div class="room-header-card position-relative">
+        <div class="position-relative" style="z-index: 1;">
+            <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-3">
+                <div>
+                    <h2 class="fw-bold mb-2">
+                        <i class="bi bi-door-open me-2"></i>
+                        {{ room.name }}
+                    </h2>
+                    <div class="mb-2 opacity-90">
+                        <span class="me-3">
+                            <i class="bi bi-hash me-1"></i>{{ room.code }}
+                        </span>
+                        <span class="me-3">
+                            <i class="bi bi-tag me-1"></i>{{ room.get_room_type_display }}
+                        </span>
+                        {% if room.location %}
+                            <span>
+                                <i class="bi bi-geo-alt me-1"></i>{{ room.location }}
+                            </span>
+                        {% endif %}
+                    </div>
+                    {% if room.description %}
+                        <p class="mb-0 opacity-90">{{ room.description }}</p>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'accounts:room_book' %}?room={{ room.pk }}"
+                       class="btn btn-light">
+                        <i class="bi bi-plus-circle me-1"></i>
+                        Request Booking
+                    </a>
+                    <a href="{% url 'accounts:room_list' %}"
+                       class="btn btn-outline-light">
+                        <i class="bi bi-arrow-left me-1"></i>
+                        Back
+                    </a>
+                </div>
+            </div>
+
+            <!-- Stats Row -->
+            <div class="row g-3 mt-3">
+                <div class="col-6 col-md-3">
+                    <div class="room-stat">
+                        <div class="number">{{ room.capacity|default:"—" }}</div>
+                        <div class="label">Capacity</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="room-stat">
+                        <div class="number">{{ approved_bookings|length }}</div>
+                        <div class="label">Upcoming</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="room-stat">
+                        <div class="number">{{ bookings_today|default:0 }}</div>
+                        <div class="label">Today</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="room-stat">
+                        <div class="number">{{ utilization_rate|default:"—" }}%</div>
+                        <div class="label">Utilization</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== APPROVER NOTICE ===================== -->
+    {% if is_approver %}
+        <div class="approver-badge">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-shield-check fs-3 text-warning me-3"></i>
+                <div>
+                    <div class="fw-bold text-dark mb-1">You're an Approver</div>
+                    <div class="small text-muted">
+                        Pending requests for this room will appear in
+                        <a href="{% url 'accounts:room_approvals' %}" class="text-warning fw-semibold">
+                            My Approvals
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- ===================== VIEW TOGGLE ===================== -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="fw-bold mb-0">
+            <i class="bi bi-calendar-week me-2"></i>
+            Schedule Overview
+        </h5>
+        <div class="calendar-toggle">
+            <button class="active" data-view="list">
+                <i class="bi bi-list-ul me-1"></i>List
+            </button>
+            <button data-view="timeline">
+                <i class="bi bi-clock me-1"></i>Timeline
+            </button>
+        </div>
+    </div>
+
+    <!-- ===================== MAIN CONTENT ===================== -->
+    <div class="row g-4">
+
+        <!-- Left Column: Bookings -->
+        <div class="col-lg-8">
+
+            <!-- List View -->
+            <div id="listView" class="card shadow-sm border-0">
+                <div class="card-header bg-white border-bottom">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        Approved Bookings ({{ approved_bookings|length }})
+                    </h6>
+                </div>
+
+                <div class="card-body p-0">
+                    {% if approved_bookings %}
+                        <div class="list-group list-group-flush">
+                            {% for b in approved_bookings %}
+                                <div class="list-group-item booking-card">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div class="flex-grow-1">
+                                            <h6 class="fw-bold mb-2">{{ b.title }}</h6>
+
+                                            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                                                <span class="text-muted small">
+                                                    <i class="bi bi-calendar3 me-1"></i>
+                                                    {{ b.date|date:"M d, Y (D)" }}
+                                                </span>
+                                                <span class="text-muted small">
+                                                    <i class="bi bi-clock me-1"></i>
+                                                    {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
+                                                </span>
+                                                {% if b.duration_minutes %}
+                                                    <span class="text-muted small">
+                                                        <i class="bi bi-hourglass-split me-1"></i>
+                                                        {{ b.duration_minutes }} min
+                                                    </span>
+                                                {% endif %}
+                                            </div>
+
+                                            {% if b.duration_minutes %}
+                                                <div class="mb-2">
+                                                    {% widthratio b.duration_minutes 180 100 as booking_width %}
+                                                    {% if booking_width > 100 %}
+                                                        {% with 100 as booking_width %}
+                                                        {% endwith %}
+                                                    {% endif %}
+
+                                                    <div class="duration-bar">
+                                                        <div class="duration-bar-fill duration-{{ b.duration_class }}"
+                                                             style="width: {{ booking_width }}%;">
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="small mt-1">
+                                                        {% if b.duration_class == "heavy" %}
+                                                            <span class="text-danger">
+                                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                                Extended session – Consider shorter meetings
+                                                            </span>
+                                                        {% elif b.duration_class == "medium" %}
+                                                            <span class="text-warning">
+                                                                <i class="bi bi-info-circle me-1"></i>
+                                                                Moderate duration – Good balance
+                                                            </span>
+                                                        {% else %}
+                                                            <span class="text-success">
+                                                                <i class="bi bi-check-circle me-1"></i>
+                                                                Optimal duration – Easy to share
+                                                            </span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+
+                                            {% if b.created_by %}
+                                                <div class="d-flex align-items-center mt-2">
+                                                    <div class="user-avatar">
+                                                        {{ b.created_by.get_full_name|default:b.created_by.username|slice:":1"|upper }}
+                                                    </div>
+                                                    <div class="small text-muted">
+                                                        {{ b.created_by.get_full_name|default:b.created_by.username }}
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="text-end ms-3">
+                                            <span class="status-badge status-approved">
+                                                <span class="status-dot"></span>
+                                                Approved
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-state-mini">
+                            <i class="bi bi-calendar-x"></i>
+                            <h6 class="text-muted">No Approved Bookings</h6>
+                            <p class="small mb-0">This room is available for booking</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Timeline View (Hidden by default) -->
+                <div id="timelineView" style="display: none;">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white border-bottom">
+                            <h6 class="mb-0 fw-semibold">
+                                <i class="bi bi-clock-history me-2"></i>
+                                Today's Timeline
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="timeline-view">
+                                {% for hour in timeline_hours %}
+                                    <div class="timeline-hour">
+                                        <div class="timeline-label">{{ hour }}:00</div>
+
+                                        {# Show bookings whose start_time hour == this hour #}
+                                        {% for b in timeline_bookings_today %}
+                                            {% if b.start_time.hour == hour %}
+                                                <div class="timeline-booking" style="top: 8px;">
+                                                    <div class="fw-semibold small">
+                                                        {{ b.title }}
+                                                    </div>
+                                                    <div class="small">
+                                                        {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+
+                            {% if not timeline_bookings_today %}
+                                <p class="text-muted small text-center mb-0">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    No approved bookings for today.
+                                </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+
+        <!-- Right Column: Sidebar -->
+        <div class="col-lg-4">
+
+            <!-- My Pending Requests -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white border-bottom">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-clock-history text-warning me-2"></i>
+                        My Pending Requests
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    {% if my_pending_bookings %}
+                        <div class="list-group list-group-flush">
+                            {% for b in my_pending_bookings %}
+                                <div class="list-group-item">
+                                    <div class="fw-semibold mb-1">{{ b.title }}</div>
+                                    <div class="small text-muted mb-2">
+                                        <div>
+                                            <i class="bi bi-calendar3 me-1"></i>
+                                            {{ b.date|date:"M d, Y" }}
+                                        </div>
+                                        <div>
+                                            <i class="bi bi-clock me-1"></i>
+                                            {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
+                                        </div>
+                                    </div>
+                                    <span class="status-badge status-pending">
+                                        <span class="status-dot"></span>
+                                        Pending Approval
+                                    </span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="p-4 text-center">
+                            <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                            <p class="text-muted small mt-2 mb-0">
+                                No pending requests for this room
+                            </p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Quick Info -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white border-bottom">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Quick Info
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="quick-info-grid">
+                        {% if room.has_projector %}
+                            <div class="quick-info-item">
+                                <i class="bi bi-projector"></i>
+                                <div class="label">Projector</div>
+                            </div>
+                        {% endif %}
+                        {% if room.has_whiteboard %}
+                            <div class="quick-info-item">
+                                <i class="bi bi-easel"></i>
+                                <div class="label">Whiteboard</div>
+                            </div>
+                        {% endif %}
+                        {% if room.has_video_conf %}
+                            <div class="quick-info-item">
+                                <i class="bi bi-camera-video"></i>
+                                <div class="label">Video Conf</div>
+                            </div>
+                        {% endif %}
+                        {% if room.has_phone %}
+                            <div class="quick-info-item">
+                                <i class="bi bi-telephone"></i>
+                                <div class="label">Phone</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Usage Tips -->
+            <div class="card hint-card shadow-sm">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-lightbulb me-2"></i>
+                        Usage Tips
+                    </h6>
+                    <ul class="small mb-0 ps-3">
+                        <li class="mb-2">
+                            <strong class="text-success">Green bars</strong> indicate short meetings (under 1 hour) – optimal for sharing
+                        </li>
+                        <li class="mb-2">
+                            <strong class="text-warning">Yellow bars</strong> show moderate bookings (1-3 hours) – reasonable duration
+                        </li>
+                        <li class="mb-0">
+                            <strong class="text-danger">Red bars</strong> mark extended sessions (3+ hours) – consider breaking into shorter slots
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // View toggle functionality
+    const toggleButtons = document.querySelectorAll('.calendar-toggle button');
+    const listView = document.getElementById('listView');
+    const timelineView = document.getElementById('timelineView');
+
+    toggleButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Remove active class from all buttons
+            toggleButtons.forEach(btn => btn.classList.remove('active'));
+            // Add active class to clicked button
+            this.classList.add('active');
+
+            // Toggle views
+            const view = this.dataset.view;
+            if (view === 'list') {
+                listView.style.display = 'block';
+                timelineView.style.display = 'none';
+            } else {
+                listView.style.display = 'none';
+                timelineView.style.display = 'block';
+            }
+        });
+    });
+
+    // Animate duration bars on load
+    const durationBars = document.querySelectorAll('.duration-bar-fill');
+    setTimeout(() => {
+        durationBars.forEach(bar => {
+            const width = bar.style.width;
+            bar.style.width = '0';
+            setTimeout(() => {
+                bar.style.width = width;
+            }, 100);
+        });
+    }, 200);
+});
+</script>
+{% endblock %}

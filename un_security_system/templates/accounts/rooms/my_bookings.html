@@ -1,0 +1,844 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}My Room Bookings{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bookings-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 16px;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+
+    .stat-card {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        text-align: center;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-top: 0.25rem;
+    }
+
+    .filter-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 2rem;
+    }
+
+    .filter-section-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: #667eea;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-tabs {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+
+    .filter-tab {
+        padding: 0.6rem 1.25rem;
+        border-radius: 20px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-tab:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+        transform: translateY(-1px);
+    }
+
+    .filter-tab.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+
+    .filter-tab .count {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 0.1rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.75rem;
+    }
+
+    .booking-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        border: 2px solid #e5e7eb;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .booking-card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 4px;
+        transition: transform 0.3s ease;
+    }
+
+    .booking-card.approved::before {
+        background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+    }
+
+    .booking-card.pending::before {
+        background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .booking-card.rejected::before {
+        background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .booking-card.cancelled::before {
+        background: linear-gradient(180deg, #6b7280 0%, #4b5563 100%);
+    }
+
+    .booking-card:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.1);
+    }
+
+    .booking-card:hover::before {
+        transform: scaleX(1.5);
+    }
+
+    .booking-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1rem;
+    }
+
+    .booking-title-section {
+        flex: 1;
+    }
+
+    .booking-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 0.35rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .booking-title i {
+        color: #667eea;
+    }
+
+    .booking-subtitle {
+        font-size: 0.9rem;
+        color: #6b7280;
+    }
+
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-approved {
+        background: #d1f4e0;
+        color: #0f6938;
+    }
+
+    .status-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .status-rejected {
+        background: #ffe0e0;
+        color: #b91c1c;
+    }
+
+    .status-cancelled {
+        background: #e5e7eb;
+        color: #4b5563;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .status-pending .status-dot {
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .booking-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+    }
+
+    .detail-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .detail-icon {
+        width: 40px;
+        height: 40px;
+        background: white;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #667eea;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .detail-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .detail-label {
+        font-size: 0.7rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+    }
+
+    .detail-value {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .booking-actions {
+        display: flex;
+        gap: 0.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .action-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .action-btn:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+        color: #667eea;
+    }
+
+    .action-btn.primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+
+    .action-btn.primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: white;
+        border-radius: 16px;
+        border: 2px dashed #e5e7eb;
+    }
+
+    .empty-state-icon {
+        font-size: 5rem;
+        color: #d1d5db;
+        margin-bottom: 1.5rem;
+    }
+
+    .timeline-indicator {
+        position: absolute;
+        top: 1.5rem;
+        left: -2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 3px solid white;
+    }
+
+    .timeline-indicator.approved {
+        background: #10b981;
+    }
+
+    .timeline-indicator.pending {
+        background: #f59e0b;
+    }
+
+    .timeline-indicator.rejected {
+        background: #ef4444;
+    }
+
+    .timeline-indicator.cancelled {
+        background: #6b7280;
+    }
+
+    .view-toggle {
+        background: white;
+        border-radius: 10px;
+        padding: 0.35rem;
+        display: inline-flex;
+        gap: 0.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .view-toggle button {
+        padding: 0.5rem 1rem;
+        border: none;
+        background: transparent;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .view-toggle button.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .rejection-reason {
+        background: #fef2f2;
+        border-left: 4px solid #ef4444;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-top: 1rem;
+    }
+
+    .rejection-reason-title {
+        font-weight: 700;
+        color: #991b1b;
+        font-size: 0.85rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .rejection-reason-text {
+        color: #7f1d1d;
+        font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+        .booking-details {
+            grid-template-columns: 1fr;
+        }
+        .booking-header {
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .booking-actions {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="bookings-container">
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="page-header-content">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h2 class="mb-2 fw-bold">
+                            <i class="bi bi-calendar-check me-2"></i>
+                            My Room Bookings
+                        </h2>
+                        <p class="mb-0 opacity-90">
+                            Manage and track all your room reservations
+                        </p>
+                    </div>
+                    <a href="{% url 'accounts:room_list' %}" class="btn btn-light">
+                        <i class="bi bi-plus-circle me-1"></i>
+                        New Booking
+                    </a>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ total_bookings|default:0 }}</div>
+                        <div class="stat-label">Total Bookings</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{ upcoming_count|default:0 }}</div>
+                        <div class="stat-label">Upcoming</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{ pending_count|default:0 }}</div>
+                        <div class="stat-label">Pending Approval</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{ approved_count|default:0 }}</div>
+                        <div class="stat-label">Approved</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="filter-section-title">
+                    <i class="bi bi-funnel"></i>
+                    Filter Bookings
+                </div>
+                <div class="view-toggle">
+                    <button class="active" data-view="card">
+                        <i class="bi bi-grid me-1"></i> Cards
+                    </button>
+                    <button data-view="table">
+                        <i class="bi bi-list me-1"></i> Table
+                    </button>
+                </div>
+            </div>
+
+            <form method="get" id="filterForm">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Status</label>
+                        <select name="status" class="form-select" onchange="this.form.submit()">
+                            <option value="">All Statuses</option>
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if value == status_filter %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Time Period</label>
+                        <select name="when" class="form-select" onchange="this.form.submit()">
+                            <option value="">Any Time</option>
+                            <option value="upcoming" {% if when_filter == "upcoming" %}selected{% endif %}>
+                                Upcoming
+                            </option>
+                            <option value="today" {% if when_filter == "today" %}selected{% endif %}>
+                                Today
+                            </option>
+                            <option value="this-week" {% if when_filter == "this-week" %}selected{% endif %}>
+                                This Week
+                            </option>
+                            <option value="past" {% if when_filter == "past" %}selected{% endif %}>
+                                Past
+                            </option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted mb-1">Search</label>
+                        <input type="text" name="search" class="form-control"
+                               placeholder="Room or title..."
+                               value="{{ search_query }}">
+                    </div>
+                </div>
+
+                <!-- Quick Filters -->
+                <div class="filter-tabs mt-3">
+                    <button type="button" class="filter-tab active" onclick="clearFilters()">
+                        <i class="bi bi-grid"></i>
+                        All
+                        <span class="count">{{ bookings|length }}</span>
+                    </button>
+                    <button type="button" class="filter-tab" onclick="setFilter('status', 'approved')">
+                        <i class="bi bi-check-circle"></i>
+                        Approved
+                    </button>
+                    <button type="button" class="filter-tab" onclick="setFilter('status', 'pending')">
+                        <i class="bi bi-clock"></i>
+                        Pending
+                    </button>
+                    <button type="button" class="filter-tab" onclick="setFilter('when', 'upcoming')">
+                        <i class="bi bi-calendar-plus"></i>
+                        Upcoming
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Card View -->
+        {% if bookings %}
+            <div id="cardView">
+                {% for b in bookings %}
+                    <div class="booking-card {{ b.status }}">
+                        <div class="timeline-indicator {{ b.status }}"></div>
+
+                        <div class="booking-header">
+                            <div class="booking-title-section">
+                                <div class="booking-title">
+                                    <i class="bi bi-calendar-event"></i>
+                                    {{ b.title }}
+                                </div>
+                                <div class="booking-subtitle">
+                                    Booking #{{ b.id }} · Created {{ b.created_at|timesince }} ago
+                                </div>
+                            </div>
+                            <div>
+                                {% if b.status == "approved" %}
+                                    <span class="status-badge status-approved">
+                                        <span class="status-dot"></span>
+                                        Approved
+                                    </span>
+                                {% elif b.status == "pending" %}
+                                    <span class="status-badge status-pending">
+                                        <span class="status-dot"></span>
+                                        Pending
+                                    </span>
+                                {% elif b.status == "rejected" %}
+                                    <span class="status-badge status-rejected">
+                                        <span class="status-dot"></span>
+                                        Rejected
+                                    </span>
+                                {% elif b.status == "cancelled" %}
+                                    <span class="status-badge status-cancelled">
+                                        <span class="status-dot"></span>
+                                        Cancelled
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="booking-details">
+                            <div class="detail-item">
+                                <div class="detail-icon">
+                                    <i class="bi bi-door-open"></i>
+                                </div>
+                                <div class="detail-content">
+                                    <div class="detail-label">Room</div>
+                                    <div class="detail-value">{{ b.room.name }}</div>
+                                </div>
+                            </div>
+
+                            <div class="detail-item">
+                                <div class="detail-icon">
+                                    <i class="bi bi-calendar3"></i>
+                                </div>
+                                <div class="detail-content">
+                                    <div class="detail-label">Date</div>
+                                    <div class="detail-value">{{ b.date|date:"M d, Y" }}</div>
+                                </div>
+                            </div>
+
+                            <div class="detail-item">
+                                <div class="detail-icon">
+                                    <i class="bi bi-clock"></i>
+                                </div>
+                                <div class="detail-content">
+                                    <div class="detail-label">Time</div>
+                                    <div class="detail-value">
+                                        {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {% if b.duration_minutes %}
+                                <div class="detail-item">
+                                    <div class="detail-icon">
+                                        <i class="bi bi-hourglass-split"></i>
+                                    </div>
+                                    <div class="detail-content">
+                                        <div class="detail-label">Duration</div>
+                                        <div class="detail-value">{{ b.duration_minutes }} min</div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {% if b.status == "rejected" and b.rejection_reason %}
+                            <div class="rejection-reason">
+                                <div class="rejection-reason-title">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    Rejection Reason
+                                </div>
+                                <div class="rejection-reason-text">
+                                    {{ b.rejection_reason }}
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <div class="booking-actions">
+                            <a href="{% url 'accounts:room_detail' b.room_id %}"
+                               class="action-btn primary">
+                                <i class="bi bi-eye"></i>
+                                View Room
+                            </a>
+                            {% if b.status == "pending" %}
+                                <button class="action-btn" onclick="cancelBooking({{ b.id }})">
+                                    <i class="bi bi-x-circle"></i>
+                                    Cancel Request
+                                </button>
+                            {% endif %}
+                            {% if b.status == "approved" and b.is_upcoming %}
+                                <button class="action-btn" onclick="modifyBooking({{ b.id }})">
+                                    <i class="bi bi-pencil"></i>
+                                    Modify
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Table View (Hidden by default) -->
+            <div id="tableView" style="display: none;">
+                <div class="card shadow-sm border-0" style="border-radius: 16px; overflow: hidden;">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Room</th>
+                                    <th>Title</th>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Status</th>
+                                    <th class="text-end pe-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for b in bookings %}
+                                    <tr>
+                                        <td class="ps-3">
+                                            <a href="{% url 'accounts:room_detail' b.room_id %}" class="text-decoration-none fw-semibold">
+                                                {{ b.room.name }}
+                                            </a>
+                                        </td>
+                                        <td>{{ b.title }}</td>
+                                        <td>{{ b.date|date:"M d, Y" }}</td>
+                                        <td>{{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}</td>
+                                        <td>
+                                            {% if b.status == "approved" %}
+                                                <span class="status-badge status-approved">Approved</span>
+                                            {% elif b.status == "pending" %}
+                                                <span class="status-badge status-pending">Pending</span>
+                                            {% elif b.status == "rejected" %}
+                                                <span class="status-badge status-rejected">Rejected</span>
+                                            {% elif b.status == "cancelled" %}
+                                                <span class="status-badge status-cancelled">Cancelled</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <a href="{% url 'accounts:room_detail' b.room_id %}"
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if is_paginated %}
+                        <div class="card-footer bg-white border-top">
+                            <nav aria-label="Bookings pagination">
+                                <ul class="pagination justify-content-center mb-0">
+                                    {% if page_obj.has_previous %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&status={{ status_filter }}&when={{ when_filter }}">
+                                                <i class="bi bi-chevron-left"></i>
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">
+                                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                                        </span>
+                                    </li>
+                                    {% if page_obj.has_next %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&status={{ status_filter }}&when={{ when_filter }}">
+                                                <i class="bi bi-chevron-right"></i>
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+        {% else %}
+            <!-- Empty State -->
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="bi bi-calendar-x"></i>
+                </div>
+                <h4 class="text-muted mb-3">No Bookings Found</h4>
+                <p class="text-muted mb-4">
+                    {% if status_filter or when_filter %}
+                        Try adjusting your filters to see more results.
+                    {% else %}
+                        You haven't made any room bookings yet.<br>
+                        Get started by booking your first room!
+                    {% endif %}
+                </p>
+                <a href="{% url 'accounts:room_list' %}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle me-2"></i>
+                    Book a Room
+                </a>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // View toggle
+    const viewButtons = document.querySelectorAll('.view-toggle button');
+    const cardView = document.getElementById('cardView');
+    const tableView = document.getElementById('tableView');
+
+    viewButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            viewButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+
+            const view = this.dataset.view;
+            if (view === 'card') {
+                cardView.style.display = 'block';
+                tableView.style.display = 'none';
+            } else {
+                cardView.style.display = 'none';
+                tableView.style.display = 'block';
+            }
+        });
+    });
+});
+
+function setFilter(field, value) {
+    const form = document.getElementById('filterForm');
+    const input = form.querySelector(`[name="${field}"]`);
+    if (input) {
+        input.value = value;
+        form.submit();
+    }
+}
+
+function clearFilters() {
+    window.location.href = window.location.pathname;
+}
+
+function cancelBooking(bookingId) {
+    if (confirm('Are you sure you want to cancel this booking request?')) {
+        // Implement cancel logic
+        console.log('Cancelling booking:', bookingId);
+    }
+}
+
+function modifyBooking(bookingId) {
+    // Implement modify logic
+    console.log('Modifying booking:', bookingId);
+}
+</script>
+{% endblock %}

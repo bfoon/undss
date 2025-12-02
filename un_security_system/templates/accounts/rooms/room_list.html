@@ -1,0 +1,626 @@
+{% extends "base.html" %}
+{% block title %}Rooms – Booking{% endblock %}
+
+{% block extra_css %}
+<style>
+    .room-card {
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .room-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        transform: scaleX(0);
+        transition: transform 0.3s ease;
+    }
+
+    .room-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 1rem 2rem rgba(0,0,0,0.15) !important;
+        border-color: #667eea;
+    }
+
+    .room-card:hover::before {
+        transform: scaleX(1);
+    }
+
+    .room-type-badge {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        font-size: 0.7rem;
+        padding: 0.35rem 0.6rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .room-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .room-feature {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.6rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .room-feature i {
+        margin-right: 0.35rem;
+        color: #667eea;
+    }
+
+    .availability-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .availability-indicator.available {
+        background: #d1f4e0;
+        color: #0f6938;
+    }
+
+    .availability-indicator.busy {
+        background: #ffe0e0;
+        color: #b91c1c;
+    }
+
+    .availability-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+
+    .availability-dot.available {
+        background: #0f6938;
+    }
+
+    .availability-dot.busy {
+        background: #b91c1c;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .filter-pills {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 12px;
+    }
+
+    .filter-pill {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        border: 2px solid #dee2e6;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .filter-pill:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+    }
+
+    .filter-pill.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+
+    .search-box {
+        position: relative;
+    }
+
+    .search-box .form-control {
+        padding-left: 2.5rem;
+        border-radius: 12px;
+        border: 2px solid #e9ecef;
+    }
+
+    .search-box .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.1);
+    }
+
+    .search-box i {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+
+    .stats-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stats-item {
+        text-align: center;
+    }
+
+    .stats-item .number {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .stats-item .label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-top: 0.25rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+    }
+
+    .empty-state .icon {
+        font-size: 6rem;
+        color: #dee2e6;
+        margin-bottom: 1.5rem;
+    }
+
+    .quick-book-btn {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .quick-book-btn::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.3);
+        transform: translate(-50%, -50%);
+        transition: width 0.6s, height 0.6s;
+    }
+
+    .quick-book-btn:hover::before {
+        width: 300px;
+        height: 300px;
+    }
+
+    @media (max-width: 768px) {
+        .stats-banner {
+            margin-bottom: 1rem;
+        }
+        .filter-pills {
+            flex-direction: column;
+        }
+        .filter-pill {
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- ===================== HEADER ===================== -->
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-2">
+                <i class="bi bi-door-open-fill text-primary me-2"></i>
+                Room Booking
+            </h2>
+            <p class="text-muted mb-0">
+                Find and reserve meeting rooms, conference spaces, and shared facilities
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'accounts:my_bookings' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-calendar-check me-1"></i> My Bookings
+            </a>
+            <a href="{% url 'accounts:room_approvals' %}" class="btn btn-outline-primary">
+                <i class="bi bi-clipboard-check me-1"></i> Approvals
+                {% if pending_approvals %}
+                    <span class="badge bg-danger ms-1">{{ pending_approvals }}</span>
+                {% endif %}
+            </a>
+        </div>
+    </div>
+
+    <!-- ===================== STATS BANNER ===================== -->
+    {% if rooms %}
+    <div class="stats-banner">
+        <div class="row g-4">
+            <div class="col-6 col-md-3">
+                <div class="stats-item">
+                    <div class="number">{{ rooms|length }}</div>
+                    <div class="label">Total Rooms</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stats-item">
+                    <div class="number">{{ available_now|default:0 }}</div>
+                    <div class="label">Available Now</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stats-item">
+                    <div class="number">{{ total_capacity|default:0 }}</div>
+                    <div class="label">Total Capacity</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stats-item">
+                    <div class="number">{{ bookings_today|default:0 }}</div>
+                    <div class="label">Bookings Today</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ===================== SEARCH & FILTERS ===================== -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" class="form-control" id="roomSearch"
+                       placeholder="Search rooms by name, location, or code...">
+            </div>
+        </div>
+        <div class="col-md-6">
+            <select class="form-select" id="capacityFilter" style="border-radius: 12px; border: 2px solid #e9ecef;">
+                <option value="">All Capacities</option>
+                <option value="1-5">1-5 people</option>
+                <option value="6-10">6-10 people</option>
+                <option value="11-20">11-20 people</option>
+                <option value="20+">20+ people</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="filter-pills mb-4">
+        <button class="filter-pill active" data-filter="all">
+            <i class="bi bi-grid me-1"></i> All Rooms
+        </button>
+        <button class="filter-pill" data-filter="meeting">
+            <i class="bi bi-people me-1"></i> Meeting Rooms
+        </button>
+        <button class="filter-pill" data-filter="conference">
+            <i class="bi bi-building me-1"></i> Conference
+        </button>
+        <button class="filter-pill" data-filter="training">
+            <i class="bi bi-easel me-1"></i> Training
+        </button>
+        <button class="filter-pill" data-filter="available">
+            <i class="bi bi-check-circle me-1"></i> Available Now
+        </button>
+    </div>
+
+    <!-- ===================== ROOMS GRID ===================== -->
+    {% if rooms %}
+        <div class="row g-4" id="roomsGrid">
+            {% for room in rooms %}
+                <div class="col-md-6 col-lg-4 room-item"
+                     data-type="{{ room.room_type }}"
+                     data-capacity="{{ room.capacity|default:0 }}"
+                     data-name="{{ room.name|lower }}"
+                     data-location="{{ room.location|lower }}"
+                     data-code="{{ room.code|lower }}">
+
+                    <div class="card shadow-sm room-card">
+                        <span class="room-type-badge badge bg-primary">
+                            {{ room.get_room_type_display }}
+                        </span>
+
+                        <div class="card-body pb-2">
+                            <div class="room-icon">
+                                {% if room.room_type == 'meeting' %}
+                                    <i class="bi bi-people"></i>
+                                {% elif room.room_type == 'conference' %}
+                                    <i class="bi bi-building"></i>
+                                {% elif room.room_type == 'training' %}
+                                    <i class="bi bi-easel"></i>
+                                {% else %}
+                                    <i class="bi bi-door-open"></i>
+                                {% endif %}
+                            </div>
+
+                            <h5 class="card-title fw-bold mb-1">{{ room.name }}</h5>
+                            <div class="text-muted small mb-3">
+                                <i class="bi bi-hash"></i> {{ room.code }}
+                            </div>
+
+                            <!-- Availability Status -->
+                            {% if room.is_available_now %}
+                                <div class="availability-indicator available mb-3">
+                                    <span class="availability-dot available"></span>
+                                    Available Now
+                                </div>
+                            {% else %}
+                                <div class="availability-indicator busy mb-3">
+                                    <span class="availability-dot busy"></span>
+                                    In Use
+                                </div>
+                            {% endif %}
+
+                            <!-- Room Features -->
+                            <div class="mb-3">
+                                {% if room.location %}
+                                    <span class="room-feature">
+                                        <i class="bi bi-geo-alt-fill"></i>
+                                        {{ room.location }}
+                                    </span>
+                                {% endif %}
+
+                                {% if room.capacity %}
+                                    <span class="room-feature">
+                                        <i class="bi bi-people-fill"></i>
+                                        {{ room.capacity }} seats
+                                    </span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Amenities -->
+                            {% if room.has_projector or room.has_whiteboard or room.has_video_conf %}
+                                <div class="d-flex gap-2 mb-3">
+                                    {% if room.has_projector %}
+                                        <i class="bi bi-projector text-primary"
+                                           data-bs-toggle="tooltip"
+                                           title="Projector Available"></i>
+                                    {% endif %}
+                                    {% if room.has_whiteboard %}
+                                        <i class="bi bi-easel text-primary"
+                                           data-bs-toggle="tooltip"
+                                           title="Whiteboard Available"></i>
+                                    {% endif %}
+                                    {% if room.has_video_conf %}
+                                        <i class="bi bi-camera-video text-primary"
+                                           data-bs-toggle="tooltip"
+                                           title="Video Conferencing"></i>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+
+                            <!-- Description -->
+                            {% if room.description %}
+                                <p class="text-muted small mb-0">
+                                    {{ room.description|truncatewords:15 }}
+                                </p>
+                            {% endif %}
+                        </div>
+
+                        <div class="card-footer bg-white border-top d-flex gap-2">
+                            <a href="{% url 'accounts:room_detail' room.pk %}"
+                               class="btn btn-outline-secondary flex-fill">
+                                <i class="bi bi-calendar-week me-1"></i>
+                                Schedule
+                            </a>
+                            <a href="{% url 'accounts:room_book' %}?room={{ room.pk }}"
+                               class="btn btn-primary flex-fill quick-book-btn">
+                                <i class="bi bi-plus-circle me-1"></i>
+                                Book Now
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- No Results Message (hidden by default) -->
+        <div id="noResults" class="empty-state" style="display: none;">
+            <div class="icon">
+                <i class="bi bi-search"></i>
+            </div>
+            <h4 class="text-muted mb-2">No rooms found</h4>
+            <p class="text-muted">Try adjusting your search or filters</p>
+        </div>
+
+    {% else %}
+        <!-- Empty State -->
+        <div class="empty-state">
+            <div class="icon">
+                <i class="bi bi-door-closed"></i>
+            </div>
+            <h4 class="text-muted mb-2">No Rooms Available</h4>
+            <p class="text-muted mb-4">
+                There are no rooms configured in the system yet.<br>
+                Please contact your administrator to set up room booking.
+            </p>
+            <a href="{% url 'accounts:help' %}" class="btn btn-outline-primary">
+                <i class="bi bi-question-circle me-1"></i>
+                Get Help
+            </a>
+        </div>
+    {% endif %}
+
+    <!-- ===================== QUICK TIPS ===================== -->
+    {% if rooms %}
+    <div class="row g-3 mt-4">
+        <div class="col-md-4">
+            <div class="card border-0 bg-light">
+                <div class="card-body text-center">
+                    <i class="bi bi-lightning-fill text-warning fs-3 mb-2"></i>
+                    <h6 class="fw-bold">Quick Book</h6>
+                    <p class="small text-muted mb-0">
+                        See a room you like? Click "Book Now" for instant reservation
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 bg-light">
+                <div class="card-body text-center">
+                    <i class="bi bi-calendar-check text-success fs-3 mb-2"></i>
+                    <h6 class="fw-bold">Check Schedule</h6>
+                    <p class="small text-muted mb-0">
+                        View room availability and upcoming bookings before reserving
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 bg-light">
+                <div class="card-body text-center">
+                    <i class="bi bi-bell text-info fs-3 mb-2"></i>
+                    <h6 class="fw-bold">Get Notified</h6>
+                    <p class="small text-muted mb-0">
+                        Receive reminders before your booking starts
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltips.forEach(el => new bootstrap.Tooltip(el));
+
+    const roomItems = document.querySelectorAll('.room-item');
+    const searchInput = document.getElementById('roomSearch');
+    const capacityFilter = document.getElementById('capacityFilter');
+    const filterPills = document.querySelectorAll('.filter-pill');
+    const noResults = document.getElementById('noResults');
+    const roomsGrid = document.getElementById('roomsGrid');
+
+    let currentTypeFilter = 'all';
+    let currentCapacityFilter = '';
+    let currentSearchTerm = '';
+
+    // Filter pills
+    filterPills.forEach(pill => {
+        pill.addEventListener('click', function() {
+            // Remove active class from all pills
+            filterPills.forEach(p => p.classList.remove('active'));
+            // Add active class to clicked pill
+            this.classList.add('active');
+
+            currentTypeFilter = this.dataset.filter;
+            applyFilters();
+        });
+    });
+
+    // Search
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            currentSearchTerm = e.target.value.toLowerCase();
+            applyFilters();
+        });
+    }
+
+    // Capacity filter
+    if (capacityFilter) {
+        capacityFilter.addEventListener('change', function(e) {
+            currentCapacityFilter = e.target.value;
+            applyFilters();
+        });
+    }
+
+    function applyFilters() {
+        let visibleCount = 0;
+
+        roomItems.forEach(item => {
+            const type = item.dataset.type;
+            const capacity = parseInt(item.dataset.capacity) || 0;
+            const name = item.dataset.name || '';
+            const location = item.dataset.location || '';
+            const code = item.dataset.code || '';
+            const isAvailable = item.querySelector('.availability-indicator.available') !== null;
+
+            let show = true;
+
+            // Type filter
+            if (currentTypeFilter !== 'all') {
+                if (currentTypeFilter === 'available') {
+                    show = isAvailable;
+                } else {
+                    show = type === currentTypeFilter;
+                }
+            }
+
+            // Capacity filter
+            if (show && currentCapacityFilter) {
+                const [min, max] = currentCapacityFilter.split('-').map(s => {
+                    if (s.includes('+')) return [parseInt(s), Infinity];
+                    return parseInt(s);
+                });
+
+                if (currentCapacityFilter.includes('+')) {
+                    show = capacity >= min[0];
+                } else {
+                    show = capacity >= min && capacity <= max;
+                }
+            }
+
+            // Search filter
+            if (show && currentSearchTerm) {
+                show = name.includes(currentSearchTerm) ||
+                       location.includes(currentSearchTerm) ||
+                       code.includes(currentSearchTerm);
+            }
+
+            // Show/hide item
+            item.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+
+        // Show/hide no results message
+        if (noResults && roomsGrid) {
+            if (visibleCount === 0) {
+                roomsGrid.style.display = 'none';
+                noResults.style.display = 'block';
+            } else {
+                roomsGrid.style.display = '';
+                noResults.style.display = 'none';
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -243,5 +243,196 @@ class RegistrationInviteUsage(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+class Room(models.Model):
+    """
+    A bookable room (library, conference room, meeting room, etc.)
+    """
+    ROOM_TYPES = (
+        ("meeting", "Meeting Room"),
+        ("conference", "Conference Room"),
+        ("library", "Library"),
+        ("other", "Other"),
+    )
+
+    name = models.CharField(max_length=150, unique=True)
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Short code, e.g. CR-1, LIB-1"
+    )
+    room_type = models.CharField(
+        max_length=20,
+        choices=ROOM_TYPES,
+        default="meeting",
+    )
+    location = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="e.g. UN House 1st floor"
+    )
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+    description = models.TextField(blank=True)
+
+    is_active = models.BooleanField(default=True)
+
+    # Users that can approve bookings for this room
+    approvers = models.ManyToManyField(
+        User,
+        related_name="rooms_to_approve",
+        blank=True,
+        help_text="Users who can approve bookings for this room."
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class RoomBooking(models.Model):
+    """
+    A booking request for a room (with approval workflow).
+    """
+    STATUS_CHOICES = (
+        ("pending", "Pending approval"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    )
+
+    room = models.ForeignKey(
+        Room,
+        related_name="bookings",
+        on_delete=models.CASCADE,
+    )
+    title = models.CharField(max_length=200, help_text="Meeting title / purpose")
+    description = models.TextField(blank=True)
+
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+    )
+
+    requested_by = models.ForeignKey(
+        User,
+        related_name="room_bookings",
+        on_delete=models.CASCADE,
+    )
+    approved_by = models.ForeignKey(
+        User,
+        related_name="approved_room_bookings",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "start_time"]
+
+    def __str__(self):
+        return f"{self.room} – {self.title} on {self.date} ({self.start_time}-{self.end_time})"
+
+    @property
+    def is_future(self):
+        """
+        Simple helper to know if the booking is in the future.
+        """
+        from datetime import datetime
+        dt = datetime.combine(self.date, self.start_time)
+        return dt >= timezone.now()
+
+    def clean(self):
+        """
+        Prevent overlapping bookings for APPROVED and PENDING bookings
+        of the same room.
+        """
+        from django.core.exceptions import ValidationError
+        if self.end_time <= self.start_time:
+            raise ValidationError("End time must be after start time.")
+
+        qs = RoomBooking.objects.filter(
+            room=self.room,
+            date=self.date,
+            status__in=("approved", "pending"),
+        ).exclude(pk=self.pk)
+
+        # Time overlap:
+        # (start < existing_end) and (end > existing_start)
+        overlap = qs.filter(
+            start_time__lt=self.end_time,
+            end_time__gt=self.start_time,
+        ).exists()
+
+        if overlap:
+            raise ValidationError(
+                "This time range overlaps with an existing booking for this room."
+            )
+
+    def approve(self, user):
+        self.status = "approved"
+        self.approved_by = user
+        self.approved_at = timezone.now()
+        self.save(update_fields=["status", "approved_by", "approved_at"])
+
+    def reject(self, user, reason=""):
+        self.status = "rejected"
+        self.approved_by = user
+        self.rejection_reason = reason
+        self.approved_at = timezone.now()
+        self.save(update_fields=["status", "approved_by", "rejection_reason", "approved_at"])
+
+
+class RoomApprover(models.Model):
+    room = models.ForeignKey(
+        "Room",
+        on_delete=models.CASCADE,
+        related_name="room_approver_links",  # changed from "approvers"
+        help_text="Room that this user can approve bookings for.",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="room_approver_roles",
+        help_text="User who can approve bookings for this room.",
+    )
+
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Mark as primary approver / room owner."
+    )
+
+    can_approve_all_agency = models.BooleanField(
+        default=True,
+        help_text="If checked, can approve bookings regardless of requester agency."
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive approvers will be ignored by the approval workflow."
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Room approver"
+        verbose_name_plural = "Room approvers"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room", "user"],
+                name="unique_room_user_approver",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user} → {self.room} ({'primary' if self.is_primary else 'approver'})"
+
 
 from .hr.models import EmployeeIDCardRequest

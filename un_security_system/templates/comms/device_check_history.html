@@ -1,0 +1,196 @@
+{# comms/templates/comms/device_check_history.html #}
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Radio Check History – {{ device.call_sign|default:"Radio" }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+    <div>
+      <h1 class="h4 fw-bold mb-1">
+        <i class="bi bi-clock-history text-primary me-2"></i>
+        Radio Check History
+      </h1>
+      <div class="small text-muted">
+        {% if device.call_sign %}
+          <strong>{{ device.call_sign }}</strong>
+        {% else %}
+          <strong>{{ device.get_device_type_display }}</strong>
+        {% endif %}
+        {% if device.serial_number %}
+          · Serial: {{ device.serial_number }}
+        {% endif %}
+      </div>
+      <div class="small text-muted">
+        Type: {{ device.get_device_type_display }} · Status: {{ device.get_status_display }}
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a href="{% url 'comms:my_devices' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i> Back to My Devices
+      </a>
+      <a href="{% url 'comms:radios' %}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-broadcast me-1"></i> All Radios
+      </a>
+    </div>
+  </div>
+
+  {% if entries %}
+    <!-- Summary -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-3 col-sm-6">
+        <div class="card shadow-sm border-0">
+          <div class="card-body text-center">
+            <i class="bi bi-list-check fs-3 text-primary mb-1"></i>
+            <h4 class="fw-bold mb-0">{{ stats.total }}</h4>
+            <small class="text-muted">Total Checks</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-sm-6">
+        <div class="card shadow-sm border-0">
+          <div class="card-body text-center">
+            <i class="bi bi-check-circle fs-3 text-success mb-1"></i>
+            <h4 class="fw-bold mb-0">{{ stats.responded }}</h4>
+            <small class="text-muted">Responded</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-sm-6">
+        <div class="card shadow-sm border-0">
+          <div class="card-body text-center">
+            <i class="bi bi-x-circle fs-3 text-danger mb-1"></i>
+            <h4 class="fw-bold mb-0">{{ stats.missed }}</h4>
+            <small class="text-muted">No Response</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 col-sm-6">
+        <div class="card shadow-sm border-0">
+          <div class="card-body text-center">
+            <i class="bi bi-percent fs-3 text-info mb-1"></i>
+            <h4 class="fw-bold mb-1">{{ stats.response_rate }}%</h4>
+            <small class="text-muted d-block mb-1">Overall Response Rate</small>
+            <div class="progress" style="height: 6px;">
+              <div class="progress-bar bg-success"
+                   role="progressbar"
+                   style="width: {{ stats.response_rate }}%;"
+                   aria-valuenow="{{ stats.response_rate }}"
+                   aria-valuemin="0"
+                   aria-valuemax="100">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-semibold">
+          <i class="bi bi-list-ul me-2"></i>
+          Check Events ({{ entries|length }})
+        </h6>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Session</th>
+              <th>Responded</th>
+              <th>Issue / Notes</th>
+              <th>Checked By</th>
+              <th>Checked At</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for e in entries %}
+            <tr>
+              <td>
+                {% if e.session %}
+                  <div class="fw-semibold">{{ e.session.name|default:"Radio Check" }}</div>
+                  <div class="small text-muted">
+                    {{ e.session.started_at|date:"M d, Y H:i" }}
+                  </div>
+                {% else %}
+                  <span class="text-muted">–</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if e.responded == True %}
+                  <span class="badge bg-success-subtle text-success">
+                    <i class="bi bi-check-circle me-1"></i>Yes
+                  </span>
+                {% elif e.responded == False %}
+                  <span class="badge bg-danger-subtle text-danger">
+                    <i class="bi bi-x-circle me-1"></i>No
+                  </span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary">
+                    Pending / Not marked
+                  </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if e.noted_issue %}
+                  {{ e.noted_issue }}
+                {% else %}
+                  <span class="text-muted small">No issue recorded</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if e.checked_by %}
+                  <span class="small">
+                    {{ e.checked_by.get_full_name|default:e.checked_by.username }}
+                  </span>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if e.checked_at %}
+                  <span class="small">
+                    {{ e.checked_at|date:"M d, Y H:i" }}
+                  </span>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  {% else %}
+    <div class="card shadow-sm">
+      <div class="card-body text-center py-5">
+        <div class="mb-3">
+          <i class="bi bi-broadcast fs-1 text-muted"></i>
+        </div>
+        <h5 class="text-muted mb-2">No radio check history yet</h5>
+        <p class="text-muted mb-3">
+          This radio has not yet been included in any recorded radio check sessions.
+        </p>
+        <a href="{% url 'comms:check_start' %}" class="btn btn-primary btn-sm">
+          <i class="bi bi-plus-lg me-1"></i> Start a Radio Check
+        </a>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+
+<style>
+  .badge.bg-success-subtle { background-color: rgba(25,135,84,.1)!important; color: #198754!important; }
+  .badge.bg-danger-subtle { background-color: rgba(220,53,69,.1)!important; color: #dc3545!important; }
+  .badge.bg-secondary-subtle { background-color: rgba(108,117,125,.1)!important; color: #6c757d!important; }
+</style>
+{% endblock %}

@@ -1,0 +1,684 @@
+{% extends "base.html" %}
+{% block title %}Book Room{% endblock %}
+
+{% block extra_css %}
+<style>
+    .booking-form-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .form-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 16px 16px 0 0;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .form-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+    }
+
+    .form-header h3 {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        font-weight: 700;
+    }
+
+    .form-header p {
+        position: relative;
+        z-index: 1;
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+
+    .booking-form-card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 1rem 3rem rgba(0,0,0,0.175);
+        overflow: hidden;
+    }
+
+    .form-section {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-section-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: #667eea;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-section-title i {
+        font-size: 1.2rem;
+    }
+
+    .form-label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-label i {
+        color: #667eea;
+        font-size: 0.9rem;
+    }
+
+    .form-label .required {
+        color: #dc3545;
+        font-size: 0.9rem;
+    }
+
+    .form-control, .form-select {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 0.75rem;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.15);
+        transform: translateY(-1px);
+    }
+
+    .form-control:hover, .form-select:hover {
+        border-color: #9ca3af;
+    }
+
+    textarea.form-control {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    .input-icon {
+        position: relative;
+    }
+
+    .input-icon i {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        pointer-events: none;
+    }
+
+    .input-icon .form-control {
+        padding-left: 2.75rem;
+    }
+
+    .time-estimate {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 2px solid #f59e0b;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-top: 1rem;
+        display: none;
+    }
+
+    .time-estimate.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .time-estimate-content {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .time-estimate-icon {
+        font-size: 2rem;
+    }
+
+    .time-estimate-text {
+        flex: 1;
+    }
+
+    .time-estimate-duration {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #92400e;
+    }
+
+    .quick-times {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.5rem;
+    }
+
+    .quick-time-btn {
+        padding: 0.4rem 0.8rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        background: white;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .quick-time-btn:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+        transform: translateY(-1px);
+    }
+
+    .help-text {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 0.35rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .help-text i {
+        font-size: 0.9rem;
+    }
+
+    .form-footer {
+        background: #f8f9fa;
+        padding: 1.5rem 2rem;
+        border-top: 2px solid #e5e7eb;
+    }
+
+    .btn-submit {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        border-radius: 10px;
+        transition: all 0.3s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .btn-submit::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.3);
+        transform: translate(-50%, -50%);
+        transition: width 0.6s, height 0.6s;
+    }
+
+    .btn-submit:hover::before {
+        width: 300px;
+        height: 300px;
+    }
+
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-cancel {
+        border: 2px solid #e5e7eb;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        border-radius: 10px;
+        transition: all 0.2s;
+    }
+
+    .btn-cancel:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+        color: #667eea;
+    }
+
+    .alert-error {
+        border-left: 4px solid #dc3545;
+        background: #f8d7da;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .room-preview {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 0.5rem;
+        display: none;
+    }
+
+    .room-preview.show {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        animation: slideDown 0.3s ease;
+    }
+
+    .room-preview-icon {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+    }
+
+    .room-preview-info {
+        flex: 1;
+    }
+
+    .room-preview-name {
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .room-preview-details {
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+
+    @media (max-width: 768px) {
+        .form-header {
+            padding: 1.5rem;
+        }
+        .form-footer {
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .btn-submit, .btn-cancel {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="booking-form-container">
+
+        <form method="post" class="booking-form-card" id="bookingForm">
+            {% csrf_token %}
+
+            <!-- Form Header -->
+            <div class="form-header">
+                <h3>
+                    <i class="bi bi-calendar-plus me-2"></i>
+                    Request Room Booking
+                </h3>
+                <p class="mb-0">Fill in the details below to request a room reservation</p>
+            </div>
+
+            <!-- Form Body -->
+            <div class="card-body p-4">
+
+                <!-- Non-field Errors -->
+                {% if form.non_field_errors %}
+                    <div class="alert-error">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                            <div>
+                                {{ form.non_field_errors }}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <!-- Room Selection Section -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <i class="bi bi-door-open"></i>
+                        Room Selection
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label">
+                            <i class="bi bi-building"></i>
+                            Select Room
+                            <span class="required">*</span>
+                        </label>
+                        {{ form.room }}
+                        {% if form.room.errors %}
+                            <div class="text-danger small mt-1">{{ form.room.errors }}</div>
+                        {% endif %}
+                        <div class="help-text">
+                            <i class="bi bi-info-circle"></i>
+                            Choose the room that best fits your needs
+                        </div>
+                    </div>
+
+                    <!-- Room Preview (shown when room is selected) -->
+                    <div class="room-preview" id="roomPreview">
+                        <div class="room-preview-icon">
+                            <i class="bi bi-door-open"></i>
+                        </div>
+                        <div class="room-preview-info">
+                            <div class="room-preview-name" id="roomPreviewName">—</div>
+                            <div class="room-preview-details" id="roomPreviewDetails">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Meeting Details Section -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <i class="bi bi-card-text"></i>
+                        Meeting Details
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="bi bi-type"></i>
+                            Title / Purpose
+                            <span class="required">*</span>
+                        </label>
+                        {{ form.title }}
+                        {% if form.title.errors %}
+                            <div class="text-danger small mt-1">{{ form.title.errors }}</div>
+                        {% endif %}
+                        <div class="help-text">
+                            <i class="bi bi-info-circle"></i>
+                            A brief, descriptive title for your meeting
+                        </div>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label">
+                            <i class="bi bi-text-paragraph"></i>
+                            Additional Details
+                        </label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <div class="text-danger small mt-1">{{ form.description.errors }}</div>
+                        {% endif %}
+                        <div class="help-text">
+                            <i class="bi bi-info-circle"></i>
+                            Include agenda, attendees, or special requirements (optional)
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Date & Time Section -->
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <i class="bi bi-clock"></i>
+                        Date & Time
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label">
+                                <i class="bi bi-calendar3"></i>
+                                Date
+                                <span class="required">*</span>
+                            </label>
+                            {{ form.date }}
+                            {% if form.date.errors %}
+                                <div class="text-danger small mt-1">{{ form.date.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">
+                                <i class="bi bi-clock"></i>
+                                Start Time
+                                <span class="required">*</span>
+                            </label>
+                            {{ form.start_time }}
+                            {% if form.start_time.errors %}
+                                <div class="text-danger small mt-1">{{ form.start_time.errors }}</div>
+                            {% endif %}
+
+                            <!-- Quick Time Buttons -->
+                            <div class="quick-times">
+                                <button type="button" class="quick-time-btn" data-time="09:00">9:00 AM</button>
+                                <button type="button" class="quick-time-btn" data-time="10:00">10:00 AM</button>
+                                <button type="button" class="quick-time-btn" data-time="14:00">2:00 PM</button>
+                                <button type="button" class="quick-time-btn" data-time="15:00">3:00 PM</button>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">
+                                <i class="bi bi-clock-fill"></i>
+                                End Time
+                                <span class="required">*</span>
+                            </label>
+                            {{ form.end_time }}
+                            {% if form.end_time.errors %}
+                                <div class="text-danger small mt-1">{{ form.end_time.errors }}</div>
+                            {% endif %}
+
+                            <!-- Quick Duration Buttons -->
+                            <div class="quick-times">
+                                <button type="button" class="quick-duration-btn" data-duration="30">30 min</button>
+                                <button type="button" class="quick-duration-btn" data-duration="60">1 hour</button>
+                                <button type="button" class="quick-duration-btn" data-duration="90">1.5 hours</button>
+                                <button type="button" class="quick-duration-btn" data-duration="120">2 hours</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Duration Estimate -->
+                    <div class="time-estimate" id="timeEstimate">
+                        <div class="time-estimate-content">
+                            <div class="time-estimate-icon">⏱️</div>
+                            <div class="time-estimate-text">
+                                <div class="small text-muted mb-1">Meeting Duration</div>
+                                <div class="time-estimate-duration" id="durationText">—</div>
+                                <div class="small" id="durationAdvice"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Form Footer -->
+            <div class="form-footer d-flex justify-content-between align-items-center">
+                <div class="text-muted small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Your request will be sent to the room approvers
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'accounts:room_list' %}" class="btn btn-cancel">
+                        <i class="bi bi-x-lg me-1"></i>
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-submit text-white">
+                        <i class="bi bi-send me-1"></i>
+                        Submit Request
+                    </button>
+                </div>
+            </div>
+
+        </form>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const roomSelect = document.querySelector('select[name="room"]');
+    const dateInput = document.querySelector('input[name="date"]');
+    const startTimeInput = document.querySelector('input[name="start_time"]');
+    const endTimeInput = document.querySelector('input[name="end_time"]');
+    const timeEstimate = document.getElementById('timeEstimate');
+    const durationText = document.getElementById('durationText');
+    const durationAdvice = document.getElementById('durationAdvice');
+    const roomPreview = document.getElementById('roomPreview');
+
+    // Set minimum date to today
+    if (dateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.setAttribute('min', today);
+    }
+
+    // Room preview (you can customize this with actual room data)
+    if (roomSelect) {
+        roomSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption.value) {
+                roomPreview.classList.add('show');
+                document.getElementById('roomPreviewName').textContent = selectedOption.text;
+                document.getElementById('roomPreviewDetails').textContent = 'View availability and details';
+            } else {
+                roomPreview.classList.remove('show');
+            }
+        });
+
+        // Trigger on load if room is pre-selected
+        if (roomSelect.value) {
+            roomSelect.dispatchEvent(new Event('change'));
+        }
+    }
+
+    // Quick time buttons
+    document.querySelectorAll('.quick-time-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const time = this.dataset.time;
+            if (startTimeInput) {
+                startTimeInput.value = time;
+                calculateDuration();
+            }
+        });
+    });
+
+    // Quick duration buttons
+    document.querySelectorAll('.quick-duration-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!startTimeInput.value) {
+                alert('Please select a start time first');
+                return;
+            }
+
+            const duration = parseInt(this.dataset.duration);
+            const start = startTimeInput.value.split(':');
+            const startMinutes = parseInt(start[0]) * 60 + parseInt(start[1]);
+            const endMinutes = startMinutes + duration;
+
+            const endHours = Math.floor(endMinutes / 60) % 24;
+            const endMins = endMinutes % 60;
+
+            endTimeInput.value = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
+            calculateDuration();
+        });
+    });
+
+    // Calculate duration when times change
+    if (startTimeInput && endTimeInput) {
+        startTimeInput.addEventListener('change', calculateDuration);
+        endTimeInput.addEventListener('change', calculateDuration);
+    }
+
+    function calculateDuration() {
+        if (!startTimeInput.value || !endTimeInput.value) {
+            timeEstimate.classList.remove('show');
+            return;
+        }
+
+        const start = startTimeInput.value.split(':');
+        const end = endTimeInput.value.split(':');
+
+        const startMinutes = parseInt(start[0]) * 60 + parseInt(start[1]);
+        let endMinutes = parseInt(end[0]) * 60 + parseInt(end[1]);
+
+        // Handle cases where end time is before start time (next day)
+        if (endMinutes < startMinutes) {
+            endMinutes += 24 * 60;
+        }
+
+        const durationMinutes = endMinutes - startMinutes;
+
+        if (durationMinutes > 0) {
+            timeEstimate.classList.add('show');
+
+            // Format duration
+            const hours = Math.floor(durationMinutes / 60);
+            const minutes = durationMinutes % 60;
+            let durationStr = '';
+
+            if (hours > 0) {
+                durationStr += hours + ' hour' + (hours > 1 ? 's' : '');
+            }
+            if (minutes > 0) {
+                if (hours > 0) durationStr += ' ';
+                durationStr += minutes + ' min';
+            }
+
+            durationText.textContent = durationStr;
+
+            // Advice based on duration
+            if (durationMinutes <= 60) {
+                durationAdvice.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Optimal duration – easy to share the room</span>';
+            } else if (durationMinutes <= 180) {
+                durationAdvice.innerHTML = '<span class="text-warning"><i class="bi bi-info-circle me-1"></i>Moderate duration – consider if you need the full time</span>';
+            } else {
+                durationAdvice.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Extended session – try to break into shorter meetings if possible</span>';
+            }
+        } else {
+            timeEstimate.classList.remove('show');
+        }
+    }
+
+    // Form validation feedback
+    const form = document.getElementById('bookingForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const submitBtn = form.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+        });
+    }
+
+    // Initialize tooltips if Bootstrap is available
+    if (typeof bootstrap !== 'undefined') {
+        const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        tooltips.forEach(el => new bootstrap.Tooltip(el));
+    }
+});
+</script>
+{% endblock %}

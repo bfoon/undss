@@ -1,0 +1,727 @@
+{% extends "base.html" %}
+{% block title %}Room Bookings – My Approvals{% endblock %}
+
+{% block extra_css %}
+<style>
+    .approvals-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 16px;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .approvals-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -20%;
+        width: 400px;
+        height: 400px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+    }
+
+    .approvals-header-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+
+    .stat-box {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .filter-section {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 2rem;
+    }
+
+    .filter-pills {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+    }
+
+    .filter-pill {
+        padding: 0.5rem 1.25rem;
+        border-radius: 20px;
+        border: 2px solid #e5e7eb;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-pill:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+        transform: translateY(-1px);
+    }
+
+    .filter-pill.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+
+    .filter-pill .count {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 0.1rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.8rem;
+    }
+
+    .booking-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        border: 2px solid #e5e7eb;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        text-decoration: none;
+        display: block;
+    }
+
+    .booking-card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 4px;
+        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        transform: scaleY(0);
+        transition: transform 0.3s ease;
+    }
+
+    .booking-card:hover {
+        border-color: #667eea;
+        transform: translateX(4px);
+        box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.1);
+    }
+
+    .booking-card:hover::before {
+        transform: scaleY(1);
+    }
+
+    .booking-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .booking-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .booking-title i {
+        color: #667eea;
+        font-size: 1.1rem;
+    }
+
+    .priority-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        white-space: nowrap;
+    }
+
+    .priority-urgent {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .priority-normal {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .booking-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .detail-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .detail-icon {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #667eea;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .detail-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .detail-label {
+        font-size: 0.75rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        margin-bottom: 0.15rem;
+    }
+
+    .detail-value {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .detail-sub {
+        font-size: 0.8rem;
+        color: #6b7280;
+    }
+
+    .requester-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+    }
+
+    .requester-avatar {
+        width: 45px;
+        height: 45px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .requester-details {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .requester-name {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 0.15rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .requester-meta {
+        font-size: 0.85rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .booking-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 1rem;
+        border-top: 1px solid #e5e7eb;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .time-ago {
+        font-size: 0.85rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .action-hint {
+        font-size: 0.85rem;
+        color: #667eea;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .action-hint i {
+        font-size: 1.1rem;
+    }
+
+    .duration-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-top: 0.25rem;
+    }
+
+    .duration-optimal {
+        background: #d1f4e0;
+        color: #0f6938;
+    }
+
+    .duration-moderate {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .duration-extended {
+        background: #ffe0e0;
+        color: #b91c1c;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: white;
+        border-radius: 16px;
+        border: 2px dashed #e5e7eb;
+    }
+
+    .empty-state-icon {
+        font-size: 5rem;
+        color: #d1d5db;
+        margin-bottom: 1.5rem;
+    }
+
+    .empty-state h4 {
+        color: #6b7280;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state p {
+        color: #9ca3af;
+        max-width: 400px;
+        margin: 0 auto 2rem;
+    }
+
+    .search-box {
+        position: relative;
+        margin-bottom: 0;
+        margin-top: 1rem;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 0.75rem 1rem 0.75rem 2.75rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        transition: all 0.3s;
+    }
+
+    .search-box input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.15);
+        outline: none;
+    }
+
+    .search-box i {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        pointer-events: none;
+    }
+
+    @media (max-width: 768px) {
+        .booking-details {
+            grid-template-columns: 1fr;
+        }
+        .booking-header {
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+        .stats-row {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .booking-footer {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Header -->
+    <div class="approvals-header">
+        <div class="approvals-header-content">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                <div>
+                    <h2 class="mb-2 fw-bold">
+                        <i class="bi bi-clipboard-check me-2"></i>
+                        My Approval Queue
+                    </h2>
+                    <p class="mb-0 opacity-90">
+                        Review and manage room booking requests awaiting your approval
+                    </p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'accounts:room_list' %}" class="btn btn-light">
+                        <i class="bi bi-door-open me-1"></i>
+                        View Rooms
+                    </a>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-row">
+                <div class="stat-box">
+                    <div class="stat-number">{{ bookings|length|default:0 }}</div>
+                    <div class="stat-label">Pending Approvals</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">{{ urgent_count|default:0 }}</div>
+                    <div class="stat-label">Urgent Requests</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">{{ today_count|default:0 }}</div>
+                    <div class="stat-label">Due Today</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number">{{ approved_this_week|default:0 }}</div>
+                    <div class="stat-label">Approved This Week</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if bookings %}
+        <!-- Filters -->
+        <div class="filter-section">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">
+                    <i class="bi bi-funnel me-2"></i>
+                    Filter Requests
+                </h6>
+                <span class="text-muted small">{{ bookings|length }} total</span>
+            </div>
+
+            <div class="filter-pills">
+                <button class="filter-pill active" data-filter="all">
+                    <i class="bi bi-grid"></i>
+                    All Requests
+                    <span class="count">{{ bookings|length }}</span>
+                </button>
+                <button class="filter-pill" data-filter="urgent">
+                    <i class="bi bi-exclamation-circle"></i>
+                    Urgent
+                    <span class="count">{{ urgent_count|default:0 }}</span>
+                </button>
+                <button class="filter-pill" data-filter="today">
+                    <i class="bi bi-calendar-day"></i>
+                    Today
+                    <span class="count">{{ today_count|default:0 }}</span>
+                </button>
+                <button class="filter-pill" data-filter="this-week">
+                    <i class="bi bi-calendar-week"></i>
+                    This Week
+                    <span class="count">{{ this_week_count|default:0 }}</span>
+                </button>
+            </div>
+
+            <!-- Search -->
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" id="searchInput" placeholder="Search by title, room, or requester...">
+            </div>
+        </div>
+
+        <!-- Bookings List -->
+        <div id="bookingsList">
+            {% for b in bookings %}
+                <a href="{% url 'accounts:room_booking_approve' b.pk %}"
+                   class="booking-card"
+                   data-title="{{ b.title|lower }}"
+                   data-room="{{ b.room.name|lower }}"
+                   data-requester="{{ b.requested_by.get_full_name|default:b.requested_by.username|lower }}"
+                   data-date="{{ b.date|date:'Y-m-d' }}"
+                   data-urgency="{% if b.is_urgent %}urgent{% else %}normal{% endif %}">
+
+                    <div class="booking-header">
+                        <div style="flex: 1; min-width: 0;">
+                            <div class="booking-title">
+                                <i class="bi bi-calendar-event"></i>
+                                {{ b.title }}
+                            </div>
+                        </div>
+                        <div>
+                            {% if b.is_urgent or b.is_today %}
+                                <span class="priority-badge priority-urgent">
+                                    <i class="bi bi-exclamation-circle"></i>
+                                    {% if b.is_today %}Today{% else %}Urgent{% endif %}
+                                </span>
+                            {% else %}
+                                <span class="priority-badge priority-normal">
+                                    <i class="bi bi-clock"></i>
+                                    Pending
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="booking-details">
+                        <!-- Room -->
+                        <div class="detail-item">
+                            <div class="detail-icon">
+                                <i class="bi bi-door-open"></i>
+                            </div>
+                            <div class="detail-content">
+                                <div class="detail-label">Room</div>
+                                <div class="detail-value">{{ b.room.name }}</div>
+                                <div class="detail-sub">{{ b.room.code }}</div>
+                            </div>
+                        </div>
+
+                        <!-- Date & Time -->
+                        <div class="detail-item">
+                            <div class="detail-icon">
+                                <i class="bi bi-calendar3"></i>
+                            </div>
+                            <div class="detail-content">
+                                <div class="detail-label">Date</div>
+                                <div class="detail-value">{{ b.date|date:"M d, Y" }}</div>
+                                <div class="detail-sub">{{ b.date|date:"l" }}</div>
+                            </div>
+                        </div>
+
+                        <!-- Time -->
+                        <div class="detail-item">
+                            <div class="detail-icon">
+                                <i class="bi bi-clock"></i>
+                            </div>
+                            <div class="detail-content">
+                                <div class="detail-label">Time</div>
+                                <div class="detail-value">
+                                    {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
+                                </div>
+                                {% if b.duration_minutes %}
+                                    <div class="duration-indicator duration-{{ b.duration_class|default:'optimal' }}">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        {{ b.duration_minutes }} min
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Requester Info -->
+                    <div class="requester-info">
+                        <div class="requester-avatar">
+                            {{ b.requested_by.get_full_name|default:b.requested_by.username|slice:":1"|upper }}
+                        </div>
+                        <div class="requester-details">
+                            <div class="requester-name">
+                                {{ b.requested_by.get_full_name|default:b.requested_by.username }}
+                            </div>
+                            <div class="requester-meta">
+                                <span>
+                                    <i class="bi bi-envelope"></i>
+                                    {{ b.requested_by.email|truncatechars:30 }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="booking-footer">
+                        <div class="time-ago">
+                            <i class="bi bi-clock-history"></i>
+                            Requested {{ b.created_at|timesince }} ago
+                        </div>
+                        <div class="action-hint">
+                            Click to review
+                            <i class="bi bi-arrow-right-circle"></i>
+                        </div>
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+
+        <!-- No Results Message -->
+        <div id="noResults" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">
+                <i class="bi bi-search"></i>
+            </div>
+            <h4>No matching requests</h4>
+            <p>Try adjusting your search or filters to find what you're looking for</p>
+        </div>
+
+    {% else %}
+        <!-- Empty State -->
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="bi bi-clipboard-check"></i>
+            </div>
+            <h4>All caught up! 🎉</h4>
+            <p>
+                You have no pending booking approvals at the moment.<br>
+                Check back later for new requests.
+            </p>
+            <a href="{% url 'accounts:room_list' %}" class="btn btn-primary">
+                <i class="bi bi-door-open me-1"></i>
+                Browse Rooms
+            </a>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const filterButtons = document.querySelectorAll('.filter-pill');
+    const bookingCards = document.querySelectorAll('.booking-card');
+    const searchInput = document.getElementById('searchInput');
+    const noResults = document.getElementById('noResults');
+    const bookingsList = document.getElementById('bookingsList');
+
+    let currentFilter = 'all';
+    let currentSearch = '';
+
+    // Filter functionality
+    filterButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Update active state
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+
+            currentFilter = this.dataset.filter;
+            applyFilters();
+        });
+    });
+
+    // Search functionality
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            currentSearch = e.target.value.toLowerCase();
+            applyFilters();
+        });
+    }
+
+    function applyFilters() {
+        let visibleCount = 0;
+        const today = new Date().toISOString().split('T')[0];
+        const weekFromNow = new Date();
+        weekFromNow.setDate(weekFromNow.getDate() + 7);
+        const weekDate = weekFromNow.toISOString().split('T')[0];
+
+        bookingCards.forEach(card => {
+            let show = true;
+
+            // Filter logic
+            if (currentFilter === 'urgent') {
+                show = card.dataset.urgency === 'urgent';
+            } else if (currentFilter === 'today') {
+                show = card.dataset.date === today;
+            } else if (currentFilter === 'this-week') {
+                const cardDate = card.dataset.date;
+                show = cardDate && cardDate <= weekDate && cardDate >= today;
+            }
+
+            // Search logic
+            if (show && currentSearch) {
+                const title = card.dataset.title || '';
+                const room = card.dataset.room || '';
+                const requester = card.dataset.requester || '';
+
+                show = title.includes(currentSearch) ||
+                       room.includes(currentSearch) ||
+                       requester.includes(currentSearch);
+            }
+
+            // Show/hide card
+            card.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+
+        // Show/hide no results message
+        if (bookingsList && noResults) {
+            if (visibleCount === 0) {
+                bookingsList.style.display = 'none';
+                noResults.style.display = 'block';
+            } else {
+                bookingsList.style.display = '';
+                noResults.style.display = 'none';
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

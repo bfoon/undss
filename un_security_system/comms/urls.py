@@ -32,6 +32,11 @@ urlpatterns = [
     # Radio Check Sessions (SOC/LSA)
     path("checks/new/", views.RadioCheckStartView.as_view(), name="check_start"),
     path("checks/<int:pk>/", views.RadioCheckRunView.as_view(), name="check_run"),
+    path("checks/<int:pk>/stop/", views.stop_radio_check, name="check_stop"),
+
+    path("checks/", views.RadioCheckSessionListView.as_view(), name="check_list"),
+    path("radios/<int:pk>/checks/", views.DeviceRadioCheckHistoryView.as_view(),
+         name="device_check_history"),
     path("checks/<int:pk>/export.csv", views.export_check_csv, name="check_export_csv"),
     path("checks/<int:pk>/export.xlsx", views.export_check_xlsx, name="check_export_xlsx"),
 ]

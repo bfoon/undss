@@ -10,11 +10,12 @@ from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Q, Exists, OuterRef, QuerySet, Value, CharField
+from django.db.models import Q, Exists, OuterRef, QuerySet, Value, CharField, Count
 from django.http import HttpResponse, HttpRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
+from datetime import timedelta
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, DetailView, FormView, UpdateView
 from collections import defaultdict
@@ -287,7 +288,43 @@ class MyDevicesView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["can_add"] = True
+
+        devices = ctx["devices"]
+
+        for d in devices:
+            d.check_total = 0
+            d.check_responded = 0
+            d.check_missed = 0
+            d.check_rate = None
+            d.check_bar_class = None  # <-- new
+
+            if d.device_type in ["hf", "vhf"]:
+                qs = RadioCheckEntry.objects.filter(device=d)
+
+                total = qs.count()
+                responded = qs.filter(responded=True).count()
+                missed = qs.filter(responded=False).count()
+
+                if total > 0:
+                    rate = round((responded / total) * 100)
+                else:
+                    rate = None
+
+                d.check_total = total
+                d.check_responded = responded
+                d.check_missed = missed
+                d.check_rate = rate
+
+                if rate is not None:
+                    if rate >= 80:
+                        d.check_bar_class = "good"
+                    elif rate >= 40:
+                        d.check_bar_class = "medium"
+                    else:
+                        d.check_bar_class = "low"
+
         return ctx
+
 
 
 class DeviceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
@@ -674,6 +711,214 @@ class RadioCheckRunView(LoginRequiredMixin, OnlyTeamMixin, DetailView):
         messages.success(request, "Radio check updated.")
         return redirect("comms:check_run", pk=session.pk)
 
+
+@require_POST
+@login_required
+@user_passes_test(is_lsa_or_soc)
+def stop_radio_check(request: HttpRequest, pk: int):
+    """
+    Stop an ongoing radio check session and mark it as completed.
+    Triggers missed notifications + summary report, similar to finishing
+    from the run screen.
+    """
+    session = get_object_or_404(RadioCheckSession, pk=pk)
+
+    # Already completed?
+    if hasattr(session, "status") and session.status == "completed":
+        messages.info(request, "This radio check session is already completed.")
+        return redirect("comms:check_run", pk=pk)
+
+    update_fields = []
+
+    if hasattr(session, "ended_at"):
+        session.ended_at = timezone.now()
+        update_fields.append("ended_at")
+
+    if hasattr(session, "status"):
+        session.status = "completed"
+        update_fields.append("status")
+
+    if update_fields:
+        session.save(update_fields=update_fields)
+
+    # Notify users whose radios explicitly did NOT respond
+    missed_entries = session.entries.select_related("device", "device__assigned_to").filter(responded=False)
+    for entry in missed_entries:
+        dev = entry.device
+        if dev and dev.assigned_to:
+            _notify_user_missed_radio_check(dev.assigned_to, dev, session)
+
+    # Send summary report to LSA/SOC + creator
+    _notify_radio_check_report(session)
+
+    messages.success(request, "Radio check session has been stopped and marked as completed.")
+    return redirect("comms:check_run", pk=pk)
+
+
+# ============================================================================
+# RADIO CHECK HISTORY
+# ============================================================================
+
+class RadioCheckSessionListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
+    """
+    Show history of radio check sessions (LSA/SOC).
+    """
+    model = RadioCheckSession
+    template_name = "comms/check_list.html"
+    context_object_name = "sessions"
+    paginate_by = 25
+
+    def get_queryset(self) -> QuerySet:
+        qs = RadioCheckSession.objects.all()
+
+        # --- text search ---
+        q = (self.request.GET.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q) |
+                Q(created_by__username__icontains=q) |
+                Q(created_by__first_name__icontains=q) |
+                Q(created_by__last_name__icontains=q)
+            )
+
+        # --- status filter ---
+        status = (self.request.GET.get("status") or "").strip()
+        if status in ("ongoing", "completed"):
+            qs = qs.filter(status=status)
+
+        # --- date range filter ---
+        date_range = (self.request.GET.get("date_range") or "").strip()
+        now = timezone.now()
+        if date_range == "today":
+            qs = qs.filter(started_at__date=now.date())
+        elif date_range == "week":
+            qs = qs.filter(started_at__gte=now - timedelta(days=7))
+        elif date_range == "month":
+            qs = qs.filter(started_at__gte=now - timedelta(days=30))
+
+        # --- per-session stats (for table/progress bar) ---
+        qs = qs.annotate(
+            total=Count("entries"),
+            responded=Count("entries", filter=Q(entries__responded=True)),
+            missed=Count("entries", filter=Q(entries__responded=False)),
+            pending=Count("entries", filter=Q(entries__responded__isnull=True)),
+        ).order_by("-started_at", "-id")
+
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        sessions = self.object_list
+        now = timezone.now()
+
+        ctx["status_filter"] = (self.request.GET.get("status") or "").strip()
+
+        # --- summary cards (top 4 boxes) ---
+        ctx["ongoing_count"] = sessions.filter(status="ongoing").count()
+        ctx["completed_count"] = sessions.filter(status="completed").count()
+        ctx["this_week_count"] = sessions.filter(
+            started_at__gte=now - timedelta(days=7)
+        ).count()
+
+        # --- analytics (completed only) ---
+        completed = sessions.filter(status="completed").annotate(
+            total=Count("entries"),
+            responded=Count("entries", filter=Q(entries__responded=True)),
+        )
+
+        if completed.exists():
+            total_sessions = completed.count()
+            total_resp_rate = 0.0
+            total_duration_seconds = 0.0
+
+            for s in completed:
+                if s.total:
+                    total_resp_rate += (s.responded / s.total) * 100.0
+                if s.started_at and s.ended_at:
+                    total_duration_seconds += (s.ended_at - s.started_at).total_seconds()
+
+            avg_rr = total_resp_rate / total_sessions
+            ctx["avg_response_rate"] = round(avg_rr)
+
+            if total_duration_seconds > 0:
+                avg_sec = total_duration_seconds / total_sessions
+                minutes = int(avg_sec // 60)
+                seconds = int(avg_sec % 60)
+                ctx["avg_duration"] = f"{minutes}m {seconds}s"
+            else:
+                ctx["avg_duration"] = "—"
+        else:
+            ctx["avg_response_rate"] = 0
+            ctx["avg_duration"] = "—"
+
+        return ctx
+
+
+class DeviceRadioCheckHistoryView(LoginRequiredMixin, DetailView):
+    """
+    Show radio check history for a specific device (HF/VHF).
+
+    - LSA/SOC/superuser: can see ALL radios
+    - Any user: can see history for radios assigned to them
+    """
+    model = CommunicationDevice
+    template_name = "comms/device_check_history.html"
+    context_object_name = "device"
+
+    def get_queryset(self):
+        """
+        Limit queryset based on role:
+        - LSA/SOC/superuser -> all HF/VHF
+        - Normal user       -> only HF/VHF assigned to them
+        """
+        user = self.request.user
+
+        base_qs = CommunicationDevice.objects.filter(
+            device_type__in=["hf", "vhf"]
+        )
+
+        if is_lsa_or_soc(user) or user.is_superuser:
+            # Full access to all radios
+            return base_qs
+
+        # Normal user: only their own radio(s)
+        return base_qs.filter(assigned_to=user)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        device = self.object
+
+        entries = (
+            RadioCheckEntry.objects
+            .filter(device=device)
+            .select_related("session", "checked_by")
+            .order_by(
+                "-checked_at",
+                "-session__started_at"
+            )
+        )
+
+        total = entries.count()
+        responded = entries.filter(responded=True).count()
+        missed = entries.filter(responded=False).count()
+        pending = entries.filter(responded__isnull=True).count()
+
+        if total > 0:
+            response_rate = round((responded / total) * 100)
+        else:
+            response_rate = 0
+
+        ctx["entries"] = entries
+        ctx["stats"] = {
+            "total": total,
+            "responded": responded,
+            "missed": missed,
+            "pending": pending,
+            "response_rate": response_rate,
+        }
+        return ctx
+        return ctx
 
 # ============================================================================
 # EXPORT FUNCTIONALITY

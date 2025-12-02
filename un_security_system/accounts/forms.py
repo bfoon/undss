@@ -3,7 +3,7 @@ from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.contrib.auth import authenticate
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column
-from .models import User, SecurityIncident, RegistrationInvite
+from .models import User, SecurityIncident, RegistrationInvite, RoomBooking
 from django.core.exceptions import ValidationError
 
 
@@ -401,3 +401,26 @@ class RegistrationInviteForm(forms.ModelForm):
                 "Validity must be less than 24 hours (max 23)."
             )
         return value
+
+class RoomBookingForm(forms.ModelForm):
+    class Meta:
+        model = RoomBooking
+        fields = ["room", "title", "description", "date", "start_time", "end_time"]
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "start_time": forms.TimeInput(attrs={"type": "time"}),
+            "end_time": forms.TimeInput(attrs={"type": "time"}),
+        }
+
+
+class RoomBookingApprovalForm(forms.Form):
+    ACTION_CHOICES = (
+        ("approve", "Approve"),
+        ("reject", "Reject"),
+    )
+    action = forms.ChoiceField(choices=ACTION_CHOICES, widget=forms.RadioSelect)
+    reason = forms.CharField(
+        label="Reason (optional for approval, required for rejection)",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        required=False,
+    )

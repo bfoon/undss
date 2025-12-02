@@ -189,16 +189,20 @@
                           <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
                                  id="yes_{{ entry.pk }}" value="yes"
                                  {% if entry.responded == True %}checked{% endif %}
+                                 {% if session.status == "completed" %}disabled{% endif %}
                                  autocomplete="off">
-                          <label class="btn btn-outline-success" for="yes_{{ entry.pk }}">
+                          <label class="btn btn-outline-success {% if session.status == 'completed' %}disabled{% endif %}"
+                                 for="yes_{{ entry.pk }}">
                             <i class="bi bi-check2-circle"></i> Yes
                           </label>
 
                           <input type="radio" class="btn-check" name="responded_{{ entry.pk }}"
                                  id="no_{{ entry.pk }}" value="no"
                                  {% if entry.responded == False %}checked{% endif %}
+                                 {% if session.status == "completed" %}disabled{% endif %}
                                  autocomplete="off">
-                          <label class="btn btn-outline-danger" for="no_{{ entry.pk }}">
+                          <label class="btn btn-outline-danger {% if session.status == 'completed' %}disabled{% endif %}"
+                                 for="no_{{ entry.pk }}">
                             <i class="bi bi-x-circle"></i> No
                           </label>
                         </div>
@@ -211,7 +215,8 @@
                                name="issue_{{ entry.pk }}"
                                class="form-control form-control-sm"
                                placeholder="Issue or notes..."
-                               value="{{ entry.noted_issue|default:'' }}">
+                               value="{{ entry.noted_issue|default:'' }}"
+                               {% if session.status == "completed" %}disabled{% endif %}>
                       </td>
                     </tr>
                   {% endfor %}
@@ -236,11 +241,33 @@
       <a href="{% url 'comms:radios' %}" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left me-1"></i> Back
       </a>
-      <button type="submit" class="btn btn-primary">
-        <i class="bi bi-save me-1"></i> Save Updates
-      </button>
+
+      {% if session.status != "completed" %}
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-save me-1"></i> Save Updates
+        </button>
+      {% else %}
+        <button type="button" class="btn btn-outline-secondary" disabled>
+          <i class="bi bi-check-circle me-1"></i> Session Completed
+        </button>
+      {% endif %}
     </div>
   </form>
+
+  {# Separate form JUST for stopping the session – only if not completed #}
+  {% if session.status != "completed" %}
+    <form method="post"
+          action="{% url 'comms:check_stop' session.pk %}"
+          class="mt-2 text-end d-inline-block">
+      {% csrf_token %}
+      <button type="submit"
+              class="btn btn-sm btn-outline-danger"
+              data-bs-toggle="tooltip"
+              title="Stop Session">
+        <i class="bi bi-stop-fill"></i> Stop Session
+      </button>
+    </form>
+  {% endif %}
 
 </div>
 
@@ -283,7 +310,7 @@
     updateStats();
 
     // Update stats when radio buttons change
-    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+    document.querySelectorAll('input[type="radio"][name^="responded_"]').forEach(radio => {
       radio.addEventListener('change', updateStats);
     });
   });

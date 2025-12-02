@@ -65,23 +65,40 @@ class CommunicationDevice(models.Model):
 
 
 class RadioCheckSession(models.Model):
-    """One check session (e.g. daily @ 09:00)"""
-    name        = models.CharField(max_length=120, help_text="e.g. Morning Net 09:00")
-    started_at  = models.DateTimeField(default=timezone.now)
-    created_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="radio_checks_created")
+    name = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="radio_check_sessions"
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[("ongoing", "Ongoing"), ("completed", "Completed")],
+        default="ongoing",
+    )
 
     def __str__(self):
-        return f"{self.name} ({self.started_at:%Y-%m-%d %H:%M})"
+        return self.name
 
 
 class RadioCheckEntry(models.Model):
-    session     = models.ForeignKey(RadioCheckSession, on_delete=models.CASCADE, related_name="entries")
-    device      = models.ForeignKey(CommunicationDevice, on_delete=models.CASCADE, related_name="check_entries")
-    call_sign   = models.CharField(max_length=40)  # cached for historical integrity
-    responded   = models.BooleanField(null=True)   # True/False/None(not attempted)
-    noted_issue = models.CharField(max_length=200, blank=True)
-    checked_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="radio_checks_done")
-    checked_at  = models.DateTimeField(null=True, blank=True)
+    session = models.ForeignKey(
+        RadioCheckSession, related_name="entries",
+        on_delete=models.CASCADE
+    )
+    device = models.ForeignKey(
+        "CommunicationDevice", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="check_entries"
+    )
+    call_sign = models.CharField(max_length=100, blank=True)
+    responded = models.BooleanField(null=True, blank=True)
+    noted_issue = models.TextField(blank=True)
+    checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="radio_checks_done"
+    )
+    checked_at = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
-        unique_together = ("session", "device")
+    def __str__(self):
+        return f"{self.session.name} – {self.call_sign or 'Unknown'}"

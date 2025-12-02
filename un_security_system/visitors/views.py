@@ -363,7 +363,7 @@ class VisitorUpdateView(LoginRequiredMixin, UpdateView):
 
 
 @login_required
-@user_passes_test(is_lsa)
+@user_passes_test(is_lsa_or_soc)
 def approve_visitor(request, visitor_id):
     visitor = get_object_or_404(Visitor, id=visitor_id)
 
@@ -658,7 +658,7 @@ def visitor_status_api(request, visitor_id):
 
 # Bulk Operations
 @login_required
-@user_passes_test(is_lsa)
+@user_passes_test(is_lsa_or_soc)
 def bulk_approve_visitors(request):
     if request.method == 'POST':
         visitor_ids = request.POST.getlist('visitor_ids')
@@ -844,7 +844,7 @@ def visitor_request_clearance(request, pk):
             performed_by=request.user,
             notes="Clearance (re)requested."
         )
-        messages.success(request, "Clearance requested from LSA.")
+        messages.success(request, "Clearance requested from LSA/SOC.")
 
         # Notify LSA/SOC about new (re)request
         _notify_lsa_soc_new_request(visitor, request)
@@ -853,7 +853,7 @@ def visitor_request_clearance(request, pk):
 
 
 @login_required
-@user_passes_test(is_lsa)
+@user_passes_test(is_lsa_or_soc)
 def visitor_lsa_approve(request, pk):
     """
     LSA approves the visitor. Uses your existing model fields: status, approved_by, approval_date.
@@ -880,7 +880,7 @@ def visitor_lsa_approve(request, pk):
 
 
 @login_required
-@user_passes_test(is_lsa)
+@user_passes_test(is_lsa_or_soc)
 def visitor_lsa_reject(request, pk):
     """
     LSA rejects the visitor. If you have a rejection reason in a form, you can pass it in POST['notes'].
