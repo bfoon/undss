@@ -1,5 +1,412 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}ID Card Request for Staff{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<style>
+  :root {
+    --primary-color: #0d6efd;
+    --primary-light: rgba(13, 110, 253, 0.1);
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+    --border-color: #dee2e6;
+    --light-bg: #f8f9fa;
+    --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  }
+
+  /* Card Enhancements */
+  .card {
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+  }
+
+  .card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+    padding: 1rem 1.5rem;
+    border-bottom: none;
+  }
+
+  .card-header h5 {
+    font-weight: 600;
+    margin-bottom: 0;
+  }
+
+  .card-header .btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    backdrop-filter: blur(10px);
+  }
+
+  .card-header .btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  /* Header Card */
+  .header-card {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+    border: 2px solid var(--primary-color);
+    transition: transform 0.2s ease;
+  }
+
+  .header-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .icon-circle {
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+
+  /* Form Elements */
+  .form-label {
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .form-control,
+  .form-select {
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem var(--primary-light);
+    outline: none;
+  }
+
+  .form-control.is-invalid,
+  .form-select.is-invalid {
+    border-color: var(--danger-color);
+    background-image: none;
+  }
+
+  .form-control:disabled,
+  .form-select:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+  }
+
+  textarea.form-control {
+    min-height: 120px;
+    resize: vertical;
+  }
+
+  .form-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.5rem;
+  }
+
+  .invalid-feedback {
+    display: block !important;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--danger-color);
+  }
+
+  /* Alert Enhancements */
+  .alert {
+    border-radius: 0.5rem;
+    border: none;
+    padding: 1rem 1.25rem;
+  }
+
+  .alert-info {
+    background: linear-gradient(135deg, rgba(13, 202, 240, 0.1) 0%, rgba(13, 110, 253, 0.1) 100%);
+    border-left: 4px solid var(--info-color);
+  }
+
+  .alert-warning {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 152, 0, 0.1) 100%);
+    border-left: 4px solid var(--warning-color);
+  }
+
+  .alert-danger {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(255, 82, 82, 0.1) 100%);
+    border-left: 4px solid var(--danger-color);
+  }
+
+  .alert-light {
+    background-color: var(--light-bg);
+    border: 1px solid var(--border-color);
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    border-radius: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    transition: all 0.2s ease;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+
+  .btn-primary:disabled {
+    background: #6c757d;
+    transform: none;
+  }
+
+  .btn-outline-primary {
+    border: 2px solid var(--primary-color);
+    color: var(--primary-color);
+  }
+
+  .btn-outline-primary:hover {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: transparent;
+    color: white;
+  }
+
+  .btn-outline-secondary {
+    border: 2px solid #6c757d;
+  }
+
+  .btn-outline-secondary:hover {
+    background-color: #6c757d;
+    color: white;
+  }
+
+  /* Select2 Styling */
+  .select2-container--default .select2-selection--single {
+    border-radius: 0.5rem !important;
+    border: 1px solid var(--border-color) !important;
+    height: calc(2.75rem + 2px) !important;
+    display: flex;
+    align-items: center;
+  }
+
+  .select2-container--default.select2-container--focus .select2-selection--single {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 0.25rem var(--primary-light) !important;
+  }
+
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+    padding-left: 1rem;
+    line-height: 2.75rem;
+    color: #2d3748;
+  }
+
+  .select2-container--default .select2-selection--single .select2-selection__placeholder {
+    color: #6c757d;
+  }
+
+  .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 100%;
+    right: 1rem;
+  }
+
+  .select2-dropdown {
+    border-radius: 0.5rem;
+    border-color: var(--border-color);
+    box-shadow: var(--shadow-md);
+  }
+
+  .select2-container--default .select2-results__option--highlighted[aria-selected] {
+    background-color: var(--primary-color);
+  }
+
+  /* Sidebar Cards */
+  .sidebar-card {
+    position: sticky;
+    top: 20px;
+    margin-bottom: 1rem;
+  }
+
+  .sidebar-card .card-header {
+    background: var(--light-bg);
+    color: #2d3748;
+    padding: 0.75rem 1rem;
+  }
+
+  .sidebar-card .card-header h6 {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  /* Tips Card */
+  .tip-item {
+    display: flex;
+    align-items: start;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+  }
+
+  .tip-item i {
+    font-size: 1.1rem;
+    margin-top: 0.125rem;
+  }
+
+  /* Workflow Steps */
+  .workflow-step {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .workflow-step::before {
+    content: '';
+    position: absolute;
+    left: 0.375rem;
+    top: 1.5rem;
+    bottom: -0.5rem;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--primary-color), rgba(13, 110, 253, 0.3));
+  }
+
+  .workflow-step:last-child::before {
+    display: none;
+  }
+
+  .workflow-step strong {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  /* Selected Employee Summary */
+  .employee-summary {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.1) 0%, rgba(25, 135, 84, 0.1) 100%);
+    border-left: 4px solid var(--success-color);
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  /* File Upload Styling */
+  .form-control[type="file"] {
+    padding: 0.5rem 1rem;
+  }
+
+  .form-control[type="file"]::file-selector-button {
+    padding: 0.375rem 0.75rem;
+    margin-right: 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .form-control[type="file"]::file-selector-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    background: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+  }
+
+  .breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+    font-size: 1.25rem;
+  }
+
+  .breadcrumb-item a {
+    color: var(--primary-color);
+    text-decoration: none;
+  }
+
+  .breadcrumb-item a:hover {
+    text-decoration: underline;
+  }
+
+  /* Responsive */
+  @media (max-width: 992px) {
+    .sidebar-card {
+      position: relative;
+      top: 0;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .icon-circle {
+      width: 48px;
+      height: 48px;
+    }
+
+    .card-body {
+      padding: 1.5rem !important;
+    }
+
+    .btn-lg {
+      width: 100%;
+    }
+  }
+
+  /* Loading State */
+  .spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15rem;
+  }
+
+  /* Request Type Info Cards */
+  .request-type-info {
+    background: var(--light-bg);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  .request-type-info span {
+    display: block;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .request-type-info span:last-child {
+    border-bottom: none;
+  }
+
+  /* Contact Info */
+  .contact-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+  }
+
+  .contact-item i {
+    font-size: 1.1rem;
+  }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container py-4">
@@ -8,7 +415,9 @@
   <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
       <li class="breadcrumb-item">
-        <a href="{% url 'accounts:idcard_request_list' %}">ID Card Requests</a>
+        <a href="{% url 'accounts:idcard_request_list' %}">
+          <i class="bi bi-house-door me-1"></i>ID Card Requests
+        </a>
       </li>
       <li class="breadcrumb-item active" aria-current="page">Request for Staff</li>
     </ol>
@@ -17,21 +426,28 @@
   <!-- Page Header -->
   <div class="row mb-4">
     <div class="col-lg-9 mx-auto">
-      <div class="card shadow-sm border-primary">
-        <div class="card-body">
+      <div class="card shadow-sm header-card">
+        <div class="card-body p-4">
           <div class="row align-items-center">
             <div class="col-auto">
-              <div class="bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
-                   style="width: 56px; height: 56px;">
-                <i class="bi bi-person-badge fs-3 text-primary"></i>
+              <div class="icon-circle">
+                <i class="bi bi-person-badge fs-3"></i>
               </div>
             </div>
             <div class="col">
-              <h3 class="mb-1">ID Card Request for Staff</h3>
-              <p class="text-muted mb-0">
+              <h3 class="mb-2 fw-bold">ID Card Request for Staff</h3>
+              <p class="text-muted mb-2">
                 <i class="bi bi-shield-check me-1"></i>
-                Authorized personnel: LSA / SOC / Agency HR can initiate requests for any employee
+                Authorized personnel: LSA / SOC / Agency HR can initiate requests for any employee.
               </p>
+
+              {% if form.for_user %}
+              <div class="employee-summary" id="selected-employee-summary" style="display: none;">
+                <i class="bi bi-person-check-fill me-2 text-success"></i>
+                Requesting ID card for:
+                <strong id="selected-employee-name" class="text-success"></strong>
+              </div>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -45,14 +461,14 @@
 
       <!-- Role Information Alert -->
       <div class="alert alert-info d-flex align-items-start mb-4">
-        <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+        <i class="bi bi-info-circle-fill me-3 mt-1 fs-5"></i>
         <div>
-          <strong>Staff Request Guidelines:</strong>
-          <ul class="mb-0 mt-2 small">
-            <li>This form allows you to submit ID card requests on behalf of employees</li>
-            <li>Ensure you have proper authorization to request cards for staff members</li>
-            <li>Select the employee from the dropdown and provide complete information</li>
-            <li>The employee will be notified once the request is processed</li>
+          <strong class="d-block mb-2">Staff Request Guidelines:</strong>
+          <ul class="mb-0 ps-3 small">
+            <li class="mb-1">This form allows you to submit ID card requests on behalf of employees.</li>
+            <li class="mb-1">Ensure you have proper authorization to request cards for staff members.</li>
+            <li class="mb-1">Select the employee from the dropdown and provide complete information.</li>
+            <li>The employee will be notified once the request is processed.</li>
           </ul>
         </div>
       </div>
@@ -61,46 +477,61 @@
         <!-- Form Card -->
         <div class="col-lg-8">
           <div class="card shadow-sm">
-            <div class="card-header bg-light">
+            <div class="card-header d-flex justify-content-between align-items-center">
               <h5 class="mb-0">
-                <i class="bi bi-pencil-square me-2"></i> Request Details
+                <i class="bi bi-pencil-square me-2"></i>Request Details
               </h5>
+              <a href="{% static 'docs/un_id_card_request_form.docx' %}"
+                 class="btn btn-sm"
+                 download>
+                <i class="bi bi-file-earmark-arrow-down me-1"></i>
+                Download UN ID Form
+              </a>
             </div>
             <div class="card-body p-4">
-              <!-- 🔸 ADD enctype FOR FILE UPLOAD -->
               <form method="post" enctype="multipart/form-data" novalidate id="staffIdCardRequestForm">
                 {% csrf_token %}
 
-                <!-- Display non-field errors -->
                 {% if form.non_field_errors %}
                   <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     <i class="bi bi-exclamation-triangle-fill me-2"></i>
                     <strong>Error:</strong>
-                    <ul class="mb-0 mt-2">
+                    <ul class="mb-0 mt-2 ps-3">
                       {% for error in form.non_field_errors %}
                         <li>{{ error }}</li>
                       {% endfor %}
                     </ul>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                   </div>
                 {% endif %}
+
+                <!-- Required Fields Note -->
+                <div class="alert alert-light border mb-4">
+                  <small class="text-muted">
+                    <i class="bi bi-asterisk text-danger me-1"></i>
+                    Fields marked with <span class="text-danger fw-bold">*</span> are required.
+                  </small>
+                </div>
 
                 <!-- Employee Selection -->
                 {% if form.for_user %}
                   <div class="mb-4">
-                    <label for="{{ form.for_user.id_for_label }}" class="form-label fw-semibold">
-                      <i class="bi bi-person-circle me-1"></i> Select Employee
+                    <label for="{{ form.for_user.id_for_label }}" class="form-label">
+                      <i class="bi bi-person-circle"></i>
+                      Select Employee
                       {% if form.for_user.field.required %}
                         <span class="text-danger">*</span>
                       {% endif %}
                     </label>
+
                     {{ form.for_user }}
+
                     <div class="form-text">
                       <i class="bi bi-search me-1"></i>
-                      Search and select the employee who needs an ID card
+                      Click the field and start typing to search employees by name, username, or email.
                     </div>
                     {% if form.for_user.errors %}
-                      <div class="invalid-feedback d-block">
+                      <div class="invalid-feedback">
                         {% for error in form.for_user.errors %}
                           <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                         {% endfor %}
@@ -112,22 +543,21 @@
                 <!-- Request Type -->
                 {% if form.request_type %}
                   <div class="mb-4">
-                    <label for="{{ form.request_type.id_for_label }}" class="form-label fw-semibold">
-                      <i class="bi bi-card-list me-1"></i> Request Type
+                    <label for="{{ form.request_type.id_for_label }}" class="form-label">
+                      <i class="bi bi-card-list"></i>
+                      Request Type
                       {% if form.request_type.field.required %}
                         <span class="text-danger">*</span>
                       {% endif %}
                     </label>
                     {{ form.request_type }}
-                    <div class="form-text">
-                      <div class="d-flex flex-column gap-1 mt-2">
-                        <span><strong>New:</strong> First-time ID card issuance</span>
-                        <span><strong>Renewal:</strong> Expired or expiring card</span>
-                        <span><strong>Replacement:</strong> Lost, stolen, or damaged card</span>
-                      </div>
+                    <div class="request-type-info">
+                      <span><strong>New:</strong> First-time ID card issuance for new employees.</span>
+                      <span><strong>Renewal:</strong> For expired or expiring ID cards.</span>
+                      <span><strong>Replacement:</strong> For lost, stolen, or damaged cards.</span>
                     </div>
                     {% if form.request_type.errors %}
-                      <div class="invalid-feedback d-block">
+                      <div class="invalid-feedback">
                         {% for error in form.request_type.errors %}
                           <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                         {% endfor %}
@@ -139,19 +569,21 @@
                 <!-- Reason -->
                 {% if form.reason %}
                   <div class="mb-4">
-                    <label for="{{ form.reason.id_for_label }}" class="form-label fw-semibold">
-                      <i class="bi bi-chat-left-text me-1"></i> Reason / Additional Notes
+                    <label for="{{ form.reason.id_for_label }}" class="form-label">
+                      <i class="bi bi-chat-left-text"></i>
+                      Reason / Additional Notes
                       {% if form.reason.field.required %}
                         <span class="text-danger">*</span>
                       {% endif %}
                     </label>
                     {{ form.reason }}
                     <div class="form-text">
-                      Provide detailed information about why this ID card is needed.
-                      For replacements, specify if lost, stolen, or damaged.
+                      <i class="bi bi-lightbulb me-1"></i>
+                      Provide clear details about why this ID card is needed.
+                      For replacements, specify whether the card was lost, stolen, or damaged.
                     </div>
                     {% if form.reason.errors %}
-                      <div class="invalid-feedback d-block">
+                      <div class="invalid-feedback">
                         {% for error in form.reason.errors %}
                           <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                         {% endfor %}
@@ -160,23 +592,25 @@
                   </div>
                 {% endif %}
 
-                <!-- 🔸 FILE UPLOAD: Request Form (PDF / Word) -->
+                <!-- File Upload -->
                 {% if form.request_form %}
                   <div class="mb-4">
-                    <label for="{{ form.request_form.id_for_label }}" class="form-label fw-semibold">
-                      <i class="bi bi-file-earmark-arrow-up me-1"></i>
-                      Upload Signed Request Form (PDF / Word)
+                    <label for="{{ form.request_form.id_for_label }}" class="form-label">
+                      <i class="bi bi-file-earmark-arrow-up"></i>
+                      Upload Signed UN ID Card Request Form
                       {% if form.request_form.field.required %}
                         <span class="text-danger">*</span>
                       {% endif %}
                     </label>
                     {{ form.request_form }}
                     <div class="form-text">
-                      Upload the signed request form from HR / Line Manager.
-                      Allowed formats: PDF, DOC, DOCX. Max size: 5 MB.
+                      <i class="bi bi-file-pdf me-1 text-danger"></i>
+                      Upload the completed and signed UN Identification Card Request Form
+                      (Section A by staff, Section B by Agency Focal Point).<br>
+                      <strong>Allowed formats:</strong> PDF, DOC, DOCX | <strong>Max size:</strong> 5 MB
                     </div>
                     {% if form.request_form.errors %}
-                      <div class="invalid-feedback d-block">
+                      <div class="invalid-feedback">
                         {% for error in form.request_form.errors %}
                           <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                         {% endfor %}
@@ -185,11 +619,11 @@
                   </div>
                 {% endif %}
 
-                <!-- Any other fields not explicitly handled -->
+                <!-- Other Fields -->
                 {% for field in form %}
                   {% if field.name != 'for_user' and field.name != 'request_type' and field.name != 'reason' and field.name != 'request_form' %}
                     <div class="mb-4">
-                      <label for="{{ field.id_for_label }}" class="form-label fw-semibold">
+                      <label for="{{ field.id_for_label }}" class="form-label">
                         {{ field.label }}
                         {% if field.field.required %}
                           <span class="text-danger">*</span>
@@ -197,10 +631,12 @@
                       </label>
                       {{ field }}
                       {% if field.help_text %}
-                        <div class="form-text">{{ field.help_text }}</div>
+                        <div class="form-text">
+                          <i class="bi bi-info-circle me-1"></i>{{ field.help_text }}
+                        </div>
                       {% endif %}
                       {% if field.errors %}
-                        <div class="invalid-feedback d-block">
+                        <div class="invalid-feedback">
                           {% for error in field.errors %}
                             <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                           {% endfor %}
@@ -210,21 +646,13 @@
                   {% endif %}
                 {% endfor %}
 
-                <!-- Required Fields Notice -->
-                <div class="alert alert-light border mb-4">
-                  <small class="text-muted">
-                    <i class="bi bi-asterisk text-danger me-1"></i>
-                    Fields marked with an asterisk (<span class="text-danger">*</span>) are required
-                  </small>
-                </div>
-
-                <!-- Action Buttons -->
-                <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                <!-- Form Actions -->
+                <div class="d-flex justify-content-between align-items-center pt-4 border-top mt-4">
                   <a href="{% url 'accounts:idcard_request_list' %}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-1"></i> Cancel
+                    <i class="bi bi-arrow-left me-2"></i>Cancel
                   </a>
                   <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="bi bi-send me-1"></i> Submit Request
+                    <i class="bi bi-send-check me-2"></i>Submit Request
                   </button>
                 </div>
               </form>
@@ -236,70 +664,76 @@
         <div class="col-lg-4">
 
           <!-- Quick Tips -->
-          <div class="card shadow-sm mb-3">
-            <div class="card-header bg-light">
+          <div class="card shadow-sm sidebar-card">
+            <div class="card-header">
               <h6 class="mb-0">
-                <i class="bi bi-lightbulb me-2"></i> Quick Tips
+                <i class="bi bi-lightbulb me-2 text-warning"></i>Quick Tips
               </h6>
             </div>
             <div class="card-body">
-              <div class="d-flex flex-column gap-3">
-                <div class="d-flex">
-                  <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
-                  <small>Verify employee details before submission</small>
-                </div>
-                <div class="d-flex">
-                  <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
-                  <small>Choose the correct request type</small>
-                </div>
-                <div class="d-flex">
-                  <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
-                  <small>Provide clear reasons for replacements</small>
-                </div>
-                <div class="d-flex">
-                  <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
-                  <small>Employee will be notified automatically</small>
-                </div>
+              <div class="tip-item">
+                <i class="bi bi-check-circle-fill text-success"></i>
+                <small>Verify employee details before submission.</small>
+              </div>
+              <div class="tip-item">
+                <i class="bi bi-check-circle-fill text-success"></i>
+                <small>Choose the correct request type.</small>
+              </div>
+              <div class="tip-item">
+                <i class="bi bi-check-circle-fill text-success"></i>
+                <small>Provide clear reasons for replacements.</small>
+              </div>
+              <div class="tip-item">
+                <i class="bi bi-check-circle-fill text-success"></i>
+                <small>The employee will be notified automatically.</small>
               </div>
             </div>
           </div>
 
-          <!-- Workflow Info -->
-          <div class="card shadow-sm mb-3">
-            <div class="card-header bg-light">
+          <!-- Workflow -->
+          <div class="card shadow-sm sidebar-card">
+            <div class="card-header">
               <h6 class="mb-0">
-                <i class="bi bi-diagram-3 me-2"></i> Workflow
+                <i class="bi bi-diagram-3 me-2 text-primary"></i>Workflow
               </h6>
             </div>
             <div class="card-body">
-              <ol class="ps-3 mb-0 small">
-                <li class="mb-2"><strong>Request Submitted</strong> - Your request is logged</li>
-                <li class="mb-2"><strong>Photo Pending</strong> - Employee scheduled for photo</li>
-                <li class="mb-2"><strong>Card Printed</strong> - Physical card is created</li>
-                <li class="mb-0"><strong>Card Issued</strong> - Delivered to employee</li>
-              </ol>
+              <div class="workflow-step">
+                <i class="bi bi-circle-fill text-primary me-2" style="font-size: 0.75rem;"></i>
+                <strong>Request Submitted</strong> – Your request is logged in the system.
+              </div>
+              <div class="workflow-step">
+                <i class="bi bi-circle-fill text-primary me-2" style="font-size: 0.75rem;"></i>
+                <strong>Photo Pending</strong> – Employee scheduled for photo session.
+              </div>
+              <div class="workflow-step">
+                <i class="bi bi-circle-fill text-primary me-2" style="font-size: 0.75rem;"></i>
+                <strong>Card Printed</strong> – Physical ID card is created.
+              </div>
+              <div class="workflow-step">
+                <i class="bi bi-circle-fill text-success me-2" style="font-size: 0.75rem;"></i>
+                <strong>Card Issued</strong> – Delivered to employee.
+              </div>
             </div>
           </div>
 
-          <!-- Contact Info -->
-          <div class="card shadow-sm border-primary">
+          <!-- Contact Support -->
+          <div class="card shadow-sm sidebar-card border-primary">
             <div class="card-body">
-              <h6 class="mb-3">
-                <i class="bi bi-headset me-2"></i> Need Assistance?
+              <h6 class="mb-3 fw-bold">
+                <i class="bi bi-headset me-2 text-primary"></i>Need Assistance?
               </h6>
-              <div class="d-flex flex-column gap-2 small">
-                <div>
-                  <i class="bi bi-envelope text-primary me-2"></i>
-                  <strong>Email:</strong> ict.gm@undp.org
-                </div>
-                <div>
-                  <i class="bi bi-telephone text-primary me-2"></i>
-                  <strong>Phone:</strong> Extension 1234
-                </div>
-                <div>
-                  <i class="bi bi-clock text-primary me-2"></i>
-                  <strong>Hours:</strong> Mon-Fri, 9:00-17:00
-                </div>
+              <div class="contact-item">
+                <i class="bi bi-envelope text-primary"></i>
+                <small><strong>Email:</strong> ict.gm@undp.org</small>
+              </div>
+              <div class="contact-item">
+                <i class="bi bi-telephone text-primary"></i>
+                <small><strong>Phone:</strong> Extension 1234</small>
+              </div>
+              <div class="contact-item">
+                <i class="bi bi-clock text-primary"></i>
+                <small><strong>Hours:</strong> Mon–Fri, 9:00–17:00</small>
               </div>
             </div>
           </div>
@@ -307,13 +741,13 @@
         </div>
       </div>
 
-      <!-- Bulk Request Notice -->
+      <!-- Bulk Request Info -->
       <div class="alert alert-warning mt-4">
         <div class="d-flex align-items-start">
-          <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+          <i class="bi bi-people-fill me-3 fs-5"></i>
           <div>
             <strong>Bulk Requests:</strong> Need to request cards for multiple employees?
-            <a href="mailto:hr@organization.org" class="alert-link">Contact HR</a>
+            <a href="mailto:hr@organization.org" class="alert-link fw-bold">Contact HR</a>
             for assistance with batch processing.
           </div>
         </div>
@@ -324,56 +758,15 @@
 
 </div>
 
-<style>
-  /* Form styling */
-  .form-control, .form-select {
-    border-radius: 0.375rem;
-    border: 1px solid #ced4da;
-    padding: 0.625rem 0.75rem;
-  }
-
-  .form-control:focus, .form-select:focus {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-  }
-
-  .form-control.is-invalid, .form-select.is-invalid {
-    border-color: #dc3545;
-  }
-
-  textarea.form-control {
-    min-height: 120px;
-    resize: vertical;
-  }
-
-  .invalid-feedback {
-    display: block;
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
-  }
-
-  .text-danger {
-    font-weight: bold;
-  }
-
-  .col-lg-4 .card {
-    position: sticky;
-    top: 20px;
-  }
-
-  ol li strong {
-    color: #0d6efd;
-  }
-
-  .alert-link {
-    font-weight: 600;
-    text-decoration: underline;
-  }
-</style>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const form = document.getElementById('staffIdCardRequestForm');
+  if (!form) return;
+
   const formControls = form.querySelectorAll('.form-control, .form-select');
 
   formControls.forEach(function(field) {
@@ -382,10 +775,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  form.addEventListener('submit', function(e) {
+  form.addEventListener('submit', function() {
     const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+    }
   });
 
   const requestTypeField = document.querySelector('[name="request_type"]');
@@ -393,7 +788,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (requestTypeField && reasonField) {
     requestTypeField.addEventListener('change', function() {
-      switch(this.value) {
+      switch (this.value) {
         case 'replacement':
           reasonField.placeholder = 'Specify if the card was lost, stolen, or damaged, and provide details...';
           break;
@@ -413,13 +808,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  const employeeField = document.querySelector('[name="for_user"]');
+  const employeeField = document.querySelector('select[name="for_user"]');
+  const summaryLine = document.getElementById('selected-employee-summary');
+  const summaryName = document.getElementById('selected-employee-name');
+
+  function updateSelectedEmployeeFromSelect() {
+    if (!employeeField || !summaryLine || !summaryName) return;
+    const selectedOption = employeeField.options[employeeField.selectedIndex];
+    if (selectedOption && selectedOption.value) {
+      summaryName.textContent = selectedOption.text;
+      summaryLine.style.display = 'block';
+    } else {
+      summaryName.textContent = '';
+      summaryLine.style.display = 'none';
+    }
+  }
+
   if (employeeField) {
-    employeeField.addEventListener('change', function() {
-      if (this.value) {
-        const selectedOption = this.options[this.selectedIndex];
-        console.log('Selected employee:', selectedOption.text);
-      }
+    $(function() {
+      $('.select2-employee').select2({
+        width: '100%',
+        placeholder: 'Search and select an employee',
+        allowClear: true
+      });
+
+      $('.select2-employee').on('change', function() {
+        updateSelectedEmployeeFromSelect();
+      });
+
+      updateSelectedEmployeeFromSelect();
     });
   }
 });

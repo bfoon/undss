@@ -1,353 +1,841 @@
 {% extends "base.html" %}
-{% block title %}Request ID Card{% endblock %}
+{% block title %}Request ID Card – Renewal / Replacement{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root {
+    --primary-color: #0d6efd;
+    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --primary-light: rgba(102, 126, 234, 0.1);
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+    --border-color: #dee2e6;
+    --light-bg: #f8f9fa;
+    --text-dark: #2d3748;
+    --text-muted: #718096;
+    --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  }
+
+  /* Page Layout */
+  .page-container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* Header Section */
+  .header-section {
+    text-align: center;
+    padding: 2rem 1rem;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+    border-radius: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .icon-badge {
+    width: 80px;
+    height: 80px;
+    background: var(--primary-gradient);
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .header-section h3 {
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 1rem;
+  }
+
+  .header-section .subtitle {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+
+  .restriction-notice {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(255, 82, 82, 0.1) 100%);
+    border-left: 4px solid var(--danger-color);
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    background: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+  }
+
+  .breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+    font-size: 1.25rem;
+    color: var(--text-muted);
+  }
+
+  .breadcrumb-item a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .breadcrumb-item a:hover {
+    text-decoration: underline;
+    color: #764ba2;
+  }
+
+  /* Cards */
+  .card {
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s ease;
+  }
+
+  .card:hover {
+    box-shadow: var(--shadow-md);
+  }
+
+  .card-header {
+    background: var(--primary-gradient);
+    color: white;
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+    padding: 1.25rem 1.5rem;
+    border-bottom: none;
+  }
+
+  .card-header h5 {
+    font-weight: 600;
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-body {
+    padding: 2rem;
+  }
+
+  /* Alerts */
+  .alert {
+    border-radius: 0.5rem;
+    border: none;
+    padding: 1.25rem;
+  }
+
+  .alert-info {
+    background: linear-gradient(135deg, rgba(13, 202, 240, 0.1) 0%, rgba(13, 110, 253, 0.1) 100%);
+    border-left: 4px solid var(--info-color);
+  }
+
+  .alert-info .bi-info-circle-fill {
+    font-size: 1.5rem;
+  }
+
+  .alert-danger {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(255, 82, 82, 0.1) 100%);
+    border-left: 4px solid var(--danger-color);
+  }
+
+  .alert-light {
+    background-color: var(--light-bg);
+    border: 1px solid var(--border-color);
+  }
+
+  .alert ul {
+    margin-bottom: 0;
+    padding-left: 1.25rem;
+  }
+
+  .alert ul li {
+    margin-bottom: 0.5rem;
+  }
+
+  .alert ul li:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Form Elements */
+  .form-label {
+    font-weight: 600;
+    color: var(--text-dark);
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .form-control,
+  .form-select {
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.25rem var(--primary-light);
+    outline: none;
+  }
+
+  .form-control.is-invalid,
+  .form-select.is-invalid {
+    border-color: var(--danger-color);
+    background-image: none;
+  }
+
+  .form-control:disabled,
+  .form-select:disabled {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+  }
+
+  textarea.form-control {
+    min-height: 140px;
+    resize: vertical;
+  }
+
+  .form-text {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .invalid-feedback {
+    display: block !important;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--danger-color);
+  }
+
+  /* Request Type Helper */
+  .request-type-helper {
+    background: var(--light-bg);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-top: 0.75rem;
+    border: 1px solid var(--border-color);
+  }
+
+  .request-type-helper div {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .request-type-helper div:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  /* File Upload */
+  .form-control[type="file"] {
+    padding: 0.625rem 1rem;
+  }
+
+  .form-control[type="file"]::file-selector-button {
+    padding: 0.5rem 1rem;
+    margin-right: 1rem;
+    background: var(--primary-gradient);
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+
+  .form-control[type="file"]::file-selector-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+  }
+
+  /* Buttons */
+  .btn {
+    font-weight: 500;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    transition: all 0.2s ease;
+  }
+
+  .btn-primary {
+    background: var(--primary-gradient);
+    border: none;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  }
+
+  .btn-primary:disabled {
+    background: #6c757d;
+    transform: none;
+    cursor: not-allowed;
+  }
+
+  .btn-outline-secondary {
+    border: 2px solid #6c757d;
+    color: #6c757d;
+  }
+
+  .btn-outline-secondary:hover {
+    background-color: #6c757d;
+    color: white;
+  }
+
+  .btn-lg {
+    padding: 0.875rem 2rem;
+    font-size: 1rem;
+  }
+
+  /* Help Card */
+  .help-card {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.03) 0%, rgba(118, 75, 162, 0.03) 100%);
+    border: 1px solid var(--border-color);
+  }
+
+  .help-item {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+  }
+
+  .help-item i {
+    font-size: 1.5rem;
+    min-width: 28px;
+  }
+
+  .help-item strong {
+    display: block;
+    color: var(--text-dark);
+    margin-bottom: 0.25rem;
+  }
+
+  .help-item small {
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* Loading State */
+  .spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15rem;
+  }
+
+  /* Required Indicator */
+  .text-danger {
+    font-weight: bold;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header-section {
+      padding: 1.5rem 1rem;
+    }
+
+    .icon-badge {
+      width: 64px;
+      height: 64px;
+    }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+
+    .help-item {
+      flex-direction: column;
+    }
+
+    .btn-lg {
+      width: 100%;
+    }
+  }
+
+  /* Smooth Animations */
+  .fade-in {
+    animation: fadeIn 0.5s ease-in;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container py-4">
+  <div class="page-container">
 
-  <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item">
-        <a href="{% url 'accounts:idcard_request_list' %}">ID Card Requests</a>
-      </li>
-      <li class="breadcrumb-item active" aria-current="page">New Request</li>
-    </ol>
-  </nav>
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3 fade-in">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+          <a href="{% url 'accounts:idcard_request_list' %}">
+            <i class="bi bi-house-door me-1"></i>ID Card Requests
+          </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page">Renewal / Replacement</li>
+      </ol>
+    </nav>
 
-  <!-- Page Header -->
-  <div class="row mb-4">
-    <div class="col-lg-8 mx-auto">
-      <div class="text-center mb-4">
-        <div class="bg-primary bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
-             style="width: 64px; height: 64px;">
-          <i class="bi bi-credit-card fs-2 text-primary"></i>
-        </div>
-        <h3 class="mb-2">Request ID Card</h3>
-        <p class="text-muted mb-0">
-          Submit a request for a new employee ID card, renewal, or replacement
-        </p>
+    <!-- Page Header -->
+    <div class="header-section fade-in">
+      <div class="icon-badge">
+        <i class="bi bi-credit-card fs-1"></i>
+      </div>
+      <h3>Request ID Card – Renewal / Replacement</h3>
+      <p class="subtitle mb-0">
+        Use this form to request an <strong>ID card renewal</strong> or
+        <strong>replacement</strong> (lost, stolen, or damaged).
+      </p>
+      <div class="restriction-notice">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Important:</strong> New ID cards can only be requested by Agency HR / HR Focal Point.
       </div>
     </div>
-  </div>
 
-  <!-- Main Form -->
-  <div class="row">
-    <div class="col-lg-8 mx-auto">
-
-      <!-- Information Alert -->
-      <div class="alert alert-info d-flex align-items-start mb-4">
-        <i class="bi bi-info-circle-fill me-2 mt-1"></i>
-        <div>
-          <strong>Before you submit:</strong>
-          <ul class="mb-0 mt-2 small">
-            <li>Ensure all information is accurate and complete</li>
-            <li>For replacements, specify the reason (lost, damaged, etc.)</li>
-            <li>You will be notified when your request is approved</li>
-            <li>Photo capture will be scheduled after approval</li>
-          </ul>
-        </div>
+    <!-- Information Alert -->
+    <div class="alert alert-info d-flex align-items-start mb-4 fade-in">
+      <i class="bi bi-info-circle-fill me-3"></i>
+      <div>
+        <strong class="d-block mb-2">Before you submit:</strong>
+        <ul class="small ps-3 mb-0">
+          <li class="mb-1">This self-service form is for <strong>renewal</strong> or <strong>replacement</strong> of existing ID cards only.</li>
+          <li class="mb-1">For <strong>new ID cards</strong>, please contact your <strong>Agency HR / HR Focal Point</strong>.</li>
+          <li class="mb-1">For replacements, clearly specify if the card was lost, stolen, or damaged.</li>
+          <li>You will be notified when your request is approved and when to come for photo capture / collection.</li>
+        </ul>
       </div>
+    </div>
 
-      <!-- Form Card -->
-      <div class="card shadow-sm">
-        <div class="card-header bg-light">
-          <h5 class="mb-0">
-            <i class="bi bi-pencil-square me-2"></i> Request Details
-          </h5>
-        </div>
-        <div class="card-body p-4">
-          <!-- 🔸 enctype added -->
-          <form method="post" enctype="multipart/form-data" novalidate id="idCardRequestForm">
-            {% csrf_token %}
+    <!-- Form Card -->
+    <div class="card fade-in">
+      <div class="card-header">
+        <h5><i class="bi bi-pencil-square"></i>Request Details</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data" novalidate id="idCardRequestForm">
+          {% csrf_token %}
 
-            <!-- Display non-field errors -->
-            {% if form.non_field_errors %}
-              <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                <strong>Error:</strong>
-                <ul class="mb-0 mt-2">
-                  {% for error in form.non_field_errors %}
-                    <li>{{ error }}</li>
-                  {% endfor %}
-                </ul>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-              </div>
-            {% endif %}
+          <!-- Non-field errors -->
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>
+              <strong>Error:</strong>
+              <ul class="mt-2 mb-0 ps-3">
+                {% for error in form.non_field_errors %}
+                  <li>{{ error }}</li>
+                {% endfor %}
+              </ul>
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endif %}
 
-            <!-- Employee (for_user) — often hidden or readonly in self-service form -->
-            {% if form.for_user %}
-              <div class="mb-4">
-                <label for="{{ form.for_user.id_for_label }}" class="form-label fw-semibold">
-                  <i class="bi bi-person me-1"></i> Employee
-                  {% if form.for_user.field.required %}
-                    <span class="text-danger">*</span>
-                  {% endif %}
-                </label>
-                {{ form.for_user }}
-                {% if form.for_user.help_text %}
-                  <div class="form-text">{{ form.for_user.help_text }}</div>
-                {% endif %}
-                {% if form.for_user.errors %}
-                  <div class="invalid-feedback d-block">
-                    {% for error in form.for_user.errors %}
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    {% endfor %}
-                  </div>
-                {% endif %}
-              </div>
-            {% endif %}
+          <!-- Required Fields Notice -->
+          <div class="alert alert-light mb-4">
+            <small class="text-muted">
+              <i class="bi bi-asterisk text-danger me-1"></i>
+              Fields marked with <span class="text-danger">*</span> are required.
+            </small>
+          </div>
 
-            <!-- Request Type -->
-            {% if form.request_type %}
-              <div class="mb-4">
-                <label for="{{ form.request_type.id_for_label }}" class="form-label fw-semibold">
-                  <i class="bi bi-card-list me-1"></i> Request Type
-                  {% if form.request_type.field.required %}
-                    <span class="text-danger">*</span>
-                  {% endif %}
-                </label>
-                {{ form.request_type }}
-                {% if form.request_type.help_text %}
-                  <div class="form-text">{{ form.request_type.help_text }}</div>
-                {% else %}
-                  <div class="form-text">
-                    <strong>New:</strong> First-time ID card issuance<br>
-                    <strong>Renewal:</strong> Expired or expiring card<br>
-                    <strong>Replacement:</strong> Lost, stolen, or damaged card
-                  </div>
+          <!-- Employee (for_user) - if present -->
+          {% if form.for_user %}
+            <div class="mb-4">
+              <label for="{{ form.for_user.id_for_label }}" class="form-label">
+                <i class="bi bi-person"></i>
+                Employee
+                {% if form.for_user.field.required %}
+                  <span class="text-danger">*</span>
                 {% endif %}
-                {% if form.request_type.errors %}
-                  <div class="invalid-feedback d-block">
-                    {% for error in form.request_type.errors %}
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    {% endfor %}
-                  </div>
-                {% endif %}
-              </div>
-            {% endif %}
-
-            <!-- Reason -->
-            {% if form.reason %}
-              <div class="mb-4">
-                <label for="{{ form.reason.id_for_label }}" class="form-label fw-semibold">
-                  <i class="bi bi-chat-left-text me-1"></i> Reason / Notes
-                  {% if form.reason.field.required %}
-                    <span class="text-danger">*</span>
-                  {% endif %}
-                </label>
-                {{ form.reason }}
-                {% if form.reason.help_text %}
-                  <div class="form-text">{{ form.reason.help_text }}</div>
-                {% else %}
-                  <div class="form-text">
-                    Provide details about why this ID card is needed. For replacements,
-                    please specify if the card was lost, stolen, or damaged.
-                  </div>
-                {% endif %}
-                {% if form.reason.errors %}
-                  <div class="invalid-feedback d-block">
-                    {% for error in form.reason.errors %}
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    {% endfor %}
-                  </div>
-                {% endif %}
-              </div>
-            {% endif %}
-
-            <!-- 🔸 File Upload: Request Form (PDF / Word) -->
-            {% if form.request_form %}
-              <div class="mb-4">
-                <label for="{{ form.request_form.id_for_label }}" class="form-label fw-semibold">
-                  <i class="bi bi-file-earmark-arrow-up me-1"></i>
-                  Upload Signed Request Form (PDF / Word)
-                  {% if form.request_form.field.required %}
-                    <span class="text-danger">*</span>
-                  {% endif %}
-                </label>
-                {{ form.request_form }}
+              </label>
+              {{ form.for_user }}
+              {% if form.for_user.help_text %}
                 <div class="form-text">
-                  Upload the completed / signed HR request form if applicable.
-                  Allowed formats: PDF, DOC, DOCX. Max size: 5 MB.
-                </div>
-                {% if form.request_form.errors %}
-                  <div class="invalid-feedback d-block">
-                    {% for error in form.request_form.errors %}
-                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                    {% endfor %}
-                  </div>
-                {% endif %}
-              </div>
-            {% endif %}
-
-            <!-- Any other fields not explicitly handled -->
-            {% for field in form %}
-              {% if field.name != 'for_user' and field.name != 'request_type' and field.name != 'reason' and field.name != 'request_form' %}
-                <div class="mb-4">
-                  <label for="{{ field.id_for_label }}" class="form-label fw-semibold">
-                    {{ field.label }}
-                    {% if field.field.required %}
-                      <span class="text-danger">*</span>
-                    {% endif %}
-                  </label>
-                  {{ field }}
-                  {% if field.help_text %}
-                    <div class="form-text">{{ field.help_text }}</div>
-                  {% endif %}
-                  {% if field.errors %}
-                    <div class="invalid-feedback d-block">
-                      {% for error in field.errors %}
-                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                      {% endfor %}
-                    </div>
-                  {% endif %}
+                  <i class="bi bi-info-circle me-1"></i>{{ form.for_user.help_text }}
                 </div>
               {% endif %}
-            {% endfor %}
-
-            <!-- Required Fields Notice -->
-            <div class="alert alert-light border mb-4">
-              <small class="text-muted">
-                <i class="bi bi-asterisk text-danger me-1"></i>
-                Fields marked with an asterisk (<span class="text-danger">*</span>) are required
-              </small>
+              {% if form.for_user.errors %}
+                <div class="invalid-feedback">
+                  {% for error in form.for_user.errors %}
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
             </div>
+          {% endif %}
 
-            <!-- Action Buttons -->
-            <div class="d-flex justify-content-between align-items-center pt-3 border-top">
-              <a href="{% url 'accounts:idcard_request_list' %}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left me-1"></i> Cancel
-              </a>
-              <button type="submit" class="btn btn-primary btn-lg">
-                <i class="bi bi-send me-1"></i> Submit Request
-              </button>
+          <!-- Request Type -->
+          {% if form.request_type %}
+            <div class="mb-4">
+              <label for="{{ form.request_type.id_for_label }}" class="form-label">
+                <i class="bi bi-card-list"></i>
+                Request Type
+                {% if form.request_type.field.required %}
+                  <span class="text-danger">*</span>
+                {% endif %}
+              </label>
+              {{ form.request_type }}
+
+              {% if form.request_type.help_text %}
+                <div class="form-text">{{ form.request_type.help_text }}</div>
+              {% else %}
+                <div class="request-type-helper">
+                  <div>
+                    <strong class="text-primary"><i class="bi bi-arrow-clockwise me-1"></i>Renewal:</strong>
+                    <span class="text-muted ms-2">ID card is expired or expiring soon.</span>
+                  </div>
+                  <div>
+                    <strong class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Replacement:</strong>
+                    <span class="text-muted ms-2">ID card is lost, stolen, or damaged.</span>
+                  </div>
+                  <div class="mt-2">
+                    <small class="text-muted">
+                      <i class="bi bi-info-circle me-1"></i>
+                      For <strong>new ID cards</strong>, please contact your Agency HR / HR Focal Point.
+                    </small>
+                  </div>
+                </div>
+              {% endif %}
+
+              {% if form.request_type.errors %}
+                <div class="invalid-feedback">
+                  {% for error in form.request_type.errors %}
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
             </div>
-          </form>
-        </div>
+          {% endif %}
+
+          <!-- Reason -->
+          {% if form.reason %}
+            <div class="mb-4">
+              <label for="{{ form.reason.id_for_label }}" class="form-label">
+                <i class="bi bi-chat-left-text"></i>
+                Reason / Notes
+                {% if form.reason.field.required %}
+                  <span class="text-danger">*</span>
+                {% endif %}
+              </label>
+              {{ form.reason }}
+
+              {% if form.reason.help_text %}
+                <div class="form-text">{{ form.reason.help_text }}</div>
+              {% else %}
+                <div class="form-text">
+                  <i class="bi bi-lightbulb me-1"></i>
+                  For <strong>renewal</strong>, mention if the card is expired or expiring soon.<br>
+                  For <strong>replacement</strong>, specify clearly if the card was lost, stolen, or damaged
+                  and include any additional information that may help process your request.
+                </div>
+              {% endif %}
+
+              {% if form.reason.errors %}
+                <div class="invalid-feedback">
+                  {% for error in form.reason.errors %}
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <!-- File Upload -->
+          {% if form.request_form %}
+            <div class="mb-4">
+              <label for="{{ form.request_form.id_for_label }}" class="form-label">
+                <i class="bi bi-file-earmark-arrow-up"></i>
+                Upload Supporting Document
+                {% if form.request_form.field.required %}
+                  <span class="text-danger">*</span>
+                {% endif %}
+              </label>
+              {{ form.request_form }}
+              <div class="form-text">
+                <i class="bi bi-file-pdf me-1 text-danger"></i>
+                If required by your office, upload a signed memo or HR request form in PDF, DOC, or DOCX format.
+                <br><strong>Max size:</strong> 5 MB
+              </div>
+              {% if form.request_form.errors %}
+                <div class="invalid-feedback">
+                  {% for error in form.request_form.errors %}
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <!-- Other Fields -->
+          {% for field in form %}
+            {% if field.name != 'for_user' and field.name != 'request_type' and field.name != 'reason' and field.name != 'request_form' %}
+              <div class="mb-4">
+                <label for="{{ field.id_for_label }}" class="form-label">
+                  {{ field.label }}
+                  {% if field.field.required %}
+                    <span class="text-danger">*</span>
+                  {% endif %}
+                </label>
+                {{ field }}
+                {% if field.help_text %}
+                  <div class="form-text">
+                    <i class="bi bi-info-circle me-1"></i>{{ field.help_text }}
+                  </div>
+                {% endif %}
+                {% if field.errors %}
+                  <div class="invalid-feedback">
+                    {% for error in field.errors %}
+                      <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
+          {% endfor %}
+
+          <!-- Action Buttons -->
+          <div class="d-flex justify-content-between align-items-center pt-4 border-top mt-4">
+            <a href="{% url 'accounts:idcard_request_list' %}" class="btn btn-outline-secondary">
+              <i class="bi bi-arrow-left me-2"></i>Cancel
+            </a>
+            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+              <i class="bi bi-send-check me-2"></i>Submit Request
+            </button>
+          </div>
+        </form>
       </div>
+    </div>
 
-      <!-- Help Card -->
-      <div class="card shadow-sm mt-4">
-        <div class="card-body">
-          <h6 class="mb-3">
-            <i class="bi bi-question-circle me-2"></i> Need Help?
-          </h6>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <div class="d-flex">
-                <i class="bi bi-clock text-primary me-2 mt-1"></i>
-                <div>
-                  <strong class="d-block">Processing Time</strong>
-                  <small class="text-muted">Requests are typically processed within 2-3 business days</small>
-                </div>
+    <!-- Help Card -->
+    <div class="card help-card mt-4 fade-in">
+      <div class="card-body">
+        <h6 class="mb-4 fw-bold">
+          <i class="bi bi-question-circle me-2 text-primary"></i>Need Help?
+        </h6>
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="help-item">
+              <i class="bi bi-clock text-primary"></i>
+              <div>
+                <strong>Processing Time</strong>
+                <small>Requests are typically processed within 2–3 business days.</small>
               </div>
             </div>
-            <div class="col-md-6">
-              <div class="d-flex">
-                <i class="bi bi-camera-video text-primary me-2 mt-1"></i>
-                <div>
-                  <strong class="d-block">Photo Capture</strong>
-                  <small class="text-muted">You'll be contacted to schedule a photo session after approval</small>
-                </div>
+          </div>
+          <div class="col-md-6">
+            <div class="help-item">
+              <i class="bi bi-camera-video text-primary"></i>
+              <div>
+                <strong>Photo Capture</strong>
+                <small>You will be contacted to schedule a photo session after approval.</small>
               </div>
             </div>
-            <div class="col-md-6">
-              <div class="d-flex">
-                <i class="bi bi-envelope text-primary me-2 mt-1"></i>
-                <div>
-                  <strong class="d-block">Notifications</strong>
-                  <small class="text-muted">You'll receive email updates on your request status</small>
-                </div>
+          </div>
+          <div class="col-md-6">
+            <div class="help-item">
+              <i class="bi bi-envelope text-primary"></i>
+              <div>
+                <strong>Notifications</strong>
+                <small>You will receive email updates on your request status.</small>
               </div>
             </div>
-            <div class="col-md-6">
-              <div class="d-flex">
-                <i class="bi bi-telephone text-primary me-2 mt-1"></i>
-                <div>
-                  <strong class="d-block">Questions?</strong>
-                  <small class="text-muted">Contact HR at extension 1234 for assistance</small>
-                </div>
+          </div>
+          <div class="col-md-6">
+            <div class="help-item">
+              <i class="bi bi-telephone text-primary"></i>
+              <div>
+                <strong>Questions?</strong>
+                <small>Contact HR or ICT at extension 1234 for assistance.</small>
               </div>
             </div>
           </div>
         </div>
       </div>
-
     </div>
+
   </div>
-
 </div>
+{% endblock %}
 
-<style>
-  .form-control, .form-select {
-    border-radius: 0.375rem;
-    border: 1px solid #ced4da;
-    padding: 0.625rem 0.75rem;
-  }
-
-  .form-control:focus, .form-select:focus {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-  }
-
-  .form-control.is-invalid, .form-select.is-invalid {
-    border-color: #dc3545;
-  }
-
-  textarea.form-control {
-    min-height: 120px;
-    resize: vertical;
-  }
-
-  .invalid-feedback {
-    display: block;
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
-  }
-
-  .text-danger {
-    font-weight: bold;
-  }
-
-  .card {
-    transition: transform 0.2s ease;
-  }
-
-  .bi-clock, .bi-camera-video, .bi-envelope, .bi-telephone {
-    font-size: 1.25rem;
-  }
-</style>
-
+{% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  const form = document.getElementById('idCardRequestForm');
-  const formControls = form.querySelectorAll('.form-control, .form-select');
+  'use strict';
 
+  const form = document.getElementById('idCardRequestForm');
+  if (!form) return;
+
+  // Mark invalid fields on page load
+  const formControls = form.querySelectorAll('.form-control, .form-select');
   formControls.forEach(function(field) {
-    if (field.classList.contains('is-invalid') || field.parentElement.querySelector('.invalid-feedback')) {
+    if (field.classList.contains('is-invalid') ||
+        field.parentElement.querySelector('.invalid-feedback')) {
       field.classList.add('is-invalid');
     }
   });
 
+  // Form submission handling
   form.addEventListener('submit', function(e) {
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn && !submitBtn.disabled) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+    }
   });
 
+  // Dynamic placeholder based on request type
   const requestTypeField = document.querySelector('[name="request_type"]');
-  if (requestTypeField) {
+  const reasonField = document.querySelector('[name="reason"]');
+
+  if (requestTypeField && reasonField) {
     requestTypeField.addEventListener('change', function() {
-      const reasonField = document.querySelector('[name="reason"]');
-      if (!reasonField) return;
-      if (this.value === 'replacement') {
-        reasonField.placeholder = 'Please specify if the card was lost, stolen, or damaged...';
-      } else if (this.value === 'renewal') {
-        reasonField.placeholder = 'Card expired or expiring soon. Add any extra details...';
-      } else {
-        reasonField.placeholder = 'Provide details about your request...';
+      updateReasonPlaceholder(this.value);
+    });
+
+    // Set initial placeholder if value exists
+    if (requestTypeField.value) {
+      updateReasonPlaceholder(requestTypeField.value);
+    }
+  }
+
+  function updateReasonPlaceholder(requestType) {
+    const placeholders = {
+      'replacement': 'Please specify if the card was lost, stolen, or damaged, and provide any relevant details...',
+      'renewal': 'Card expired or expiring soon. Please add expiry date and any additional details...',
+      'default': 'Provide details about your request...'
+    };
+
+    reasonField.placeholder = placeholders[requestType] || placeholders['default'];
+  }
+
+  // File upload validation
+  const fileInput = document.querySelector('input[type="file"]');
+  if (fileInput) {
+    fileInput.addEventListener('change', function() {
+      if (this.files.length > 0) {
+        const file = this.files[0];
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        const allowedTypes = [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ];
+
+        if (file.size > maxSize) {
+          alert('❌ File size exceeds 5MB limit. Please choose a smaller file.');
+          this.value = '';
+          return;
+        }
+
+        if (!allowedTypes.includes(file.type)) {
+          alert('❌ Invalid file type. Please upload a PDF, DOC, or DOCX file.');
+          this.value = '';
+          return;
+        }
+
+        // Success feedback
+        console.log('✓ File selected:', file.name);
       }
     });
   }
+
+  // Real-time validation feedback
+  formControls.forEach(function(field) {
+    field.addEventListener('blur', function() {
+      if (this.value.trim()) {
+        this.classList.remove('is-invalid');
+        const feedback = this.parentElement.querySelector('.invalid-feedback');
+        if (feedback) {
+          feedback.style.display = 'none';
+        }
+      }
+    });
+
+    field.addEventListener('input', function() {
+      if (this.classList.contains('is-invalid') && this.value.trim()) {
+        this.classList.remove('is-invalid');
+      }
+    });
+  });
+
+  // Prevent double submission
+  let formSubmitted = false;
+  form.addEventListener('submit', function(e) {
+    if (formSubmitted) {
+      e.preventDefault();
+      return false;
+    }
+
+    // Check required fields
+    const requiredFields = form.querySelectorAll('[required]');
+    let allValid = true;
+
+    requiredFields.forEach(function(field) {
+      if (!field.value.trim()) {
+        field.classList.add('is-invalid');
+        allValid = false;
+      }
+    });
+
+    if (!allValid) {
+      e.preventDefault();
+      const firstInvalid = form.querySelector('.is-invalid');
+      if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid.focus();
+      }
+
+      // Re-enable button if validation fails
+      const submitBtn = document.getElementById('submitBtn');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-send-check me-2"></i>Submit Request';
+      }
+      return false;
+    }
+
+    formSubmitted = true;
+    return true;
+  });
+
+  // Smooth scroll reveal animation
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('fade-in');
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.card, .alert').forEach(el => {
+    observer.observe(el);
+  });
 });
 </script>
 {% endblock %}

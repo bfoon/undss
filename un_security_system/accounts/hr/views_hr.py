@@ -1,17 +1,17 @@
 from datetime import timedelta
+import os
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
+from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import ListView, CreateView
-import os
-from django.db.models import Count, Q
-from django.core.paginator import Paginator
-from django.http import FileResponse, Http404, HttpResponseForbidden
 
 from .notifications import notify_users_by_role, notify_users_direct
 from .forms import EmployeeIDCardRequestForm, EmployeeIDCardAdminRequestForm
@@ -20,9 +20,14 @@ from .models import EmployeeIDCardRequest
 User = get_user_model()
 
 
-# ---- Role helpers ---------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Role helpers
+# ---------------------------------------------------------------------------
 
 def is_lsa_soc_or_hr(user):
+    """
+    Check if user is LSA, SOC, Agency HR or superuser.
+    """
     if not user.is_authenticated:
         return False
     if user.is_superuser:
@@ -35,7 +40,23 @@ class LsaSocHrRequiredMixin(UserPassesTestMixin):
         return is_lsa_soc_or_hr(self.request.user)
 
 
-# ---- 5.1. Employees with expiring / expired IDs ---------------------------
+def get_idcard_qs_for_user(user):
+    """
+    Base queryset for ID card requests, restricted by Agency HR scope:
+
+    - LSA / SOC / superuser: all requests
+    - Agency HR: only requests for staff in their own agency
+    """
+    qs = EmployeeIDCardRequest.objects.all()
+    role = getattr(user, "role", "")
+    if role == "agency_hr" and getattr(user, "agency_id", None):
+        qs = qs.filter(for_user__agency=user.agency)
+    return qs
+
+
+# ---------------------------------------------------------------------------
+# 5.1. Employees with expiring / expired IDs
+# ---------------------------------------------------------------------------
 
 class ExpiringIDListView(LoginRequiredMixin, LsaSocHrRequiredMixin, ListView):
     template_name = "hr/expiring_ids.html"
@@ -55,11 +76,10 @@ class ExpiringIDListView(LoginRequiredMixin, LsaSocHrRequiredMixin, ListView):
 
         role = getattr(self.request.user, "role", "")
         if role == "agency_hr" and getattr(self.request.user, "agency_id", None):
-            # 🔐 This line restricts to their own agency only
+            # 🔐 Restrict to their own agency only
             qs = qs.filter(agency=self.request.user.agency)
 
         return qs.order_by("agency__name", "employee_id_expiry", "last_name")
-
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -67,36 +87,70 @@ class ExpiringIDListView(LoginRequiredMixin, LsaSocHrRequiredMixin, ListView):
         ctx["days"] = int(self.request.GET.get("days") or 30)
         return ctx
 
+
+# ---------------------------------------------------------------------------
+# Self-service: staff requests (renewal / replacement only)
+# ---------------------------------------------------------------------------
+
 @login_required
 def my_idcard_request(request):
     """
     Staff request ID card for themselves.
+    - Self-service users can only request RENEWAL or REPLACEMENT (no NEW).
     """
     target = request.user
+    allowed_self_service_types = {"renewal", "replacement"}
 
     if request.method == "POST":
-        form = EmployeeIDCardRequestForm(request.POST)
+        form = EmployeeIDCardRequestForm(request.POST, request.FILES)
+
+        # Restrict request_type choices for self-service (POST)
+        if "request_type" in form.fields:
+            form.fields["request_type"].choices = [
+                (value, label)
+                for value, label in form.fields["request_type"].choices
+                if value in allowed_self_service_types
+            ]
+
         if form.is_valid():
             obj = form.save(commit=False)
-            obj.for_user = target
-            obj.requested_by = request.user
-            obj.save()
 
-            # Notify LSA/SOC/Agency HR
-            subject = f"ID Card Request for {target.get_full_name() or target.username}"
-            msg = (
-                f"A new {obj.get_request_type_display()} request was submitted.\n\n"
-                f"Employee: {target.get_full_name() or target.username}\n"
-                f"Employee ID: {target.employee_id or 'N/A'}\n"
-                f"Agency: {getattr(target, 'un_agency', '') or 'N/A'}\n"
-                f"Reason: {obj.reason or '—'}"
-            )
-            notify_users_by_role(["lsa", "soc", "agency_hr"], subject, msg)
+            # Extra safety check
+            if obj.request_type not in allowed_self_service_types:
+                form.add_error(
+                    "request_type",
+                    "You can only request a renewal or replacement. "
+                    "New ID cards must be requested through your Agency HR / HR Focal Point.",
+                )
+            else:
+                obj.for_user = target
+                obj.requested_by = request.user
+                obj.save()
 
-            messages.success(request, "Your ID card request has been submitted.")
-            return redirect("accounts:my_idcard_requests")
+                # Notify LSA/SOC/Agency HR
+                display_name = target.get_full_name() or target.username
+                subject = f"ID Card {obj.get_request_type_display()} request for {display_name}"
+                msg = (
+                    f"An ID card {obj.get_request_type_display()} request was submitted.\n\n"
+                    f"Employee: {display_name}\n"
+                    f"Employee ID: {target.employee_id or 'N/A'}\n"
+                    f"Agency: {getattr(target, 'un_agency', '') or 'N/A'}\n"
+                    f"Reason: {obj.reason or '—'}"
+                )
+                notify_users_by_role(["lsa", "soc", "agency_hr"], subject, msg)
+
+                messages.success(request, "Your ID card request has been submitted.")
+                return redirect("accounts:my_idcard_requests")
     else:
         form = EmployeeIDCardRequestForm()
+
+        # Restrict request_type choices for self-service (GET)
+        if "request_type" in form.fields:
+            form.fields["request_type"].choices = [
+                (value, label)
+                for value, label in form.fields["request_type"].choices
+                if value in allowed_self_service_types
+            ]
 
     return render(request, "hr/my_idcard_request_form.html", {"form": form})
 
@@ -106,11 +160,9 @@ def my_id_card_requests(request):
     """
     Show ID card requests related to the currently logged-in user.
     - Requests they submitted (requested_by)
-    - You can also include for_user=request.user if you want.
-    Includes small stats and filters.
+    - Requests where they are the subject (for_user)
+    Includes stats and filters.
     """
-
-    # ----- Base queryset: only this user's requests -----
     qs = (
         EmployeeIDCardRequest.objects
         .filter(
@@ -121,14 +173,13 @@ def my_id_card_requests(request):
         .order_by("-created_at")
     )
 
-    # ------------- Filters -------------
+    # Filters
     status = (request.GET.get("status") or "").strip()
     date_from = (request.GET.get("date_from") or "").strip()
     date_to = (request.GET.get("date_to") or "").strip()
     q = (request.GET.get("q") or "").strip()
 
     if status:
-        # must be one of: submitted, photo_pending, printed, issued, rejected
         qs = qs.filter(status=status)
 
     if date_from:
@@ -148,19 +199,16 @@ def my_id_card_requests(request):
             Q(requested_by__username__icontains=q)
         )
 
-    # ------------- Stats -------------
+    # Stats
     total_requests = qs.count()
-    # "pending" = submitted + waiting for photo
     pending_count = qs.filter(status__in=["submitted", "photo_pending"]).count()
     printed_count = qs.filter(status="printed").count()
     issued_count = qs.filter(status="issued").count()
     rejected_count = qs.filter(status="rejected").count()
-
-    # Optional: an "approved-ish" counter (everything beyond submitted)
     approved_count = qs.filter(status__in=["photo_pending", "printed", "issued"]).count()
 
-    # ------------- Pagination -------------
-    paginator = Paginator(qs, 10)  # 10 per page
+    # Pagination
+    paginator = Paginator(qs, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
@@ -188,42 +236,46 @@ def my_id_card_request_detail(request, pk):
     """
     card_request = get_object_or_404(
         EmployeeIDCardRequest,
-
         Q(requested_by=request.user) |
         Q(for_user=request.user),
         pk=pk,
     )
     return render(
         request,
-        "hr/my_id_card_request_detail.html",  # template path, change if needed
+        "hr/my_id_card_request_detail.html",
         {"card_request": card_request},
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin / HR / LSA / SOC views
+# ---------------------------------------------------------------------------
 
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_for_user(request):
     """
     HR/LSA/SOC initiate a card request for any employee.
-    - LSA / SOC / superuser: can pick any user
+
+    - LSA / SOC / superuser: can pick any active user
     - Agency HR: ONLY staff in their own agency
+
     Optional ?user=<id> to preselect the employee.
     """
     role = getattr(request.user, "role", "")
     is_agency_hr = (role == "agency_hr")
     has_agency = getattr(request.user, "agency_id", None) is not None
 
-    # ---------- Build base queryset for for_user field ----------
+    # Base queryset for for_user field
     if is_agency_hr and has_agency:
-        # Agency HR can only see their agency’s users
         base_user_qs = User.objects.filter(
             agency=request.user.agency,
             is_active=True,
         )
     else:
-        # LSA / SOC / superuser: all active staff
         base_user_qs = User.objects.filter(is_active=True)
 
-    # ---------- Optional preselect via ?user=<id> ----------
+    # Optional preselect via ?user=<id>
     preselect_id = request.GET.get("user")
     initial = {}
     if preselect_id:
@@ -232,8 +284,8 @@ def idcard_request_for_user(request):
             initial["for_user"] = target
 
     if request.method == "POST":
-        form = EmployeeIDCardAdminRequestForm(request.POST)
-        # Limit choices for agency HR on POST as well
+        form = EmployeeIDCardAdminRequestForm(request.POST, request.FILES)
+        # Limit choices for Agency HR on POST
         if "for_user" in form.fields:
             form.fields["for_user"].queryset = base_user_qs
 
@@ -241,7 +293,7 @@ def idcard_request_for_user(request):
             obj = form.save(commit=False)
             obj.requested_by = request.user
 
-            # Extra safety check for agency HR
+            # Extra safety check for Agency HR: only their own agency
             if is_agency_hr and has_agency:
                 if obj.for_user.agency_id != request.user.agency_id:
                     form.add_error(
@@ -255,10 +307,12 @@ def idcard_request_for_user(request):
 
             if obj.pk:
                 # notify target user + LSA/SOC/HR
-                subject = f"ID Card Request Created for {obj.for_user.get_full_name() or obj.for_user.username}"
+                subject = (
+                    f"ID Card {obj.get_request_type_display()} request created "
+                    f"for {obj.for_user.get_full_name() or obj.for_user.username}"
+                )
                 msg = (
-                    f"An ID card request was created.\n\n"
-                    f"Type: {obj.get_request_type_display()}\n"
+                    f"An ID card {obj.get_request_type_display()} request was created.\n\n"
                     f"For: {obj.for_user.get_full_name() or obj.for_user.username}\n"
                     f"Employee ID: {obj.for_user.employee_id or 'N/A'}\n"
                     f"Agency: {getattr(obj.for_user.agency, 'name', 'N/A')}\n"
@@ -277,10 +331,15 @@ def idcard_request_for_user(request):
 
     return render(request, "hr/idcard_admin_request_form.html", {"form": form})
 
+
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_list(request):
-    qs = EmployeeIDCardRequest.objects.select_related(
+    """
+    Admin / LSA / SOC / Agency HR list of all requests.
+    Agency HR only sees requests for their own agency.
+    """
+    qs = get_idcard_qs_for_user(request.user).select_related(
         "for_user", "requested_by", "approver"
     ).order_by("-created_at")
 
@@ -288,44 +347,25 @@ def idcard_request_list(request):
     if status:
         qs = qs.filter(status=status)
 
-    # 🔐 Agency HR only see their agency’s staff
-    if getattr(request.user, "role", "") == "agency_hr" and getattr(request.user, "agency_id", None):
-        qs = qs.filter(for_user__agency=request.user.agency)
-
     return render(request, "hr/idcard_request_list.html", {
         "requests": qs,
         "status_filter": status,
     })
 
 
-@login_required
-@user_passes_test(is_lsa_soc_or_hr)  # only LSA/SOC/HR gets in
-def idcard_request_download_form(request, pk):
-    """
-    Allow LSA / SOC / Agency HR of that agency to download the attached request form.
-    """
-    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
-
-    user = request.user
-    role = getattr(user, "role", "")
-
-    # Agency HR must match agency of the employee
-    if role == "agency_hr":
-        if not user.agency or not obj.for_user.agency or user.agency_id != obj.for_user.agency_id:
-            return HttpResponseForbidden("You are not allowed to access this file.")
-
-    # LSA and SOC (and superuser) are already allowed by is_lsa_soc_or_hr
-    if not obj.request_form:
-        raise Http404("No form uploaded for this request.")
-
-    return FileResponse(
-        obj.request_form.open("rb"),
-        as_attachment=True,
-        filename=obj.request_form_filename or "request_form",
-    )
+# ---------------------------------------------------------------------------
+# Download attached request form (single, permission-checked view)
+# ---------------------------------------------------------------------------
 
 @login_required
 def idcard_request_download_form(request, pk):
+    """
+    Allow access to the attached request form with proper permissions:
+
+    - Owner (for_user) or requester (requested_by)
+    - LSA / SOC / superuser
+    - Agency HR for same agency as the employee
+    """
     obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
     user = request.user
     role = getattr(user, "role", "")
@@ -335,7 +375,7 @@ def idcard_request_download_form(request, pk):
     # Owner / requester
     if user == obj.for_user or user == obj.requested_by:
         allowed = True
-    # LSA & SOC
+    # LSA & SOC & superuser
     elif role in ("lsa", "soc") or user.is_superuser:
         allowed = True
     # Agency HR for same agency
@@ -354,20 +394,21 @@ def idcard_request_download_form(request, pk):
         filename=obj.request_form_filename or "request_form",
     )
 
+
+# ---------------------------------------------------------------------------
+# Edit / approve / reject / printed / issued / detail (admin side)
+# ---------------------------------------------------------------------------
+
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_edit(request, pk):
     """
     Edit an existing ID card request (for_user, request_type, reason, request_form).
-    LSA / SOC can edit all; Agency HR can only edit requests for staff in their own agency.
+    LSA / SOC can edit all;
+    Agency HR can only edit requests for staff in their own agency.
     """
-    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
-
-    # Agency HR restriction: only requests from their own agency
-    if getattr(request.user, "role", "") == "agency_hr":
-        if not obj.for_user.agency_id or obj.for_user.agency_id != request.user.agency_id:
-            messages.error(request, "You can only edit ID card requests for staff in your agency.")
-            return redirect("accounts:idcard_request_detail", pk=obj.pk)
+    qs = get_idcard_qs_for_user(request.user)
+    obj = get_object_or_404(qs, pk=pk)
 
     if request.method == "POST":
         form = EmployeeIDCardAdminRequestForm(
@@ -399,13 +440,14 @@ def idcard_request_edit(request, pk):
 
     return render(
         request,
-        "hr/idcard_admin_request_form.html",  # reuse same form template
+        "hr/idcard_admin_request_form.html",
         {
             "form": form,
             "obj": obj,
-            "is_edit": True,  # optional flag if you want to tweak heading/button text in template
+            "is_edit": True,
         },
     )
+
 
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
@@ -414,7 +456,8 @@ def idcard_request_approve(request, pk):
     Step 1: LSA / SOC / HR marks the request as 'Pending Photo Capture'
     and notifies the user to come and take a picture.
     """
-    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
+    qs = get_idcard_qs_for_user(request.user)
+    obj = get_object_or_404(qs, pk=pk)
 
     obj.mark_call_for_photo(request.user)
 
@@ -426,18 +469,21 @@ def idcard_request_approve(request, pk):
         f"Action required: Please report to Security/HR for photo capture "
         f"at the next available opportunity."
     )
-    # Notify the person whose ID it is for + the requester (HR or staff)
     notify_users_direct([obj.for_user, obj.requested_by], subject, msg)
 
     messages.success(request, "Request moved to 'Pending Photo Capture'.")
     return redirect("accounts:idcard_request_list")
 
 
-
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_reject(request, pk):
-    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
+    """
+    Reject a request.
+    """
+    qs = get_idcard_qs_for_user(request.user)
+    obj = get_object_or_404(qs, pk=pk)
+
     obj.mark_rejected(request.user)
 
     subject = "Your ID card request has been rejected"
@@ -451,14 +497,15 @@ def idcard_request_reject(request, pk):
     return redirect("accounts:idcard_request_list")
 
 
-
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_mark_printed(request, pk):
     """
     Step 2: Card printed.
     """
-    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
+    qs = get_idcard_qs_for_user(request.user)
+    obj = get_object_or_404(qs, pk=pk)
+
     obj.mark_printed(request.user)
 
     subject = "Your ID card has been printed"
@@ -472,13 +519,16 @@ def idcard_request_mark_printed(request, pk):
     messages.success(request, "Request marked as printed.")
     return redirect("accounts:idcard_request_list")
 
+
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_mark_issued(request, pk):
     """
     Step 3: Card has been issued/handed over to the staff.
     """
-    obj = get_object_or_404(EmployeeIDCardRequest, pk=pk)
+    qs = get_idcard_qs_for_user(request.user)
+    obj = get_object_or_404(qs, pk=pk)
+
     obj.mark_issued(request.user)
 
     subject = "Your ID card has been issued"
@@ -492,6 +542,7 @@ def idcard_request_mark_issued(request, pk):
     messages.success(request, "Request marked as issued.")
     return redirect("accounts:idcard_request_list")
 
+
 @login_required
 @user_passes_test(is_lsa_soc_or_hr)
 def idcard_request_detail(request, pk):
@@ -499,7 +550,7 @@ def idcard_request_detail(request, pk):
     HR / LSA / SOC can view the full details of an ID card request.
     Agency HR is limited to their own agency staff.
     """
-    qs = EmployeeIDCardRequest.objects.select_related(
+    qs = get_idcard_qs_for_user(request.user).select_related(
         "for_user",
         "requested_by",
         "approver",
@@ -507,13 +558,6 @@ def idcard_request_detail(request, pk):
         "issued_by",
     )
 
-    # Agency HR only sees requests for their agency’s staff
-    if getattr(request.user, "role", "") == "agency_hr" and request.user.agency_id:
-        qs = qs.filter(for_user__agency=request.user.agency)
-
     obj = get_object_or_404(qs, pk=pk)
 
     return render(request, "hr/idcard_request_detail.html", {"obj": obj})
-
-
-

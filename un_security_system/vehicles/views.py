@@ -1626,32 +1626,58 @@ def package_log_new(request):
             pkg.logged_by = request.user
             pkg.status = "to_reception"  # guard logged and forwards to reception
             pkg.save()
-            PackageEvent.objects.create(package=pkg, status="logged", who=request.user, note="Logged at gate")
-            PackageEvent.objects.create(package=pkg, status="to_reception", who=request.user, note="Forwarded to reception")
-            messages.success(request, f"Package logged. Tracking: {pkg.tracking_code}")
+
+            PackageEvent.objects.create(
+                package=pkg,
+                status="logged",
+                who=request.user,
+                note="Logged at gate",
+            )
+            PackageEvent.objects.create(
+                package=pkg,
+                status="to_reception",
+                who=request.user,
+                note="Forwarded to reception",
+            )
+
+            messages.success(
+                request,
+                f"Package logged. Tracking: {pkg.tracking_code}",
+            )
 
             # Notify reception & LSA/SOC
-            rec_emails = _emails_for_roles("reception", "lsa", "soc", include_superusers=True)
+            rec_emails = _emails_for_roles(
+                "reception", "lsa", "soc", include_superusers=True
+            )
             if rec_emails:
-                detail_url = request.build_absolute_uri(reverse("vehicles:package_detail", args=[pkg.pk]))
+                detail_url = request.build_absolute_uri(
+                    reverse("vehicles:package_detail", args=[pkg.pk])
+                )
                 subject = f"[Packages] New package logged at gate ({pkg.tracking_code})"
                 msg = (
-                    f"Dear colleagues,\n\n"
-                    f"A new package has been logged at the gate and forwarded to Reception.\n\n"
+                    "Dear colleagues,\n\n"
+                    "A new package has been logged at the gate and forwarded to Reception.\n\n"
                     f"Tracking: {pkg.tracking_code}\n"
                     f"Sender: {pkg.sender_name or pkg.sender_org or 'N/A'}\n"
                     f"Destination agency: {pkg.destination_agency or 'N/A'}\n"
                     f"For: {pkg.for_recipient or 'N/A'}\n\n"
                     f"Details: {detail_url}\n\n"
-                    f"Best regards,\nUN Security / Common Services System"
+                    "Best regards,\nUN Security / Common Services System"
                 )
                 _send_notification(subject, msg, rec_emails)
 
             return redirect("vehicles:package_detail", pk=pkg.pk)
     else:
         form = PackageLogForm()
-    return render(request, "vehicles/packages/package_form.html", {"form": form, "is_guard": True})
 
+    return render(
+        request,
+        "vehicles/packages/package_form.html",
+        {
+            "form": form,
+            "is_guard": True,
+        },
+    )
 
 
 @login_required
