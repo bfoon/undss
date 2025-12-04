@@ -415,6 +415,13 @@ def approve_visitor(request, visitor_id):
         'form': form
     })
 
+from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+from django.utils import timezone
+from django.contrib.auth.decorators import login_required
+
+from .models import Visitor, VisitorLog
+
 
 @login_required
 def check_in_visitor(request, visitor_id):
@@ -426,18 +433,30 @@ def check_in_visitor(request, visitor_id):
     if visitor.checked_in:
         return JsonResponse({'error': 'Visitor already checked in'}, status=400)
 
+    gate = request.POST.get('gate', 'front')
+
+    # Mark visitor as checked in
     visitor.checked_in = True
     visitor.check_in_time = timezone.now()
     visitor.save()
 
-    gate = request.POST.get('gate', 'front')
+    # Get any card currently assigned to this visitor
+    card = visitor.visitor_card  # may be None, that's fine
 
+    # Build a nice note, including card if present
+    note_parts = [f'Checked in at {visitor.check_in_time.strftime("%H:%M")}']
+    if card:
+        note_parts.append(f'Card {card.number}')
+    note = ' · '.join(note_parts)
+
+    # Log the action, including the card
     VisitorLog.objects.create(
         visitor=visitor,
+        card=card,              # 👈 ensure card is recorded here
         action='check_in',
         performed_by=request.user,
         gate=gate,
-        notes=f'Checked in at {visitor.check_in_time.strftime("%H:%M")}'
+        notes=note,
     )
 
     # Notify requester that visitor checked in
@@ -446,7 +465,8 @@ def check_in_visitor(request, visitor_id):
     return JsonResponse({
         'success': True,
         'message': f'Visitor {visitor.full_name} checked in successfully',
-        'check_in_time': visitor.check_in_time.isoformat()
+        'check_in_time': visitor.check_in_time.isoformat(),
+        'card_number': card.number if card else None,
     })
 
 
@@ -460,6 +480,9 @@ def check_out_visitor(request, visitor_id):
     if visitor.checked_out:
         return JsonResponse({'error': 'Visitor already checked out'}, status=400)
 
+    gate = request.POST.get('gate', 'front')
+
+    # Mark visitor as checked out
     visitor.checked_out = True
     visitor.check_out_time = timezone.now()
     visitor.save()
@@ -468,14 +491,26 @@ def check_out_visitor(request, visitor_id):
     duration = visitor.check_out_time - visitor.check_in_time
     duration_str = str(duration).split('.')[0]  # Remove microseconds
 
-    gate = request.POST.get('gate', 'front')
+    # Get any card currently assigned to this visitor
+    card = visitor.visitor_card  # may be None
 
+    # Build note with time, duration and card
+    note_parts = [
+        f'Checked out at {visitor.check_out_time.strftime("%H:%M")}',
+        f'Duration: {duration_str}',
+    ]
+    if card:
+        note_parts.append(f'Card {card.number}')
+    note = ' · '.join(note_parts)
+
+    # Log the action, including the card
     VisitorLog.objects.create(
         visitor=visitor,
+        card=card,              # 👈 ensure card is recorded here
         action='check_out',
         performed_by=request.user,
         gate=gate,
-        notes=f'Checked out at {visitor.check_out_time.strftime("%H:%M")} (Duration: {duration_str})'
+        notes=note,
     )
 
     # Notify requester that visitor left
@@ -485,7 +520,8 @@ def check_out_visitor(request, visitor_id):
         'success': True,
         'message': f'Visitor {visitor.full_name} checked out successfully',
         'check_out_time': visitor.check_out_time.isoformat(),
-        'duration': duration_str
+        'duration': duration_str,
+        'card_number': card.number if card else None,
     })
 
 
