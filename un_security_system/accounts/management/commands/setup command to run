@@ -1,0 +1,44 @@
+This is the command to run now that everything is created.
+docker-compose exec web python manage.py create_room_amenities
+
+some more information is below:
+your_project/
+├── manage.py
+├── accounts/              # Your Django app
+│   ├── __init__.py
+│   ├── models.py
+│   ├── views.py
+│   ├── management/        # ← CREATE THIS FOLDER
+│   │   ├── __init__.py   # ← CREATE THIS FILE (empty)
+│   │   └── commands/      # ← CREATE THIS FOLDER
+│   │       ├── __init__.py   # ← CREATE THIS FILE (empty)
+│   │       └── create_room_amenities.py  # ← YOUR COMMAND FILE
+│   └── ...
+
+1. Create the directory structure in Docker:
+
+docker-compose exec web bash
+
+# Navigate to your accounts app
+cd accounts
+
+# Create the directories
+mkdir -p management/commands
+
+# Create the __init__.py files
+touch management/__init__.py
+touch management/commands/__init__.py
+
+# Check the structure
+ls -la management/
+ls -la management/commands/
+
+exit
+```
+
+### 2. Create the command file on your HOST machine (not in Docker):
+
+In your project directory on your **local machine**, create:
+```
+accounts/management/commands/create_room_amenities.py
+
