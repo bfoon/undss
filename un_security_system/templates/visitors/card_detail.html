@@ -338,6 +338,147 @@
     color: #4a5568;
   }
 
+  /* --- Card History / Activity --- */
+
+  .history-card {
+    border: none;
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid #e2e8f0;
+    margin-bottom: 1rem;
+    overflow: hidden;
+  }
+
+  .history-header {
+    padding: 1.25rem 1.75rem;
+    background: linear-gradient(135deg, #edf2ff 0%, #e0e7ff 100%);
+    border-bottom: 1px solid #cbd5e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .history-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    color: #2d3748;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .history-body {
+    padding: 1.25rem 1.5rem;
+    background: #ffffff;
+  }
+
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .history-table thead {
+    background: #f7fafc;
+  }
+
+  .history-table th,
+  .history-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+  }
+
+  .history-table th {
+    font-weight: 700;
+    color: #4a5568;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+  }
+
+  .history-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .history-empty {
+    padding: 1rem 0;
+    color: #a0aec0;
+    font-style: italic;
+    text-align: center;
+  }
+
+  .history-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid #e2e8f0;
+  }
+
+  .history-status-checkin {
+    background: #e6fffa;
+    border-color: #b2f5ea;
+    color: #234e52;
+  }
+
+  .history-status-checkout {
+    background: #ebf8ff;
+    border-color: #bee3f8;
+    color: #1a365d;
+  }
+
+  .history-status-approval {
+    background: #f0fff4;
+    border-color: #c6f6d5;
+    color: #22543d;
+  }
+
+  .history-status-rejection {
+    background: #fff5f5;
+    border-color: #fed7d7;
+    color: #822727;
+  }
+
+  .history-activity {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #edf2ff 100%);
+    border: 1px dashed #cbd5e0;
+    margin-bottom: 1rem;
+  }
+
+  .history-activity-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #718096;
+    font-weight: 700;
+  }
+
+  .history-activity-main {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    align-items: center;
+  }
+
+  .history-activity-main span {
+    font-size: 0.85rem;
+  }
+
+  .history-activity-action {
+    font-weight: 700;
+  }
+
   @media (max-width: 768px) {
     .page-container {
       padding: 1rem;
@@ -369,6 +510,15 @@
 
     .status-summary {
       grid-template-columns: 1fr;
+    }
+
+    .history-body {
+      padding: 1rem;
+    }
+
+    .history-table th:nth-child(1),
+    .history-table td:nth-child(1) {
+      display: none;  /* hide # on small screens */
     }
   }
 </style>
@@ -571,11 +721,123 @@
       </div>
     </div>
   </div>
+
+  <!-- Card History (VisitorLog) -->
+  <div class="history-card">
+    <div class="history-header">
+      <div class="history-header-title">
+        <i class="bi bi-clock-history"></i>
+        <span>Card History</span>
+      </div>
+      {% if card_history %}
+        <span class="badge bg-light text-muted">
+          {{ card_history|length }} record{{ card_history|length|pluralize }}
+        </span>
+      {% endif %}
+    </div>
+    <div class="history-body">
+      {% if card_history %}
+        {% with last=card_history.0 %}
+          <div class="history-activity">
+            <div>
+              <div class="history-activity-label">Last activity</div>
+              <div class="history-activity-main">
+                <span class="history-activity-action">
+                  {% if last.action == 'check_in' %}Check In{% elif last.action == 'check_out' %}Check Out{% elif last.action == 'approval' %}Approved{% elif last.action == 'rejection' %}Rejected{% else %}{{ last.get_action_display }}{% endif %}
+                </span>
+                <span>· {{ last.timestamp|date:"M d, Y - H:i" }}</span>
+                {% if last.visitor_id %}
+                  <span>· {{ last.visitor.full_name }}</span>
+                {% endif %}
+                <span>· by {{ last.performed_by.get_full_name|default:last.performed_by.username }}</span>
+                {% if last.gate %}
+                  <span>· Gate: {{ last.gate|title }}</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endwith %}
+
+        <div class="table-responsive">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Visitor</th>
+                <th>Action</th>
+                <th>Timestamp</th>
+                <th>Performed By</th>
+                <th>Gate</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in card_history %}
+                <tr>
+                  <td>{{ forloop.counter }}</td>
+                  <td>
+                    {% if entry.visitor_id %}
+                      <a href="{% url 'visitors:visitor_detail' entry.visitor_id %}">
+                        {{ entry.visitor.full_name }}
+                      </a>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if entry.action == 'check_in' %}
+                      <span class="history-status-badge history-status-checkin">
+                        <i class="bi bi-arrow-right-circle"></i> Check In
+                      </span>
+                    {% elif entry.action == 'check_out' %}
+                      <span class="history-status-badge history-status-checkout">
+                        <i class="bi bi-arrow-left-circle"></i> Check Out
+                      </span>
+                    {% elif entry.action == 'approval' %}
+                      <span class="history-status-badge history-status-approval">
+                        <i class="bi bi-check-circle"></i> Approved
+                      </span>
+                    {% elif entry.action == 'rejection' %}
+                      <span class="history-status-badge history-status-rejection">
+                        <i class="bi bi-x-circle"></i> Rejected
+                      </span>
+                    {% else %}
+                      <span class="text-muted">{{ entry.get_action_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ entry.timestamp|date:"M d, Y - H:i" }}</td>
+                  <td>{{ entry.performed_by.get_full_name|default:entry.performed_by.username }}</td>
+                  <td>
+                    {% if entry.gate %}
+                      {{ entry.gate|title }}
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if entry.notes %}
+                      {{ entry.notes }}
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="history-empty">
+          No history records for this card yet.
+        </div>
+      {% endif %}
+    </div>
+  </div>
 </div>
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // Add smooth animations on page load
+    // Animate detail rows
     const detailRows = document.querySelectorAll('.detail-row');
     detailRows.forEach((row, index) => {
       row.style.opacity = '0';
@@ -587,7 +849,7 @@
       }, index * 50);
     });
 
-    // Enhanced alert auto-dismiss
+    // Auto-dismiss alerts
     const alerts = document.querySelectorAll('.alert');
     alerts.forEach(alert => {
       setTimeout(() => {

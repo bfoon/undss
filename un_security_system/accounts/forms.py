@@ -3,7 +3,7 @@ from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.contrib.auth import authenticate
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column
-from .models import User, SecurityIncident, RegistrationInvite, RoomBooking
+from .models import User, SecurityIncident, RegistrationInvite, RoomBooking, Room, RoomAmenity
 from django.core.exceptions import ValidationError
 
 
@@ -424,3 +424,83 @@ class RoomBookingApprovalForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
         required=False,
     )
+
+
+class RoomForm(forms.ModelForm):
+    """Form for creating and editing rooms."""
+
+    amenities = forms.ModelMultipleChoiceField(
+        queryset=RoomAmenity.objects.filter(is_active=True),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        help_text="Select all amenities available in this room"
+    )
+
+    approvers = forms.ModelMultipleChoiceField(
+        queryset=User.objects.filter(is_active=True),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        help_text="Select users who can approve bookings for this room"
+    )
+
+    class Meta:
+        model = Room
+        fields = [
+            'name', 'code', 'room_type', 'location',
+            'capacity', 'description', 'is_active',
+            'amenities', 'approvers'
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g., Conference Room A'
+            }),
+            'code': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g., CR-A, LIB-1'
+            }),
+            'room_type': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'location': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g., UN House 1st Floor'
+            }),
+            'capacity': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Number of people',
+                'min': 1
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 4,
+                'placeholder': 'Describe the room and its purpose'
+            }),
+            'is_active': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+
+    def clean_code(self):
+        """Validate that code is unique (excluding current instance if editing)."""
+        code = self.cleaned_data.get('code')
+        if code:
+            code = code.strip().upper()
+            qs = Room.objects.filter(code=code)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise ValidationError('A room with this code already exists.')
+        return code
+
+    def clean_name(self):
+        """Validate that name is unique (excluding current instance if editing)."""
+        name = self.cleaned_data.get('name')
+        if name:
+            name = name.strip()
+            qs = Room.objects.filter(name=name)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise ValidationError('A room with this name already exists.')
+        return name

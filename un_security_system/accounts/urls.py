@@ -3,12 +3,9 @@ from django.contrib.auth import views as auth_views
 from . import views, views_ict
 from .hr import views_hr
 from .views_room_booking import (
-    RoomListView,
-    RoomDetailView,
-    RoomBookingCreateView,
-    MyRoomApprovalsView,
-    room_booking_approve_view,
-    MyRoomBookingsView,
+    RoomListView, RoomDetailView, RoomCreateView, RoomUpdateView,
+    MyRoomBookingsView, RoomBookingCreateView, MyRoomApprovalsView,
+    room_booking_approve_view, room_delete_view
 )
 
 
@@ -199,12 +196,20 @@ path(
         name="registration_link_toggle_active",
     ),
 
-# Rooms
+    # Room Management (superuser only)
+    path("rooms/add/", RoomCreateView.as_view(), name="room_add"),
+    path("rooms/<int:pk>/edit/", RoomUpdateView.as_view(), name="room_edit"),
+    path("rooms/<int:pk>/delete/", room_delete_view, name="room_delete"),
+
+    # Room Listing & Detail
     path("rooms/", RoomListView.as_view(), name="room_list"),
     path("rooms/<int:pk>/", RoomDetailView.as_view(), name="room_detail"),
-    path("rooms/my-bookings/", MyRoomBookingsView.as_view(), name="my_bookings"),
-    path("rooms/book/", RoomBookingCreateView.as_view(), name="room_book"),
-    path("rooms/approvals/", MyRoomApprovalsView.as_view(), name="room_approvals"),
-    path("rooms/booking/<int:pk>/approve/", room_booking_approve_view, name="room_booking_approve"),
 
+    # Room Booking
+    path("rooms/book/", RoomBookingCreateView.as_view(), name="room_book"),
+    path("rooms/my-bookings/", MyRoomBookingsView.as_view(), name="my_bookings"),
+
+    # Approvals
+    path("rooms/approvals/", MyRoomApprovalsView.as_view(), name="room_approvals"),
+    path("rooms/bookings/<int:pk>/approve/", room_booking_approve_view, name="booking_approve"),
 ]

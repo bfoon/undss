@@ -12,6 +12,7 @@ from .models import (
     Room,
     RoomBooking,
     RoomApprover,
+    RoomAmenity,
 )
 
 import csv
@@ -615,6 +616,23 @@ class EmployeeIDCardRequestAdmin(admin.ModelAdmin):
 
 
 # -------------------------------------------------------------------
+# ROOM AMENITY ADMIN
+# -------------------------------------------------------------------
+
+
+@admin.register(RoomAmenity)
+class RoomAmenityAdmin(admin.ModelAdmin):
+    """
+    Admin for reusable room amenities/features.
+    Example: projector, video conferencing, whiteboard, etc.
+    """
+    list_display = ("name", "code", "icon_class", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("name", "code", "description")
+    ordering = ("name",)
+
+
+# -------------------------------------------------------------------
 # ROOM / BOOKING / APPROVER ADMINS
 # -------------------------------------------------------------------
 
@@ -623,11 +641,38 @@ class EmployeeIDCardRequestAdmin(admin.ModelAdmin):
 class RoomAdmin(admin.ModelAdmin):
     """
     Admin for meeting rooms / spaces.
-    Adjust fields if your Room model uses slightly different names.
+    Now with amenities support.
     """
-    list_display = ("name", "location", "capacity", "is_active")
-    list_filter = ("location", "is_active")
-    search_fields = ("name", "location")
+    list_display = (
+        "name",
+        "code",
+        "room_type",
+        "location",
+        "capacity",
+        "is_active",
+        "amenities_display",   # ✅ custom column
+    )
+    list_filter = (
+        "room_type",
+        "location",
+        "is_active",
+        "amenities",           # ✅ filter by amenity
+    )
+    search_fields = ("name", "code", "location", "description")
+    filter_horizontal = (
+        "amenities",           # ✅ nice multi-select widget
+        "approvers",
+    )
+
+    def amenities_display(self, obj):
+        """
+        Show a comma-separated list of active amenities on the list page.
+        Uses Room.amenities_for_display property.
+        """
+        names = [a.name for a in obj.amenities_for_display]
+        return ", ".join(names) if names else "-"
+
+    amenities_display.short_description = "Amenities"
 
 
 @admin.register(RoomBooking)
@@ -648,21 +693,20 @@ class RoomBookingAdmin(admin.ModelAdmin):
         "requested_by_display",
     )
 
-    # Keep filters very conservative so system checks don't fail
+    # Keep filters conservative
     list_filter = ("status", "room")
 
     # Use only guaranteed fields for searching to avoid system check errors
     search_fields = ("id",)
 
-    # IMPORTANT: remove date_hierarchy for now because we don't know the real field name
-    # date_hierarchy = "start"  # <-- removed (was causing admin.E127)
+    # Optional: make it easier to pick room and requester
+    autocomplete_fields = ("room", "requested_by")
 
     # ------- Display helpers (these are allowed in list_display) -------
 
     def start_display(self, obj):
         """
-        Try a few common datetime field names.
-        Adjust this once you confirm your model field name.
+        Try a few common datetime/time field names.
         """
         value = (
             getattr(obj, "start", None)
@@ -676,7 +720,7 @@ class RoomBookingAdmin(admin.ModelAdmin):
 
     def end_display(self, obj):
         """
-        Try a few common datetime field names.
+        Try a few common datetime/time field names.
         """
         value = (
             getattr(obj, "end", None)

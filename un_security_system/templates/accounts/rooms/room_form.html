@@ -1,0 +1,477 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} – Room Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .form-section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .amenity-grid, .approver-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+    
+    .checkbox-item {
+        background: #f8f9fa;
+        padding: 0.75rem;
+        border-radius: 8px;
+        border: 2px solid #e9ecef;
+        transition: all 0.2s;
+    }
+    
+    .checkbox-item:hover {
+        background: #e9ecef;
+        border-color: #667eea;
+    }
+    
+    .checkbox-item input[type="checkbox"]:checked + label {
+        color: #667eea;
+        font-weight: 600;
+    }
+    
+    .form-check {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-check-input {
+        width: 1.25rem;
+        height: 1.25rem;
+        cursor: pointer;
+        margin: 0;
+    }
+    
+    .form-check-label {
+        cursor: pointer;
+        margin: 0;
+        user-select: none;
+        flex: 1;
+    }
+    
+    .btn-group-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        margin-top: 2rem;
+    }
+    
+    .alert-info {
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        color: #004085;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-control, .form-select {
+        border-radius: 8px;
+        border: 2px solid #e9ecef;
+        padding: 0.625rem 0.75rem;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.1);
+    }
+
+    .text-danger {
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+    }
+
+    .is-invalid {
+        border-color: #dc3545;
+    }
+
+    @media (max-width: 768px) {
+        .amenity-grid, .approver-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .btn-group-actions {
+            flex-direction: column;
+        }
+        
+        .btn-group-actions .btn {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1">
+                <i class="bi {% if is_edit %}bi-pencil-square{% else %}bi-plus-circle{% endif %} text-primary me-2"></i>
+                {{ page_title }}
+            </h2>
+            <p class="text-muted mb-0">
+                {% if is_edit %}
+                    Update room details, amenities, and approvers
+                {% else %}
+                    Create a new bookable room in the system
+                {% endif %}
+            </p>
+        </div>
+        <a href="{% if is_edit %}{% url 'accounts:room_detail' object.pk %}{% else %}{% url 'accounts:room_list' %}{% endif %}" 
+           class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
+            {% if is_edit %}Back to Room{% else %}Back to Rooms{% endif %}
+        </a>
+    </div>
+    
+    {% if not is_edit %}
+    <div class="alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        <strong>Creating a new room:</strong> Fill in the basic information below. You can assign amenities and approvers to help users find the right space.
+    </div>
+    {% endif %}
+    
+    <form method="post" novalidate>
+        {% csrf_token %}
+        
+        <!-- Basic Information -->
+        <div class="form-section">
+            <div class="form-section-title">
+                <i class="bi bi-info-circle me-2"></i>Basic Information
+            </div>
+            
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="{{ form.name.id_for_label }}" class="form-label fw-semibold">
+                        Room Name <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" 
+                           name="{{ form.name.name }}" 
+                           class="form-control {% if form.name.errors %}is-invalid{% endif %}"
+                           id="{{ form.name.id_for_label }}"
+                           value="{{ form.name.value|default:'' }}"
+                           placeholder="e.g., Conference Room A"
+                           required>
+                    {% if form.name.errors %}
+                        <div class="text-danger">
+                            {% for error in form.name.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Full name of the room</small>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="{{ form.code.id_for_label }}" class="form-label fw-semibold">
+                        Room Code <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" 
+                           name="{{ form.code.name }}" 
+                           class="form-control {% if form.code.errors %}is-invalid{% endif %}"
+                           id="{{ form.code.id_for_label }}"
+                           value="{{ form.code.value|default:'' }}"
+                           placeholder="e.g., CR-A, LIB-1"
+                           required>
+                    {% if form.code.errors %}
+                        <div class="text-danger">
+                            {% for error in form.code.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Short unique identifier (e.g., CR-A, LIB-1)</small>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="{{ form.room_type.id_for_label }}" class="form-label fw-semibold">
+                        Room Type <span class="text-danger">*</span>
+                    </label>
+                    <select name="{{ form.room_type.name }}" 
+                            class="form-select {% if form.room_type.errors %}is-invalid{% endif %}"
+                            id="{{ form.room_type.id_for_label }}"
+                            required>
+                        <option value="">---------</option>
+                        {% for value, label in form.room_type.field.choices %}
+                            {% if value %}
+                                <option value="{{ value }}" {% if form.room_type.value == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    {% if form.room_type.errors %}
+                        <div class="text-danger">
+                            {% for error in form.room_type.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="{{ form.capacity.id_for_label }}" class="form-label fw-semibold">
+                        Capacity
+                    </label>
+                    <input type="number" 
+                           name="{{ form.capacity.name }}" 
+                           class="form-control {% if form.capacity.errors %}is-invalid{% endif %}"
+                           id="{{ form.capacity.id_for_label }}"
+                           value="{{ form.capacity.value|default:'' }}"
+                           placeholder="Number of people"
+                           min="1">
+                    {% if form.capacity.errors %}
+                        <div class="text-danger">
+                            {% for error in form.capacity.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Maximum number of people</small>
+                </div>
+                
+                <div class="col-12">
+                    <label for="{{ form.location.id_for_label }}" class="form-label fw-semibold">
+                        Location
+                    </label>
+                    <input type="text" 
+                           name="{{ form.location.name }}" 
+                           class="form-control {% if form.location.errors %}is-invalid{% endif %}"
+                           id="{{ form.location.id_for_label }}"
+                           value="{{ form.location.value|default:'' }}"
+                           placeholder="e.g., UN House 1st Floor">
+                    {% if form.location.errors %}
+                        <div class="text-danger">
+                            {% for error in form.location.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Building, floor, or area description</small>
+                </div>
+                
+                <div class="col-12">
+                    <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold">
+                        Description
+                    </label>
+                    <textarea name="{{ form.description.name }}" 
+                              class="form-control {% if form.description.errors %}is-invalid{% endif %}"
+                              id="{{ form.description.id_for_label }}"
+                              rows="4"
+                              placeholder="Additional details about the room">{{ form.description.value|default:'' }}</textarea>
+                    {% if form.description.errors %}
+                        <div class="text-danger">
+                            {% for error in form.description.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">Additional details about the room</small>
+                </div>
+                
+                <div class="col-12">
+                    <div class="form-check">
+                        <input type="checkbox" 
+                               name="{{ form.is_active.name }}" 
+                               class="form-check-input"
+                               id="{{ form.is_active.id_for_label }}"
+                               {% if form.is_active.value or form.is_active.value == None %}checked{% endif %}>
+                        <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                            Room is active and available for booking
+                        </label>
+                    </div>
+                    {% if form.is_active.errors %}
+                        <div class="text-danger">
+                            {% for error in form.is_active.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Amenities -->
+        <div class="form-section">
+            <div class="form-section-title">
+                <i class="bi bi-star me-2"></i>Amenities & Features
+            </div>
+            
+            {% if form.amenities.field.queryset.exists %}
+                <p class="text-muted small mb-3">Select all amenities available in this room</p>
+                <div class="amenity-grid">
+                    {% for amenity in form.amenities.field.queryset %}
+                        <div class="checkbox-item">
+                            <div class="form-check">
+                                <input type="checkbox" 
+                                       name="{{ form.amenities.name }}" 
+                                       class="form-check-input"
+                                       id="amenity_{{ amenity.id }}"
+                                       value="{{ amenity.id }}"
+                                       {% if amenity.id in form.amenities.value or amenity in form.instance.amenities.all %}checked{% endif %}>
+                                <label class="form-check-label" for="amenity_{{ amenity.id }}">
+                                    {{ amenity.name }}
+                                </label>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                {% if form.amenities.errors %}
+                    <div class="text-danger mt-2">
+                        {% for error in form.amenities.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    No amenities have been created yet. You can add them later from the admin panel.
+                </div>
+            {% endif %}
+        </div>
+        
+<!--        &lt;!&ndash; Approvers &ndash;&gt;-->
+<!--        <div class="form-section">-->
+<!--            <div class="form-section-title">-->
+<!--                <i class="bi bi-shield-check me-2"></i>Booking Approvers-->
+<!--            </div>-->
+<!--            -->
+<!--            <p class="text-muted small mb-3">-->
+<!--                Select users who can approve booking requests for this room. -->
+<!--                If no approvers are selected, only superusers can approve bookings.-->
+<!--            </p>-->
+<!--            -->
+<!--            {% if form.approvers.field.queryset.exists %}-->
+<!--                <div class="approver-grid">-->
+<!--                    {% for approver in form.approvers.field.queryset %}-->
+<!--                        <div class="checkbox-item">-->
+<!--                            <div class="form-check">-->
+<!--                                <input type="checkbox" -->
+<!--                                       name="{{ form.approvers.name }}" -->
+<!--                                       class="form-check-input"-->
+<!--                                       id="approver_{{ approver.id }}"-->
+<!--                                       value="{{ approver.id }}"-->
+<!--                                       {% if approver.id in form.approvers.value or approver in form.instance.approvers.all %}checked{% endif %}>-->
+<!--                                <label class="form-check-label" for="approver_{{ approver.id }}">-->
+<!--                                    {{ approver.get_full_name|default:approver.username }}-->
+<!--                                    <small class="text-muted d-block">{{ approver.get_role_display }}</small>-->
+<!--                                </label>-->
+<!--                            </div>-->
+<!--                        </div>-->
+<!--                    {% endfor %}-->
+<!--                </div>-->
+<!--                {% if form.approvers.errors %}-->
+<!--                    <div class="text-danger mt-2">-->
+<!--                        {% for error in form.approvers.errors %}-->
+<!--                            {{ error }}-->
+<!--                        {% endfor %}-->
+<!--                    </div>-->
+<!--                {% endif %}-->
+<!--            {% else %}-->
+<!--                <div class="alert alert-warning">-->
+<!--                    <i class="bi bi-exclamation-triangle me-2"></i>-->
+<!--                    No active users found to assign as approvers.-->
+<!--                </div>-->
+<!--            {% endif %}-->
+<!--        </div>-->
+        
+        <!-- Form Errors -->
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                {% for error in form.non_field_errors %}
+                    {{ error }}
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        <!-- Action Buttons -->
+        <div class="btn-group-actions">
+            <a href="{% if is_edit %}{% url 'accounts:room_detail' object.pk %}{% else %}{% url 'accounts:room_list' %}{% endif %}" 
+               class="btn btn-outline-secondary btn-lg">
+                <i class="bi bi-x-circle me-1"></i>
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi {% if is_edit %}bi-check-circle{% else %}bi-plus-circle{% endif %} me-1"></i>
+                {{ submit_text }}
+            </button>
+        </div>
+    </form>
+    
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add smooth transitions to checkbox items
+    const checkboxItems = document.querySelectorAll('.checkbox-item');
+    
+    checkboxItems.forEach(item => {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const label = item.querySelector('label');
+        
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                item.style.borderColor = '#667eea';
+                item.style.background = '#f0f4ff';
+            } else {
+                item.style.borderColor = '#e9ecef';
+                item.style.background = '#f8f9fa';
+            }
+        });
+        
+        // Set initial state
+        if (checkbox.checked) {
+            item.style.borderColor = '#667eea';
+            item.style.background = '#f0f4ff';
+        }
+    });
+    
+    // Form validation feedback
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const requiredFields = form.querySelectorAll('[required]');
+            let hasErrors = false;
+            
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    field.classList.add('is-invalid');
+                    hasErrors = true;
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+            
+            if (hasErrors) {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -42,6 +42,7 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        z-index: 10;
     }
 
     .room-icon {
@@ -81,6 +82,7 @@
         border-radius: 20px;
         font-size: 0.85rem;
         font-weight: 500;
+        margin-bottom: 1rem;
     }
 
     .availability-indicator.available {
@@ -225,6 +227,71 @@
         height: 300px;
     }
 
+    /* Admin action badge */
+    .admin-badge {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        z-index: 11;
+        background: rgba(255, 193, 7, 0.9);
+        backdrop-filter: blur(10px);
+        padding: 0.35rem 0.6rem;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #000;
+    }
+
+    .admin-actions-dropdown {
+        position: absolute;
+        bottom: 1rem;
+        left: 1rem;
+        z-index: 11;
+    }
+
+    .admin-dropdown-btn {
+        background: rgba(255, 193, 7, 0.95);
+        border: none;
+        color: #000;
+        font-weight: 600;
+        font-size: 0.75rem;
+        padding: 0.4rem 0.8rem;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+    .admin-dropdown-btn:hover {
+        background: #ffc107;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+    }
+
+    .amenity-icons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .amenity-icon {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f0f4ff;
+        border-radius: 6px;
+        color: #667eea;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+        cursor: help;
+    }
+
+    .amenity-icon:hover {
+        background: #667eea;
+        color: white;
+        transform: scale(1.1);
+    }
+
     @media (max-width: 768px) {
         .stats-banner {
             margin-bottom: 1rem;
@@ -253,7 +320,12 @@
                 Find and reserve meeting rooms, conference spaces, and shared facilities
             </p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            {% if user.is_superuser %}
+                <a href="{% url 'accounts:room_add' %}" class="btn btn-success">
+                    <i class="bi bi-plus-circle me-1"></i> Add Room
+                </a>
+            {% endif %}
             <a href="{% url 'accounts:my_bookings' %}" class="btn btn-outline-secondary">
                 <i class="bi bi-calendar-check me-1"></i> My Bookings
             </a>
@@ -328,8 +400,8 @@
         <button class="filter-pill" data-filter="conference">
             <i class="bi bi-building me-1"></i> Conference
         </button>
-        <button class="filter-pill" data-filter="training">
-            <i class="bi bi-easel me-1"></i> Training
+        <button class="filter-pill" data-filter="library">
+            <i class="bi bi-book me-1"></i> Library
         </button>
         <button class="filter-pill" data-filter="available">
             <i class="bi bi-check-circle me-1"></i> Available Now
@@ -345,12 +417,21 @@
                      data-capacity="{{ room.capacity|default:0 }}"
                      data-name="{{ room.name|lower }}"
                      data-location="{{ room.location|lower }}"
-                     data-code="{{ room.code|lower }}">
+                     data-code="{{ room.code|lower }}"
+                     data-available="{{ room.is_available_now|yesno:'true,false' }}">
 
                     <div class="card shadow-sm room-card">
+                        <!-- Room Type Badge -->
                         <span class="room-type-badge badge bg-primary">
                             {{ room.get_room_type_display }}
                         </span>
+
+                        <!-- Admin Badge (top left) -->
+                        {% if user.is_superuser %}
+                            <span class="admin-badge">
+                                <i class="bi bi-shield-check me-1"></i>Admin
+                            </span>
+                        {% endif %}
 
                         <div class="card-body pb-2">
                             <div class="room-icon">
@@ -358,8 +439,8 @@
                                     <i class="bi bi-people"></i>
                                 {% elif room.room_type == 'conference' %}
                                     <i class="bi bi-building"></i>
-                                {% elif room.room_type == 'training' %}
-                                    <i class="bi bi-easel"></i>
+                                {% elif room.room_type == 'library' %}
+                                    <i class="bi bi-book"></i>
                                 {% else %}
                                     <i class="bi bi-door-open"></i>
                                 {% endif %}
@@ -371,20 +452,65 @@
                             </div>
 
                             <!-- Availability Status -->
-                            {% if room.is_available_now %}
-                                <div class="availability-indicator available mb-3">
-                                    <span class="availability-dot available"></span>
+                            <div class="availability-indicator {% if room.is_available_now %}available{% else %}busy{% endif %}">
+                                <span class="availability-dot {% if room.is_available_now %}available{% else %}busy{% endif %}"></span>
+                                {% if room.is_available_now %}
                                     Available Now
-                                </div>
-                            {% else %}
-                                <div class="availability-indicator busy mb-3">
-                                    <span class="availability-dot busy"></span>
+                                {% else %}
                                     In Use
-                                </div>
-                            {% endif %}
+                                {% endif %}
+                            </div>
+
+                            <!-- Next Meeting Info -->
+                            <div class="mt-3 p-2 rounded"
+                                 style="background:#f8f9ff; border:1px solid #e1e5ff; border-radius:10px;">
+
+                                {% if room.is_available_now %}
+                                    {% if room.next_meeting %}
+                                        <div class="d-flex align-items-center small text-primary">
+                                            <i class="bi bi-clock-history me-2"></i>
+                                            <span>
+                                                <strong>Next:</strong>
+                                                {{ room.next_meeting.start_time|time:"H:i" }}
+                                                {% if room.next_meeting_human %}
+                                                    <span class="text-muted">({{ room.next_meeting_human }})</span>
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                    {% else %}
+                                        <div class="d-flex align-items-center small text-success">
+                                            <i class="bi bi-check-circle me-2"></i>
+                                            <span>Free all day</span>
+                                        </div>
+                                    {% endif %}
+
+                                {% else %}
+                                    {% if room.time_until_free %}
+                                        <div class="d-flex align-items-center small text-danger mb-1">
+                                            <i class="bi bi-exclamation-circle me-2"></i>
+                                            <span>
+                                                <strong>Free in {{ room.time_until_free }}</strong>
+                                            </span>
+                                        </div>
+                                    {% endif %}
+
+                                    {% if room.next_meeting %}
+                                        <div class="d-flex align-items-center small text-primary">
+                                            <i class="bi bi-arrow-right-circle me-2"></i>
+                                            <span>
+                                                <strong>Then:</strong>
+                                                {{ room.next_meeting.start_time|time:"H:i" }}
+                                                {% if room.next_meeting_human %}
+                                                    <span class="text-muted">({{ room.next_meeting_human }})</span>
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
 
                             <!-- Room Features -->
-                            <div class="mb-3">
+                            <div class="mb-3 mt-3">
                                 {% if room.location %}
                                     <span class="room-feature">
                                         <i class="bi bi-geo-alt-fill"></i>
@@ -401,23 +527,16 @@
                             </div>
 
                             <!-- Amenities -->
-                            {% if room.has_projector or room.has_whiteboard or room.has_video_conf %}
-                                <div class="d-flex gap-2 mb-3">
-                                    {% if room.has_projector %}
-                                        <i class="bi bi-projector text-primary"
-                                           data-bs-toggle="tooltip"
-                                           title="Projector Available"></i>
-                                    {% endif %}
-                                    {% if room.has_whiteboard %}
-                                        <i class="bi bi-easel text-primary"
-                                           data-bs-toggle="tooltip"
-                                           title="Whiteboard Available"></i>
-                                    {% endif %}
-                                    {% if room.has_video_conf %}
-                                        <i class="bi bi-camera-video text-primary"
-                                           data-bs-toggle="tooltip"
-                                           title="Video Conferencing"></i>
-                                    {% endif %}
+                            {% if room.amenities_for_display %}
+                                <div class="amenity-icons mb-3">
+                                    {% for amenity in room.amenities_for_display %}
+                                        <div class="amenity-icon"
+                                             data-bs-toggle="tooltip"
+                                             data-bs-placement="top"
+                                             title="{{ amenity.description|default:amenity.name }}">
+                                            <i class="bi {{ amenity.icon_class|default:'bi-star' }}"></i>
+                                        </div>
+                                    {% endfor %}
                                 </div>
                             {% endif %}
 
@@ -429,6 +548,37 @@
                             {% endif %}
                         </div>
 
+                        <!-- Admin Actions Dropdown (inside card, bottom left) -->
+                        {% if user.is_superuser %}
+                            <div class="admin-actions-dropdown">
+                                <div class="dropdown">
+                                    <button class="admin-dropdown-btn dropdown-toggle"
+                                            type="button"
+                                            id="adminMenu{{ room.pk }}"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false">
+                                        <i class="bi bi-gear me-1"></i>Manage
+                                    </button>
+                                    <ul class="dropdown-menu" aria-labelledby="adminMenu{{ room.pk }}">
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'accounts:room_edit' room.pk %}">
+                                                <i class="bi bi-pencil-square me-2 text-warning"></i>
+                                                Edit Room
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <a class="dropdown-item text-danger" href="{% url 'accounts:room_delete' room.pk %}">
+                                                <i class="bi bi-trash me-2"></i>
+                                                Deactivate
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Action Buttons -->
                         <div class="card-footer bg-white border-top d-flex gap-2">
                             <a href="{% url 'accounts:room_detail' room.pk %}"
                                class="btn btn-outline-secondary flex-fill">
@@ -466,10 +616,17 @@
                 There are no rooms configured in the system yet.<br>
                 Please contact your administrator to set up room booking.
             </p>
-            <a class="btn btn-outline-primary">
-                <i class="bi bi-question-circle me-1"></i>
-                Get Help
-            </a>
+            {% if user.is_superuser %}
+                <a href="{% url 'accounts:room_add' %}" class="btn btn-success">
+                    <i class="bi bi-plus-circle me-1"></i>
+                    Add Your First Room
+                </a>
+            {% else %}
+                <a href="#" class="btn btn-outline-primary">
+                    <i class="bi bi-question-circle me-1"></i>
+                    Get Help
+                </a>
+            {% endif %}
         </div>
     {% endif %}
 
@@ -519,8 +676,10 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize tooltips
-    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-    tooltips.forEach(el => new bootstrap.Tooltip(el));
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
 
     const roomItems = document.querySelectorAll('.room-item');
     const searchInput = document.getElementById('roomSearch');
@@ -571,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const name = item.dataset.name || '';
             const location = item.dataset.location || '';
             const code = item.dataset.code || '';
-            const isAvailable = item.querySelector('.availability-indicator.available') !== null;
+            const isAvailable = item.dataset.available === 'true';
 
             let show = true;
 
@@ -586,28 +745,46 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Capacity filter
             if (show && currentCapacityFilter) {
-                const [min, max] = currentCapacityFilter.split('-').map(s => {
-                    if (s.includes('+')) return [parseInt(s), Infinity];
-                    return parseInt(s);
-                });
+                let min = 0;
+                let max = Infinity;
 
                 if (currentCapacityFilter.includes('+')) {
-                    show = capacity >= min[0];
+                    // e.g. "20+"
+                    min = parseInt(currentCapacityFilter) || 0;
+                    max = Infinity;
                 } else {
-                    show = capacity >= min && capacity <= max;
+                    // e.g. "1-5", "6-10"
+                    const parts = currentCapacityFilter.split('-');
+                    min = parseInt(parts[0]) || 0;
+                    max = parseInt(parts[1]) || Infinity;
+                }
+
+                if (!(capacity >= min && capacity <= max)) {
+                    show = false;
                 }
             }
 
             // Search filter
             if (show && currentSearchTerm) {
-                show = name.includes(currentSearchTerm) ||
-                       location.includes(currentSearchTerm) ||
-                       code.includes(currentSearchTerm);
+                const haystack = `${name} ${location} ${code}`;
+                show = haystack.includes(currentSearchTerm);
             }
 
-            // Show/hide item
-            item.style.display = show ? '' : 'none';
-            if (show) visibleCount++;
+            // Show/hide item with animation
+            if (show) {
+                item.style.display = '';
+                setTimeout(() => {
+                    item.style.opacity = '1';
+                    item.style.transform = 'scale(1)';
+                }, 10);
+                visibleCount++;
+            } else {
+                item.style.opacity = '0';
+                item.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    item.style.display = 'none';
+                }, 300);
+            }
         });
 
         // Show/hide no results message
@@ -621,6 +798,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     }
+
+    // Add initial transition properties
+    roomItems.forEach(item => {
+        item.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    });
 });
 </script>
 {% endblock %}

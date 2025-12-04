@@ -1201,28 +1201,35 @@ def visitor_card_create(request):
 def visitor_card_detail(request, pk):
     card = get_object_or_404(VisitorCard, pk=pk)
 
-    # Only privileged users can toggle active status
-    user = request.user
-    can_manage = user.is_superuser or getattr(user, "role", "") in ["lsa", "soc", "data_entry"]
+    # Get all log entries related to this card
+    card_history = (
+        VisitorLog.objects
+        .filter(card=card)
+        .select_related('visitor', 'performed_by')
+        .order_by('-timestamp')
+    )
+
+    can_manage = request.user.has_perm('visitors.change_visitorcard')
 
     if request.method == "POST" and can_manage:
         action = request.POST.get("action")
 
-        if action == "activate":
-            if not card.is_active:
-                card.is_active = True
-                card.save(update_fields=["is_active"])
-                messages.success(request, f"Card {card.number} has been activated.")
-        elif action == "deactivate":
-            if card.is_active:
-                card.is_active = False
-                card.save(update_fields=["is_active"])
-                messages.success(request, f"Card {card.number} has been deactivated.")
+        if action == "deactivate" and card.is_active:
+            card.is_active = False
+            card.save()
+            messages.success(request, f"Card {card.number} has been deactivated.")
+        elif action == "activate" and not card.is_active:
+            card.is_active = True
+            card.save()
+            messages.success(request, f"Card {card.number} has been activated.")
+        else:
+            messages.warning(request, "No changes were applied to this card.")
 
         return redirect("visitors:visitor_card_detail", pk=card.pk)
 
     context = {
         "card": card,
+        "card_history": card_history,
         "can_manage": can_manage,
     }
     return render(request, "visitors/card_detail.html", context)

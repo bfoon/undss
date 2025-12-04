@@ -79,6 +79,13 @@ class VisitorLog(models.Model):
     ]
 
     visitor = models.ForeignKey(Visitor, on_delete=models.CASCADE)
+    card = models.ForeignKey(
+        'VisitorCard',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='logs'
+    )
     action = models.CharField(max_length=10, choices=ACTION_TYPES)
     timestamp = models.DateTimeField(auto_now_add=True)
     performed_by = models.ForeignKey(User, on_delete=models.CASCADE)

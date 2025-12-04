@@ -1,8 +1,10 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.generic import ListView, DetailView, CreateView
+from django.views.generic import ListView, DetailView, CreateView, UpdateView
 from django.urls import reverse_lazy, reverse
+from django.contrib.admin.views.decorators import staff_member_required
+from django.utils.decorators import method_decorator
 from django.contrib import messages
 from django.utils import timezone
 from datetime import datetime
@@ -12,7 +14,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from .models import Room, RoomBooking, RoomApprover
-from .forms import RoomBookingForm, RoomBookingApprovalForm
+from .forms import RoomBookingForm, RoomBookingApprovalForm, RoomForm
 
 
 # ======================= EMAIL HELPERS =======================
@@ -401,3 +403,70 @@ def room_booking_approve_view(request, pk):
             "form": form,
         },
     )
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class RoomCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
+    """Create a new room (superuser only)."""
+    model = Room
+    form_class = RoomForm
+    template_name = "accounts/rooms/room_form.html"
+    success_url = reverse_lazy("accounts:room_list")
+
+    def test_func(self):
+        return self.request.user.is_superuser
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Room '{form.instance.name}' created successfully!")
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['page_title'] = 'Add New Room'
+        ctx['submit_text'] = 'Create Room'
+        return ctx
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class RoomUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    """Edit an existing room (superuser only)."""
+    model = Room
+    form_class = RoomForm
+    template_name = "accounts/rooms/room_form.html"
+
+    def test_func(self):
+        return self.request.user.is_superuser
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Room '{form.instance.name}' updated successfully!")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("accounts:room_list")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['page_title'] = f'Edit Room: {self.object.name}'
+        ctx['submit_text'] = 'Update Room'
+        ctx['is_edit'] = True
+        return ctx
+
+
+@staff_member_required
+def room_delete_view(request, pk):
+    """Delete/deactivate a room (superuser only)."""
+    if not request.user.is_superuser:
+        messages.error(request, "You don't have permission to delete rooms.")
+        return redirect("accounts:room_list")
+
+    room = get_object_or_404(Room, pk=pk)
+
+    if request.method == "POST":
+        room_name = room.name
+        # Soft delete - just deactivate
+        room.is_active = False
+        room.save()
+        messages.warning(request, f"Room '{room_name}' has been deactivated.")
+        return redirect("accounts:room_list")
+
+    return render(request, "accounts/rooms/room_confirm_delete.html", {"room": room})

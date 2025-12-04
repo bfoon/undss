@@ -2,8 +2,8 @@ from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
-from django.db.models import F
+from datetime import timedelta, datetime
+from django.db.models import F, Q
 import uuid
 
 class Agency(models.Model):
@@ -243,6 +243,44 @@ class RegistrationInviteUsage(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+class RoomAmenity(models.Model):
+    """
+    Reusable amenity / feature that can be attached to one or more rooms.
+    Example: projector, video conference, whiteboard, etc.
+    """
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Machine-readable code, e.g. 'projector', 'video_conf'"
+    )
+    name = models.CharField(
+        max_length=120,
+        help_text="Human name, e.g. 'Projector', 'Video Conferencing'"
+    )
+    icon_class = models.CharField(
+        max_length=80,
+        blank=True,
+        help_text="Bootstrap icon class, e.g. 'bi-projector', 'bi-camera-video'"
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Optional short description shown as tooltip"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Hide amenity from selection without deleting it"
+    )
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Room amenity"
+        verbose_name_plural = "Room amenities"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Room(models.Model):
     """
     A bookable room (library, conference room, meeting room, etc.)
@@ -275,6 +313,14 @@ class Room(models.Model):
 
     is_active = models.BooleanField(default=True)
 
+    # 🔹 NEW: amenities / features
+    amenities = models.ManyToManyField(
+        "RoomAmenity",
+        related_name="rooms",
+        blank=True,
+        help_text="Available features/amenities in this room"
+    )
+
     # Users that can approve bookings for this room
     approvers = models.ManyToManyField(
         User,
@@ -286,6 +332,123 @@ class Room(models.Model):
     def __str__(self):
         return f"{self.name} ({self.code})"
 
+    # --------- AMENITY HELPERS ---------
+
+    def has_amenity(self, code: str) -> bool:
+        """
+        Convenience helper for templates / logic:
+        room.has_amenity('projector'), room.has_amenity('video_conf'), etc.
+        """
+        return self.amenities.filter(code=code, is_active=True).exists()
+
+    @property
+    def amenities_for_display(self):
+        """
+        Amenity queryset already filtered for active ones.
+        Use this in templates: for amenity in room.amenities_for_display
+        """
+        return self.amenities.filter(is_active=True)
+
+    # --------- AVAILABILITY HELPERS ---------
+
+    @property
+    def next_meeting(self):
+        """
+        Returns the next approved meeting today, or None.
+        """
+        now = timezone.localtime()
+        today = now.date()
+        now_time = now.time()
+
+        return self.bookings.filter(
+            date=today,
+            status="approved",
+            start_time__gt=now_time
+        ).order_by("start_time").first()
+
+    @property
+    def next_meeting_human(self):
+        """
+        Human-friendly text for the next meeting start time:
+        - "in 15 min"
+        - "in 1h 20m"
+        """
+        nm = self.next_meeting
+        if not nm:
+            return None
+
+        now = timezone.localtime()
+        start_dt = datetime.combine(nm.date, nm.start_time)
+        start_dt = timezone.make_aware(start_dt, timezone.get_current_timezone())
+
+        delta = start_dt - now
+        seconds = delta.total_seconds()
+
+        if seconds < 60:
+            return "soon"
+
+        minutes = int(seconds // 60)
+        hours, minutes = divmod(minutes, 60)
+
+        if hours and minutes:
+            return f"in {hours}h {minutes}m"
+        if hours:
+            return f"in {hours}h"
+        return f"in {minutes}m"
+
+    @property
+    def is_available_now(self):
+        """
+        Room is free right now if no APPROVED meeting is currently running.
+        """
+        now = timezone.localtime()
+        today = now.date()
+        now_time = now.time()
+
+        return not self.bookings.filter(
+            date=today,
+            status="approved",
+            start_time__lte=now_time,
+            end_time__gt=now_time,
+        ).exists()
+
+    @property
+    def time_until_free(self):
+        """
+        Returns human readable time until current APPROVED meeting ends.
+        Example: "25 min", "1h 10m".
+        """
+        now = timezone.localtime()
+        today = now.date()
+        now_time = now.time()
+
+        meeting = self.bookings.filter(
+            date=today,
+            status="approved",
+            start_time__lte=now_time,
+            end_time__gt=now_time,
+        ).order_by("end_time").first()
+
+        if not meeting:
+            return ""
+
+        end_dt = datetime.combine(meeting.date, meeting.end_time)
+        end_dt = timezone.make_aware(end_dt, timezone.get_current_timezone())
+
+        delta = end_dt - now
+        seconds = delta.total_seconds()
+
+        if seconds < 60:
+            return "a few seconds"
+
+        minutes = int(seconds // 60)
+        hours, minutes = divmod(minutes, 60)
+
+        if hours and minutes:
+            return f"{hours}h {minutes}m"
+        if hours:
+            return f"{hours}h"
+        return f"{minutes}m"
 
 class RoomBooking(models.Model):
     """

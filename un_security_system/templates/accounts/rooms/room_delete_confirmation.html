@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Delete Room – {{ room.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .delete-confirmation {
+        max-width: 600px;
+        margin: 4rem auto;
+    }
+    
+    .warning-card {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-top: 4px solid #dc3545;
+    }
+    
+    .warning-icon {
+        width: 80px;
+        height: 80px;
+        background: #fff5f5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: #dc3545;
+    }
+    
+    .room-details {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin: 1.5rem 0;
+    }
+    
+    .room-details .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .room-details .detail-row:last-child {
+        border-bottom: none;
+    }
+    
+    .room-details .label {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .room-details .value {
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="delete-confirmation">
+        <div class="warning-card">
+            <div class="warning-icon">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+            
+            <h3 class="text-center mb-3">Deactivate Room?</h3>
+            
+            <p class="text-center text-muted mb-4">
+                You are about to deactivate this room. It will no longer be available for new bookings.
+            </p>
+            
+            <div class="room-details">
+                <div class="detail-row">
+                    <span class="label">Room Name:</span>
+                    <span class="value">{{ room.name }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Room Code:</span>
+                    <span class="value">{{ room.code }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Type:</span>
+                    <span class="value">{{ room.get_room_type_display }}</span>
+                </div>
+                {% if room.location %}
+                <div class="detail-row">
+                    <span class="label">Location:</span>
+                    <span class="value">{{ room.location }}</span>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="alert alert-warning">
+                <i class="bi bi-info-circle me-2"></i>
+                <strong>Note:</strong> Existing bookings will remain intact, but no new bookings can be made for this room.
+                You can reactivate it later from the admin panel.
+            </div>
+            
+            <form method="post" class="mt-4">
+                {% csrf_token %}
+                <div class="d-flex gap-3 justify-content-center">
+                    <a href="{% url 'accounts:room_detail' room.pk %}" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-x-circle me-1"></i>
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-danger btn-lg">
+                        <i class="bi bi-trash me-1"></i>
+                        Deactivate Room
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
