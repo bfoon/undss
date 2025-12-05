@@ -350,7 +350,18 @@
                             <i class="bi bi-person-badge me-2"></i>
                             {{ member.full_name }}
                           </h6>
-                          {% if user.is_authenticated %}
+                         {% if user.is_authenticated %}
+                          {% if visitor.checked_out %}
+                            {# Visit complete -> ONLY superuser can delete #}
+                            {% if user.is_superuser %}
+                              <a href="{% url 'visitors:delete_group_member' visitor.pk member.pk %}"
+                                 class="btn btn-sm btn-outline-danger"
+                                 title="Remove member">
+                                <i class="bi bi-trash"></i>
+                              </a>
+                            {% endif %}
+                          {% else %}
+                            {# Visit NOT complete -> previous permission logic #}
                             {% if user.is_superuser or user.role == 'lsa' or user.role == 'soc' or user == visitor.registered_by %}
                               <a href="{% url 'visitors:delete_group_member' visitor.pk member.pk %}"
                                  class="btn btn-sm btn-outline-danger"
@@ -359,6 +370,7 @@
                               </a>
                             {% endif %}
                           {% endif %}
+                        {% endif %}
                         </div>
 
                         <div class="row g-2 small">
