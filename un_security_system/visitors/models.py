@@ -39,7 +39,7 @@ class Visitor(models.Model):
     # Visit details
     expected_date = models.DateField()
     expected_time = models.TimeField()
-    estimated_duration = models.CharField(max_length=50)  # e.g., "2 hours"
+    estimated_duration = models.CharField(max_length=50)
 
     # Approval workflow
     status = models.CharField(max_length=10, choices=APPROVAL_STATUS, default='pending')
@@ -69,6 +69,46 @@ class Visitor(models.Model):
     def __str__(self):
         return f"{self.full_name} - {self.organization}"
 
+    @property
+    def total_group_size(self):
+        """Returns total number of people including main visitor and group members"""
+        if self.visitor_type == 'group':
+            return 1 + self.group_members.count()
+        return 1
+
+
+class GroupMember(models.Model):
+    """Individual member of a group visit"""
+    ID_TYPES = [
+        ('passport', 'Passport'),
+        ('national_id', 'National ID Card'),
+        ('driving_license', 'Driving License'),
+        ('other', 'Other Photo ID'),
+    ]
+
+    visitor = models.ForeignKey(Visitor, on_delete=models.CASCADE, related_name='group_members')
+    full_name = models.CharField(max_length=200, help_text="Full name as shown on ID")
+    contact_number = models.CharField(max_length=20, blank=True, help_text="Phone or mobile number")
+    email = models.EmailField(blank=True, help_text="Email address (optional)")
+    id_type = models.CharField(max_length=20, choices=ID_TYPES, help_text="Type of identification")
+    id_number = models.CharField(max_length=100, help_text="ID/Passport number")
+    nationality = models.CharField(max_length=100, blank=True)
+
+    # Photo ID upload (optional but recommended)
+    id_photo = models.ImageField(upload_to='group_members/ids/%Y/%m/', blank=True, null=True,
+                                 help_text="Upload a photo of the ID document")
+
+    added_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, help_text="Additional notes about this member")
+
+    class Meta:
+        ordering = ['full_name']
+        verbose_name = 'Group Member'
+        verbose_name_plural = 'Group Members'
+
+    def __str__(self):
+        return f"{self.full_name} ({self.get_id_type_display()}: {self.id_number})"
+
 
 class VisitorLog(models.Model):
     ACTION_TYPES = [
@@ -90,15 +130,16 @@ class VisitorLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     performed_by = models.ForeignKey(User, on_delete=models.CASCADE)
     notes = models.TextField(blank=True)
-    gate = models.CharField(max_length=10, blank=True)  # front/back
+    gate = models.CharField(max_length=10, blank=True)
 
     class Meta:
         ordering = ['-timestamp']
 
+
 class VisitorCard(models.Model):
     number = models.CharField(max_length=20, unique=True)
-    is_active = models.BooleanField(default=True)       # card exists/usable
-    in_use = models.BooleanField(default=False)         # currently issued
+    is_active = models.BooleanField(default=True)
+    in_use = models.BooleanField(default=False)
     issued_to = models.ForeignKey('Visitor', null=True, blank=True,
                                   on_delete=models.SET_NULL, related_name='issued_card_history')
     issued_at = models.DateTimeField(null=True, blank=True)

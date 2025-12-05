@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Delete Group Member · UN Security Management System{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 600px;">
+    <div class="card shadow-sm mt-5">
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 4rem;"></i>
+                <h4 class="mt-3">Confirm Delete Group Member</h4>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>Warning:</strong> This action cannot be undone.
+            </div>
+
+            <div class="card bg-light mb-4">
+                <div class="card-body">
+                    <h6 class="mb-3">Member Details:</h6>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Name:</dt>
+                        <dd class="col-sm-8">{{ member.full_name }}</dd>
+                        
+                        <dt class="col-sm-4">ID Type:</dt>
+                        <dd class="col-sm-8">{{ member.get_id_type_display }}</dd>
+                        
+                        <dt class="col-sm-4">ID Number:</dt>
+                        <dd class="col-sm-8">{{ member.id_number }}</dd>
+                        
+                        {% if member.contact_number %}
+                        <dt class="col-sm-4">Contact:</dt>
+                        <dd class="col-sm-8">{{ member.contact_number }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+
+            <p class="text-center text-muted mb-4">
+                Are you sure you want to remove <strong>{{ member.full_name }}</strong> from 
+                <strong>{{ visitor.full_name }}</strong>'s group?
+            </p>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="d-flex gap-2 justify-content-center">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-2"></i>Yes, Delete Member
+                    </button>
+                    <a href="{% url 'visitors:visitor_detail' visitor.pk %}" class="btn btn-secondary">
+                        <i class="bi bi-x-lg me-2"></i>Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

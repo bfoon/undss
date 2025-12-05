@@ -3,7 +3,7 @@ from django.utils import timezone
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column, HTML
 from crispy_forms.bootstrap import Field, InlineRadios
-from .models import Visitor, VisitorLog
+from .models import Visitor, VisitorLog, GroupMember
 
 
 class VisitorForm(forms.ModelForm):
@@ -101,6 +101,63 @@ class VisitorForm(forms.ModelForm):
         return cleaned_data
 
 
+class GroupMemberForm(forms.ModelForm):
+    """Form for adding individual group members"""
+
+    class Meta:
+        model = GroupMember
+        fields = ['full_name', 'contact_number', 'email', 'id_type', 'id_number',
+                  'nationality', 'id_photo', 'notes']
+        widgets = {
+            'full_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Full name as on ID document'
+            }),
+            'contact_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '+123 456 789'
+            }),
+            'email': forms.EmailInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'member@example.com'
+            }),
+            'id_type': forms.Select(attrs={'class': 'form-control'}),
+            'id_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'ID/Passport number'
+            }),
+            'nationality': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Country of citizenship'
+            }),
+            'id_photo': forms.FileInput(attrs={
+                'class': 'form-control',
+                'accept': 'image/*'
+            }),
+            'notes': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Additional notes (optional)'
+            }),
+        }
+
+    def clean_id_photo(self):
+        """Validate uploaded ID photo"""
+        id_photo = self.cleaned_data.get('id_photo')
+        if id_photo:
+            # Check file size (5MB limit)
+            if id_photo.size > 5 * 1024 * 1024:
+                raise forms.ValidationError('Image file size must be less than 5MB.')
+
+            # Check file type
+            allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
+            if hasattr(id_photo, 'content_type'):
+                if id_photo.content_type not in allowed_types:
+                    raise forms.ValidationError('Only JPEG, PNG, and GIF images are allowed.')
+
+        return id_photo
+
+
 class VisitorApprovalForm(forms.Form):
     ACTION_CHOICES = [
         ('approve', 'Approve'),
@@ -177,24 +234,73 @@ GATE_ACTIONS = (
     ('check_out', 'Check Out'),
 )
 
+
 class GateCheckForm(forms.Form):
-    action = forms.ChoiceField(choices=GATE_ACTIONS)
-    gate = forms.ChoiceField(choices=(('front', 'Front Gate'), ('back', 'Back Gate')), initial='front')
-    id_number = forms.CharField(max_length=50, required=False,
-                                help_text="Required if missing for check-in.")
-    card_number = forms.CharField(max_length=20, required=False,
-                                  help_text="Required for check-in to issue a visitor card.")
+    action = forms.ChoiceField(
+        choices=GATE_ACTIONS,
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+    gate = forms.ChoiceField(
+        choices=(
+            ("front", "Front Gate"),
+            ("back", "Back Gate"),
+        ),
+        initial="front",
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+    id_number = forms.CharField(
+        max_length=50,
+        required=False,
+        help_text="Required if missing for check-in.",
+        widget=forms.TextInput(attrs={"class": "form-control"})
+    )
+    card_number = forms.CharField(
+        max_length=20,
+        required=False,
+        help_text="Required for check-in to issue a visitor card.",
+        widget=forms.TextInput(attrs={"class": "form-control"})
+    )
+
+    def __init__(self, *args, visitor=None, **kwargs):
+        """
+        Pass the visitor instance so we can:
+        - decide if ID is really required on check-in
+        - show better help text when an ID already exists
+        """
+        self.visitor = visitor
+        super().__init__(*args, **kwargs)
+
+        if self.visitor and getattr(self.visitor, "id_number", None):
+            # Visitor already has an ID on file
+            current_id = self.visitor.id_number
+            self.fields["id_number"].help_text = (
+                f"Current ID on file: {current_id}. "
+                "Fill only if you need to update it at the gate."
+            )
+        else:
+            # No ID on file yet
+            self.fields["id_number"].help_text = "Required for first check-in."
 
     def clean(self):
         cleaned = super().clean()
-        action = cleaned.get('action')
-        id_number = cleaned.get('id_number')
-        card_number = cleaned.get('card_number')
-        if action == 'check_in':
-            # require a card and ID
-            if not card_number:
-                self.add_error('card_number', 'Card number is required for check-in.')
-            if not id_number:
-                self.add_error('id_number', 'Visitor ID is required for check-in.')
-        return cleaned
+        action = cleaned.get("action")
+        id_number = cleaned.get("id_number")
+        card_number = cleaned.get("card_number")
 
+        # Normalize action just in case
+        if action:
+            action = str(action)
+
+        if action == "check_in":
+            # Card is ALWAYS required on check-in
+            if not card_number:
+                self.add_error("card_number", "Card number is required for check-in.")
+
+            # ID is required if:
+            # - no ID in the form AND
+            # - no ID already stored on the visitor
+            visitor_has_id = bool(getattr(self.visitor, "id_number", None)) if self.visitor else False
+            if not id_number and not visitor_has_id:
+                self.add_error("id_number", "Visitor ID is required for check-in.")
+
+        return cleaned

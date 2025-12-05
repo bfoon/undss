@@ -17,13 +17,15 @@ import threading
 import logging
 from django.views.generic import TemplateView
 
+from django.core.files.uploadedfile import UploadedFile
+
 
 
 from django.conf import settings
 from django.core.mail import send_mail
 from django.contrib.auth import get_user_model
 
-from .models import Visitor, VisitorLog, VisitorCard
+from .models import Visitor, VisitorLog, VisitorCard, GroupMember
 from .forms import VisitorForm, VisitorApprovalForm, QuickVisitorCheckForm, GateCheckForm
 
 logger = logging.getLogger(__name__)
@@ -317,6 +319,11 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
         response = super().form_valid(form)
         visitor = form.instance
 
+        # Handle group members if visitor type is 'group'
+        member_count = 0
+        if visitor.visitor_type == 'group':
+            member_count = self._save_group_members(visitor)
+
         # Notify LSA/SOC of new request
         _notify_lsa_soc_new_request(visitor, self.request)
 
@@ -333,15 +340,89 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
                 performed_by=self.request.user,
                 notes='Auto-approved by LSA'
             )
-            messages.success(self.request, 'Visitor registered and approved successfully.')
 
-            # Notify requester (in this case, the same LSA - but still consistent)
+            success_msg = f'Visitor {visitor.full_name} registered and approved successfully.'
+            if member_count > 0:
+                success_msg += f' Group includes {member_count} member(s).'
+            messages.success(self.request, success_msg)
+
             _notify_requester_status_change(visitor, 'approved')
         else:
-            messages.success(self.request, 'Visitor registered successfully. Awaiting LSA approval.')
+            success_msg = f'Visitor {visitor.full_name} registered successfully. Awaiting LSA approval.'
+            if member_count > 0:
+                success_msg += f' Group includes {member_count} member(s).'
+            messages.success(self.request, success_msg)
 
         return response
 
+    def _save_group_members(self, visitor):
+        """Process and save group members from form data"""
+        # Get arrays from POST data
+        names = self.request.POST.getlist('member_full_name[]')
+        contacts = self.request.POST.getlist('member_contact[]')
+        emails = self.request.POST.getlist('member_email[]')
+        id_types = self.request.POST.getlist('member_id_type[]')
+        id_numbers = self.request.POST.getlist('member_id_number[]')
+        nationalities = self.request.POST.getlist('member_nationality[]')
+        notes_list = self.request.POST.getlist('member_notes[]')
+
+        # Get uploaded files
+        id_photos = self.request.FILES.getlist('member_id_photo[]')
+
+        saved_count = 0
+
+        # Process each member
+        for idx, name in enumerate(names):
+            if not name or not name.strip():
+                continue  # Skip empty entries
+
+            # Validate required fields
+            id_type = id_types[idx] if idx < len(id_types) else ''
+            id_number = id_numbers[idx] if idx < len(id_numbers) else ''
+
+            if not id_type or not id_number:
+                continue  # Skip if missing required fields
+
+            member_data = {
+                'visitor': visitor,
+                'full_name': name.strip(),
+                'contact_number': contacts[idx].strip() if idx < len(contacts) else '',
+                'email': emails[idx].strip() if idx < len(emails) else '',
+                'id_type': id_type,
+                'id_number': id_number.strip(),
+                'nationality': nationalities[idx].strip() if idx < len(nationalities) else '',
+                'notes': notes_list[idx].strip() if idx < len(notes_list) else '',
+            }
+
+            # Create member
+            try:
+                member = GroupMember.objects.create(**member_data)
+
+                # Handle photo upload if provided
+                if idx < len(id_photos) and id_photos[idx]:
+                    # Validate file size
+                    if id_photos[idx].size <= 5 * 1024 * 1024:  # 5MB limit
+                        member.id_photo = id_photos[idx]
+                        member.save()
+
+                saved_count += 1
+            except Exception as e:
+                logger.error(f"Error saving group member: {e}")
+                continue
+
+        # Log group member addition
+        if saved_count > 0:
+            VisitorLog.objects.create(
+                visitor=visitor,
+                action='approval',
+                performed_by=self.request.user,
+                notes=f'Added {saved_count} group member(s) to this visit'
+            )
+
+        return saved_count
+
+
+# Replace your VisitorUpdateView with this updated version:
 
 class VisitorUpdateView(LoginRequiredMixin, UpdateView):
     model = Visitor
@@ -351,15 +432,136 @@ class VisitorUpdateView(LoginRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse('visitors:visitor_detail', kwargs={'pk': self.object.pk})
 
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        messages.success(self.request, f'Visitor {form.instance.full_name} updated successfully.')
-        return response
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_edit'] = True
+        # Pass existing group members to template
+        if self.object.visitor_type == 'group':
+            context['existing_members'] = self.object.group_members.all()
         return context
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        visitor = form.instance
+
+        # Handle group members if visitor type is 'group'
+        member_count = 0
+        if visitor.visitor_type == 'group':
+            # Option 1: Keep existing members and add new ones
+            # Option 2: Clear all and re-add (uncomment line below)
+            # visitor.group_members.all().delete()
+
+            member_count = self._save_group_members(visitor)
+        else:
+            # If changed from group to other type, optionally clear members
+            # visitor.group_members.all().delete()
+            pass
+
+        success_msg = f'Visitor {visitor.full_name} updated successfully.'
+        if member_count > 0:
+            success_msg += f' Added {member_count} new group member(s).'
+        messages.success(self.request, success_msg)
+
+        return response
+
+    def _save_group_members(self, visitor):
+        """Process and save group members from form data"""
+        # Same implementation as VisitorCreateView
+        names = self.request.POST.getlist('member_full_name[]')
+        contacts = self.request.POST.getlist('member_contact[]')
+        emails = self.request.POST.getlist('member_email[]')
+        id_types = self.request.POST.getlist('member_id_type[]')
+        id_numbers = self.request.POST.getlist('member_id_number[]')
+        nationalities = self.request.POST.getlist('member_nationality[]')
+        notes_list = self.request.POST.getlist('member_notes[]')
+        id_photos = self.request.FILES.getlist('member_id_photo[]')
+
+        saved_count = 0
+
+        for idx, name in enumerate(names):
+            if not name or not name.strip():
+                continue
+
+            id_type = id_types[idx] if idx < len(id_types) else ''
+            id_number = id_numbers[idx] if idx < len(id_numbers) else ''
+
+            if not id_type or not id_number:
+                continue
+
+            member_data = {
+                'visitor': visitor,
+                'full_name': name.strip(),
+                'contact_number': contacts[idx].strip() if idx < len(contacts) else '',
+                'email': emails[idx].strip() if idx < len(emails) else '',
+                'id_type': id_type,
+                'id_number': id_number.strip(),
+                'nationality': nationalities[idx].strip() if idx < len(nationalities) else '',
+                'notes': notes_list[idx].strip() if idx < len(notes_list) else '',
+            }
+
+            try:
+                member = GroupMember.objects.create(**member_data)
+
+                if idx < len(id_photos) and id_photos[idx]:
+                    if id_photos[idx].size <= 5 * 1024 * 1024:
+                        member.id_photo = id_photos[idx]
+                        member.save()
+
+                saved_count += 1
+            except Exception as e:
+                logger.error(f"Error saving group member: {e}")
+                continue
+
+        if saved_count > 0:
+            VisitorLog.objects.create(
+                visitor=visitor,
+                action='approval',
+                performed_by=self.request.user,
+                notes=f'Updated visitor: Added {saved_count} group member(s)'
+            )
+
+        return saved_count
+
+
+# Add this new view for managing group members after creation:
+
+@login_required
+def delete_group_member(request, visitor_id, member_id):
+    """Delete a specific group member"""
+    visitor = get_object_or_404(Visitor, pk=visitor_id)
+    member = get_object_or_404(GroupMember, pk=member_id, visitor=visitor)
+
+    # Check permissions
+    user = request.user
+    can_delete = (
+            user.is_superuser or
+            user.role in ['lsa', 'soc'] or
+            (visitor.registered_by and visitor.registered_by.id == user.id)
+    )
+
+    if not can_delete:
+        messages.error(request, "You don't have permission to delete this group member.")
+        return redirect('visitors:visitor_detail', pk=visitor_id)
+
+    if request.method == 'POST':
+        member_name = member.full_name
+        member.delete()
+
+        VisitorLog.objects.create(
+            visitor=visitor,
+            action='approval',
+            performed_by=request.user,
+            notes=f'Removed group member: {member_name}'
+        )
+
+        messages.success(request, f'Group member {member_name} removed successfully.')
+        return redirect('visitors:visitor_detail', pk=visitor_id)
+
+    return render(request, 'visitors/confirm_delete_member.html', {
+        'visitor': visitor,
+        'member': member
+    })
+
 
 
 @login_required
@@ -415,45 +617,70 @@ def approve_visitor(request, visitor_id):
         'form': form
     })
 
-from django.shortcuts import get_object_or_404
-from django.http import JsonResponse
-from django.utils import timezone
-from django.contrib.auth.decorators import login_required
-
-from .models import Visitor, VisitorLog
-
-
 @login_required
 def check_in_visitor(request, visitor_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
     visitor = get_object_or_404(Visitor, id=visitor_id)
 
-    if visitor.status != 'approved':
-        return JsonResponse({'error': 'Visitor not approved'}, status=400)
+    # Must be cleared first
+    if visitor.status != "approved":
+        return JsonResponse({"error": "Visitor not approved"}, status=400)
 
     if visitor.checked_in:
-        return JsonResponse({'error': 'Visitor already checked in'}, status=400)
+        return JsonResponse({"error": "Visitor already checked in"}, status=400)
 
-    gate = request.POST.get('gate', 'front')
+    gate = request.POST.get("gate", "front")
+
+    # ID & card from request (if provided)
+    id_number_input = (request.POST.get("id_number") or "").strip()
+    card_number_input = (request.POST.get("card_number") or "").strip()
+
+    # ---- Enforce ID requirement ----
+    # If visitor has no ID on file and none provided now -> reject
+    if not visitor.id_number and not id_number_input:
+        return JsonResponse(
+            {"error": "Visitor ID number is required for check-in."},
+            status=400,
+        )
+
+    # If a new ID was captured at the gate, update the record
+    if id_number_input and id_number_input != (visitor.id_number or ""):
+        visitor.id_number = id_number_input
+
+    # ---- Enforce card requirement ----
+    # Existing assigned card (relation) – may be None, that's fine
+    card = getattr(visitor, "visitor_card", None)
+
+    # If no linked card and no card number provided -> reject
+    if card is None and not card_number_input:
+        return JsonResponse(
+            {"error": "Visitor card number is required for check-in."},
+            status=400,
+        )
 
     # Mark visitor as checked in
     visitor.checked_in = True
     visitor.check_in_time = timezone.now()
     visitor.save()
 
-    # Get any card currently assigned to this visitor
-    card = visitor.visitor_card  # may be None, that's fine
-
-    # Build a nice note, including card if present
-    note_parts = [f'Checked in at {visitor.check_in_time.strftime("%H:%M")}']
+    # Build note, including card info (FK if present, else raw number)
+    note_parts = [f"Checked in at {visitor.check_in_time.strftime('%H:%M')}"]
     if card:
-        note_parts.append(f'Card {card.number}')
-    note = ' · '.join(note_parts)
+        note_parts.append(f"Card {card.number}")
+        effective_card_number = card.number
+    else:
+        note_parts.append(f"Card {card_number_input}")
+        effective_card_number = card_number_input
 
-    # Log the action, including the card
+    note = " · ".join(note_parts)
+
+    # Log the action, including card FK if available
     VisitorLog.objects.create(
         visitor=visitor,
-        card=card,              # 👈 ensure card is recorded here
-        action='check_in',
+        card=card,              # may be None – card number still goes in notes
+        action="check_in",
         performed_by=request.user,
         gate=gate,
         notes=note,
@@ -462,25 +689,33 @@ def check_in_visitor(request, visitor_id):
     # Notify requester that visitor checked in
     _notify_requester_check_in(visitor, gate=gate)
 
-    return JsonResponse({
-        'success': True,
-        'message': f'Visitor {visitor.full_name} checked in successfully',
-        'check_in_time': visitor.check_in_time.isoformat(),
-        'card_number': card.number if card else None,
-    })
+    return JsonResponse(
+        {
+            "success": True,
+            "message": f"Visitor {visitor.full_name} checked in successfully",
+            "check_in_time": visitor.check_in_time.isoformat(),
+            "card_number": effective_card_number,
+        }
+    )
 
 
 @login_required
 def check_out_visitor(request, visitor_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
     visitor = get_object_or_404(Visitor, id=visitor_id)
 
     if not visitor.checked_in:
-        return JsonResponse({'error': 'Visitor not checked in'}, status=400)
+        return JsonResponse({"error": "Visitor not checked in"}, status=400)
 
     if visitor.checked_out:
-        return JsonResponse({'error': 'Visitor already checked out'}, status=400)
+        return JsonResponse({"error": "Visitor already checked out"}, status=400)
 
-    gate = request.POST.get('gate', 'front')
+    gate = request.POST.get("gate", "front")
+
+    # Optional override card number from request (e.g. if scanned at exit)
+    card_number_input = (request.POST.get("card_number") or "").strip()
 
     # Mark visitor as checked out
     visitor.checked_out = True
@@ -489,25 +724,33 @@ def check_out_visitor(request, visitor_id):
 
     # Calculate visit duration
     duration = visitor.check_out_time - visitor.check_in_time
-    duration_str = str(duration).split('.')[0]  # Remove microseconds
+    duration_str = str(duration).split(".")[0]  # strip microseconds
 
-    # Get any card currently assigned to this visitor
-    card = visitor.visitor_card  # may be None
+    # Card linked to visitor, if any
+    card = getattr(visitor, "visitor_card", None)
 
-    # Build note with time, duration and card
+    # Build note with time, duration & card info
     note_parts = [
-        f'Checked out at {visitor.check_out_time.strftime("%H:%M")}',
-        f'Duration: {duration_str}',
+        f"Checked out at {visitor.check_out_time.strftime('%H:%M')}",
+        f"Duration: {duration_str}",
     ]
-    if card:
-        note_parts.append(f'Card {card.number}')
-    note = ' · '.join(note_parts)
 
-    # Log the action, including the card
+    if card:
+        note_parts.append(f"Card {card.number}")
+        effective_card_number = card.number
+    elif card_number_input:
+        note_parts.append(f"Card {card_number_input}")
+        effective_card_number = card_number_input
+    else:
+        effective_card_number = None
+
+    note = " · ".join(note_parts)
+
+    # Log the action, including card FK if available
     VisitorLog.objects.create(
         visitor=visitor,
-        card=card,              # 👈 ensure card is recorded here
-        action='check_out',
+        card=card,
+        action="check_out",
         performed_by=request.user,
         gate=gate,
         notes=note,
@@ -516,14 +759,15 @@ def check_out_visitor(request, visitor_id):
     # Notify requester that visitor left
     _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
 
-    return JsonResponse({
-        'success': True,
-        'message': f'Visitor {visitor.full_name} checked out successfully',
-        'check_out_time': visitor.check_out_time.isoformat(),
-        'duration': duration_str,
-        'card_number': card.number if card else None,
-    })
-
+    return JsonResponse(
+        {
+            "success": True,
+            "message": f"Visitor {visitor.full_name} checked out successfully",
+            "check_out_time": visitor.check_out_time.isoformat(),
+            "duration": duration_str,
+            "card_number": effective_card_number,
+        }
+    )
 
 @login_required
 def quick_check_page(request):
@@ -981,7 +1225,6 @@ def visitor_cancel_request(request, pk):
 
     return redirect("visitors:visitor_detail", pk=pk)
 
-
 @login_required
 @require_http_methods(["GET", "POST"])
 def gate_check_view(request, pk):
@@ -990,136 +1233,287 @@ def gate_check_view(request, pk):
       - Only guards/LSA/SOC/superuser can access (_gate_role)
       - If visitor missing id_number and action=check_in => require it
       - Enforces status rules: must be 'approved' to check in
+      - Handles group check-in requirements (ID + card per member)
+      - Marks ALL used cards (primary + group) as in_use=True
+      - On check-out, frees ALL cards issued_to this visitor
       - Sends emails on check-in / check-out
     """
     if not _gate_role(request.user):
         messages.error(request, "You don’t have permission to perform gate actions.")
-        return redirect('visitors:visitor_detail', pk=pk)
+        return redirect("visitors:visitor_detail", pk=pk)
 
     visitor = get_object_or_404(Visitor, pk=pk)
-    initial_action = request.GET.get('action')  # optional shortcut from link
-    form = GateCheckForm(request.POST or None, initial={'action': initial_action} if initial_action else None)
 
-    if request.method == 'POST' and form.is_valid():
-        action = form.cleaned_data['action']
-        gate = form.cleaned_data['gate']
-        id_number = form.cleaned_data['id_number']
-        card_number = form.cleaned_data['card_number']
+    # Optional shortcut from link: ?action=check_in / ?action=check_out
+    initial_action = request.GET.get("action")
+    initial_data = {"action": initial_action} if initial_action else None
 
-        # for check-in, enforce approval
-        if action == 'check_in':
-            if visitor.status != 'approved':
+    # IMPORTANT: pass visitor into the form so it can enforce ID rules properly
+    form = GateCheckForm(
+        request.POST or None,
+        visitor=visitor,
+        initial=initial_data,
+    )
+
+    if request.method == "POST" and form.is_valid():
+        action = form.cleaned_data["action"]
+        gate = form.cleaned_data["gate"]
+        id_number = form.cleaned_data["id_number"]
+        card_number = form.cleaned_data["card_number"]
+
+        # --------------------
+        # CHECK-IN WORKFLOW
+        # --------------------
+        if action == "check_in":
+            # must be LSA-approved
+            if visitor.status != "approved":
                 messages.error(request, "Visitor is not approved by LSA.")
-                return redirect('visitors:visitor_detail', pk=visitor.pk)
+                return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-            # set id_number if missing
-            if not visitor.id_number:
+            # update or set ID number if supplied
+            if id_number and id_number != (visitor.id_number or ""):
                 visitor.id_number = id_number
 
-            # assign/issue card
+            # ---- Group member validation (IDs + cards) ----
+            group_card_notes = []
+            group_card_data = []  # list of dicts: {member, id_number, card_number}
+
+            if visitor.visitor_type == "group":
+                member_ids = request.POST.getlist("member_ids")
+                members_qs = visitor.group_members.filter(id__in=member_ids)
+                errors = []
+
+                for member in members_qs:
+                    mid = (request.POST.get(f"member_id_number_{member.id}") or "").strip()
+                    mcard = (request.POST.get(f"member_card_number_{member.id}") or "").strip()
+
+                    if not mid:
+                        errors.append(f"{member.full_name}: ID number is required.")
+                    if not mcard:
+                        errors.append(f"{member.full_name}: visitor card number is required.")
+
+                    # Store for later issuing if both present
+                    group_card_data.append(
+                        {
+                            "member": member,
+                            "id_number": mid,
+                            "card_number": mcard,
+                        }
+                    )
+
+                    # Note for log
+                    group_card_notes.append(
+                        f"{member.full_name} – ID {mid or 'N/A'}, Card {mcard or 'N/A'}"
+                    )
+
+                if errors:
+                    for msg_text in errors:
+                        messages.error(request, msg_text)
+                    # Stay on the gate screen so the guard can correct it
+                    return render(
+                        request,
+                        "visitors/gate_check.html",
+                        {"visitor": visitor, "form": form},
+                    )
+
+            # ---- Issue cards (primary + group) in one atomic transaction ----
             try:
                 with transaction.atomic():
-                    card = VisitorCard.objects.select_for_update().get(number__iexact=card_number)
-                    if not card.is_active:
-                        messages.error(request, f"Card {card.number} is inactive.")
-                        return redirect('visitors:visitor_detail', pk=visitor.pk)
-                    if card.in_use:
-                        messages.error(request, f"Card {card.number} is already in use.")
-                        return redirect('visitors:visitor_detail', pk=visitor.pk)
+                    now = timezone.now()
 
-                    # issue
-                    card.in_use = True
-                    card.issued_to = visitor
-                    card.issued_at = timezone.now()
-                    card.issued_by = request.user
-                    card.returned_at = None
-                    card.returned_by = None
-                    card.save()
+                    # PRIMARY VISITOR CARD
+                    main_card = VisitorCard.objects.select_for_update().get(
+                        number__iexact=card_number
+                    )
+                    if not main_card.is_active:
+                        raise ValueError(f"Card {main_card.number} is inactive.")
+                    if main_card.in_use:
+                        raise ValueError(f"Card {main_card.number} is already in use.")
 
-                    visitor.visitor_card = card
-                    visitor.card_issued_at = card.issued_at
+                    main_card.in_use = True
+                    main_card.issued_to = visitor  # group cards will also be tied to this Visitor
+                    main_card.issued_at = now
+                    main_card.issued_by = request.user
+                    main_card.returned_at = None
+                    main_card.returned_by = None
+                    main_card.save()
+
+                    visitor.visitor_card = main_card
+                    visitor.card_issued_at = now
                     visitor.checked_in = True
-                    visitor.check_in_time = timezone.now()
+                    visitor.check_in_time = now
                     visitor.save()
 
-                # log
+                    # GROUP MEMBER CARDS
+                    group_card_numbers = []
+                    for item in group_card_data:
+                        mcard_num = (item["card_number"] or "").strip()
+                        if not mcard_num:
+                            continue
+
+                        # avoid accidentally reusing the same card as primary
+                        if mcard_num.lower() == card_number.lower():
+                            raise ValueError(
+                                f"Group member card {mcard_num} is the same as the primary visitor card."
+                            )
+
+                        gc = VisitorCard.objects.select_for_update().get(
+                            number__iexact=mcard_num
+                        )
+                        if not gc.is_active:
+                            raise ValueError(f"Group card {gc.number} is inactive.")
+                        if gc.in_use:
+                            raise ValueError(f"Group card {gc.number} is already in use.")
+
+                        gc.in_use = True
+                        gc.issued_to = visitor   # tie card usage to this group visit
+                        gc.issued_at = now
+                        gc.issued_by = request.user
+                        gc.returned_at = None
+                        gc.returned_by = None
+                        gc.save()
+
+                        group_card_numbers.append(gc.number)
+
+                # Build log note
+                base_note = f"Issued card {main_card.number}"
+                if group_card_notes:
+                    base_note += " | Group cards: " + "; ".join(group_card_notes)
+
                 VisitorLog.objects.create(
-                    visitor=visitor, action='check_in', performed_by=request.user,
-                    gate=gate, notes=f"Issued card {card.number}"
+                    visitor=visitor,
+                    action="check_in",
+                    performed_by=request.user,
+                    gate=gate,
+                    notes=base_note,
                 )
-                messages.success(request, f"Checked in. Card {card.number} issued.")
+                messages.success(
+                    request,
+                    f"Checked in. Card {main_card.number} issued."
+                    + (f" Group cards in use: {', '.join(group_card_numbers)}" if group_card_numbers else ""),
+                )
 
                 # Email requester
                 _notify_requester_check_in(visitor, gate=gate)
 
-                return redirect('visitors:visitor_detail', pk=visitor.pk)
+                return redirect("visitors:visitor_detail", pk=visitor.pk)
 
             except VisitorCard.DoesNotExist:
-                messages.error(request, "Card number not found.")
-                return redirect('visitors:visitor_detail', pk=visitor.pk)
-
-        elif action == 'check_out':
-            # must have been checked in
-            if not visitor.checked_in or visitor.checked_out:
-                messages.error(request, "Visitor not currently in compound.")
-                return redirect('visitors:visitor_detail', pk=visitor.pk)
-
-            # must have a card to collect
-            if not visitor.visitor_card:
-                # still allow checkout, but warn
-                messages.warning(request, "Visitor had no card assigned — checking out anyway.")
-                visitor.checked_out = True
-                visitor.check_out_time = timezone.now()
-                visitor.save()
-                VisitorLog.objects.create(
-                    visitor=visitor, action='check_out', performed_by=request.user,
-                    gate=gate, notes="Checked out (no card on file)"
+                messages.error(request, "One of the card numbers was not found.")
+                return render(
+                    request,
+                    "visitors/gate_check.html",
+                    {"visitor": visitor, "form": form},
+                )
+            except ValueError as e:
+                messages.error(request, str(e))
+                return render(
+                    request,
+                    "visitors/gate_check.html",
+                    {"visitor": visitor, "form": form},
                 )
 
-                # Notify requester
-                duration = visitor.check_out_time - visitor.check_in_time if visitor.check_in_time else None
-                duration_str = str(duration).split('.')[0] if duration else None
-                _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
+        # --------------------
+        # CHECK-OUT WORKFLOW
+        # --------------------
+        elif action == "check_out":
+            # must have been checked in and not already checked out
+            if not visitor.checked_in or visitor.checked_out:
+                messages.error(request, "Visitor not currently in compound.")
+                return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-                return redirect('visitors:visitor_detail', pk=visitor.pk)
-
-            # return the card
+            # Return ALL cards issued to this visitor (primary + group)
             with transaction.atomic():
-                card = VisitorCard.objects.select_for_update().get(pk=visitor.visitor_card_id)
-                card.in_use = False
-                card.returned_at = timezone.now()
-                card.returned_by = request.user
-                card.issued_to = None
-                card.save()
+                cards_qs = VisitorCard.objects.select_for_update().filter(
+                    issued_to=visitor,
+                    in_use=True,
+                )
 
-                visitor.card_returned_at = card.returned_at
+                now = timezone.now()
+
+                if not cards_qs.exists():
+                    # Fallback: no cards tracked; behave like "no card" case
+                    visitor.checked_out = True
+                    visitor.check_out_time = now
+                    visitor.save()
+
+                    VisitorLog.objects.create(
+                        visitor=visitor,
+                        action="check_out",
+                        performed_by=request.user,
+                        gate=gate,
+                        notes="Checked out (no cards on file)",
+                    )
+
+                    duration = (
+                        visitor.check_out_time - visitor.check_in_time
+                        if visitor.check_in_time
+                        else None
+                    )
+                    duration_str = (
+                        str(duration).split(".")[0] if duration is not None else None
+                    )
+                    _notify_requester_check_out(
+                        visitor, gate=gate, duration_str=duration_str
+                    )
+
+                    messages.warning(
+                        request,
+                        "Visitor checked out, but no cards were currently marked as in use.",
+                    )
+                    return redirect("visitors:visitor_detail", pk=visitor.pk)
+
+                # There are cards in use – free them all
+                card_numbers = []
+                for card in cards_qs:
+                    card.in_use = False
+                    card.returned_at = now
+                    card.returned_by = request.user
+                    card.issued_to = None
+                    card.save()
+                    card_numbers.append(card.number)
+
+                visitor.card_returned_at = now
                 visitor.visitor_card = None
                 visitor.checked_out = True
-                visitor.check_out_time = timezone.now()
+                visitor.check_out_time = now
                 visitor.save()
 
             VisitorLog.objects.create(
-                visitor=visitor, action='check_out', performed_by=request.user,
-                gate=gate, notes=f"Collected card {card.number}"
+                visitor=visitor,
+                action="check_out",
+                performed_by=request.user,
+                gate=gate,
+                notes=f"Collected cards {', '.join(card_numbers)}",
             )
-            messages.success(request, f"Checked out. Card {card.number} collected.")
+            messages.success(
+                request, f"Checked out. Collected cards: {', '.join(card_numbers)}"
+            )
 
             # Notify requester
-            duration = visitor.check_out_time - visitor.check_in_time if visitor.check_in_time else None
-            duration_str = str(duration).split('.')[0] if duration else None
+            duration = (
+                visitor.check_out_time - visitor.check_in_time
+                if visitor.check_in_time
+                else None
+            )
+            duration_str = str(duration).split(".")[0] if duration else None
             _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
 
-            return redirect('visitors:visitor_detail', pk=visitor.pk)
+            return redirect("visitors:visitor_detail", pk=visitor.pk)
 
         else:
             messages.error(request, "Unknown gate action.")
-            return redirect('visitors:visitor_detail', pk=visitor.pk)
+            return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-    # GET or invalid POST
-    return render(request, 'visitors/gate_check.html', {
-        'visitor': visitor,
-        'form': form,
-    })
+    # GET or invalid POST – show form again
+    return render(
+        request,
+        "visitors/gate_check.html",
+        {
+            "visitor": visitor,
+            "form": form,
+        },
+    )
 
 
 @login_required
@@ -1232,15 +1626,19 @@ def visitor_card_create(request):
     }
     return render(request, "visitors/card_form.html", context)
 
-
 @login_required
 def visitor_card_detail(request, pk):
     card = get_object_or_404(VisitorCard, pk=pk)
 
-    # Get all log entries related to this card
+    # Get all log entries related to this card:
+    #  - Either the FK `card` is set
+    #  - OR the notes contain the card number (for older logs)
     card_history = (
         VisitorLog.objects
-        .filter(card=card)
+        .filter(
+            Q(card=card) |
+            Q(notes__icontains=card.number)
+        )
         .select_related('visitor', 'performed_by')
         .order_by('-timestamp')
     )
@@ -1269,6 +1667,7 @@ def visitor_card_detail(request, pk):
         "can_manage": can_manage,
     }
     return render(request, "visitors/card_detail.html", context)
+
 
 @login_required
 def visitor_card_check_api(request):

@@ -19,6 +19,11 @@ urlpatterns = [
     path('<int:pk>/lsa-reject/', views.visitor_lsa_reject, name='visitor_lsa_reject'),
     path('<int:pk>/cancel-request/', views.visitor_cancel_request, name='visitor_cancel_request'),
 
+    # Group Member Management
+    path('<int:visitor_id>/member/<int:member_id>/delete/',
+         views.delete_group_member,
+         name='delete_group_member'),
+
     # Check-in/Check-out
     path('<int:visitor_id>/check-in/', views.check_in_visitor, name='check_in_visitor'),
     path('<int:visitor_id>/check-out/', views.check_out_visitor, name='check_out_visitor'),

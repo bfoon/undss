@@ -78,7 +78,7 @@
   }
 
   .timeline-dot {
-    position: absolute;
+    position: relative;
     left: -0.5rem;
     top: 0.25rem;
     width: 1rem;
@@ -125,6 +125,15 @@
   .alert-gate-status.no-action {
     border-color: #6c757d;
   }
+
+  .id-document-preview {
+    transition: all 0.3s ease;
+  }
+
+  .id-document-preview img:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
 </style>
 {% endblock %}
 
@@ -143,7 +152,8 @@
             {{ visitor.full_name|default:"Visitor" }}
           </h2>
           <div class="opacity-75">
-            <i class="bi bi-calendar-check"></i> Registered {{ visitor.registered_at|date:"M d, Y" }} at {{ visitor.registered_at|date:"H:i" }}
+            <i class="bi bi-calendar-check"></i>
+            Registered {{ visitor.registered_at|date:"M d, Y" }} at {{ visitor.registered_at|date:"H:i" }}
             {% if visitor.registered_by %}
               <span class="mx-2">·</span>
               <i class="bi bi-person"></i> by {{ visitor.registered_by.username }}
@@ -181,7 +191,7 @@
 
   <div class="row g-4">
 
-    <!-- Left Column: Visitor & Vehicle Info -->
+    <!-- Left Column: Visitor, Vehicle, Group Info -->
     <div class="col-lg-8">
 
       <!-- Visit Information -->
@@ -219,7 +229,11 @@
                 <i class="bi bi-calendar-event"></i> Visit Date
               </div>
               <div class="info-value">
-                {% if visitor.expected_date %}{{ visitor.expected_date|date:"l, F d, Y" }}{% else %}—{% endif %}
+                {% if visitor.expected_date %}
+                  {{ visitor.expected_date|date:"l, F d, Y" }}
+                {% else %}
+                  —
+                {% endif %}
               </div>
             </div>
 
@@ -283,7 +297,9 @@
                     <div class="info-value">
                       {% if visitor.vehicle_make or visitor.vehicle_model %}
                         {{ visitor.vehicle_make|default:"" }} {{ visitor.vehicle_model|default:"" }}
-                      {% else %}—{% endif %}
+                      {% else %}
+                        —
+                      {% endif %}
                     </div>
                   </div>
                 </div>
@@ -302,6 +318,131 @@
           {% endif %}
         </div>
       </div>
+
+          <!-- Group Members Section (for group visits) -->
+      {% if visitor.visitor_type == 'group' %}
+      <div class="card shadow-sm mt-4">
+        <div class="card-body p-4">
+          <div class="section-header">
+            <i class="bi bi-people-fill text-primary"></i>
+            <span>Group Members</span>
+            <span class="badge bg-primary ms-auto">
+              {{ visitor.group_members.count }} member{{ visitor.group_members.count|pluralize }}
+            </span>
+          </div>
+
+          {% if visitor.group_members.exists %}
+            <div class="alert alert-info mb-3">
+              <i class="bi bi-info-circle me-2"></i>
+              <strong>Total Group Size:</strong> {{ visitor.total_group_size }} person{{ visitor.total_group_size|pluralize }}
+              (including primary visitor)
+            </div>
+
+            <div class="row g-3">
+              {% for member in visitor.group_members.all %}
+              <div class="col-12">
+                <div class="card border-start border-primary border-3 shadow-sm">
+                  <div class="card-body">
+                    <div class="row align-items-start">
+                      <div class="col-md-8">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                          <h6 class="mb-0">
+                            <i class="bi bi-person-badge me-2"></i>
+                            {{ member.full_name }}
+                          </h6>
+                          {% if user.is_authenticated %}
+                            {% if user.is_superuser or user.role == 'lsa' or user.role == 'soc' or user == visitor.registered_by %}
+                              <a href="{% url 'visitors:delete_group_member' visitor.pk member.pk %}"
+                                 class="btn btn-sm btn-outline-danger"
+                                 title="Remove member">
+                                <i class="bi bi-trash"></i>
+                              </a>
+                            {% endif %}
+                          {% endif %}
+                        </div>
+
+                        <div class="row g-2 small">
+                          <div class="col-sm-6">
+                            <div class="d-flex align-items-center text-muted mb-1">
+                              <i class="bi bi-credit-card-2-front me-2"></i>
+                              <strong class="me-1">{{ member.get_id_type_display }}:</strong>
+                              {{ member.id_number }}
+                            </div>
+                          </div>
+
+                          {% if member.nationality %}
+                          <div class="col-sm-6">
+                            <div class="d-flex align-items-center text-muted mb-1">
+                              <i class="bi bi-flag me-2"></i>
+                              <strong class="me-1">Nationality:</strong>
+                              {{ member.nationality }}
+                            </div>
+                          </div>
+                          {% endif %}
+
+                          {% if member.contact_number %}
+                          <div class="col-sm-6">
+                            <div class="d-flex align-items-center text-muted mb-1">
+                              <i class="bi bi-telephone me-2"></i>
+                              <strong class="me-1">Contact:</strong>
+                              {{ member.contact_number }}
+                            </div>
+                          </div>
+                          {% endif %}
+
+                          {% if member.email %}
+                          <div class="col-sm-6">
+                            <div class="d-flex align-items-center text-muted mb-1">
+                              <i class="bi bi-envelope me-2"></i>
+                              <strong class="me-1">Email:</strong>
+                              {{ member.email }}
+                            </div>
+                          </div>
+                          {% endif %}
+                        </div>
+
+                        {% if member.notes %}
+                        <div class="mt-2 small">
+                          <strong class="text-muted">Notes:</strong>
+                          <p class="mb-0 ms-3">{{ member.notes }}</p>
+                        </div>
+                        {% endif %}
+                      </div>
+
+                      <div class="col-md-4 text-end">
+                        {% if member.id_photo %}
+                        <div class="id-document-preview">
+                          <img src="{{ member.id_photo.url }}"
+                               alt="{{ member.full_name }} ID"
+                               class="img-thumbnail"
+                               style="max-width: 200px; max-height: 150px; cursor: pointer;"
+                               onclick="showImageModal(this.src, '{{ member.full_name }} - ID Document')">
+                          <div class="small text-muted mt-1">
+                            <i class="bi bi-card-image"></i> ID Document
+                          </div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted small">
+                          <i class="bi bi-file-earmark-x"></i>
+                          <br>No ID photo uploaded
+                        </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="alert alert-warning mb-0">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              No group members have been added to this visit yet.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     <!-- Right Column: Clearance, Gate Actions & Activity -->
@@ -340,7 +481,11 @@
             <div class="info-item">
               <div class="info-label">Requested By</div>
               <div class="info-value">
-                {% if visitor.registered_by %}{{ visitor.registered_by.username }}{% else %}—{% endif %}
+                {% if visitor.registered_by %}
+                  {{ visitor.registered_by.username }}
+                {% else %}
+                  —
+                {% endif %}
               </div>
             </div>
 
@@ -493,47 +638,75 @@
       </div>
 
       <!-- Recent Activity Timeline -->
-      {% if visitor.logs.all %}
-        <div class="card shadow-sm">
-          <div class="card-body p-4">
-            <div class="section-header">
-              <i class="bi bi-clock-history text-primary"></i>
-              <span>Recent Activity</span>
-            </div>
+      {% with logs=visitor.logs.all %}
+        {% if logs %}
+          <div class="card shadow-sm">
+            <div class="card-body p-4">
+              <div class="section-header">
+                <i class="bi bi-clock-history text-primary"></i>
+                <span>Recent Activity</span>
+              </div>
 
-            <div class="timeline">
-              {% for log in visitor.logs.all|slice:":8" %}
-                <div class="timeline-item">
-                  <div class="timeline-dot"></div>
-                  <div>
-                    <div class="fw-semibold mb-1">
-                      {{ log.get_action_display|default:log.action }}
-                    </div>
-                    {% if log.description %}
-                      <div class="text-muted small mb-1">{{ log.description }}</div>
-                    {% endif %}
-                    <div class="text-muted small">
-                      <i class="bi bi-clock"></i> {{ log.timestamp|date:"M d, Y" }} at {{ log.timestamp|date:"H:i" }}
+              <div class="timeline">
+                {% for log in logs|slice:":8" %}
+                  <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div>
+                      <div class="fw-semibold mb-1">
+                        {{ log.get_action_display|default:log.action }}
+                      </div>
+                      {% if log.description %}
+                        <div class="text-muted small mb-1">{{ log.description }}</div>
+                      {% endif %}
+                      <div class="text-muted small">
+                        <i class="bi bi-clock"></i>
+                        {{ log.timestamp|date:"M d, Y" }} at {{ log.timestamp|date:"H:i" }}
+                      </div>
                     </div>
                   </div>
-                </div>
-              {% endfor %}
-            </div>
-
-            {% if visitor.logs.count > 8 %}
-              <div class="text-center mt-3">
-                <small class="text-muted">
-                  Showing 8 of {{ visitor.logs.count }} activities
-                </small>
+                {% endfor %}
               </div>
-            {% endif %}
+
+              {% if logs|length > 8 %}
+                <div class="text-center mt-3">
+                  <small class="text-muted">
+                    Showing 8 of {{ logs|length }} activities
+                  </small>
+                </div>
+              {% endif %}
+            </div>
           </div>
-        </div>
-      {% endif %}
+        {% endif %}
+      {% endwith %}
 
     </div>
   </div>
+
+  <!-- Image Modal for viewing ID photos -->
+  <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="imageModalLabel">ID Document</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body text-center">
+          <img id="modalImage" src="" alt="ID Document" class="img-fluid">
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 {% endwith %}
+
+<script>
+function showImageModal(imageSrc, title) {
+  document.getElementById('modalImage').src = imageSrc;
+  document.getElementById('imageModalLabel').textContent = title;
+  const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+  modal.show();
+}
+</script>
 {% endblock %}

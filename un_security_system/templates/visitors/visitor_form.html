@@ -3,15 +3,21 @@
 {% load crispy_forms_tags %}
 {% load static %}
 
-{% block title %}{% if object %}Edit Visitor{% else %}Register Visitor{% endif %} · UN Security Management System{% endblock %}
+{% block title %}
+    {% if object %}
+        Update Visitor Record · UN Security Management System
+    {% else %}
+        Register Visitor · UN Security Management System
+    {% endif %}
+{% endblock %}
 
 {% block extra_css %}
 <style>
     .form-section {
         background: #f8f9fa;
         border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 1rem;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.25rem;
         border-left: 4px solid var(--un-blue, #009edb);
     }
 
@@ -19,6 +25,12 @@
         color: var(--un-dark-blue, #1f4788);
         margin-bottom: 0.75rem;
         font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
     }
 
     .required-field label::after {
@@ -30,40 +42,270 @@
         background: var(--un-light-blue, #e6f7ff);
         border-radius: 6px;
         padding: 0.5rem 0.75rem;
-        font-size: 0.875rem;
+        font-size: 0.85rem;
         color: var(--un-dark-blue, #1f4788);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid rgba(0, 158, 219, 0.1);
     }
 
     .form-help-text {
-        font-size: 0.875rem;
+        font-size: 0.85rem;
         color: var(--un-gray, #6c757d);
         margin-top: 0.25rem;
+    }
+
+    /* ================================
+       FLOATING / PILL LABELS
+       ================================ */
+
+    /* Crispy/Bootstrap fields inside sections */
+    .form-section .mb-3 {
+        position: relative;
+        padding-top: 1.2rem; /* space for pill label */
+        margin-bottom: 1rem;
+    }
+
+    .form-section .mb-3 > label.form-label,
+    .form-section .mb-3 > label {
+        position: absolute;
+        top: 0;
+        left: 0.9rem;
+        transform: translateY(-50%);
+        background: #f8f9fa;
+        padding: 0.1rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--un-dark-blue, #1f4788);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04);
+        z-index: 2;
+        white-space: nowrap;
+    }
+
+    /* Manual fields inside group members card */
+    .group-member-card .form-group {
+        position: relative;
+        padding-top: 1.2rem;
+        margin-bottom: 0.9rem;
+    }
+
+    .group-member-card .form-group > label.form-label,
+    .group-member-card .form-group > label {
+        position: absolute;
+        top: 0;
+        left: 0.75rem;
+        transform: translateY(-50%);
+        background: #ffffff;
+        padding: 0.1rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #1565c0;
+        box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.08);
+        z-index: 2;
+        white-space: nowrap;
+    }
+
+    /* Make sure required star stays tight with the pill label */
+    .required-field label::after {
+        margin-left: 0.15rem;
+    }
+
+    /* Placeholder styling so the contrast with label feels intentional */
+    .form-control::placeholder {
+        color: #b0b0b0;
+        font-size: 0.85rem;
+    }
+
+    /* Group Members Styling */
+    #group-members-section {
+        display: none;
+        background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        border: 2px solid #2196F3;
+    }
+
+    #group-members-section.show {
+        display: block;
+        animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .group-member-card {
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-left: 4px solid #2196F3;
+        position: relative;
+        transition: all 0.3s ease;
+    }
+
+    .group-member-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+
+    .group-member-card .member-number {
+        position: absolute;
+        top: -12px;
+        left: 12px;
+        background: linear-gradient(135deg, #2196F3, #1976D2);
+        color: #ffffff;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.85rem;
+        box-shadow: 0 2px 6px rgba(33, 150, 243, 0.4);
+    }
+
+    .remove-member-btn {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: #ff5252;
+        border: none;
+        color: #ffffff;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+    }
+
+    .remove-member-btn:hover {
+        background: #d32f2f;
+        transform: rotate(90deg);
+    }
+
+    .add-member-btn {
+        background: linear-gradient(135deg, #4CAF50, #45a049);
+        border: none;
+        color: #ffffff;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        font-size: 0.95rem;
+    }
+
+    .add-member-btn:hover {
+        background: linear-gradient(135deg, #45a049, #388e3c);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+    }
+
+    .group-summary {
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        border: 2px dashed #2196F3;
+    }
+
+    .group-summary-icon {
+        font-size: 2rem;
+        color: #2196F3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .group-summary-text {
+        flex: 1;
+        font-size: 0.9rem;
+    }
+
+    .group-summary-count {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #2196F3;
+    }
+
+    .id-photo-preview {
+        max-width: 150px;
+        max-height: 150px;
+        margin-top: 0.5rem;
+        border-radius: 8px;
+        border: 2px solid #e0e0e0;
+    }
+
+    .member-form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #757575;
+        font-size: 0.9rem;
+    }
+
+    .empty-state i {
+        font-size: 2.5rem;
+        color: #bdbdbd;
+        margin-bottom: 0.75rem;
     }
 </style>
 {% endblock %}
 
+
 {% block content %}
-<div class="container" style="max-width: 800px;">
+<div class="container" style="max-width: 900px;">
     <div class="row">
         <div class="col-12">
             <!-- Page Header -->
-            <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
                 <div>
-                    <h4 class="mb-1">
+                    <h1 class="h4 mb-1">
                         <i class="bi bi-{% if object %}pencil-square{% else %}person-plus{% endif %} me-2"></i>
-                        {% if object %}Edit Visitor{% else %}Register Visitor{% endif %}
-                    </h4>
+                        {% if object %}Update Visitor Record{% else %}Register Visitor{% endif %}
+                    </h1>
                     <p class="text-muted mb-0">
                         {% if object %}
-                            Update visitor information and access details
+                            Review and update the visitor’s personal details and visit information.
                         {% else %}
-                            Register a new visitor for secure access
+                            Capture key information to pre-clear and register a new visitor.
                         {% endif %}
                     </p>
                 </div>
                 <div class="timestamp-info">
-                    <i class="bi bi-clock me-1"></i>
-                    {% now "M j, Y H:i" %} • {{ request.user.get_full_name|default:request.user.username }}
+                    <i class="bi bi-clock"></i>
+                    <span>{% now "M j, Y H:i" %}</span>
+                    <span>•</span>
+                    <span>{{ request.user.get_full_name|default:request.user.username }}</span>
                 </div>
             </div>
 
@@ -73,7 +315,7 @@
                     {% if messages %}
                         {% for message in messages %}
                             <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
-                                <i class="bi bi-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' %}exclamation-triangle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
+                                <i class="bi bi-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' or message.tags == 'danger' %}exclamation-triangle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
                                 {{ message }}
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
@@ -83,26 +325,15 @@
                     <form method="post" enctype="multipart/form-data" novalidate id="visitor-form">
                         {% csrf_token %}
 
-                        <!-- Form sections for better organization -->
+                        <!-- Personal Information -->
                         <div class="form-section">
                             <h6>
-                                <i class="bi bi-person me-2"></i>
+                                <i class="bi bi-person"></i>
                                 Personal Information
                             </h6>
                             <div class="row">
-                                {% comment %}
-                                Assuming your form has these fields - adjust field names as needed:
-                                - name or full_name
-                                - id_number
-                                - phone
-                                - email
-                                {% endcomment %}
                                 <div class="col-md-6">
-                                    {% if form.name %}
-                                        <div class="mb-3 required-field">
-                                            {{ form.name|as_crispy_field }}
-                                        </div>
-                                    {% elif form.full_name %}
+                                    {% if form.full_name %}
                                         <div class="mb-3 required-field">
                                             {{ form.full_name|as_crispy_field }}
                                         </div>
@@ -129,76 +360,166 @@
                                         </div>
                                     {% endif %}
                                 </div>
+                                <div class="col-md-6">
+                                    {% if form.organization %}
+                                        <div class="mb-3">
+                                            {{ form.organization|as_crispy_field }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    {% if form.visitor_type %}
+                                        <div class="mb-3 required-field">
+                                            {{ form.visitor_type|as_crispy_field }}
+                                        </div>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
 
+                        <!-- Group Members Section (Dynamic) -->
+                        <div id="group-members-section" aria-label="Group members for this visit">
+                            <h6 class="mb-3">
+                                <i class="bi bi-people-fill"></i>
+                                Group Members
+                                <span class="badge bg-primary ms-2" id="member-count-badge">0 members</span>
+                            </h6>
+
+                            <div class="group-summary">
+                                <div class="group-summary-icon">
+                                    <i class="bi bi-people"></i>
+                                </div>
+                                <div class="group-summary-text">
+                                    <strong>Total Group Size</strong>
+                                    <div class="small text-muted">
+                                        Includes the primary visitor listed above.
+                                    </div>
+                                </div>
+                                <div class="group-summary-count" id="total-group-count">1</div>
+                            </div>
+
+                            <div id="group-members-container">
+                                <!-- Empty state -->
+                                <div class="empty-state" id="empty-members-state">
+                                    <i class="bi bi-person-plus-fill"></i>
+                                    <p class="mb-0">
+                                        No additional group members have been added.<br>
+                                        Click <strong>“Add Group Member”</strong> to register each accompanying visitor.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button type="button"
+                                    class="add-member-btn mt-2"
+                                    id="add-member-btn"
+                                    aria-label="Add a new group member">
+                                <i class="bi bi-plus-circle-fill"></i>
+                                Add Group Member
+                            </button>
+                        </div>
+
+                        <!-- Visit Details -->
                         <div class="form-section">
                             <h6>
-                                <i class="bi bi-building me-2"></i>
+                                <i class="bi bi-building"></i>
                                 Visit Details
                             </h6>
                             <div class="row">
                                 <div class="col-md-6">
-                                    {% if form.host %}
+                                    {% if form.person_to_visit %}
                                         <div class="mb-3 required-field">
-                                            {{ form.host|as_crispy_field }}
+                                            {{ form.person_to_visit|as_crispy_field }}
                                         </div>
                                     {% endif %}
                                 </div>
                                 <div class="col-md-6">
-                                    {% if form.department %}
+                                    {% if form.department_to_visit %}
                                         <div class="mb-3">
-                                            {{ form.department|as_crispy_field }}
+                                            {{ form.department_to_visit|as_crispy_field }}
                                         </div>
                                     {% endif %}
                                 </div>
                                 <div class="col-12">
-                                    {% if form.purpose %}
+                                    {% if form.purpose_of_visit %}
                                         <div class="mb-3 required-field">
-                                            {{ form.purpose|as_crispy_field }}
+                                            {{ form.purpose_of_visit|as_crispy_field }}
                                         </div>
                                     {% endif %}
                                 </div>
-                                <div class="col-md-6">
-                                    {% if form.visit_date %}
+                                <div class="col-md-4">
+                                    {% if form.expected_date %}
                                         <div class="mb-3">
-                                            {{ form.visit_date|as_crispy_field }}
+                                            {{ form.expected_date|as_crispy_field }}
                                         </div>
                                     {% endif %}
                                 </div>
-                                <div class="col-md-6">
-                                    {% if form.expected_duration %}
+                                <div class="col-md-4">
+                                    {% if form.expected_time %}
                                         <div class="mb-3">
-                                            {{ form.expected_duration|as_crispy_field }}
+                                            {{ form.expected_time|as_crispy_field }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    {% if form.estimated_duration %}
+                                        <div class="mb-3">
+                                            {{ form.estimated_duration|as_crispy_field }}
                                         </div>
                                     {% endif %}
                                 </div>
                             </div>
                         </div>
 
-                        {% comment %}
-                        If you have other fields that don't fit the above categories,
-                        render them here using crispy forms
-                        {% endcomment %}
+                        <!-- Vehicle Information -->
                         <div class="form-section">
                             <h6>
-                                <i class="bi bi-gear me-2"></i>
-                                Additional Information
+                                <i class="bi bi-car-front"></i>
+                                Vehicle Information (Optional)
                             </h6>
-                            {% for field in form %}
-                                {% if field.name not in "name,full_name,id_number,phone,email,host,department,purpose,visit_date,expected_duration" %}
-                                    <div class="mb-3">
-                                        {{ field|as_crispy_field }}
-                                    </div>
-                                {% endif %}
-                            {% endfor %}
+                            <div class="row">
+                                <div class="col-12 mb-3">
+                                    {% if form.has_vehicle %}
+                                        {{ form.has_vehicle|as_crispy_field }}
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    {% if form.vehicle_plate %}
+                                        <div class="mb-3">
+                                            {{ form.vehicle_plate|as_crispy_field }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    {% if form.vehicle_make %}
+                                        <div class="mb-3">
+                                            {{ form.vehicle_make|as_crispy_field }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    {% if form.vehicle_model %}
+                                        <div class="mb-3">
+                                            {{ form.vehicle_model|as_crispy_field }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    {% if form.vehicle_color %}
+                                        <div class="mb-3">
+                                            {{ form.vehicle_color|as_crispy_field }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Form Actions -->
-                        <div class="d-flex justify-content-between align-items-center mt-4">
-                            <div class="form-help-text">
-                                <i class="bi bi-info-circle me-1"></i>
-                                All visitor information is logged for security purposes
+                        <div class="d-flex justify-content-between align-items-center mt-4 flex-wrap gap-3">
+                            <div class="form-help-text d-flex align-items-center gap-1">
+                                <i class="bi bi-info-circle"></i>
+                                <span>
+                                    Visitor and vehicle details are recorded in line with UNDSS security procedures.
+                                </span>
                             </div>
                             <div class="d-flex gap-2">
                                 <button type="submit" class="btn btn-primary btn-lg">
@@ -206,7 +527,8 @@
                                     {% if object %}Save Changes{% else %}Register Visitor{% endif %}
                                 </button>
                                 <a href="{% url 'visitors:visitor_list' %}" class="btn btn-outline-secondary btn-lg">
-                                    <i class="bi bi-x-lg me-2"></i>Cancel
+                                    <i class="bi bi-x-lg me-2"></i>
+                                    Cancel
                                 </a>
                             </div>
                         </div>
@@ -218,10 +540,10 @@
             {% if object %}
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a class="btn btn-outline-primary btn-sm" href="{% url 'visitors:visitor_detail' object.pk %}">
-                        <i class="bi bi-eye me-1"></i>View Visitor
+                        <i class="bi bi-eye me-1"></i>View Visitor Record
                     </a>
                     <a class="btn btn-outline-secondary btn-sm" href="{% url 'visitors:visitor_list' %}">
-                        <i class="bi bi-list me-1"></i>All Visitors
+                        <i class="bi bi-list me-1"></i>Back to Visitor List
                     </a>
                 </div>
             {% endif %}
@@ -229,141 +551,249 @@
             <!-- Information Alert -->
             <div class="alert alert-info mt-3 mb-0">
                 <div class="d-flex align-items-start">
-                    <i class="bi bi-lightbulb me-2"></i>
+                    <i class="bi bi-lightbulb me-2 mt-1"></i>
                     <div>
-                        <strong>Registration Tips:</strong>
-                        Ensure the visitor's host, purpose, and identification are accurate.
-                        {% if not object %}
-                            If this visitor arrives by vehicle, make sure the plate number is recorded
-                            and approval is sent to the LSA if required.
-                        {% else %}
-                            Any changes made will be logged and may require re-approval for access.
-                        {% endif %}
+                        <strong>Registration guidance:</strong>
+                        Please confirm the visitor’s host, purpose of visit, and identification details before submitting.
+                        For group visits, ensure each accompanying member is listed with their ID information.
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Hidden template for group member form -->
+<template id="member-form-template">
+    <div class="group-member-card" data-member-index="">
+        <div class="member-number"></div>
+        <button type="button"
+                class="remove-member-btn"
+                title="Remove member"
+                aria-label="Remove this group member">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="member-form-grid">
+            <div class="form-group">
+                <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                <input type="text"
+                       class="form-control"
+                       name="member_full_name[]"
+                       required
+                       placeholder="As shown on ID">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Contact Number</label>
+                <input type="text"
+                       class="form-control"
+                       name="member_contact[]"
+                       placeholder="+123 456 789">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email"
+                       class="form-control"
+                       name="member_email[]"
+                       placeholder="member@example.com">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">ID Type <span class="text-danger">*</span></label>
+                <select class="form-control"
+                        name="member_id_type[]"
+                        required>
+                    <option value="">Select ID type</option>
+                    <option value="passport">Passport</option>
+                    <option value="national_id">National ID Card</option>
+                    <option value="driving_license">Driving Licence</option>
+                    <option value="other">Other Photo ID</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">ID Number <span class="text-danger">*</span></label>
+                <input type="text"
+                       class="form-control"
+                       name="member_id_number[]"
+                       required
+                       placeholder="ID/Passport number">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Nationality</label>
+                <input type="text"
+                       class="form-control"
+                       name="member_nationality[]"
+                       placeholder="Country">
+            </div>
+        </div>
+
+        <div class="form-group mt-3">
+            <label class="form-label">
+                <i class="bi bi-card-image me-1"></i>
+                ID Photo / Document (Optional)
+            </label>
+            <input type="file"
+                   class="form-control"
+                   name="member_id_photo[]"
+                   accept="image/*"
+                   onchange="previewIDPhoto(this)">
+            <div class="id-photo-preview-container"></div>
+        </div>
+
+        <div class="form-group mt-3">
+            <label class="form-label">Notes (Optional)</label>
+            <textarea class="form-control"
+                      name="member_notes[]"
+                      rows="2"
+                      placeholder="Any additional information (e.g. role in group, special access needs)"></textarea>
+        </div>
+    </div>
+</template>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+let memberIndex = 0;
+
+// Preview ID photo
+function previewIDPhoto(input) {
+    const container = input.parentElement.querySelector('.id-photo-preview-container');
+    container.innerHTML = '';
+
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.className = 'id-photo-preview';
+            container.appendChild(img);
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+// Update member count
+function updateMemberCount() {
+    const cards = document.querySelectorAll('.group-member-card');
+    const count = cards.length;
+    const totalCount = count + 1; // +1 for primary visitor
+
+    const badge = document.getElementById('member-count-badge');
+    const totalGroupCount = document.getElementById('total-group-count');
+    const emptyState = document.getElementById('empty-members-state');
+
+    if (badge) {
+        badge.textContent = `${count} member${count !== 1 ? 's' : ''}`;
+    }
+
+    if (totalGroupCount) {
+        totalGroupCount.textContent = totalCount;
+    }
+
+    if (emptyState) {
+        emptyState.style.display = count === 0 ? 'block' : 'none';
+    }
+
+    // Update member numbers
+    cards.forEach((card, idx) => {
+        const numberBadge = card.querySelector('.member-number');
+        if (numberBadge) {
+            numberBadge.textContent = idx + 1;
+        }
+    });
+}
+
+// Add group member
+const addMemberBtn = document.getElementById('add-member-btn');
+if (addMemberBtn) {
+    addMemberBtn.addEventListener('click', function () {
+        const template = document.getElementById('member-form-template');
+        const container = document.getElementById('group-members-container');
+
+        if (!template || !container) {
+            return;
+        }
+
+        const clone = template.content.cloneNode(true);
+        const card = clone.querySelector('.group-member-card');
+
+        card.dataset.memberIndex = memberIndex++;
+
+        // Add remove functionality
+        const removeBtn = clone.querySelector('.remove-member-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function () {
+                card.remove();
+                updateMemberCount();
+            });
+        }
+
+        container.appendChild(clone);
+        updateMemberCount();
+
+        // Scroll to new member
+        setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+    });
+}
+
+// Toggle group members section based on visitor type
+document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('visitor-form');
+    const visitorTypeField = document.getElementById('id_visitor_type');
+    const groupMembersSection = document.getElementById('group-members-section');
+
+    if (visitorTypeField && groupMembersSection) {
+        function toggleGroupSection() {
+            if (visitorTypeField.value === 'group') {
+                groupMembersSection.classList.add('show');
+            } else {
+                groupMembersSection.classList.remove('show');
+            }
+        }
+
+        // Initial check
+        toggleGroupSection();
+
+        // Listen for changes
+        visitorTypeField.addEventListener('change', toggleGroupSection);
+    }
+
+    // Unsaved changes warning
     let formChanged = false;
 
-    // Track form changes
     if (form) {
         const inputs = form.querySelectorAll('input, select, textarea');
         inputs.forEach(input => {
-            input.addEventListener('change', function() {
+            input.addEventListener('change', function () {
                 formChanged = true;
-                updateSaveButton();
-            });
-
-            input.addEventListener('input', function() {
-                formChanged = true;
-                updateSaveButton();
             });
         });
-    }
 
-    function updateSaveButton() {
-        const saveBtn = form.querySelector('button[type="submit"]');
-        if (saveBtn && formChanged) {
-            saveBtn.classList.add('btn-warning');
-            saveBtn.classList.remove('btn-primary');
-            saveBtn.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Save Changes';
-        }
-    }
-
-    // Form validation
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            // Add any custom validation here
-            const requiredFields = form.querySelectorAll('[required]');
-            let hasErrors = false;
-
-            requiredFields.forEach(field => {
-                if (!field.value.trim()) {
-                    hasErrors = true;
-                    field.classList.add('is-invalid');
-                } else {
-                    field.classList.remove('is-invalid');
-                }
-            });
-
-            if (hasErrors) {
+        window.addEventListener('beforeunload', function (e) {
+            if (formChanged) {
                 e.preventDefault();
-                showAlert('Please fill in all required fields.', 'warning');
-                return;
-            }
-
-            // Show saving state
-            const saveBtn = form.querySelector('button[type="submit"]');
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+                e.returnValue = 'You have unsaved changes. Are you sure you want to leave this page?';
+                return e.returnValue;
             }
         });
-    }
 
-    function showAlert(message, type) {
-        // Remove any existing alerts
-        const existingAlerts = document.querySelectorAll('.form-alert');
-        existingAlerts.forEach(alert => alert.remove());
+        form.addEventListener('submit', function () {
+            formChanged = false;
+        });
 
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show form-alert`;
-        alertDiv.innerHTML = `
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-
-        form.insertBefore(alertDiv, form.firstChild);
-
-        // Auto-dismiss after 5 seconds
-        setTimeout(() => {
-            if (alertDiv.parentNode) {
-                const bsAlert = new bootstrap.Alert(alertDiv);
-                bsAlert.close();
-            }
-        }, 5000);
-    }
-
-    // Warn before leaving if there are unsaved changes
-    window.addEventListener('beforeunload', function(e) {
-        if (formChanged) {
-            e.preventDefault();
-            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-            return e.returnValue;
+        // Auto-focus first logical input field
+        const firstInput = form.querySelector('input:not([type="hidden"]), select, textarea');
+        if (firstInput) {
+            firstInput.focus();
         }
-    });
-
-    // Clear the flag when form is submitted successfully
-    form.addEventListener('submit', function() {
-        formChanged = false;
-    });
-
-    // Auto-focus first input field
-    const firstInput = form.querySelector('input:not([type="hidden"]), select, textarea');
-    if (firstInput) {
-        firstInput.focus();
     }
-
-    // Enhanced form field interactions
-    const formFields = form.querySelectorAll('.form-control');
-    formFields.forEach(field => {
-        field.addEventListener('focus', function() {
-            this.parentElement.classList.add('field-focused');
-        });
-
-        field.addEventListener('blur', function() {
-            this.parentElement.classList.remove('field-focused');
-        });
-    });
 });
 </script>
 {% endblock %}

@@ -32,9 +32,62 @@
   .conditional-field {
     display: none;
   }
-
   .conditional-field.show {
     display: block;
+  }
+
+  /* Group members in check-in UI */
+  .group-summary {
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background: #e7f1ff;
+    border: 1px solid #cfe2ff;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .group-summary-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0d6efd;
+    color: #fff;
+  }
+
+  .member-list {
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+  }
+
+  .member-list-item {
+    padding: 0.5rem 0.25rem;
+    border-radius: 0.35rem;
+    transition: background 0.15s;
+  }
+
+  .member-list-item:hover {
+    background: #eef2f7;
+  }
+
+  .member-meta {
+    font-size: 0.8rem;
+    color: #6c757d;
+  }
+
+  .select-all-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+
+  .member-fields-row {
+    margin-top: 0.35rem;
   }
 </style>
 {% endblock %}
@@ -55,14 +108,29 @@
   <!-- Visitor Info Card -->
   <div class="card info-card shadow-sm">
     <div class="card-body">
-      <div class="d-flex justify-content-between align-items-start">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
         <div>
-          <h5 class="mb-2">{{ visitor.full_name }}</h5>
-          <div class="opacity-75">
+          <h5 class="mb-1">{{ visitor.full_name }}</h5>
+          <div class="opacity-75 mb-1">
             {% if visitor.company %}
               <i class="bi bi-building"></i> {{ visitor.company }}
             {% endif %}
           </div>
+
+          {% if visitor.visitor_type == 'group' %}
+            {% with group_members=visitor.group_members.all %}
+              <div class="small">
+                <i class="bi bi-people-fill"></i>
+                Group visit &middot;
+                {% if group_members %}
+                  {{ group_members|length|add:"1" }} person{{ group_members|length|add:"1"|pluralize }}
+                  (primary visitor + {{ group_members|length }} member{{ group_members|length|pluralize }})
+                {% else %}
+                  1 person (primary visitor only)
+                {% endif %}
+              </div>
+            {% endwith %}
+          {% endif %}
         </div>
         <div>
           {% if visitor.checked_in and not visitor.checked_out %}
@@ -132,12 +200,12 @@
           </div>
         </div>
 
-        <!-- Check-in Requirements -->
+        <!-- Check-in Requirements: PRIMARY VISITOR -->
         <div class="form-section conditional-field" id="checkinFields">
-          <h6 class="mb-3"><i class="bi bi-person-badge-fill"></i> Check-in Requirements</h6>
+          <h6 class="mb-3"><i class="bi bi-person-badge-fill"></i> Primary Visitor Check-in</h6>
           <div class="alert alert-info mb-3">
             <i class="bi bi-info-circle-fill"></i>
-            <small>The following information is required for check-in if not already provided.</small>
+            <small>The primary visitor must have a valid ID number and assigned visitor card.</small>
           </div>
 
           <div class="row g-3">
@@ -165,6 +233,98 @@
           </div>
         </div>
 
+        <!-- Group Members Check-in (only for group & check-in) -->
+        {% if visitor.visitor_type == 'group' %}
+          {% with group_members=visitor.group_members.all %}
+            {% if group_members %}
+              <div class="form-section conditional-field" id="groupMembersSection">
+                <h6 class="mb-3"><i class="bi bi-people-fill"></i> Group Members Check-in</h6>
+
+                <div class="group-summary">
+                  <div class="group-summary-icon">
+                    <i class="bi bi-people"></i>
+                  </div>
+                  <div>
+                    <strong>Each member must have an ID and a visitor card.</strong><br>
+                    <small class="text-muted">
+                      For all selected members, please capture their ID number and the card number issued at the gate.
+                    </small>
+                  </div>
+                </div>
+
+                <div class="select-all-row">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="selectAllMembers" checked>
+                    <label class="form-check-label fw-semibold" for="selectAllMembers">
+                      Select all ({{ group_members|length }} member{{ group_members|length|pluralize }})
+                    </label>
+                  </div>
+                  <small class="text-muted" id="selectedCountText">
+                    {{ group_members|length }} selected
+                  </small>
+                </div>
+
+                <div class="member-list mt-2">
+                  {% for member in group_members %}
+                    <div class="member-list-item">
+                      <div class="d-flex align-items-start justify-content-between">
+                        <div class="form-check">
+                          <input class="form-check-input member-checkbox"
+                                 type="checkbox"
+                                 name="member_ids"
+                                 value="{{ member.id }}"
+                                 id="member_{{ member.id }}"
+                                 data-member-name="{{ member.full_name }}"
+                                 checked>
+                          <label class="form-check-label" for="member_{{ member.id }}">
+                            <strong>{{ member.full_name }}</strong>
+                            <div class="member-meta">
+                              {% if member.id_number %}
+                                <i class="bi bi-credit-card-2-front"></i>
+                                {{ member.get_id_type_display }}: {{ member.id_number }}
+                              {% else %}
+                                <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                                No ID on file
+                              {% endif %}
+                              {% if member.nationality %}
+                                &middot; <i class="bi bi-flag"></i> {{ member.nationality }}
+                              {% endif %}
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      <!-- Member ID + Card fields -->
+                      <div class="row g-2 member-fields-row">
+                        <div class="col-md-6">
+                          <label class="form-label form-label-sm mb-1">
+                            ID Number <span class="text-danger">*</span>
+                          </label>
+                          <input type="text"
+                                 class="form-control form-control-sm member-id-input"
+                                 name="member_id_number_{{ member.id }}"
+                                 id="member_id_number_{{ member.id }}"
+                                 value="{{ member.id_number }}">
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label form-label-sm mb-1">
+                            Visitor Card Number <span class="text-danger">*</span>
+                          </label>
+                          <input type="text"
+                                 class="form-control form-control-sm member-card-input"
+                                 name="member_card_number_{{ member.id }}"
+                                 id="member_card_number_{{ member.id }}"
+                                 value="">
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          {% endwith %}
+        {% endif %}
+
         <!-- Action Buttons -->
         <div class="d-flex gap-2 mt-4">
           <button class="btn btn-primary btn-lg" type="submit">
@@ -183,32 +343,124 @@
     <div class="card-body">
       <small class="text-muted">
         <i class="bi bi-lightbulb-fill"></i>
-        <strong>Tip:</strong> Use the quick action buttons on the visitor detail page to pre-fill check-in or check-out actions automatically.
+        <strong>Tip:</strong> For group visits, ensure every selected member has both an ID number and a visitor card before completing check-in.
       </small>
     </div>
   </div>
 </div>
 
 <script>
-  // Dynamic form field visibility based on action
   document.addEventListener('DOMContentLoaded', function() {
     const actionSelect = document.getElementById('{{ form.action.id_for_label }}');
     const checkinFields = document.getElementById('checkinFields');
+    const groupMembersSection = document.getElementById('groupMembersSection');
+    const selectAllMembers = document.getElementById('selectAllMembers');
+    const memberCheckboxes = document.querySelectorAll('.member-checkbox');
+    const selectedCountText = document.getElementById('selectedCountText');
+    const gateForm = document.getElementById('gateActionForm');
+
+    function updateSelectedCount() {
+      if (!selectedCountText || !memberCheckboxes.length) return;
+      let count = 0;
+      memberCheckboxes.forEach(cb => {
+        if (cb.checked) count++;
+      });
+      selectedCountText.textContent = count + ' selected';
+    }
+
+    function isCheckInAction() {
+      if (!actionSelect) return false;
+      const val = actionSelect.value;
+      return val === 'checkin' || val === 'check_in';
+    }
 
     function toggleCheckinFields() {
-      if (actionSelect && checkinFields) {
-        const selectedAction = actionSelect.value;
-        if (selectedAction === 'checkin' || selectedAction === 'check_in') {
+      const isCheckIn = isCheckInAction();
+
+      if (checkinFields) {
+        if (isCheckIn) {
           checkinFields.classList.add('show');
         } else {
           checkinFields.classList.remove('show');
         }
       }
+
+      if (groupMembersSection) {
+        if (isCheckIn) {
+          groupMembersSection.classList.add('show');
+        } else {
+          groupMembersSection.classList.remove('show');
+        }
+      }
     }
 
+    // Action change listener
     if (actionSelect) {
       actionSelect.addEventListener('change', toggleCheckinFields);
-      toggleCheckinFields(); // Initial check
+      toggleCheckinFields(); // Initial state
+    }
+
+    // Select all toggle for group members
+    if (selectAllMembers && memberCheckboxes.length) {
+      selectAllMembers.addEventListener('change', function() {
+        const checked = this.checked;
+        memberCheckboxes.forEach(cb => {
+          cb.checked = checked;
+        });
+        updateSelectedCount();
+      });
+
+      memberCheckboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+          // If any is unchecked, uncheck "select all"
+          if (!this.checked && selectAllMembers.checked) {
+            selectAllMembers.checked = false;
+          }
+          // If all checked, check "select all"
+          if (!Array.from(memberCheckboxes).some(c => !c.checked)) {
+            selectAllMembers.checked = true;
+          }
+          updateSelectedCount();
+        });
+      });
+
+      // Initial count
+      updateSelectedCount();
+    }
+
+    // Client-side validation: all selected members must have ID + card when checking in
+    if (gateForm) {
+      gateForm.addEventListener('submit', function(e) {
+        if (!isCheckInAction()) {
+          return;  // only enforce on check-in
+        }
+
+        let errors = [];
+
+        memberCheckboxes.forEach(cb => {
+          if (!cb.checked) return;
+
+          const memberId = cb.value;
+          const name = cb.dataset.memberName || 'Member';
+          const idInput = document.getElementById('member_id_number_' + memberId);
+          const cardInput = document.getElementById('member_card_number_' + memberId);
+
+          if (idInput && !idInput.value.trim()) {
+            errors.push(name + ': ID number is required.');
+          }
+          if (cardInput && !cardInput.value.trim()) {
+            errors.push(name + ': visitor card number is required.');
+          }
+        });
+
+        if (errors.length) {
+          e.preventDefault();
+          alert(
+            'Please complete ID and visitor card details for all selected group members before checking in:\n\n'
+            + errors.join('\n')
+          );
+        }
+      });
     }
   });
 </script>
