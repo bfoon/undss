@@ -347,11 +347,17 @@
                                 {{ s.name }}
                             </a>
                             <div class="small text-muted mt-1 d-flex align-items-center">
-                                <span class="creator-avatar">
-                                    {{ s.created_by.get_full_name|default:s.created_by.username|slice:":1"|upper }}
-                                </span>
-                                {{ s.created_by.get_full_name|default:s.created_by.username|default:"Unknown" }}
+                              {% if s.created_by %}
+                                {% with display_name=s.created_by.get_full_name|default_if_none:s.created_by.username %}
+                                  <span class="creator-avatar">{{ display_name|slice:":1"|upper }}</span>
+                                  {{ display_name }}
+                                {% endwith %}
+                              {% else %}
+                                <span class="creator-avatar">?</span>
+                                Unknown
+                              {% endif %}
                             </div>
+
                         </td>
 
                         <td>
