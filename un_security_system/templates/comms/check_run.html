@@ -149,8 +149,20 @@
                 </thead>
                 <tbody>
                   {% for entry in group.list %}
-                    <tr class="entry-row"
-                        data-search="{{ entry.call_sign|default_if_none:'' }} {{ entry.device.assigned_to.get_full_name|default:entry.device.assigned_to.username|default:'' }} {{ entry.device.serial_number|default:'' }} {% if entry.device.assigned_to and entry.device.assigned_to.agency %}{{ entry.device.assigned_to.agency.name }}{% endif %}">
+                     {% with device=entry.device u=entry.device.assigned_to %}
+                      <tr class="entry-row"
+                          data-search="
+                            {{ entry.call_sign|default_if_none:'' }}
+                            {% if u %}
+                              {{ u.get_full_name|default_if_none:'' }}
+                              {{ u.username|default_if_none:'' }}
+                              {% if u.agency %}{{ u.agency.name|default_if_none:'' }}{% endif %}
+                            {% endif %}
+                            {% if device %}
+                              {{ device.serial_number|default_if_none:'' }}
+                            {% endif %}
+                          ">
+
                       <td>
                         <strong>{{ entry.call_sign|default:"—" }}</strong>
                         {% if entry.device.serial_number %}
@@ -219,6 +231,7 @@
                                {% if session.status == "completed" %}disabled{% endif %}>
                       </td>
                     </tr>
+                  {% endwith %}
                   {% endfor %}
                 </tbody>
               </table>

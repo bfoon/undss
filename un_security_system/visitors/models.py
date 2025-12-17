@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -60,6 +61,10 @@ class Visitor(models.Model):
 
     visitor_card = models.ForeignKey('VisitorCard', null=True, blank=True,
                                      on_delete=models.SET_NULL, related_name='current_holder')
+
+    clearance_valid_from = models.DateField(null=True, blank=True)
+    clearance_valid_until = models.DateField(null=True, blank=True)
+
     card_issued_at = models.DateTimeField(null=True, blank=True)
     card_returned_at = models.DateTimeField(null=True, blank=True)
 
@@ -75,6 +80,25 @@ class Visitor(models.Model):
         if self.visitor_type == 'group':
             return 1 + self.group_members.count()
         return 1
+
+    def clearance_is_active_today(self):
+        """
+        True if:
+          - approved
+          - and (no validity dates set) OR today is inside the window
+        """
+        if self.status != "approved":
+            return False
+
+        today = timezone.now().date()
+
+        # If no window was set, treat as normal approved visitor (your current behavior)
+        if not self.clearance_valid_from and not self.clearance_valid_until:
+            return True
+
+        start = self.clearance_valid_from or today
+        end = self.clearance_valid_until or today
+        return start <= today <= end
 
 
 class GroupMember(models.Model):

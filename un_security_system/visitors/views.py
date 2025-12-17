@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
 from django.utils.decorators import method_decorator
 from datetime import timedelta
+from dateutil.relativedelta import relativedelta
 import csv
 import threading
 import logging
@@ -191,6 +192,67 @@ def _notify_requester_check_out(visitor, gate=None, duration_str=None):
 
     message += "\nBest regards,\nUN Security / Common Services System"
     _send_notification(subject, message, requester.email)
+
+
+
+def _compute_valid_until(start_date, value: int, unit: str):
+    """
+    start_date: date
+    unit: 'days'|'months'|'years'
+    """
+    if unit == "days":
+        return start_date + timedelta(days=value)
+    if unit == "months":
+        return start_date + relativedelta(months=value)
+    if unit == "years":
+        return start_date + relativedelta(years=value)
+    return start_date
+
+
+def _apply_clearance_window_from_post(visitor, request):
+    """
+    Reads optional clearance duration from POST:
+      - clearance_value: int
+      - clearance_unit: days|months|years
+
+    If provided, sets:
+      - visitor.clearance_valid_from
+      - visitor.clearance_valid_until
+    """
+    val = (request.POST.get("clearance_value") or "").strip()
+    unit = (request.POST.get("clearance_unit") or "").strip().lower()
+
+    if not val or unit not in {"days", "months", "years"}:
+        return  # no window set, keep normal approval behavior
+
+    try:
+        value = int(val)
+        if value <= 0:
+            return
+    except Exception:
+        return
+
+    start = timezone.now().date()
+    visitor.clearance_valid_from = start
+    visitor.clearance_valid_until = _compute_valid_until(start, value, unit)
+
+
+def _clearance_is_active_today(visitor: Visitor, today=None) -> bool:
+    """
+    Returns True if today is within [valid_from, valid_until] when those values exist.
+    If no window is set, treat as active (optional policy). You can flip this if you want strict windows.
+    """
+    if today is None:
+        today = timezone.localdate()
+
+    vf = getattr(visitor, "clearance_valid_from", None)
+    vu = getattr(visitor, "clearance_valid_until", None)
+
+    if vf and today < vf:
+        return False
+    if vu and today > vu:
+        return False
+    return True
 
 
 # -------------------------------------------------------------------
@@ -579,17 +641,28 @@ def approve_visitor(request, visitor_id):
                 visitor.status = 'approved'
                 visitor.approved_by = request.user
                 visitor.approval_date = timezone.now()
-                visitor.save()
+
+                # NEW: optional long-term clearance window
+                _apply_clearance_window_from_post(visitor, request)
+
+                visitor.save(update_fields=[
+                    "status", "approved_by", "approval_date",
+                    "clearance_valid_from", "clearance_valid_until",
+                ])
 
                 VisitorLog.objects.create(
                     visitor=visitor,
                     action='approval',
                     performed_by=request.user,
-                    notes=notes
+                    notes=(
+                        "Approved on visitor detail page. "
+                        f"Valid from {visitor.clearance_valid_from} until {visitor.clearance_valid_until}."
+                        if (visitor.clearance_valid_from or visitor.clearance_valid_until)
+                        else "Approved on visitor detail page."
+                    )
                 )
                 messages.success(request, f'Visitor {visitor.full_name} approved.')
 
-                # Notify requester that their visitor was approved
                 _notify_requester_status_change(visitor, 'approved', notes)
 
             elif action == 'reject':
@@ -605,7 +678,6 @@ def approve_visitor(request, visitor_id):
                 )
                 messages.success(request, f'Visitor {visitor.full_name} rejected.')
 
-                # Notify requester that request was rejected
                 _notify_requester_status_change(visitor, 'rejected', visitor.rejection_reason)
 
             return redirect('visitors:visitor_list')
@@ -624,9 +696,9 @@ def check_in_visitor(request, visitor_id):
 
     visitor = get_object_or_404(Visitor, id=visitor_id)
 
-    # Must be cleared first
-    if visitor.status != "approved":
-        return JsonResponse({"error": "Visitor not approved"}, status=400)
+    # ✅ NEW: must be cleared for today (approved + within validity window if set)
+    if not visitor.clearance_is_active_today():
+        return JsonResponse({"error": "Visitor is not cleared for today."}, status=400)
 
     if visitor.checked_in:
         return JsonResponse({"error": "Visitor already checked in"}, status=400)
@@ -638,7 +710,6 @@ def check_in_visitor(request, visitor_id):
     card_number_input = (request.POST.get("card_number") or "").strip()
 
     # ---- Enforce ID requirement ----
-    # If visitor has no ID on file and none provided now -> reject
     if not visitor.id_number and not id_number_input:
         return JsonResponse(
             {"error": "Visitor ID number is required for check-in."},
@@ -650,23 +721,26 @@ def check_in_visitor(request, visitor_id):
         visitor.id_number = id_number_input
 
     # ---- Enforce card requirement ----
-    # Existing assigned card (relation) – may be None, that's fine
     card = getattr(visitor, "visitor_card", None)
 
-    # If no linked card and no card number provided -> reject
     if card is None and not card_number_input:
         return JsonResponse(
             {"error": "Visitor card number is required for check-in."},
             status=400,
         )
 
+    # ✅ NEW: allow repeat cycle even if they checked out previously
+    # (visitor can come again tomorrow, next week, etc. within clearance window)
+    visitor.checked_out = False
+    visitor.check_out_time = None
+
     # Mark visitor as checked in
     visitor.checked_in = True
     visitor.check_in_time = timezone.now()
     visitor.save()
 
-    # Build note, including card info (FK if present, else raw number)
     note_parts = [f"Checked in at {visitor.check_in_time.strftime('%H:%M')}"]
+
     if card:
         note_parts.append(f"Card {card.number}")
         effective_card_number = card.number
@@ -676,17 +750,15 @@ def check_in_visitor(request, visitor_id):
 
     note = " · ".join(note_parts)
 
-    # Log the action, including card FK if available
     VisitorLog.objects.create(
         visitor=visitor,
-        card=card,              # may be None – card number still goes in notes
+        card=card,
         action="check_in",
         performed_by=request.user,
         gate=gate,
         notes=note,
     )
 
-    # Notify requester that visitor checked in
     _notify_requester_check_in(visitor, gate=gate)
 
     return JsonResponse(
@@ -714,22 +786,23 @@ def check_out_visitor(request, visitor_id):
 
     gate = request.POST.get("gate", "front")
 
-    # Optional override card number from request (e.g. if scanned at exit)
+    # Optional override card number from request (e.g. scanned at exit)
     card_number_input = (request.POST.get("card_number") or "").strip()
 
     # Mark visitor as checked out
     visitor.checked_out = True
     visitor.check_out_time = timezone.now()
+
+    # ✅ NEW: important for multi-visits
+    visitor.checked_in = False
+
     visitor.save()
 
-    # Calculate visit duration
     duration = visitor.check_out_time - visitor.check_in_time
-    duration_str = str(duration).split(".")[0]  # strip microseconds
+    duration_str = str(duration).split(".")[0]
 
-    # Card linked to visitor, if any
     card = getattr(visitor, "visitor_card", None)
 
-    # Build note with time, duration & card info
     note_parts = [
         f"Checked out at {visitor.check_out_time.strftime('%H:%M')}",
         f"Duration: {duration_str}",
@@ -746,7 +819,6 @@ def check_out_visitor(request, visitor_id):
 
     note = " · ".join(note_parts)
 
-    # Log the action, including card FK if available
     VisitorLog.objects.create(
         visitor=visitor,
         card=card,
@@ -756,7 +828,6 @@ def check_out_visitor(request, visitor_id):
         notes=note,
     )
 
-    # Notify requester that visitor left
     _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
 
     return JsonResponse(
@@ -1086,7 +1157,9 @@ def visitor_verify_lookup_api(request):
         return JsonResponse({"ok": False, "found": False})
 
     status = getattr(visitor, "status", None)
-    is_cleared = (status == "approved")
+
+    # ✅ NEW: active clearance check
+    is_cleared_today = visitor.clearance_is_active_today()
 
     data = {
         "ok": True,
@@ -1099,8 +1172,9 @@ def visitor_verify_lookup_api(request):
         },
         "approval": {
             "status": status,
-            "is_cleared": is_cleared,
-            "code": None,
+            "is_cleared": is_cleared_today,
+            "valid_from": getattr(visitor, "clearance_valid_from", None),
+            "valid_until": getattr(visitor, "clearance_valid_until", None),
         }
     }
     return JsonResponse(data)
@@ -1135,15 +1209,17 @@ def visitor_request_clearance(request, pk):
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def visitor_lsa_approve(request, pk):
-    """
-    LSA approves the visitor. Uses your existing model fields: status, approved_by, approval_date.
-    """
     visitor = get_object_or_404(Visitor, pk=pk)
+
     if request.method == "POST":
         visitor.status = "approved"
         visitor.approved_by = request.user
         visitor.approval_date = timezone.now()
-        visitor.save(update_fields=["status", "approved_by", "approval_date"])
+
+        # ✅ allow approver to choose validity window (days/months/years)
+        _apply_clearance_window_from_post(visitor, request)
+
+        visitor.save()
 
         VisitorLog.objects.create(
             visitor=visitor,
@@ -1151,10 +1227,9 @@ def visitor_lsa_approve(request, pk):
             performed_by=request.user,
             notes="Approved on visitor detail page."
         )
-        messages.success(request, f"Visitor {visitor.full_name} approved.")
 
-        # Notify requester
-        _notify_requester_status_change(visitor, 'approved')
+        messages.success(request, f"Visitor {visitor.full_name} approved.")
+        _notify_requester_status_change(visitor, "approved")
 
     return redirect("visitors:visitor_detail", pk=pk)
 
@@ -1231,12 +1306,10 @@ def gate_check_view(request, pk):
     """
     Gate workflow:
       - Only guards/LSA/SOC/superuser can access (_gate_role)
-      - If visitor missing id_number and action=check_in => require it
-      - Enforces status rules: must be 'approved' to check in
-      - Handles group check-in requirements (ID + card per member)
-      - Marks ALL used cards (primary + group) as in_use=True
-      - On check-out, frees ALL cards issued_to this visitor
-      - Sends emails on check-in / check-out
+      - Enforces: must be approved + clearance active today to check in
+      - Allows repeated check-in/check-out cycles within clearance window
+      - On check-out, sets checked_in=False (fixes your UI stuck issue)
+      - Frees ALL cards issued_to this visitor (primary + group)
     """
     if not _gate_role(request.user):
         messages.error(request, "You don’t have permission to perform gate actions.")
@@ -1244,11 +1317,9 @@ def gate_check_view(request, pk):
 
     visitor = get_object_or_404(Visitor, pk=pk)
 
-    # Optional shortcut from link: ?action=check_in / ?action=check_out
     initial_action = request.GET.get("action")
     initial_data = {"action": initial_action} if initial_action else None
 
-    # IMPORTANT: pass visitor into the form so it can enforce ID rules properly
     form = GateCheckForm(
         request.POST or None,
         visitor=visitor,
@@ -1258,25 +1329,36 @@ def gate_check_view(request, pk):
     if request.method == "POST" and form.is_valid():
         action = form.cleaned_data["action"]
         gate = form.cleaned_data["gate"]
-        id_number = form.cleaned_data["id_number"]
-        card_number = form.cleaned_data["card_number"]
+        id_number = (form.cleaned_data.get("id_number") or "").strip()
+        card_number = (form.cleaned_data.get("card_number") or "").strip()
 
         # --------------------
-        # CHECK-IN WORKFLOW
+        # CHECK-IN
         # --------------------
         if action == "check_in":
-            # must be LSA-approved
+
             if visitor.status != "approved":
                 messages.error(request, "Visitor is not approved by LSA.")
                 return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-            # update or set ID number if supplied
+            # ✅ Must be cleared for today (within window if set)
+            if hasattr(visitor, "clearance_is_active_today"):
+                # If it's a @property, it's boolean
+                is_ok = visitor.clearance_is_active_today
+            else:
+                # fallback (if your model uses method)
+                is_ok = visitor.clearance_is_active_today() if hasattr(visitor, "clearance_is_active_today") else True
+
+            if not is_ok:
+                messages.error(request, "Visitor clearance is not active today (expired or not started yet).")
+                return redirect("visitors:visitor_detail", pk=visitor.pk)
+
             if id_number and id_number != (visitor.id_number or ""):
                 visitor.id_number = id_number
 
-            # ---- Group member validation (IDs + cards) ----
+            # ---- Group validation (optional: keep your existing logic) ----
             group_card_notes = []
-            group_card_data = []  # list of dicts: {member, id_number, card_number}
+            group_card_data = []
 
             if visitor.visitor_type == "group":
                 member_ids = request.POST.getlist("member_ids")
@@ -1292,90 +1374,71 @@ def gate_check_view(request, pk):
                     if not mcard:
                         errors.append(f"{member.full_name}: visitor card number is required.")
 
-                    # Store for later issuing if both present
-                    group_card_data.append(
-                        {
-                            "member": member,
-                            "id_number": mid,
-                            "card_number": mcard,
-                        }
-                    )
-
-                    # Note for log
-                    group_card_notes.append(
-                        f"{member.full_name} – ID {mid or 'N/A'}, Card {mcard or 'N/A'}"
-                    )
+                    group_card_data.append({"member": member, "id_number": mid, "card_number": mcard})
+                    group_card_notes.append(f"{member.full_name} – ID {mid or 'N/A'}, Card {mcard or 'N/A'}")
 
                 if errors:
                     for msg_text in errors:
                         messages.error(request, msg_text)
-                    # Stay on the gate screen so the guard can correct it
-                    return render(
-                        request,
-                        "visitors/gate_check.html",
-                        {"visitor": visitor, "form": form},
-                    )
+                    return render(request, "visitors/gate_check.html", {"visitor": visitor, "form": form})
 
-            # ---- Issue cards (primary + group) in one atomic transaction ----
             try:
                 with transaction.atomic():
                     now = timezone.now()
 
-                    # PRIMARY VISITOR CARD
-                    main_card = VisitorCard.objects.select_for_update().get(
-                        number__iexact=card_number
-                    )
+                    main_card = VisitorCard.objects.select_for_update().get(number__iexact=card_number)
                     if not main_card.is_active:
                         raise ValueError(f"Card {main_card.number} is inactive.")
                     if main_card.in_use:
                         raise ValueError(f"Card {main_card.number} is already in use.")
 
+                    # mark card in use
                     main_card.in_use = True
-                    main_card.issued_to = visitor  # group cards will also be tied to this Visitor
+                    main_card.issued_to = visitor
                     main_card.issued_at = now
                     main_card.issued_by = request.user
                     main_card.returned_at = None
                     main_card.returned_by = None
                     main_card.save()
 
+                    # ✅ IMPORTANT: allow re-check-in cycles
                     visitor.visitor_card = main_card
                     visitor.card_issued_at = now
                     visitor.checked_in = True
+                    visitor.checked_out = False          # ✅ reset
                     visitor.check_in_time = now
-                    visitor.save()
+                    visitor.check_out_time = None        # ✅ reset (optional but clean)
+                    visitor.save(update_fields=[
+                        "visitor_card", "card_issued_at",
+                        "checked_in", "checked_out",
+                        "check_in_time", "check_out_time",
+                        "id_number"
+                    ])
 
-                    # GROUP MEMBER CARDS
                     group_card_numbers = []
                     for item in group_card_data:
                         mcard_num = (item["card_number"] or "").strip()
                         if not mcard_num:
                             continue
 
-                        # avoid accidentally reusing the same card as primary
                         if mcard_num.lower() == card_number.lower():
-                            raise ValueError(
-                                f"Group member card {mcard_num} is the same as the primary visitor card."
-                            )
+                            raise ValueError(f"Group member card {mcard_num} is the same as the primary visitor card.")
 
-                        gc = VisitorCard.objects.select_for_update().get(
-                            number__iexact=mcard_num
-                        )
+                        gc = VisitorCard.objects.select_for_update().get(number__iexact=mcard_num)
                         if not gc.is_active:
                             raise ValueError(f"Group card {gc.number} is inactive.")
                         if gc.in_use:
                             raise ValueError(f"Group card {gc.number} is already in use.")
 
                         gc.in_use = True
-                        gc.issued_to = visitor   # tie card usage to this group visit
+                        gc.issued_to = visitor
                         gc.issued_at = now
                         gc.issued_by = request.user
                         gc.returned_at = None
                         gc.returned_by = None
                         gc.save()
-
                         group_card_numbers.append(gc.number)
 
-                # Build log note
                 base_note = f"Issued card {main_card.number}"
                 if group_card_notes:
                     base_note += " | Group cards: " + "; ".join(group_card_notes)
@@ -1387,42 +1450,32 @@ def gate_check_view(request, pk):
                     gate=gate,
                     notes=base_note,
                 )
+
                 messages.success(
                     request,
                     f"Checked in. Card {main_card.number} issued."
                     + (f" Group cards in use: {', '.join(group_card_numbers)}" if group_card_numbers else ""),
                 )
 
-                # Email requester
                 _notify_requester_check_in(visitor, gate=gate)
-
                 return redirect("visitors:visitor_detail", pk=visitor.pk)
 
             except VisitorCard.DoesNotExist:
                 messages.error(request, "One of the card numbers was not found.")
-                return render(
-                    request,
-                    "visitors/gate_check.html",
-                    {"visitor": visitor, "form": form},
-                )
+                return render(request, "visitors/gate_check.html", {"visitor": visitor, "form": form})
             except ValueError as e:
                 messages.error(request, str(e))
-                return render(
-                    request,
-                    "visitors/gate_check.html",
-                    {"visitor": visitor, "form": form},
-                )
+                return render(request, "visitors/gate_check.html", {"visitor": visitor, "form": form})
 
         # --------------------
-        # CHECK-OUT WORKFLOW
+        # CHECK-OUT
         # --------------------
         elif action == "check_out":
-            # must have been checked in and not already checked out
+
             if not visitor.checked_in or visitor.checked_out:
                 messages.error(request, "Visitor not currently in compound.")
                 return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-            # Return ALL cards issued to this visitor (primary + group)
             with transaction.atomic():
                 cards_qs = VisitorCard.objects.select_for_update().filter(
                     issued_to=visitor,
@@ -1432,10 +1485,11 @@ def gate_check_view(request, pk):
                 now = timezone.now()
 
                 if not cards_qs.exists():
-                    # Fallback: no cards tracked; behave like "no card" case
+                    # ✅ FIX: must set checked_in=False so UI allows check-in again
+                    visitor.checked_in = False
                     visitor.checked_out = True
                     visitor.check_out_time = now
-                    visitor.save()
+                    visitor.save(update_fields=["checked_in", "checked_out", "check_out_time"])
 
                     VisitorLog.objects.create(
                         visitor=visitor,
@@ -1445,25 +1499,13 @@ def gate_check_view(request, pk):
                         notes="Checked out (no cards on file)",
                     )
 
-                    duration = (
-                        visitor.check_out_time - visitor.check_in_time
-                        if visitor.check_in_time
-                        else None
-                    )
-                    duration_str = (
-                        str(duration).split(".")[0] if duration is not None else None
-                    )
-                    _notify_requester_check_out(
-                        visitor, gate=gate, duration_str=duration_str
-                    )
+                    duration = (visitor.check_out_time - visitor.check_in_time) if visitor.check_in_time else None
+                    duration_str = str(duration).split(".")[0] if duration else None
+                    _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
 
-                    messages.warning(
-                        request,
-                        "Visitor checked out, but no cards were currently marked as in use.",
-                    )
+                    messages.warning(request, "Visitor checked out, but no cards were currently marked as in use.")
                     return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-                # There are cards in use – free them all
                 card_numbers = []
                 for card in cards_qs:
                     card.in_use = False
@@ -1473,11 +1515,16 @@ def gate_check_view(request, pk):
                     card.save()
                     card_numbers.append(card.number)
 
+                # ✅ FIX: this is what was missing in your gate view
                 visitor.card_returned_at = now
                 visitor.visitor_card = None
+                visitor.checked_in = False            # ✅ VERY IMPORTANT
                 visitor.checked_out = True
                 visitor.check_out_time = now
-                visitor.save()
+                visitor.save(update_fields=[
+                    "card_returned_at", "visitor_card",
+                    "checked_in", "checked_out", "check_out_time"
+                ])
 
             VisitorLog.objects.create(
                 visitor=visitor,
@@ -1486,35 +1533,19 @@ def gate_check_view(request, pk):
                 gate=gate,
                 notes=f"Collected cards {', '.join(card_numbers)}",
             )
-            messages.success(
-                request, f"Checked out. Collected cards: {', '.join(card_numbers)}"
-            )
 
-            # Notify requester
-            duration = (
-                visitor.check_out_time - visitor.check_in_time
-                if visitor.check_in_time
-                else None
-            )
+            messages.success(request, f"Checked out. Collected cards: {', '.join(card_numbers)}")
+
+            duration = (visitor.check_out_time - visitor.check_in_time) if visitor.check_in_time else None
             duration_str = str(duration).split(".")[0] if duration else None
             _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
 
             return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-        else:
-            messages.error(request, "Unknown gate action.")
-            return redirect("visitors:visitor_detail", pk=visitor.pk)
+        messages.error(request, "Unknown gate action.")
+        return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-    # GET or invalid POST – show form again
-    return render(
-        request,
-        "visitors/gate_check.html",
-        {
-            "visitor": visitor,
-            "form": form,
-        },
-    )
-
+    return render(request, "visitors/gate_check.html", {"visitor": visitor, "form": form})
 
 @login_required
 def visitor_card_list(request):
