@@ -134,23 +134,16 @@
         </div>
 
        <div class="d-flex gap-2 align-items-start">
-
-        {# 1) Inside now #}
         {% if visitor.checked_in and not visitor.checked_out %}
           <span class="status-badge status-in-compound">
             <i class="bi bi-geo-alt-fill"></i> In Compound
           </span>
 
-        {# 2) Returning visitor ONLY if: checked out + approved + has a clearance window + window active today #}
-        {% elif visitor.checked_out
-              and visitor.status == 'approved'
-              and (visitor.clearance_valid_from or visitor.clearance_valid_until)
-              and visitor.clearance_is_active_today %}
+        {% elif visitor.checked_out and visitor.status == 'approved' and visitor.clearance_is_active_today and visitor.clearance_valid_from or visitor.clearance_valid_until %}
           <span class="status-badge status-approved">
             <i class="bi bi-arrow-repeat"></i> Returning Visitor
           </span>
 
-        {# 3) Checked out but not valid today (expired / not started / no window set) #}
         {% elif visitor.checked_out %}
           <span class="status-badge status-checked-out">
             <i class="bi bi-check-circle-fill"></i> Checked Out
@@ -249,10 +242,10 @@
             {% if visitor.clearance_valid_from or visitor.clearance_valid_until %}
               <div class="info-item">
                 <div class="info-label">
-                  <i class="bi bi-calendar-range"></i> Clearance Window
+                  <i class="bi bi-calendar-range"></i> Clearance Window -
                 </div>
                 <div class="info-value">
-                  {% if visitor.clearance_valid_from %}From <strong>{{ visitor.clearance_valid_from|date:"M d, Y" }}</strong>{% else %}From <strong>—</strong>{% endif %}
+                  {% if visitor.clearance_valid_from %} From <strong>{{ visitor.clearance_valid_from|date:"M d, Y" }}</strong>{% else %}From <strong>—</strong>{% endif %}
                   <span class="mx-2">·</span>
                   {% if visitor.clearance_valid_until %}Until <strong>{{ visitor.clearance_valid_until|date:"M d, Y" }}</strong>{% else %}Until <strong>—</strong>{% endif %}
                 </div>
@@ -575,7 +568,7 @@
                   <div class="row g-2 mb-2">
                     <div class="col-6">
                       <label class="form-label small text-muted mb-1">Clearance Value</label>
-                      <input type="number" min="1" class="form-control" name="clearance_value" placeholder="e.g. 7" required>
+                      <input type="number" min="1" class="form-control" name="clearance_value" placeholder="e.g. 7">
                     </div>
                     <div class="col-6">
                       <label class="form-label small text-muted mb-1">Unit</label>
@@ -588,7 +581,7 @@
                   </div>
 
                   <button class="btn btn-success w-100" type="submit">
-                    <i class="bi bi-check-circle-fill"></i> LSA Clear Visitor
+                    <i class="bi bi-check-circle-fill"></i> FSA Clear Visitor
                   </button>
                 </form>
 
@@ -638,7 +631,7 @@
     {% if user.is_authenticated %}
       {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' or user.is_superuser %}
 
-        {# ✅ Show Check-In when: approved + clearance active + NOT currently inside #}
+        {# Show Check-In when: approved + clearance active + NOT currently inside #}
         {% if visitor.status == 'approved' and visitor.clearance_is_active_today and not visitor.checked_in %}
 
           <div class="alert alert-gate-status can-checkin mb-3">
@@ -654,7 +647,7 @@
             <i class="bi bi-box-arrow-in-right"></i> Check In at Gate
           </a>
 
-        {# ✅ Show Check-Out ONLY when currently inside #}
+        {# Show Check-Out ONLY when currently inside #}
         {% elif visitor.checked_in and not visitor.checked_out %}
 
           <div class="alert alert-gate-status in-compound mb-3">
@@ -689,7 +682,7 @@
         <div class="alert alert-gate-status no-action mb-0">
           <small class="text-muted">
             <i class="bi bi-lock-fill"></i>
-            Gate actions are available to authorized personnel (Guards, LSA, SOC).
+            Gate actions are available to authorized personnel (Guards, FSA, SOC).
           </small>
         </div>
       {% endif %}
