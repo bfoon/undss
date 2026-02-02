@@ -28,6 +28,7 @@
       {% for a in assets %}
         <tr>
           <td class="fw-semibold">
+            <input type="checkbox" class="form-check-input am-asset-check" value="{{ a.id }}">
             <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' a.id %}">
               {{ a.name }}
             </a>
@@ -84,3 +85,13 @@
     </tbody>
   </table>
 </div>
+<script>
+  document.getElementById("btnPrintSelected")?.addEventListener("click", () => {
+    const ids = Array.from(document.querySelectorAll(".am-asset-check:checked"))
+      .map(cb => cb.value).join(",");
+    if (!ids) { alert("Select assets first."); return; }
+
+    const url = "{% url 'accounts:asset_labels_pdf' %}?mode=a4&include_url=1&ids=" + encodeURIComponent(ids);
+    window.open(url, "_blank");
+  });
+</script>

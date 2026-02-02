@@ -9,6 +9,12 @@ import uuid
 class Agency(models.Model):
     name = models.CharField(max_length=120, unique=True)
     code = models.CharField(max_length=20, unique=True, help_text="Short code e.g. UNDP, UNICEF")
+    logo = models.ImageField(
+        upload_to="agency_logos/",
+        null=True,
+        blank=True,
+        help_text="Agency logo (used on QR codes and reports)"
+    )
     def __str__(self):
         return self.code or self.name
 
@@ -624,6 +630,10 @@ class AgencyServiceConfig(models.Model):
     require_manager_approval = models.BooleanField(default=True)
     require_ict_assignment = models.BooleanField(default=True)
     require_requester_verification = models.BooleanField(default=True)
+    asset_tag_auto_generate = models.BooleanField(default=True)
+    asset_tag_prefix = models.CharField(max_length=20, default="AST")
+    asset_tag_length = models.PositiveIntegerField(default=6)
+    asset_qr_include_url = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.agency} service config"
@@ -736,6 +746,9 @@ class Asset(models.Model):
     # ✅ NEW: lifecycle dates
     acquired_at = models.DateField(null=True, blank=True, help_text="Purchase/receipt date (used for EOL)")
     retired_at = models.DateField(null=True, blank=True)
+    tag_generated = models.BooleanField(default=False)
+    qr_code = models.ImageField(upload_to="asset_qr/", null=True, blank=True)
+    qr_payload = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -806,6 +819,12 @@ class AssetRequest(models.Model):
     ict_assigned_at = models.DateTimeField(null=True, blank=True)
 
     requester_verified_at = models.DateTimeField(null=True, blank=True)
+
+    tag_generated = models.BooleanField(default=False)
+    qr_code = models.ImageField(upload_to="asset_qr/", null=True, blank=True)
+
+    # optional: store what the QR encodes (helps audits)
+    qr_payload = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
 

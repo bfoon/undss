@@ -12,3 +12,5 @@ Pillow==10.1.0
 python-decouple==3.8
 whitenoise==6.6.0
 python-dotenv
+qrcode[pil]
+reportlab

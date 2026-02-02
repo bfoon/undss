@@ -220,6 +220,7 @@ path(
     path("assets/", view_asset_management.view_asset_management, name="asset_management"),
     path("assets/<int:asset_id>/", view_asset_management.asset_detail, name="asset_detail"),
     path("assets/report/", view_asset_management.asset_report, name="asset_report"),
+    path("assets/labels.pdf", view_asset_management.asset_labels_pdf, name="asset_labels_pdf"),
 
     # # ----- Requests workflow -----
     # path(

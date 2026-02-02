@@ -34,9 +34,21 @@
               <input type="text" class="form-control" name="serial_number" placeholder="Optional">
             </div>
 
+
             <div class="col-md-6">
-              <label class="form-label">Asset Tag</label>
-              <input type="text" class="form-control" name="asset_tag" placeholder="Optional">
+               <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" name="auto_tag" value="1" id="autoTagCheck" checked>
+            <label class="form-check-label" for="autoTagCheck">
+              Auto-generate Asset Tag
+            </label>
+          </div>
+          <small class="text-muted">
+            If unchecked, you must enter a tag manually.
+          </small>
+              <label class="form-label mt-3">Asset Tag (optional)</label>
+              <input type="text" name="asset_tag" class="form-control"
+                     placeholder="e.g. AST-OPS-000123 (or leave blank to auto-generate)">
+
             </div>
 
             <div class="col-12">

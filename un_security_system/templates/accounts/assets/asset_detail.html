@@ -88,6 +88,14 @@
         </div>
 
         <hr class="my-3">
+        {% if asset.agency.logo %}
+          <div class="text-end mb-3">
+            <img src="{{ asset.agency.logo.url }}"
+                 alt="{{ asset.agency.name }} logo"
+                 style="max-height:48px;">
+          </div>
+        {% endif %}
+
 
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div>
@@ -171,6 +179,29 @@
             <div class="text-muted">EOL Due</div>
             <div class="fw-semibold">{{ asset.eol_due_date|default:"—" }}</div>
           </div>
+          <div class="d-flex flex-wrap gap-3 align-items-center mt-3">
+            <div>
+              <div class="small text-muted">Asset Tag</div>
+              <div class="fw-semibold">{{ asset.asset_tag|default:"-" }}</div>
+              {% if asset.tag_generated %}
+                <span class="badge bg-light text-dark mt-1">Auto</span>
+              {% else %}
+                <span class="badge bg-light text-dark mt-1">Manual</span>
+              {% endif %}
+            </div>
+
+            <div class="ms-auto text-center">
+              {% if asset.qr_code %}
+                <img src="{{ asset.qr_code.url }}" alt="Asset QR" class="border rounded-3 p-1" style="width:120px; height:120px;">
+                <div class="small text-muted mt-1">Scan to view asset</div>
+                <a class="btn btn-sm btn-outline-primary mt-2" href="{{ asset.qr_code.url }}" target="_blank">
+                  <i class="bi bi-download me-1"></i> Download QR
+                </a>
+              {% else %}
+                <div class="text-muted small">QR not generated.</div>
+              {% endif %}
+            </div>
+          </div>
         </div>
 
         <!-- Requester: Return to ICT -->
@@ -213,79 +244,79 @@
         {% endif %}
 
         {% if is_ict %}
-  <hr class="my-3">
-  <div class="alert alert-info">
-    <div class="fw-semibold"><i class="bi bi-pencil-square me-1"></i> Edit requires approval</div>
-    <div class="small">Your changes will be sent to the Asset Manager for approval before they are applied.</div>
-  </div>
-
-  <form method="post" class="border rounded-3 p-3">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="propose_asset_change">
-
-    <div class="row g-2">
-      <div class="col-md-6">
-        <label class="form-label">Name</label>
-        <input class="form-control" name="name" value="{{ asset.name }}">
+      <hr class="my-3">
+      <div class="alert alert-info">
+        <div class="fw-semibold"><i class="bi bi-pencil-square me-1"></i> Edit requires approval</div>
+        <div class="small">Your changes will be sent to the Asset Manager for approval before they are applied.</div>
       </div>
 
-      <div class="col-md-6">
-        <label class="form-label">Status</label>
-        <select class="form-select" name="status">
-          <option value="">-- keep current --</option>
-          <option value="available">Available</option>
-          <option value="assigned">Assigned</option>
-          <option value="maintenance">Maintenance</option>
-          <option value="retired">Retired</option>
-        </select>
-      </div>
+      <form method="post" class="border rounded-3 p-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="propose_asset_change">
 
-      <div class="col-md-6">
-        <label class="form-label">Serial Number</label>
-        <input class="form-control" name="serial_number" value="{{ asset.serial_number|default:'' }}">
-      </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Name</label>
+            <input class="form-control" name="name" value="{{ asset.name }}">
+          </div>
 
-      <div class="col-md-6">
-        <label class="form-label">Asset Tag</label>
-        <input class="form-control" name="asset_tag" value="{{ asset.asset_tag|default:'' }}">
-      </div>
+          <div class="col-md-6">
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+              <option value="">-- keep current --</option>
+              <option value="available">Available</option>
+              <option value="assigned">Assigned</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="retired">Retired</option>
+            </select>
+          </div>
 
-      <div class="col-md-6">
-        <label class="form-label">Category</label>
-        <select class="form-select" name="category_id">
-          <option value="">-- keep current --</option>
-          {% for c in categories %}
-            <option value="{{ c.id }}">{{ c.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
+          <div class="col-md-6">
+            <label class="form-label">Serial Number</label>
+            <input class="form-control" name="serial_number" value="{{ asset.serial_number|default:'' }}">
+          </div>
 
-      <div class="col-md-6">
-        <label class="form-label">Unit</label>
-        <select class="form-select" name="unit_id">
-          <option value="">-- keep current --</option>
-          {% for u in units %}
-            <option value="{{ u.id }}">{{ u.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
+          <div class="col-md-6">
+            <label class="form-label">Asset Tag</label>
+            <input class="form-control" name="asset_tag" value="{{ asset.asset_tag|default:'' }}">
+          </div>
 
-      <div class="col-md-6">
-        <label class="form-label">Acquired Date</label>
-        <input type="date" class="form-control" name="acquired_at" value="{{ asset.acquired_at|date:'Y-m-d' }}">
-      </div>
+          <div class="col-md-6">
+            <label class="form-label">Category</label>
+            <select class="form-select" name="category_id">
+              <option value="">-- keep current --</option>
+              {% for c in categories %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-      <div class="col-12">
-        <label class="form-label">Reason (optional)</label>
-        <textarea class="form-control" name="reason" rows="2" placeholder="Why are you changing this?"></textarea>
-      </div>
-    </div>
+          <div class="col-md-6">
+            <label class="form-label">Unit</label>
+            <select class="form-select" name="unit_id">
+              <option value="">-- keep current --</option>
+              {% for u in units %}
+                <option value="{{ u.id }}">{{ u.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-    <button class="btn btn-un-primary mt-2">
-      <i class="bi bi-send me-1"></i> Submit for Approval
-    </button>
-  </form>
-{% endif %}
+          <div class="col-md-6">
+            <label class="form-label">Acquired Date</label>
+            <input type="date" class="form-control" name="acquired_at" value="{{ asset.acquired_at|date:'Y-m-d' }}">
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Reason (optional)</label>
+            <textarea class="form-control" name="reason" rows="2" placeholder="Why are you changing this?"></textarea>
+          </div>
+        </div>
+
+        <button class="btn btn-un-primary mt-2">
+          <i class="bi bi-send me-1"></i> Submit for Approval
+        </button>
+      </form>
+    {% endif %}
 
 
         {% if is_ict and pending_return %}

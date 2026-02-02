@@ -14,13 +14,17 @@ import csv
 from .asset_email import send_email_async
 from .utils_assets import (get_manager_emails_for_request, get_ict_custodian_emails,
                            can_user_approve_asset_change,
-                           can_user_approve_return)
+                           can_user_approve_return,
+                           generate_unique_asset_tag,
+                           build_qr_payload,generate_qr_image,save_qr_to_asset
+                           )
 
 from .models import (
     AgencyServiceConfig, AgencyAssetRoles, Unit,
     AssetCategory, Asset, AssetRequest,
     AssetHistory, AssetReturnRequest, AssetChangeRequest
 )
+from .pdf_assets import build_asset_labels_pdf, LabelSpec
 
 
 # --- helpers (keep yours if already defined elsewhere) ---
@@ -365,9 +369,10 @@ def view_asset_management(request):
             name = (request.POST.get("name") or "").strip()
             serial_number = (request.POST.get("serial_number") or "").strip() or None
             asset_tag = (request.POST.get("asset_tag") or "").strip() or None
+            auto_tag = (request.POST.get("auto_tag") or "").strip() == "1"
+
             category_id = request.POST.get("category_id")
             unit_id = request.POST.get("unit_id")
-
             acquired_at = request.POST.get("acquired_at") or None
 
             if not name or not category_id:
@@ -377,6 +382,21 @@ def view_asset_management(request):
             category = get_object_or_404(AssetCategory, id=category_id, agency=agency)
             unit = get_object_or_404(Unit, id=unit_id, agency=agency) if unit_id else None
 
+            # service settings
+            svc, _ = AgencyServiceConfig.objects.get_or_create(agency=agency)
+
+            # auto-generate tag if enabled and user asked OR blank tag
+            if (not asset_tag and svc.asset_tag_auto_generate) or (auto_tag and svc.asset_tag_auto_generate):
+                asset_tag = generate_unique_asset_tag(
+                    agency=agency,
+                    prefix=svc.asset_tag_prefix,
+                    length=svc.asset_tag_length,
+                    AssetModel=Asset,
+                )
+                tag_generated = True
+            else:
+                tag_generated = False
+
             asset = Asset.objects.create(
                 agency=agency,
                 category=category,
@@ -384,12 +404,22 @@ def view_asset_management(request):
                 name=name,
                 serial_number=serial_number,
                 asset_tag=asset_tag,
+                tag_generated=tag_generated,
                 status="available",
                 acquired_at=acquired_at,
             )
-            _log_event(agency, asset, user, "registered", note="Asset registered into pool.")
 
-            messages.success(request, "Asset registered successfully.")
+            # generate QR code
+            payload = build_qr_payload(request, asset, include_url=svc.asset_qr_include_url)
+            logo_path = getattr(getattr(agency, "logo", None), "path", None) if getattr(agency, "logo", None) else None
+            qr_img = generate_qr_image(payload, agency_logo_path=logo_path)
+            asset.qr_payload = payload
+            save_qr_to_asset(asset, qr_img, filename_prefix="assetqr")
+            asset.save(update_fields=["qr_code", "qr_payload"])
+
+            _log_event(agency, asset, user, "registered", note="Asset registered into pool (tag + QR created).")
+
+            messages.success(request, "Asset registered successfully (tag + QR generated).")
             return redirect("accounts:asset_management")
 
         # ============ 4) ICT assign asset ============
@@ -1136,3 +1166,82 @@ def asset_report(request):
         "categories": categories,
         "units": units,
     })
+
+
+@login_required
+def asset_labels_pdf(request):
+    user = request.user
+    agency = getattr(user, "agency", None)
+    if not agency:
+        messages.error(request, "You are not assigned to an agency.")
+        return redirect("accounts:profile")
+
+    svc, _ = AgencyServiceConfig.objects.get_or_create(agency=agency)
+    if not svc.asset_mgmt_enabled and not user.is_superuser:
+        messages.warning(request, "Asset Management is not enabled for your agency.")
+        return redirect("accounts:profile")
+
+    roles, _ = AgencyAssetRoles.objects.get_or_create(agency=agency)
+
+    is_ict = user.is_superuser or _is_ict(user, agency)
+    is_ops = user.is_superuser or _is_ops_manager(user, agency)
+    managed_units = _managed_unit_ids(user, agency)
+
+    # permissions: ICT can print all; managers print assets they manage; users print their assigned assets
+    assets_qs = Asset.objects.filter(agency=agency).select_related("category", "unit", "current_holder")
+
+    if is_ict:
+        visible = assets_qs
+    elif is_ops:
+        visible = assets_qs.filter(Q(unit__isnull=True) | Q(unit__is_core_unit=True))
+    elif managed_units:
+        visible = assets_qs.filter(unit_id__in=managed_units)
+    else:
+        visible = assets_qs.filter(current_holder=user)
+
+    # filter selection: ids=1,2,3 OR status=available/assigned/retired
+    ids_str = (request.GET.get("ids") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+    mode = (request.GET.get("mode") or "a4").strip()   # a4 or sticker
+    include_url = (request.GET.get("include_url") or "1").strip() == "1"
+
+    if ids_str:
+        try:
+            ids = [int(x) for x in ids_str.split(",") if x.strip().isdigit()]
+            visible = visible.filter(id__in=ids)
+        except Exception:
+            pass
+    elif status:
+        visible = visible.filter(status=status)
+
+    assets = list(visible.order_by("category__name", "name")[:500])  # safety cap
+
+    if not assets:
+        messages.info(request, "No assets found for this selection.")
+        return redirect("accounts:asset_management")
+
+    # label spec can be customized here
+    spec = LabelSpec(
+        w_mm=70,
+        h_mm=35,
+        cols=3,
+        rows=8,
+        margin_x_mm=8,
+        margin_y_mm=10,
+        gap_x_mm=2.5,
+        gap_y_mm=2.5,
+    )
+
+    pdf_bytes = build_asset_labels_pdf(
+        request=request,
+        assets=assets,
+        agency=agency,
+        mode=mode,
+        spec=spec,
+        include_url_in_qr=include_url,
+    )
+
+    filename = f"asset-labels-{agency.id}-{mode}.pdf"
+    resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+    resp["Content-Disposition"] = f'inline; filename="{filename}"'
+    return resp
