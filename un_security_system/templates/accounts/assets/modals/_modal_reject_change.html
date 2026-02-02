@@ -1,0 +1,37 @@
+<div class="modal fade" id="modalRejectChange" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-x-circle me-2"></i> Reject Change Request
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reject_change_request">
+        <input type="hidden" name="change_request_id" id="rejectChangeId">
+
+        <div class="modal-body">
+          <label class="form-label">Reason / Note</label>
+          <textarea name="manager_note" class="form-control" rows="3"
+                    placeholder="Explain why this change cannot be approved..."></textarea>
+          <div class="small text-muted mt-2">
+            Tip: Be specific (wrong unit, wrong status, asset already assigned, etc.)
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-x-lg me-1"></i> Reject
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>

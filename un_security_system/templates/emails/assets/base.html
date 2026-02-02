@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{ subject }}</title>
+    <style>
+      body { margin:0; padding:0; background:#f5f7fb; font-family: Arial, Helvetica, sans-serif; color:#1f2937; }
+      .wrap { width:100%; padding:24px 12px; }
+      .card { max-width:680px; margin:0 auto; background:#ffffff; border-radius:14px; overflow:hidden; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+      .header { padding:18px 22px; background: #005a8b; color:#fff; }
+      .header h1 { margin:0; font-size:18px; letter-spacing:.2px; }
+      .sub { opacity:.9; font-size:12px; margin-top:6px; }
+      .body { padding:22px; }
+      .badge { display:inline-block; padding:6px 10px; font-size:12px; border-radius:999px; background:#e5f3ff; color:#005a8b; font-weight:bold; }
+      .grid { margin-top:14px; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+      .row { display:flex; border-top:1px solid #e5e7eb; }
+      .row:first-child { border-top:none; }
+      .cell { padding:10px 12px; font-size:13px; }
+      .k { width:38%; background:#f9fafb; color:#6b7280; }
+      .v { width:62%; font-weight:600; }
+      .cta { margin-top:18px; }
+      .btn { display:inline-block; background:#005a8b; color:#fff !important; text-decoration:none; padding:10px 14px; border-radius:10px; font-weight:bold; font-size:13px; }
+      .note { margin-top:16px; font-size:12px; color:#6b7280; line-height:1.5; }
+      .footer { padding:16px 22px; background:#f9fafb; font-size:12px; color:#6b7280; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="header">
+          <h1>{{ brand|default:"UN PASS" }} — Asset Management</h1>
+          <div class="sub">
+            Agency: <b>{{ agency.name|default:"-" }}</b> &nbsp; • &nbsp;
+            Ref: <b>#{{ req.id }}</b>
+          </div>
+        </div>
+
+        <div class="body">
+          {% block content %}{% endblock %}
+          <div class="note">
+            This is an automated message. If you believe you received it in error, please contact your ICT custodian.
+          </div>
+        </div>
+
+        <div class="footer">
+          © {{ brand|default:"UN PASS" }} | ICT & Operations
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

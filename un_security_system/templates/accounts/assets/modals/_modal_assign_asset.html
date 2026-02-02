@@ -1,0 +1,40 @@
+<div class="modal fade" id="modalAssignAsset" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-link-45deg me-2"></i>Assign Asset</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="assign_asset">
+        <input type="hidden" name="request_id" value="">
+
+        <div class="modal-body">
+          <label class="form-label">Select an available asset</label>
+          <select class="form-select" name="asset_id" required>
+            <option value="">Choose asset…</option>
+            {% for a in assets %}
+              {% if a.status == "available" %}
+                <option value="{{ a.id }}">
+                  {{ a.name }} — {{ a.category.name }} | SN: {{ a.serial_number|default:"-" }} | Tag: {{ a.asset_tag|default:"-" }}
+                </option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <div class="form-text">
+            Only <b>available</b> assets can be assigned. Category must match the request.
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary">
+            <i class="bi bi-check2-square me-1"></i> Assign
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,30 @@
+{% extends "emails/assets/base.html" %}
+{% block content %}
+  <span class="badge">Request Approved</span>
+  <p style="margin:14px 0 0;">
+    Your asset request has been approved and is now pending ICT assignment.
+  </p>
+
+  <div class="grid">
+    <div class="row">
+      <div class="cell k">Category</div>
+      <div class="cell v">{{ req.category.name }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Unit</div>
+      <div class="cell v">{{ req.unit.name|default:"Unallocated/Core" }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Approved By</div>
+      <div class="cell v">{{ approved_by }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Next Step</div>
+      <div class="cell v">ICT assignment</div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <a class="btn" href="{{ portal_url }}">Track Request</a>
+  </div>
+{% endblock %}

@@ -1,0 +1,41 @@
+<div class="mb-3">
+  <h6 class="mb-0 fw-semibold">ICT Assignment Queue</h6>
+  <small class="text-muted">Assign available assets to approved requests (custodian action).</small>
+</div>
+
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Requester</th>
+        <th>Category</th>
+        <th>Unit</th>
+        <th>Status</th>
+        <th class="text-end">Assign</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in pending_ict %}
+        <tr>
+          <td class="fw-semibold">#{{ r.id }}</td>
+          <td>{{ r.requester.get_full_name|default:r.requester.username }}</td>
+          <td>{{ r.category.name }}</td>
+          <td>{{ r.unit.name|default:"Unallocated/Core" }}</td>
+          <td><span class="badge bg-info text-dark">{{ r.get_status_display }}</span></td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-primary"
+                    data-bs-toggle="modal" data-bs-target="#modalAssignAsset"
+                    data-request-id="{{ r.id }}">
+              <i class="bi bi-link-45deg me-1"></i> Assign Asset
+            </button>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">No requests pending ICT assignment.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

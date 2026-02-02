@@ -13,6 +13,8 @@ from .models import (
     RoomBooking,
     RoomApprover,
     RoomAmenity,
+    AgencyServiceConfig, AgencyAssetRoles, Unit,
+    AssetCategory, Asset, AssetRequest, AssetChangeRequest
 )
 
 import csv
@@ -772,3 +774,11 @@ class RoomApproverAdmin(admin.ModelAdmin):
         "user__last_name",
         "user__employee_id",
     )
+
+admin.site.register(AgencyServiceConfig)
+admin.site.register(AgencyAssetRoles)
+admin.site.register(Unit)
+admin.site.register(AssetCategory)
+admin.site.register(Asset)
+admin.site.register(AssetRequest)
+admin.site.register(AssetChangeRequest)

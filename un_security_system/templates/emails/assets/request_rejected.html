@@ -1,0 +1,30 @@
+{% extends "emails/assets/base.html" %}
+{% block content %}
+  <span class="badge" style="background:#ffe5e5;color:#9b1c1c;">Request Rejected</span>
+  <p style="margin:14px 0 0;">
+    Your asset request was rejected. Please review the reason below.
+  </p>
+
+  <div class="grid">
+    <div class="row">
+      <div class="cell k">Category</div>
+      <div class="cell v">{{ req.category.name }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Unit</div>
+      <div class="cell v">{{ req.unit.name|default:"Unallocated/Core" }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Rejected By</div>
+      <div class="cell v">{{ rejected_by }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Reason</div>
+      <div class="cell v">{{ req.manager_reject_reason|default:"-" }}</div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <a class="btn" href="{{ portal_url }}">Open Asset Portal</a>
+  </div>
+{% endblock %}

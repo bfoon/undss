@@ -1,0 +1,52 @@
+<div class="mb-3">
+  <h6 class="mb-0 fw-semibold">My Approval Queue</h6>
+  <small class="text-muted">Approve requests for your unit (or core assets if you are Operations Manager).</small>
+</div>
+
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Requester</th>
+        <th>Category</th>
+        <th>Unit</th>
+        <th>Justification</th>
+        <th class="text-end">Decision</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in pending_approvals %}
+        <tr>
+          <td class="fw-semibold">#{{ r.id }}</td>
+          <td>{{ r.requester.get_full_name|default:r.requester.username }}</td>
+          <td>{{ r.category.name }}</td>
+          <td>{{ r.unit.name|default:"Unallocated/Core" }}</td>
+          <td class="text-muted">{{ r.justification|default:"-"|truncatechars:80 }}</td>
+          <td class="text-end">
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="approve_request">
+              <input type="hidden" name="request_id" value="{{ r.id }}">
+              <button class="btn btn-sm btn-success">
+                <i class="bi bi-check-lg me-1"></i> Approve
+              </button>
+            </form>
+
+            <button class="btn btn-sm btn-outline-danger"
+                    data-bs-toggle="modal" data-bs-target="#modalReject"
+                    data-request-id="{{ r.id }}">
+              <i class="bi bi-x-lg me-1"></i> Reject
+            </button>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">
+            No pending approvals for you right now.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

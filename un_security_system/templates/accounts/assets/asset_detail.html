@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% block title %}Asset Detail | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .am-hero {
+    background: linear-gradient(135deg, rgba(0,158,219,.10), rgba(0,90,139,.08));
+    border: 1px solid rgba(0,158,219,.15);
+  }
+  .am-card-soft {
+    border: 1px solid rgba(0,158,219,.12);
+    background: rgba(0,158,219,.02);
+  }
+  .am-muted { color: var(--un-gray); }
+  .am-kv {
+    display:flex; justify-content:space-between; gap:1rem;
+    padding:.55rem .75rem;
+    border-bottom: 1px dashed rgba(0,0,0,.08);
+  }
+  .am-kv:last-child { border-bottom: none; }
+  .am-timeline {
+    border-left: 3px solid rgba(0,90,139,.25);
+    padding-left: 1rem;
+  }
+  .am-timeline-item {
+    position: relative;
+    padding: .6rem .75rem;
+    border-radius: 10px;
+    border: 1px solid rgba(0,158,219,.12);
+    background: #fff;
+    margin-bottom: .75rem;
+  }
+  .am-timeline-item:before {
+    content:"";
+    position:absolute;
+    left:-1.08rem;
+    top: .9rem;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--un-blue);
+    box-shadow: 0 0 0 3px rgba(0,158,219,.18);
+  }
+   .am-history-scroll {
+    max-height: 520px;           /* adjust if you want taller/shorter */
+    overflow-y: auto;
+    padding-right: .5rem;
+  }
+
+  /* Nice UN-style scrollbar */
+  .am-history-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .am-history-scroll::-webkit-scrollbar-thumb {
+    background: rgba(0,90,139,.35);
+    border-radius: 6px;
+  }
+  .am-history-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  <!-- HERO -->
+  <div class="col-12">
+    <div class="card am-hero">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <h4 class="mb-1 text-un-primary fw-bold">
+              <i class="bi bi-box-seam me-2"></i> Asset Detail
+            </h4>
+            <div class="am-muted">
+              Asset record, lifecycle status and history — audit-ready.
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <a href="{% url 'accounts:asset_management' %}#register" class="btn btn-outline-primary">
+              <i class="bi bi-arrow-left me-1"></i> Back to Registry
+            </a>
+            <a href="{% url 'accounts:asset_report' %}" class="btn btn-un-primary">
+              <i class="bi bi-file-earmark-spreadsheet me-1"></i> Reports
+            </a>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div>
+            <div class="h5 mb-0 fw-bold">{{ asset.name }}</div>
+            <div class="small am-muted">
+              Category: <span class="fw-semibold">{{ asset.category.name }}</span>
+              {% if asset.unit %} • Unit: <span class="fw-semibold">{{ asset.unit.name }}</span>{% endif %}
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2">
+            <span class="badge bg-secondary">
+              {{ asset.get_status_display }}
+            </span>
+
+            {% if asset.is_eol_due %}
+              <span class="badge bg-warning text-dark">
+                <i class="bi bi-exclamation-triangle me-1"></i> End-of-life due
+              </span>
+            {% endif %}
+
+            {% if asset.current_holder %}
+              <span class="badge bg-success">
+                <i class="bi bi-person-check me-1"></i> Assigned
+              </span>
+            {% else %}
+              <span class="badge bg-light text-dark">
+                <i class="bi bi-inbox me-1"></i> In Pool
+              </span>
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- LEFT: DETAILS -->
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Asset Information</h6>
+        <span class="small text-muted">Agency: <span class="fw-semibold">{{ request.user.agency.name|default:"-" }}</span></span>
+      </div>
+
+      <div class="card-body">
+        <div class="am-card-soft rounded-3 p-2 mb-3">
+          <div class="am-kv">
+            <div class="text-muted">Asset Tag</div>
+            <div class="fw-semibold">{{ asset.asset_tag|default:"—" }}</div>
+          </div>
+          <div class="am-kv">
+            <div class="text-muted">Serial Number</div>
+            <div class="fw-semibold">{{ asset.serial_number|default:"—" }}</div>
+          </div>
+          <div class="am-kv">
+            <div class="text-muted">Category</div>
+            <div class="fw-semibold">{{ asset.category.name }}</div>
+          </div>
+          <div class="am-kv">
+            <div class="text-muted">Unit</div>
+            <div class="fw-semibold">
+              {% if asset.unit %}{{ asset.unit.name }}{% else %}<span class="text-muted">Unallocated/Core</span>{% endif %}
+            </div>
+          </div>
+          <div class="am-kv">
+            <div class="text-muted">Current Holder</div>
+            <div class="fw-semibold">
+              {% if asset.current_holder %}
+                {{ asset.current_holder.get_full_name|default:asset.current_holder.username }}
+              {% else %}
+                <span class="text-muted">Not assigned</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="am-kv">
+            <div class="text-muted">Acquired Date</div>
+            <div class="fw-semibold">{{ asset.acquired_at|default:"—" }}</div>
+          </div>
+          <div class="am-kv">
+            <div class="text-muted">EOL Due</div>
+            <div class="fw-semibold">{{ asset.eol_due_date|default:"—" }}</div>
+          </div>
+        </div>
+
+        <!-- Requester: Return to ICT -->
+        {% if asset.current_holder and asset.current_holder.id == user.id and asset.status == "assigned" %}
+          <div class="alert alert-info mb-3">
+            <div class="fw-semibold"><i class="bi bi-arrow-return-left me-1"></i> Return this asset</div>
+            <div class="small">Submit return request. ICT will verify receipt and return asset to pool.</div>
+          </div>
+
+          <form method="post" class="border rounded-3 p-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="initiate_return">
+            <input type="hidden" name="asset_id" value="{{ asset.id }}">
+            <label class="form-label">Reason (optional)</label>
+            <textarea name="reason" rows="2" class="form-control" placeholder="e.g. damaged, replacement, staff exit..."></textarea>
+            <button class="btn btn-un-primary mt-2">
+              <i class="bi bi-send me-1"></i> Submit Return Request
+            </button>
+          </form>
+        {% endif %}
+
+        <!-- ICT: Retire/Dispose -->
+        {% if is_ict %}
+          <hr class="my-3">
+          <div class="alert alert-warning">
+            <div class="fw-semibold"><i class="bi bi-trash3 me-1"></i> Retire / Dispose</div>
+            <div class="small">Use only after disposal/transfer out of inventory.</div>
+          </div>
+
+          <form method="post" class="border rounded-3 p-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="retire_asset">
+            <input type="hidden" name="asset_id" value="{{ asset.id }}">
+            <label class="form-label">Retire note</label>
+            <textarea name="note" rows="2" class="form-control" placeholder="Disposal method, date, reference..."></textarea>
+            <button class="btn btn-danger mt-2">
+              <i class="bi bi-x-octagon me-1"></i> Mark as Retired
+            </button>
+          </form>
+        {% endif %}
+
+        {% if is_ict %}
+  <hr class="my-3">
+  <div class="alert alert-info">
+    <div class="fw-semibold"><i class="bi bi-pencil-square me-1"></i> Edit requires approval</div>
+    <div class="small">Your changes will be sent to the Asset Manager for approval before they are applied.</div>
+  </div>
+
+  <form method="post" class="border rounded-3 p-3">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="propose_asset_change">
+
+    <div class="row g-2">
+      <div class="col-md-6">
+        <label class="form-label">Name</label>
+        <input class="form-control" name="name" value="{{ asset.name }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status">
+          <option value="">-- keep current --</option>
+          <option value="available">Available</option>
+          <option value="assigned">Assigned</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="retired">Retired</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Serial Number</label>
+        <input class="form-control" name="serial_number" value="{{ asset.serial_number|default:'' }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Asset Tag</label>
+        <input class="form-control" name="asset_tag" value="{{ asset.asset_tag|default:'' }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Category</label>
+        <select class="form-select" name="category_id">
+          <option value="">-- keep current --</option>
+          {% for c in categories %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Unit</label>
+        <select class="form-select" name="unit_id">
+          <option value="">-- keep current --</option>
+          {% for u in units %}
+            <option value="{{ u.id }}">{{ u.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Acquired Date</label>
+        <input type="date" class="form-control" name="acquired_at" value="{{ asset.acquired_at|date:'Y-m-d' }}">
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Reason (optional)</label>
+        <textarea class="form-control" name="reason" rows="2" placeholder="Why are you changing this?"></textarea>
+      </div>
+    </div>
+
+    <button class="btn btn-un-primary mt-2">
+      <i class="bi bi-send me-1"></i> Submit for Approval
+    </button>
+  </form>
+{% endif %}
+
+
+        {% if is_ict and pending_return %}
+        <hr class="my-3">
+        <div class="alert alert-success">
+          <div class="fw-semibold"><i class="bi bi-box-arrow-in-down me-1"></i> Verify Return Received</div>
+          <div class="small">
+            Pending Return #{{ pending_return.id }} by
+            {{ pending_return.requested_by.get_full_name|default:pending_return.requested_by.username }}.
+            Verify to return asset back to pool.
+          </div>
+        </div>
+
+        <form method="post" class="border rounded-3 p-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="verify_return_received">
+          <input type="hidden" name="return_id" value="{{ pending_return.id }}">
+          <label class="form-label">Verification note (optional)</label>
+          <textarea name="note" rows="2" class="form-control" placeholder="Condition received, accessories, remarks..."></textarea>
+          <button class="btn btn-success mt-2">
+            <i class="bi bi-check2-circle me-1"></i> Verify & Return to Pool
+          </button>
+        </form>
+      {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: HISTORY -->
+  <div class="col-lg-7">
+  <div class="card">
+    <div class="card-header">
+      <h6 class="mb-0">
+        <i class="bi bi-clock-history me-2"></i> Asset History
+      </h6>
+    </div>
+
+    <div class="card-body">
+      <div class="am-history-scroll">
+        <div class="am-timeline">
+          {% for h in history %}
+            <div class="am-timeline-item">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div class="fw-semibold">{{ h.get_event_display }}</div>
+                <div class="small text-muted">{{ h.created_at }}</div>
+              </div>
+
+              <div class="small am-muted">
+                {% if h.actor %}
+                  By:
+                  <span class="fw-semibold">
+                    {{ h.actor.get_full_name|default:h.actor.username }}
+                  </span>
+                {% else %}
+                  By: <span class="fw-semibold">System</span>
+                {% endif %}
+              </div>
+
+              {% if h.note %}
+                <div class="mt-2">{{ h.note }}</div>
+              {% endif %}
+            </div>
+          {% empty %}
+            <div class="text-muted">No history recorded yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+{% endblock %}

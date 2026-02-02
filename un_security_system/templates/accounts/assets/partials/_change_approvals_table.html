@@ -1,0 +1,81 @@
+<div class="mb-3">
+  <h6 class="mb-0 fw-semibold">Pending Asset Change Requests</h6>
+  <small class="text-muted">
+    ICT proposes updates. Unit head / asset manager approves. Ops approves core/unallocated assets.
+  </small>
+</div>
+
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Asset</th>
+        <th>Requested By</th>
+        <th>Summary</th>
+        <th>Reason</th>
+        <th class="text-end">Decision</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for cr in pending_change_approvals %}
+        <tr>
+          <td class="fw-semibold">#{{ cr.id }}</td>
+
+          <td>
+            <a class="text-decoration-none fw-semibold" href="{% url 'accounts:asset_detail' cr.asset.id %}">
+              {{ cr.asset.name }}
+            </a>
+            <div class="small text-muted">
+              {{ cr.asset.category.name }} • {{ cr.asset.unit.name|default:"Unallocated/Core" }}
+            </div>
+          </td>
+
+          <td>
+            {{ cr.requested_by.get_full_name|default:cr.requested_by.username }}
+          </td>
+
+          <td class="text-muted small">
+            {% if cr.proposed_changes %}
+              <ul class="mb-0 ps-3">
+                {% for k, v in cr.proposed_changes.items %}
+                  <li><span class="fw-semibold">{{ k|capfirst }}:</span> {{ v }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+
+          <td class="text-muted small">
+            {{ cr.reason|default:"-"|truncatechars:80 }}
+          </td>
+
+          <td class="text-end">
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="approve_change_request">
+              <input type="hidden" name="change_request_id" value="{{ cr.id }}">
+              <button class="btn btn-sm btn-success">
+                <i class="bi bi-check-lg me-1"></i> Approve
+              </button>
+            </form>
+
+            <button class="btn btn-sm btn-outline-danger"
+                    data-bs-toggle="modal" data-bs-target="#modalRejectChange"
+                    data-change-id="{{ cr.id }}">
+              <i class="bi bi-x-lg me-1"></i> Reject
+            </button>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">
+            No pending change requests for you right now.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

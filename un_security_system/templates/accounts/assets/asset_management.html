@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}Asset Management | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .am-hero {
+    background: linear-gradient(135deg, rgba(0,158,219,.10), rgba(0,90,139,.08));
+    border: 1px solid rgba(0,158,219,.15);
+  }
+  .am-kpi {
+    border-left: 4px solid var(--un-blue);
+    background: #fff;
+  }
+  .am-stepper .am-step {
+    display:flex; gap:.75rem; align-items:flex-start;
+    padding:.6rem .75rem; border-radius:10px;
+    background: rgba(0,158,219,.04);
+    border: 1px dashed rgba(0,158,219,.25);
+  }
+  .am-stepper .am-dot {
+    width: 28px; height: 28px; border-radius: 999px;
+    display:flex; align-items:center; justify-content:center;
+    background: var(--un-blue); color:#fff; flex: 0 0 auto;
+  }
+  .am-muted { color: var(--un-gray); }
+  .am-anchor { scroll-margin-top: 90px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card am-hero">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+          <div>
+            <h4 class="mb-1 text-un-primary fw-bold">
+              <i class="bi bi-boxes me-2"></i> Asset Management Portal
+            </h4>
+            <div class="am-muted">
+              Request, approve, assign and track ICT assets by agency unit — audit-ready workflow.
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-un-primary" data-bs-toggle="modal" data-bs-target="#modalRequestAsset">
+              <i class="bi bi-send-check me-1"></i> Request Asset
+            </button>
+
+            {% if is_ict %}
+              <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterAsset">
+                <i class="bi bi-plus-circle me-1"></i> Register Asset
+              </button>
+            {% endif %}
+
+            <a class="btn btn-outline-primary" href="{% url 'accounts:asset_report' %}">
+              <i class="bi bi-file-earmark-spreadsheet me-1"></i> Reports
+            </a>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="am-stepper row g-2">
+          <div class="col-lg-3 col-md-6">
+            <div class="am-step">
+              <div class="am-dot"><i class="bi bi-pencil-square"></i></div>
+              <div>
+                <div class="fw-semibold">1) Request</div>
+                <small class="am-muted">Staff submits request with category and justification.</small>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <div class="am-step">
+              <div class="am-dot"><i class="bi bi-person-check"></i></div>
+              <div>
+                <div class="fw-semibold">2) Approve</div>
+                <small class="am-muted">Unit head/asset manager approves (Ops for core/unallocated).</small>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <div class="am-step">
+              <div class="am-dot"><i class="bi bi-link-45deg"></i></div>
+              <div>
+                <div class="fw-semibold">3) Assign</div>
+                <small class="am-muted">ICT custodian assigns available asset & records details.</small>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <div class="am-step">
+              <div class="am-dot"><i class="bi bi-check2-circle"></i></div>
+              <div>
+                <div class="fw-semibold">4) Verify</div>
+                <small class="am-muted">Requester confirms receipt — closes the request.</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  {# KPI cards #}
+  {% include "accounts/assets/partials/_kpis.html" %}
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h5 class="mb-0"><i class="bi bi-grid-1x2 me-2"></i> Workspace</h5>
+        <div class="small text-muted">
+          Agency: <span class="fw-semibold">{{ request.user.agency.name|default:"-" }}</span>
+        </div>
+      </div>
+
+      <div class="card-body">
+
+        <ul class="nav nav-pills mb-3" id="assetTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-myreq" data-bs-toggle="pill" data-bs-target="#pane-myreq"
+                    type="button" role="tab">
+              <i class="bi bi-file-text me-1"></i> My Requests
+            </button>
+          </li>
+
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-returns" data-bs-toggle="pill" data-bs-target="#pane-returns"
+                    type="button" role="tab">
+              <i class="bi bi-arrow-return-left me-1"></i> Returns
+              {% if pending_returns|length > 0 %}
+                <span class="badge bg-warning text-dark ms-2">{{ pending_returns|length }}</span>
+              {% endif %}
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-change-approvals" data-bs-toggle="pill" data-bs-target="#pane-change-approvals"
+                    type="button" role="tab">
+              <i class="bi bi-pencil-square me-1"></i> Change Approvals
+              {% if pending_change_approvals|length > 0 %}
+                <span class="badge bg-danger ms-2">{{ pending_change_approvals|length }}</span>
+              {% endif %}
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-approvals" data-bs-toggle="pill" data-bs-target="#pane-approvals"
+                    type="button" role="tab">
+              <i class="bi bi-clipboard-check me-1"></i> Approvals
+              {% if pending_approvals|length > 0 %}
+                <span class="badge bg-danger ms-2">{{ pending_approvals|length }}</span>
+              {% endif %}
+            </button>
+          </li>
+
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-ict" data-bs-toggle="pill" data-bs-target="#pane-ict"
+                    type="button" role="tab">
+              <i class="bi bi-pc-display me-1"></i> Asset Queue
+              {% if pending_ict|length > 0 %}
+                <span class="badge bg-warning text-dark ms-2">{{ pending_ict|length }}</span>
+              {% endif %}
+            </button>
+          </li>
+
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-assets" data-bs-toggle="pill" data-bs-target="#pane-assets"
+                    type="button" role="tab">
+              <i class="bi bi-laptop me-1"></i> Assets Registry
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content" id="assetTabsContent">
+
+          <div class="tab-pane fade show active am-anchor" id="pane-myreq" role="tabpanel" aria-labelledby="tab-myreq">
+            <div id="request"></div>
+            {% include "accounts/assets/partials/_my_requests_table.html" %}
+          </div>
+
+          <div class="tab-pane fade am-anchor" id="pane-returns" role="tabpanel" aria-labelledby="tab-returns">
+            <div id="returns"></div>
+            {% include "accounts/assets/partials/_returns_table.html" %}
+          </div>
+          <div class="tab-pane fade am-anchor" id="pane-change-approvals" role="tabpanel" aria-labelledby="tab-change-approvals">
+            {% include "accounts/assets/partials/_change_approvals_table.html" %}
+          </div>
+          <div class="tab-pane fade am-anchor" id="pane-approvals" role="tabpanel" aria-labelledby="tab-approvals">
+            {% include "accounts/assets/partials/_approvals_table.html" %}
+          </div>
+
+          <div class="tab-pane fade am-anchor" id="pane-ict" role="tabpanel" aria-labelledby="tab-ict">
+            <div id="ict-queue"></div>
+            {% include "accounts/assets/partials/_ict_queue_table.html" %}
+          </div>
+
+          <div class="tab-pane fade am-anchor" id="pane-assets" role="tabpanel" aria-labelledby="tab-assets">
+            <div id="register"></div>
+            {% include "accounts/assets/partials/_assets_table.html" %}
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Modals #}
+{% include "accounts/assets/modals/_modal_request_asset.html" %}
+{% include "accounts/assets/modals/_modal_register_asset.html" %}
+{% include "accounts/assets/modals/_modal_reject.html" %}
+{% include "accounts/assets/modals/_modal_assign_asset.html" %}
+{% include "accounts/assets/modals/_modal_return_asset.html" %}
+{% include "accounts/assets/modals/_modal_verify_return.html" %}
+{% include "accounts/assets/modals/_modal_reject_change.html" %}
+
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const rejectChangeModal = document.getElementById("modalRejectChange");
+  rejectChangeModal?.addEventListener("show.bs.modal", (event) => {
+    const btn = event.relatedTarget;
+    const changeId = btn?.getAttribute("data-change-id");
+    const input = rejectChangeModal.querySelector("#rejectChangeId");
+    if (input) input.value = changeId || "";
+  });
+</script>
+
+<script>
+  // Deep-link to a tab via hash (#request, #returns, #ict-queue, #register)
+  document.addEventListener("DOMContentLoaded", () => {
+    const hash = window.location.hash || "";
+    if (!hash) return;
+
+    const toTab = (id) => {
+      const btn = document.querySelector(id);
+      if (btn) new bootstrap.Tab(btn).show();
+    };
+
+    if (hash === "#request") toTab("#tab-myreq");
+    if (hash === "#returns") toTab("#tab-returns");
+    if (hash === "#ict-queue") toTab("#tab-ict");
+    if (hash === "#register") toTab("#tab-assets");
+  });
+
+  // Attach request id into Reject modal
+  const rejectModal = document.getElementById("modalReject");
+  rejectModal?.addEventListener("show.bs.modal", (event) => {
+    const btn = event.relatedTarget;
+    const reqId = btn?.getAttribute("data-request-id");
+    const input = rejectModal.querySelector("input[name='request_id']");
+    if (input) input.value = reqId || "";
+  });
+
+  // Attach request id into Assign modal
+  const assignModal = document.getElementById("modalAssignAsset");
+  assignModal?.addEventListener("show.bs.modal", (event) => {
+    const btn = event.relatedTarget;
+    const reqId = btn?.getAttribute("data-request-id");
+    const input = assignModal.querySelector("input[name='request_id']");
+    if (input) input.value = reqId || "";
+  });
+
+  // Attach asset id/name into Return modal (if present)
+  const returnModal = document.getElementById("modalReturnAsset");
+  returnModal?.addEventListener("show.bs.modal", (event) => {
+    const btn = event.relatedTarget;
+    if (!btn) return;
+
+    const assetId = btn.getAttribute("data-asset-id");
+    const assetName = btn.getAttribute("data-asset-name");
+
+    const idInput = returnModal.querySelector("#returnAssetId");
+    const nameSpan = returnModal.querySelector("#returnAssetName");
+
+    if (idInput) idInput.value = assetId || "";
+    if (nameSpan) nameSpan.textContent = assetName || "";
+  });
+
+  // Attach return id/name into Verify Return modal (if present)
+  const verifyReturnModal = document.getElementById("modalVerifyReturn");
+  verifyReturnModal?.addEventListener("show.bs.modal", (event) => {
+    const btn = event.relatedTarget;
+    if (!btn) return;
+
+    const returnId = btn.getAttribute("data-return-id");
+    const assetName = btn.getAttribute("data-asset-name");
+
+    const idInput = verifyReturnModal.querySelector("#verifyReturnId");
+    const nameSpan = verifyReturnModal.querySelector("#verifyAssetName");
+
+    if (idInput) idInput.value = returnId || "";
+    if (nameSpan) nameSpan.textContent = assetName || "";
+  });
+</script>
+{% endblock %}

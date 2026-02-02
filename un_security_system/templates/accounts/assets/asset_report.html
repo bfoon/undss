@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Asset Report | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .am-hero {
+    background: linear-gradient(135deg, rgba(0,158,219,.10), rgba(0,90,139,.08));
+    border: 1px solid rgba(0,158,219,.15);
+  }
+  .am-muted { color: var(--un-gray); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  <div class="col-12">
+    <div class="card am-hero">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <h4 class="mb-1 text-un-primary fw-bold">
+              <i class="bi bi-file-earmark-spreadsheet me-2"></i> Asset Report
+            </h4>
+            <div class="am-muted">
+              Generate assigned/unassigned lists — export-ready for audits.
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <a href="{% url 'accounts:asset_management' %}#register" class="btn btn-outline-primary">
+              <i class="bi bi-arrow-left me-1"></i> Back
+            </a>
+
+            {# Keep filters and export CSV #}
+            <a class="btn btn-un-primary"
+               href="?{% if request.GET.status %}status={{ request.GET.status }}&{% endif %}{% if request.GET.assigned %}assigned={{ request.GET.assigned }}&{% endif %}{% if request.GET.category %}category={{ request.GET.category }}&{% endif %}{% if request.GET.unit %}unit={{ request.GET.unit }}&{% endif %}export=csv">
+              <i class="bi bi-download me-1"></i> Export CSV
+            </a>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="small text-muted">
+          Agency: <span class="fw-semibold">{{ request.user.agency.name|default:"-" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h6>
+        <div class="small text-muted">Tip: export after filtering.</div>
+      </div>
+
+      <div class="card-body">
+        <form method="get" class="row g-2">
+          <div class="col-md-3">
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+              <option value="">All</option>
+              <option value="available" {% if request.GET.status == "available" %}selected{% endif %}>Available</option>
+              <option value="assigned" {% if request.GET.status == "assigned" %}selected{% endif %}>Assigned</option>
+              <option value="maintenance" {% if request.GET.status == "maintenance" %}selected{% endif %}>Maintenance</option>
+              <option value="retired" {% if request.GET.status == "retired" %}selected{% endif %}>Retired</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Assigned?</label>
+            <select class="form-select" name="assigned">
+              <option value="">All</option>
+              <option value="1" {% if request.GET.assigned == "1" %}selected{% endif %}>Assigned</option>
+              <option value="0" {% if request.GET.assigned == "0" %}selected{% endif %}>Unassigned</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Category</label>
+            <select class="form-select" name="category">
+              <option value="">All</option>
+              {% for c in categories %}
+                <option value="{{ c.id }}" {% if request.GET.category == c.id|stringformat:"s" %}selected{% endif %}>
+                  {{ c.name }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Unit</label>
+            <select class="form-select" name="unit">
+              <option value="">All</option>
+              {% for u in units %}
+                <option value="{{ u.id }}" {% if request.GET.unit == u.id|stringformat:"s" %}selected{% endif %}>
+                  {{ u.name }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-12 d-flex gap-2 mt-2">
+            <button class="btn btn-un-primary">
+              <i class="bi bi-search me-1"></i> Apply
+            </button>
+            <a class="btn btn-light" href="{% url 'accounts:asset_report' %}">
+              Reset
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h6 class="mb-0"><i class="bi bi-table me-2"></i>Results</h6>
+        <div class="small text-muted">Total: <span class="fw-semibold">{{ assets|length }}</span></div>
+      </div>
+
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Asset</th>
+                <th>Category</th>
+                <th>Unit</th>
+                <th>Status</th>
+                <th>Assigned To</th>
+                <th>EOL Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in assets %}
+                <tr>
+                  <td>
+                    <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' a.id %}">
+                      {{ a.name }}
+                    </a>
+                    <div class="small text-muted">
+                      {% if a.asset_tag %}Tag: {{ a.asset_tag }} • {% endif %}
+                      {% if a.serial_number %}SN: {{ a.serial_number }}{% endif %}
+                    </div>
+                  </td>
+                  <td>{{ a.category.name }}</td>
+                  <td>{% if a.unit %}{{ a.unit.name }}{% else %}<span class="text-muted">Unallocated/Core</span>{% endif %}</td>
+                  <td><span class="badge bg-secondary">{{ a.get_status_display }}</span></td>
+                  <td>
+                    {% if a.current_holder %}
+                      {{ a.current_holder.get_full_name|default:a.current_holder.username }}
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if a.eol_due_date %}
+                      {{ a.eol_due_date }}
+                      {% if a.is_eol_due %}<span class="badge bg-warning text-dark ms-1">Due</span>{% endif %}
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">
+                    No assets found for the selected filters.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

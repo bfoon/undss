@@ -1,0 +1,38 @@
+<div class="modal fade" id="modalReturnAsset" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-arrow-return-left me-2"></i> Return Asset
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="initiate_return">
+        <input type="hidden" name="asset_id" id="returnAssetId">
+        <div class="modal-body">
+          <div class="small text-muted mb-2">Asset: <span id="returnAssetName" class="fw-semibold"></span></div>
+          <label class="form-label">Reason (optional)</label>
+          <textarea name="reason" rows="3" class="form-control" placeholder="Reason for return..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" type="submit">
+            <i class="bi bi-send me-1"></i> Submit Return
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("show.bs.modal", function (event) {
+    const modal = event.target;
+    if (modal.id !== "modalReturnAsset") return;
+    const button = event.relatedTarget;
+    document.getElementById("returnAssetId").value = button.getAttribute("data-asset-id");
+    document.getElementById("returnAssetName").textContent = button.getAttribute("data-asset-name") || "";
+  }, true);
+</script>

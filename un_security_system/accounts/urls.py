@@ -1,6 +1,6 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
-from . import views, views_ict
+from . import views, views_ict, view_asset_management
 from .hr import views_hr
 from .views_room_booking import (
     RoomListView, RoomDetailView, RoomCreateView, RoomUpdateView,
@@ -212,4 +212,119 @@ path(
     # Approvals
     path("rooms/approvals/", MyRoomApprovalsView.as_view(), name="room_approvals"),
     path("rooms/bookings/<int:pk>/approve/", room_booking_approve_view, name="booking_approve"),
+    # ------------------------------------------------------------------
+    # Asset Management (Agency Service)
+    # ------------------------------------------------------------------
+
+    # Main portal (Dashboard + Tabs + Actions)
+    path("assets/", view_asset_management.view_asset_management, name="asset_management"),
+    path("assets/<int:asset_id>/", view_asset_management.asset_detail, name="asset_detail"),
+    path("assets/report/", view_asset_management.asset_report, name="asset_report"),
+
+    # # ----- Requests workflow -----
+    # path(
+    #     "assets/requests/",
+    #     view_asset_management.asset_request_list_view,
+    #     name="asset_request_list",
+    # ),
+    # path(
+    #     "assets/requests/<int:pk>/",
+    #     view_asset_management.asset_request_detail_view,
+    #     name="asset_request_detail",
+    # ),
+    #
+    # # Approval step (Unit head / Asset manager / Ops manager)
+    # path(
+    #     "assets/requests/<int:pk>/approve/",
+    #     view_asset_management.asset_request_approve_view,
+    #     name="asset_request_approve",
+    # ),
+    # path(
+    #     "assets/requests/<int:pk>/reject/",
+    #     view_asset_management.asset_request_reject_view,
+    #     name="asset_request_reject",
+    # ),
+    #
+    # # ICT custodian assignment step
+    # path(
+    #     "assets/requests/<int:pk>/assign/",
+    #     view_asset_management.asset_request_assign_view,
+    #     name="asset_request_assign",
+    # ),
+    #
+    # # Requester verifies receipt
+    # path(
+    #     "assets/requests/<int:pk>/verify/",
+    #     view_asset_management.asset_request_verify_receipt_view,
+    #     name="asset_request_verify_receipt",
+    # ),
+    #
+    # # ----- Assets registry -----
+    # path(
+    #     "assets/registry/",
+    #     view_asset_management.asset_registry_list_view,
+    #     name="asset_registry",
+    # ),
+    # path(
+    #     "assets/registry/<int:pk>/",
+    #     view_asset_management.asset_detail_view,
+    #     name="asset_detail",
+    # ),
+    # path(
+    #     "assets/registry/<int:pk>/update/",
+    #     view_asset_management.asset_update_view,
+    #     name="asset_update",
+    # ),
+    # path(
+    #     "assets/registry/<int:pk>/retire/",
+    #     view_asset_management.asset_retire_view,
+    #     name="asset_retire",
+    # ),
+    #
+    # # ----- Setup (categories / units) -----
+    # path(
+    #     "assets/categories/",
+    #     view_asset_management.asset_category_list_view,
+    #     name="asset_category_list",
+    # ),
+    # path(
+    #     "assets/categories/new/",
+    #     view_asset_management.asset_category_create_view,
+    #     name="asset_category_create",
+    # ),
+    # path(
+    #     "assets/categories/<int:pk>/edit/",
+    #     view_asset_management.asset_category_update_view,
+    #     name="asset_category_update",
+    # ),
+    #
+    # path(
+    #     "assets/units/",
+    #     view_asset_management.unit_list_view,
+    #     name="asset_unit_list",
+    # ),
+    # path(
+    #     "assets/units/new/",
+    #     view_asset_management.unit_create_view,
+    #     name="asset_unit_create",
+    # ),
+    # path(
+    #     "assets/units/<int:pk>/edit/",
+    #     view_asset_management.unit_update_view,
+    #     name="asset_unit_update",
+    # ),
+
+    # ----- Optional: small JSON APIs (nice for dynamic UI later) -----
+    # path(
+    #     "assets/api/available-assets/",
+    #     view_asset_management.asset_available_list_api,
+    #     name="asset_available_list_api",
+    # ),
+    # path(
+    #     "assets/api/unit-managers/",
+    #     view_asset_management.unit_managers_api,
+    #     name="unit_managers_api",
+    # ),
+
+
 ]

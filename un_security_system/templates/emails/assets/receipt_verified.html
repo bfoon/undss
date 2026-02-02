@@ -1,0 +1,30 @@
+{% extends "emails/assets/base.html" %}
+{% block content %}
+  <span class="badge" style="background:#e8fff0;color:#046c3c;">Receipt Verified</span>
+  <p style="margin:14px 0 0;">
+    The requester has confirmed receipt of the assigned asset. The request is now closed.
+  </p>
+
+  <div class="grid">
+    <div class="row">
+      <div class="cell k">Requester</div>
+      <div class="cell v">{{ req.requester.get_full_name }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Asset</div>
+      <div class="cell v">{{ asset.name }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Serial / Tag</div>
+      <div class="cell v">SN: {{ asset.serial_number|default:"-" }} | Tag: {{ asset.asset_tag|default:"-" }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Verified At</div>
+      <div class="cell v">{{ req.verified_at }}</div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <a class="btn" href="{{ portal_url }}">View Record</a>
+  </div>
+{% endblock %}

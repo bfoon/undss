@@ -1,0 +1,30 @@
+{% extends "emails/assets/base.html" %}
+{% block content %}
+  <span class="badge">Asset Assigned</span>
+  <p style="margin:14px 0 0;">
+    ICT has assigned an asset to your request. Please verify receipt in the portal once received.
+  </p>
+
+  <div class="grid">
+    <div class="row">
+      <div class="cell k">Asset</div>
+      <div class="cell v">{{ asset.name }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Serial / Tag</div>
+      <div class="cell v">SN: {{ asset.serial_number|default:"-" }} | Tag: {{ asset.asset_tag|default:"-" }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Assigned By</div>
+      <div class="cell v">{{ assigned_by }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Next Step</div>
+      <div class="cell v">Requester verification</div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <a class="btn" href="{{ portal_url }}">Verify Receipt</a>
+  </div>
+{% endblock %}

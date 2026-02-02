@@ -1,0 +1,56 @@
+<div class="modal fade" id="modalRequestAsset" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-send-check me-2"></i>New Asset Request</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_request">
+
+        <div class="modal-body">
+          <div class="row g-3">
+
+            <div class="col-md-6">
+              <label class="form-label">Category</label>
+              <select class="form-select" name="category_id" required>
+                <option value="">Select category…</option>
+                {% for c in categories %}
+                  <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Unit (optional)</label>
+              <select class="form-select" name="unit_id">
+                <option value="">Auto / Unallocated</option>
+                {% for u in units %}
+                  <option value="{{ u.id }}">{{ u.name }}{% if u.is_core_unit %} (Core){% endif %}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">If empty, your unit (if set) or Operations Manager handles it.</div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Justification</label>
+              <textarea class="form-control" name="justification" rows="3"
+                        placeholder="Briefly explain why you need this asset (assignment, role needs, replacement, etc.)"></textarea>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-un-primary">
+            <i class="bi bi-send me-1"></i> Submit Request
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>

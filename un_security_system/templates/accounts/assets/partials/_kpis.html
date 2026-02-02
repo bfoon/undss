@@ -1,0 +1,61 @@
+<div class="col-12">
+  <div class="row g-3">
+
+    <div class="col-lg-3 col-md-6">
+      <div class="card am-kpi">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small">My Requests</div>
+              <div class="fs-4 fw-bold">{{ my_requests|length }}</div>
+            </div>
+            <i class="bi bi-file-text fs-4 text-un-primary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <div class="card am-kpi">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small">Pending Approvals</div>
+              <div class="fs-4 fw-bold">{{ pending_approvals|length }}</div>
+            </div>
+            <i class="bi bi-clipboard-check fs-4 text-un-primary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <div class="card am-kpi">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small">ICT Queue</div>
+              <div class="fs-4 fw-bold">{{ pending_ict|length }}</div>
+            </div>
+            <i class="bi bi-pc-display fs-4 text-un-primary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <div class="card am-kpi">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small">Assets Registered</div>
+              <div class="fs-4 fw-bold">{{ assets|length }}</div>
+            </div>
+            <i class="bi bi-laptop fs-4 text-un-primary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

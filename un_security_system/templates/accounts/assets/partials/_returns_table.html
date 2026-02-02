@@ -1,0 +1,119 @@
+<div class="mb-3">
+  <h6 class="mb-0 fw-semibold">Returns</h6>
+  <small class="text-muted">Track returns you initiated, and ICT can verify receipt.</small>
+</div>
+
+<div class="row g-3">
+  <!-- My Returns -->
+  <div class="col-lg-6">
+    <div class="border rounded-3 p-3 bg-white">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-semibold">My Returns</div>
+        <span class="badge bg-light text-dark">{{ my_returns|length }}</span>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Asset</th>
+              <th>Status</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rr in my_returns %}
+              <tr>
+                <td class="fw-semibold">#{{ rr.id }}</td>
+                <td>
+                  <a class="text-decoration-none" href="{% url 'accounts:asset_detail' rr.asset.id %}">
+                    {{ rr.asset.name }}
+                  </a>
+                </td>
+                <td>
+                  <span class="badge
+                    {% if rr.status == 'pending_ict' %}bg-warning text-dark
+                    {% elif rr.status == 'received' %}bg-success
+                    {% elif rr.status == 'rejected' %}bg-danger
+                    {% elif rr.status == 'cancelled' %}bg-secondary
+                    {% else %}bg-secondary{% endif %}">
+                    {{ rr.get_status_display }}
+                  </span>
+                </td>
+                <td class="text-end">
+                  {% if rr.status == "pending_ict" %}
+                    <form method="post" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="cancel_return">
+                      <input type="hidden" name="return_id" value="{{ rr.id }}">
+                      <button class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-x-circle me-1"></i> Cancel
+                      </button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-3">No return requests yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ICT Pending Returns -->
+  <div class="col-lg-6">
+    <div class="border rounded-3 p-3 bg-white">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-semibold">Pending Returns (ICT)</div>
+        <span class="badge bg-light text-dark">{{ pending_returns|length }}</span>
+      </div>
+
+      {% if not is_ict %}
+        <div class="text-muted small">Only ICT can verify returns.</div>
+      {% else %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Asset</th>
+                <th>Requester</th>
+                <th class="text-end">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rr in pending_returns %}
+                <tr>
+                  <td class="fw-semibold">#{{ rr.id }}</td>
+                  <td>
+                    <a class="text-decoration-none" href="{% url 'accounts:asset_detail' rr.asset.id %}">
+                      {{ rr.asset.name }}
+                    </a>
+                  </td>
+                  <td>{{ rr.requested_by.get_full_name|default:rr.requested_by.username }}</td>
+                  <td class="text-end">
+                    <button class="btn btn-sm btn-success"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modalVerifyReturn"
+                            data-return-id="{{ rr.id }}"
+                            data-asset-name="{{ rr.asset.name|escape }}">
+                      <i class="bi bi-check2-circle me-1"></i> Verify
+                    </button>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4" class="text-center text-muted py-3">No pending returns.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>

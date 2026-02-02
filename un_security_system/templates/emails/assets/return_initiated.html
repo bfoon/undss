@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <body style="font-family: Arial, sans-serif; background:#f6f7fb; padding:20px;">
+    <div style="max-width:720px;margin:auto;background:#fff;border-radius:12px;padding:20px;border:1px solid #eee;">
+      <h2 style="margin:0 0 8px 0;">{{ brand }} — Asset Return Pending</h2>
+      <p style="margin:0 0 14px 0;color:#555;">
+        Return request <b>#{{ rr.id }}</b> is pending ICT verification.
+      </p>
+
+      <div style="padding:12px;border-radius:10px;background:#f9fafc;border:1px solid #eef;">
+        <p style="margin:0;"><b>Asset:</b> {{ asset.name }}</p>
+        <p style="margin:6px 0 0 0;"><b>Requested by:</b> {{ rr.requested_by.get_full_name|default:rr.requested_by.username }}</p>
+        {% if rr.reason %}
+          <p style="margin:6px 0 0 0;"><b>Reason:</b> {{ rr.reason }}</p>
+        {% endif %}
+      </div>
+
+      <p style="margin-top:14px;">
+        Open the portal: <a href="{{ portal_url }}">{{ portal_url }}</a>
+      </p>
+
+      <p style="color:#888;font-size:12px;margin-top:16px;">
+        This is an automated message.
+      </p>
+    </div>
+  </body>
+</html>

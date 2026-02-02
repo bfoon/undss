@@ -1,0 +1,86 @@
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <div>
+    <h6 class="mb-0 fw-semibold">Assets Registry</h6>
+    <small class="text-muted">Agency-owned inventory (laptops, phones, accessories, etc.).</small>
+  </div>
+
+  {% if user.is_superuser or user.role == "ict_focal" %}
+    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterAsset">
+      <i class="bi bi-plus-circle me-1"></i> Register Asset
+    </button>
+  {% endif %}
+</div>
+
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Category</th>
+        <th>Unit</th>
+        <th>Status</th>
+        <th>Holder</th>
+        <th>Serial / Tag</th>
+        <th class="text-end">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in assets %}
+        <tr>
+          <td class="fw-semibold">
+            <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' a.id %}">
+              {{ a.name }}
+            </a>
+          </td>
+          <td>{{ a.category.name }}</td>
+          <td>{{ a.unit.name|default:"Unallocated/Core" }}</td>
+          <td>
+            <span class="badge
+              {% if a.status == 'available' %}bg-success
+              {% elif a.status == 'assigned' %}bg-primary
+              {% elif a.status == 'maintenance' %}bg-warning text-dark
+              {% elif a.status == 'retired' %}bg-secondary
+              {% else %}bg-secondary{% endif %}">
+              {{ a.get_status_display }}
+            </span>
+
+            {% if a.id in returning_asset_ids %}
+              <span class="badge bg-warning text-dark ms-1">
+                <i class="bi bi-arrow-return-left me-1"></i> Return Pending
+              </span>
+            {% endif %}
+          </td>
+
+          <td>
+            {% if a.current_holder %}
+              {{ a.current_holder.get_full_name|default:a.current_holder.username }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td class="text-muted">
+            SN: {{ a.serial_number|default:"-" }} <br>
+            Tag: {{ a.asset_tag|default:"-" }}
+          </td>
+
+          <td class="text-end">
+            {% if a.status == "assigned" and a.current_holder and a.current_holder.id == user.id and not a.id in returning_asset_ids %}
+              <button class="btn btn-sm btn-outline-primary"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modalReturnAsset"
+                      data-asset-id="{{ a.id }}"
+                      data-asset-name="{{ a.name|escape }}">
+                <i class="bi bi-arrow-return-left me-1"></i> Return
+              </button>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No assets registered yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

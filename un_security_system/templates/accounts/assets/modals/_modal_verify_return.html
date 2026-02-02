@@ -1,0 +1,39 @@
+<div class="modal fade" id="modalVerifyReturn" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-check2-circle me-2"></i> Verify Return Received
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="verify_return_received">
+        <input type="hidden" name="return_id" id="verifyReturnId">
+        <div class="modal-body">
+          <div class="small text-muted mb-2">Asset: <span id="verifyAssetName" class="fw-semibold"></span></div>
+          <label class="form-label">Verification note (optional)</label>
+          <textarea name="note" rows="3" class="form-control" placeholder="Condition received, accessories, remarks..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-success" type="submit">
+            <i class="bi bi-check-lg me-1"></i> Verify
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("show.bs.modal", function (event) {
+    const modal = event.target;
+    if (modal.id !== "modalVerifyReturn") return;
+    const button = event.relatedTarget;
+    document.getElementById("verifyReturnId").value = button.getAttribute("data-return-id");
+    document.getElementById("verifyAssetName").textContent = button.getAttribute("data-asset-name") || "";
+  }, true);
+</script>

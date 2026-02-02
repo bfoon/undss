@@ -1,0 +1,65 @@
+<div class="modal fade" id="modalRegisterAsset" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Register New Asset</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="register_asset">
+
+        <div class="modal-body">
+          <div class="row g-3">
+
+            <div class="col-md-6">
+              <label class="form-label">Asset Name</label>
+              <input type="text" class="form-control" name="name" required
+                     placeholder="e.g. Dell Latitude 5420 / iPhone 13 / HP Dock">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Category</label>
+              <select class="form-select" name="category_id" required>
+                <option value="">Select category…</option>
+                {% for c in categories %}
+                  <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Serial Number</label>
+              <input type="text" class="form-control" name="serial_number" placeholder="Optional">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Asset Tag</label>
+              <input type="text" class="form-control" name="asset_tag" placeholder="Optional">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Unit (optional)</label>
+              <select class="form-select" name="unit_id">
+                <option value="">Unallocated / Core pool</option>
+                {% for u in units %}
+                  <option value="{{ u.id }}">{{ u.name }}{% if u.is_core_unit %} (Core){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary">
+            <i class="bi bi-save2 me-1"></i> Save Asset
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>

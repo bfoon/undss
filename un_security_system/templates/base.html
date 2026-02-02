@@ -505,6 +505,59 @@
                 </li>
                 {% endif %}
 
+                {# === Asset Management (Agency Service) === #}
+              {% if user.is_authenticated and asset_mgmt_enabled or user.is_superuser %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                     aria-expanded="false">
+                    <i class="bi bi-laptop me-1"></i> ICT & Assets
+                  </a>
+                  <ul class="dropdown-menu">
+
+                    <li class="dropdown-header">Asset Management</li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:asset_management' %}">
+                        <i class="bi bi-boxes me-2"></i> Asset Portal
+                      </a>
+                    </li>
+
+                    <li><hr class="dropdown-divider"></li>
+
+                    <li class="dropdown-header">Quick Actions</li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:asset_management' %}#request">
+                        <i class="bi bi-send-check me-2"></i> Request an Asset
+                      </a>
+                    </li>
+
+                    {% if user.is_superuser or user.role == 'ict_focal' %}
+                      <li>
+                        <a class="dropdown-item" href="{% url 'accounts:asset_management' %}#register">
+                          <i class="bi bi-plus-circle me-2"></i> Register New Asset
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" href="{% url 'accounts:asset_management' %}#ict-queue">
+                          <i class="bi bi-clipboard-data me-2"></i> ICT Assignment Queue
+                        </a>
+                      </li>
+                    {% endif %}
+
+                    {% if user.is_superuser %}
+                      <li><hr class="dropdown-divider"></li>
+                      <li class="dropdown-header">Super Admin</li>
+                      <li>
+                        <a class="dropdown-item" href="/admin/">
+                          <i class="bi bi-gear me-2"></i> Service Configuration
+                        </a>
+                      </li>
+                    {% endif %}
+
+                  </ul>
+                </li>
+              {% endif %}
+
+
                 {# === Rooms & Bookings (new feature under Accounts) === #}
                 {% if user.is_authenticated %}
                   <li class="nav-item dropdown">

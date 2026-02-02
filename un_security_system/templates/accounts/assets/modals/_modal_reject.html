@@ -1,0 +1,29 @@
+<div class="modal fade" id="modalReject" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title text-danger"><i class="bi bi-x-circle me-2"></i>Reject Request</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reject_request">
+        <input type="hidden" name="request_id" value="">
+
+        <div class="modal-body">
+          <label class="form-label">Rejection reason (required)</label>
+          <textarea class="form-control" name="reason" rows="3" required
+                    placeholder="Provide a clear reason to support audit trail."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-danger">
+            <i class="bi bi-x-lg me-1"></i> Reject
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

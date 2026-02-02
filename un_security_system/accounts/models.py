@@ -52,7 +52,12 @@ class User(AbstractUser):
         related_name="users",
         help_text="UN Agency the user belongs to"
     )
-
+    unit = models.ForeignKey(
+        "Unit",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="users",
+    )
     # Password policy
     must_change_password = models.BooleanField(default=False)
     temp_password_set_at = models.DateTimeField(null=True, blank=True)
@@ -596,6 +601,422 @@ class RoomApprover(models.Model):
 
     def __str__(self):
         return f"{self.user} → {self.room} ({'primary' if self.is_primary else 'approver'})"
+
+# =========================
+# ASSET MANAGEMENT MODELS
+# =========================
+
+class AgencyServiceConfig(models.Model):
+    """
+    Toggle services per agency + optional pricing.
+    Superuser can enable/disable asset management per agency.
+    """
+    agency = models.OneToOneField(Agency, on_delete=models.CASCADE, related_name="service_config")
+
+    asset_mgmt_enabled = models.BooleanField(default=False)
+
+    # Optional billing (if you want to charge agencies)
+    asset_mgmt_is_paid = models.BooleanField(default=False)
+    asset_mgmt_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    asset_mgmt_cost_currency = models.CharField(max_length=10, default="USD", blank=True)
+
+    # Workflow toggles (agency-specific)
+    require_manager_approval = models.BooleanField(default=True)
+    require_ict_assignment = models.BooleanField(default=True)
+    require_requester_verification = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.agency} service config"
+
+
+class Unit(models.Model):
+    """
+    Units are agency-scoped. Unit head is the default asset manager.
+    Some units can have extra managers (asset managers).
+    """
+    agency = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="units")
+    name = models.CharField(max_length=120)
+
+    unit_head = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="headed_units",
+        help_text="Unit Head (default asset manager/approver for this unit)",
+    )
+
+    asset_managers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="managed_units",
+        help_text="Additional asset managers for this unit (optional)",
+    )
+
+    is_core_unit = models.BooleanField(
+        default=False,
+        help_text="If true, assets/requests go to Operations Manager approval (agency-level).",
+    )
+
+    def __str__(self):
+        return f"{self.agency.code} - {self.name}"
+
+
+class AgencyAssetRoles(models.Model):
+    """
+    Agency-level roles for asset workflow.
+    - operations_manager handles core/unallocated approvals
+    - ict_custodian assigns assets (can be ICT focal or other ICT staff)
+    """
+    agency = models.OneToOneField(Agency, on_delete=models.CASCADE, related_name="asset_roles")
+
+    operations_manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="ops_manager_for_agencies",
+    )
+
+    ict_custodian = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="ict_custodian_for_agencies",
+        help_text="Users allowed to assign assets (ICT custodians).",
+    )
+
+    def __str__(self):
+        return f"{self.agency} asset roles"
+
+
+class AssetCategory(models.Model):
+    """
+    Laptop / Phone / Accessory / Router / Tablet etc.
+    Agency-scoped so each agency can have its own categories.
+    """
+    agency = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="asset_categories")
+    name = models.CharField(max_length=80)
+    service_life_months = models.PositiveIntegerField(
+        default=36,
+        help_text="Expected lifespan in months. When reached, asset should be replaced."
+    )
+    eol_enabled = models.BooleanField(
+        default=True,
+        help_text="If enabled, assets under this category will be flagged as end-of-life when due."
+    )
+
+    def __str__(self):
+        return f"{self.agency.code} - {self.name}"
+
+
+# models.py (inside Asset)
+class Asset(models.Model):
+    STATUS_CHOICES = (
+        ("available", "Available"),
+        ("assigned", "Assigned"),
+        ("maintenance", "Maintenance"),
+        ("retired", "Retired"),
+    )
+
+    agency = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="assets")
+    category = models.ForeignKey(AssetCategory, on_delete=models.PROTECT, related_name="assets")
+    unit = models.ForeignKey(Unit, on_delete=models.SET_NULL, null=True, blank=True, related_name="assets")
+
+    name = models.CharField(max_length=150)
+    serial_number = models.CharField(max_length=120, blank=True, null=True)
+    asset_tag = models.CharField(max_length=80, blank=True, null=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="available")
+
+    current_holder = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="held_assets",
+    )
+
+    # ✅ NEW: lifecycle dates
+    acquired_at = models.DateField(null=True, blank=True, help_text="Purchase/receipt date (used for EOL)")
+    retired_at = models.DateField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def eol_due_date(self):
+        """
+        Returns computed end-of-life due date based on acquired_at + category.service_life_months.
+        """
+        if not self.acquired_at:
+            return None
+        if not self.category or not self.category.eol_enabled:
+            return None
+        # naive month add (safe enough for business flagging)
+        months = int(self.category.service_life_months or 0)
+        year = self.acquired_at.year + (self.acquired_at.month - 1 + months) // 12
+        month = (self.acquired_at.month - 1 + months) % 12 + 1
+        day = min(self.acquired_at.day, 28)  # avoid invalid dates
+        from datetime import date
+        return date(year, month, day)
+
+    @property
+    def is_eol_due(self):
+        due = self.eol_due_date
+        if not due:
+            return False
+        from django.utils import timezone
+        return due <= timezone.localdate()
+
+    def __str__(self):
+        return f"{self.agency.code} - {self.name}"
+
+
+
+class AssetRequest(models.Model):
+    STATUS_CHOICES = (
+        ("draft", "Draft"),
+        ("pending_manager", "Pending Manager Approval"),
+        ("rejected", "Rejected"),
+        ("approved_manager", "Approved by Manager"),
+        ("pending_ict", "Pending ICT Assignment"),
+        ("assigned", "Asset Assigned"),
+        ("received", "Received & Verified"),
+        ("cancelled", "Cancelled"),
+    )
+
+    agency = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="asset_requests")
+    requester = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="asset_requests")
+
+    unit = models.ForeignKey(Unit, on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_requests")
+    category = models.ForeignKey(AssetCategory, on_delete=models.PROTECT, related_name="asset_requests")
+
+    justification = models.TextField(blank=True)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="pending_manager")
+
+    # Approval chain tracking
+    manager_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="asset_requests_approved",
+    )
+    manager_decision_at = models.DateTimeField(null=True, blank=True)
+    manager_reject_reason = models.TextField(blank=True)
+
+    assigned_asset = models.ForeignKey(Asset, on_delete=models.SET_NULL, null=True, blank=True, related_name="requests")
+    ict_assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="asset_requests_assigned",
+    )
+    ict_assigned_at = models.DateTimeField(null=True, blank=True)
+
+    requester_verified_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["agency", "status"]),
+            models.Index(fields=["agency", "requester"]),
+        ]
+
+    def __str__(self):
+        return f"{self.agency.code} request #{self.id} by {self.requester}"
+
+    # ---------- helpers ----------
+    def get_required_manager(self):
+        """
+        Manager = Unit Head/Asset Manager, but Core/Unallocated uses Operations Manager.
+        """
+        if self.unit and self.unit.is_core_unit:
+            roles = getattr(self.agency, "asset_roles", None)
+            return getattr(roles, "operations_manager", None)
+
+        if not self.unit:
+            roles = getattr(self.agency, "asset_roles", None)
+            return getattr(roles, "operations_manager", None)
+
+        # unit head is default manager
+        return self.unit.unit_head
+
+    def can_user_approve_as_manager(self, user):
+        if not user or not self.agency_id or user.agency_id != self.agency_id:
+            return False
+
+        # Ops manager for core/unallocated
+        roles = getattr(self.agency, "asset_roles", None)
+        if roles and roles.operations_manager_id and user.id == roles.operations_manager_id:
+            if (not self.unit) or (self.unit and self.unit.is_core_unit):
+                return True
+
+        if not self.unit:
+            return False
+
+        # unit head OR unit asset managers
+        if self.unit.unit_head_id and user.id == self.unit.unit_head_id:
+            return True
+        return self.unit.asset_managers.filter(id=user.id).exists()
+
+    def can_user_assign_as_ict(self, user):
+        if not user or user.agency_id != self.agency_id:
+            return False
+        roles = getattr(self.agency, "asset_roles", None)
+        if not roles:
+            return False
+        return roles.ict_custodian.filter(id=user.id).exists() or getattr(user, "role", "") == "ict_focal"
+
+    def approve(self, by_user):
+        self.status = "approved_manager"
+        self.manager_approved_by = by_user
+        self.manager_decision_at = timezone.now()
+        self.manager_reject_reason = ""
+        # next step
+        self.status = "pending_ict"
+        self.save()
+
+    def reject(self, by_user, reason=""):
+        self.status = "rejected"
+        self.manager_approved_by = by_user
+        self.manager_decision_at = timezone.now()
+        self.manager_reject_reason = reason or ""
+        self.save()
+
+    def assign_asset(self, by_user, asset: Asset):
+        # mark asset assigned
+        asset.status = "assigned"
+        asset.current_holder = self.requester
+        asset.unit = self.unit or asset.unit
+        asset.save(update_fields=["status", "current_holder", "unit"])
+
+        self.assigned_asset = asset
+        self.ict_assigned_by = by_user
+        self.ict_assigned_at = timezone.now()
+        self.status = "assigned"
+        self.save()
+
+    def verify_receipt(self, by_user):
+        if by_user.id != self.requester_id:
+            raise ValueError("Only the requester can verify receipt.")
+        self.requester_verified_at = timezone.now()
+        self.status = "received"
+        self.save(update_fields=["requester_verified_at", "status"])
+
+
+class AssetHistory(models.Model):
+    EVENT_CHOICES = (
+        ("registered", "Registered"),
+        ("request_created", "Request Created"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("assigned", "Assigned"),
+        ("receipt_verified", "Receipt Verified"),
+        ("return_initiated", "Return Initiated"),
+        ("return_received", "Return Received"),
+        ("maintenance", "Marked Maintenance"),
+        ("retired", "Retired/Disposed"),
+        ("status_change", "Status Change"),
+    )
+
+    agency = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="asset_history")
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="history")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    event = models.CharField(max_length=40, choices=EVENT_CHOICES)
+    note = models.TextField(blank=True)
+    meta = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["agency", "asset", "event"]),
+            models.Index(fields=["agency", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.asset} - {self.event}"
+
+class AssetReturnRequest(models.Model):
+    STATUS_CHOICES = (
+        ("pending_ict", "Pending ICT Verification"),
+        ("received", "Received by ICT"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    )
+
+    agency = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="asset_returns")
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="return_requests")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="asset_returns_requested")
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending_ict")
+    reason = models.TextField(blank=True)
+
+    verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_returns_verified")
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verification_note = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["agency", "status"]),
+            models.Index(fields=["agency", "requested_by"]),
+        ]
+
+    def __str__(self):
+        return f"Return #{self.id} - {self.asset}"
+
+class AssetChangeRequest(models.Model):
+    STATUS_CHOICES = (
+        ("pending_manager", "Pending Asset Manager Approval"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    )
+
+    agency = models.ForeignKey("Agency", on_delete=models.CASCADE, related_name="asset_change_requests")
+    asset = models.ForeignKey("Asset", on_delete=models.CASCADE, related_name="change_requests")
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="asset_change_requests"
+    )
+
+    # store what ICT wants to change
+    proposed_changes = models.JSONField(default=dict, blank=True)
+
+    reason = models.TextField(blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending_manager")
+
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="asset_change_requests_decided"
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    manager_note = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["agency", "status"]),
+            models.Index(fields=["agency", "asset"]),
+        ]
+
+    def approve(self, manager_user, note=""):
+        self.status = "approved"
+        self.decided_by = manager_user
+        self.decided_at = timezone.now()
+        self.manager_note = note or ""
+        self.save(update_fields=["status", "decided_by", "decided_at", "manager_note"])
+
+    def reject(self, manager_user, note=""):
+        self.status = "rejected"
+        self.decided_by = manager_user
+        self.decided_at = timezone.now()
+        self.manager_note = note or ""
+        self.save(update_fields=["status", "decided_by", "decided_at", "manager_note"])
+
+    def __str__(self):
+        return f"AssetChange #{self.id} - {self.asset}"
+
 
 
 from .hr.models import EmployeeIDCardRequest

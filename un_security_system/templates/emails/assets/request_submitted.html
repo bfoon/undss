@@ -1,0 +1,34 @@
+{% extends "emails/assets/base.html" %}
+{% block content %}
+  <span class="badge">New Asset Request</span>
+  <p style="margin:14px 0 0;">
+    A new asset request has been submitted and requires your review.
+  </p>
+
+  <div class="grid">
+    <div class="row">
+      <div class="cell k">Requester</div>
+      <div class="cell v">{{ req.requester.get_full_name }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Category</div>
+      <div class="cell v">{{ req.category.name }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Unit</div>
+      <div class="cell v">{{ req.unit.name|default:"Unallocated/Core" }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Justification</div>
+      <div class="cell v">{{ req.justification|default:"-" }}</div>
+    </div>
+    <div class="row">
+      <div class="cell k">Status</div>
+      <div class="cell v">{{ req.get_status_display }}</div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <a class="btn" href="{{ portal_url }}">Open Asset Portal</a>
+  </div>
+{% endblock %}
