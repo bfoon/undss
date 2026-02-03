@@ -1,0 +1,70 @@
+<!-- Exit Organization Modal -->
+<div class="modal fade" id="exitOrganizationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-danger">
+
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">
+          <i class="fas fa-exclamation-triangle me-2"></i>
+          Confirm Exit Organization
+        </h5>
+        <button type="button" class="btn-close btn-close-white"
+                data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post" action="{% url 'accounts:exit_organization' %}">
+        {% csrf_token %}
+
+        <div class="modal-body">
+
+          <div class="alert alert-warning small">
+            <strong>Important:</strong><br>
+            This action will:
+            <ul class="mb-0">
+              <li>Notify your Unit Head, Operations Manager & ICT</li>
+              <li>Require you to return all assigned assets</li>
+              <li>Suspend your SIM/Data lines (if assigned)</li>
+            </ul>
+          </div>
+
+          <!-- Reason -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Reason for leaving</label>
+            <select name="reason" class="form-select" required>
+              <option value="">-- Select reason --</option>
+              <option value="resigned">Resigned</option>
+              <option value="reassigned">Reassigned</option>
+            </select>
+          </div>
+
+          <!-- Confirm text -->
+          <div class="mb-2">
+            <label class="form-label fw-semibold">
+              Type <span class="text-danger">CONFIRM</span> to proceed
+            </label>
+            <input type="text"
+                   name="typed_confirm"
+                   class="form-control"
+                   placeholder="CONFIRM"
+                   required>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button"
+                  class="btn btn-secondary"
+                  data-bs-dismiss="modal">
+            Cancel
+          </button>
+
+          <button type="submit" class="btn btn-danger">
+            Confirm Exit
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>

@@ -42,6 +42,16 @@
               Request, approve, assign and track ICT assets by agency unit — audit-ready workflow.
             </div>
           </div>
+          <!-- Exit Organization Button -->
+          <div class="mt-4 text-end">
+            <button class="btn btn-outline-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#exitOrganizationModal">
+              <i class="fas fa-door-open me-1"></i>
+              Exit Organization
+            </button>
+          </div>
+
 
           <div class="d-flex gap-2 flex-wrap">
             <button class="btn btn-un-primary" data-bs-toggle="modal" data-bs-target="#modalRequestAsset">
@@ -222,6 +232,7 @@
   </div>
 </div>
 
+
 {# Modals #}
 {% include "accounts/assets/modals/_modal_request_asset.html" %}
 {% include "accounts/assets/modals/_modal_register_asset.html" %}
@@ -230,6 +241,7 @@
 {% include "accounts/assets/modals/_modal_return_asset.html" %}
 {% include "accounts/assets/modals/_modal_verify_return.html" %}
 {% include "accounts/assets/modals/_modal_reject_change.html" %}
+{% include "accounts/assets/modals/_modal_exit_organization.html" %}
 
 
 {% endblock %}

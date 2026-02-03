@@ -1065,4 +1065,93 @@ class AssetVerification(models.Model):
     def __str__(self):
         return f"{self.agency} - {self.asset} verified {self.verified_at:%Y-%m-%d}"
 
+class MobileLine(models.Model):
+    LINE_TYPES = (
+        ("sim", "SIM Card"),
+        ("data", "Data Plan"),
+        ("sim_data", "SIM + Data"),
+    )
+
+    STATUS = (
+        ("available", "Available"),
+        ("assigned", "Assigned"),
+        ("suspended", "Suspended (Disable)"),
+        ("retired", "Retired"),
+    )
+
+    agency = models.ForeignKey("Agency", on_delete=models.CASCADE)
+    line_type = models.CharField(max_length=20, choices=LINE_TYPES)
+    provider = models.CharField(max_length=80, blank=True)  # QCell / Africell / etc.
+    msisdn = models.CharField(max_length=30, unique=True)  # phone number
+    sim_serial = models.CharField(max_length=80, blank=True)
+
+    custodian = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="custodian_lines",
+        help_text="Person who registers & issues SIM/data lines (e.g., telecom custodian)."
+    )
+
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="assigned_lines"
+    )
+
+    status = models.CharField(max_length=20, choices=STATUS, default="available")
+    issued_at = models.DateTimeField(null=True, blank=True)
+    suspended_at = models.DateTimeField(null=True, blank=True)
+
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def assign(self, user):
+        self.assigned_to = user
+        self.status = "assigned"
+        self.issued_at = timezone.now()
+        self.save(update_fields=["assigned_to", "status", "issued_at"])
+
+    def suspend(self):
+        self.status = "suspended"
+        self.suspended_at = timezone.now()
+        self.save(update_fields=["status", "suspended_at"])
+
+    def __str__(self):
+        return f"{self.msisdn} ({self.get_line_type_display()})"
+
+
+class ExitRequest(models.Model):
+    REASONS = (
+        ("resigned", "Resigned"),
+        ("reassigned", "Reassigned"),
+    )
+
+    STATUS = (
+        ("submitted", "Submitted"),
+        ("pending_returns", "Pending Asset Returns"),
+        ("pending_ict_confirmation", "Pending ICT Confirmation"),
+        ("cleared", "Cleared (All Returned)"),
+    )
+
+    agency = models.ForeignKey("Agency", on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    reason = models.CharField(max_length=20, choices=REASONS)
+
+    typed_confirm = models.CharField(max_length=20, blank=True)
+    status = models.CharField(max_length=40, choices=STATUS, default="submitted")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    cleared_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("agency", "user", "status")  # optional constraint
+
+    def __str__(self):
+        return f"ExitRequest({self.user} - {self.reason} - {self.status})"
+
+
 from .hr.models import EmployeeIDCardRequest

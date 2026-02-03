@@ -128,6 +128,28 @@ def _can_user_approve_change(user, agency, asset) -> bool:
 
     return False
 
+def _safe_email(u):
+    return getattr(u, "email", None)
+
+def _get_exit_recipients(user, agency):
+    # Unit head
+    unit = getattr(user, "unit", None)
+    unit_head_email = _safe_email(getattr(unit, "unit_head", None)) if unit else None
+    # Ops manager + ICT custodians
+    roles = getattr(agency, "asset_roles", None)
+    ops_email = _safe_email(getattr(roles, "operations_manager", None)) if roles else None
+    ict_emails = list(roles.ict_custodian.values_list("email", flat=True)) if roles else []
+
+    # Cell company focal points
+    cell_focal_emails = list(roles.cell_service_focal_point.values_list("email", flat=True)) if roles else []
+
+    # de-dup + remove empty
+    base = [unit_head_email, ops_email] + ict_emails
+    base = [e for e in dict.fromkeys(base) if e]
+    cell_focal_emails = [e for e in dict.fromkeys(cell_focal_emails) if e]
+    return base, cell_focal_emails
+
+
 @login_required
 def view_asset_management(request):
     """
@@ -573,6 +595,17 @@ def view_asset_management(request):
             rr.verified_by = user
             rr.verified_at = timezone.now()
             rr.save(update_fields=["status", "verified_by", "verified_at"])
+
+            pending = AssetReturnRequest.objects.filter(
+                agency=agency,
+                requested_by=exit_user,
+                status="pending_ict"
+            ).exists()
+
+            if not pending:
+                ExitRequest.objects.filter(agency=agency, user=exit_user,
+                                           status__in=["pending_returns", "pending_ict_confirmation"]) \
+                    .update(status="cleared", cleared_at=timezone.now())
 
             _log_event(agency, asset, user, "return_received", note="ICT verified return and placed asset back to pool.", meta={"return_id": rr.id})
 
@@ -1245,3 +1278,87 @@ def asset_labels_pdf(request):
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
     resp["Content-Disposition"] = f'inline; filename="{filename}"'
     return resp
+
+@login_required
+def exit_organization(request):
+    user = request.user
+    agency = getattr(user, "agency", None)  # adjust if your app uses different field
+    if not agency:
+        messages.error(request, "No agency/organization found for your profile.")
+        return redirect("accounts:profile")
+
+    if request.method == "POST":
+        reason = (request.POST.get("reason") or "").strip()
+        typed = (request.POST.get("typed_confirm") or "").strip()
+
+        if typed != "CONFIRM":
+            messages.error(request, "You must type CONFIRM (in capital letters) to proceed.")
+            return redirect("accounts:profile")
+
+        if reason not in ("resigned", "reassigned"):
+            messages.error(request, "Please choose a valid reason (Resigned or Reassigned).")
+            return redirect("accounts:profile")
+
+        with transaction.atomic():
+            exit_req = ExitRequest.objects.create(
+                agency=agency,
+                user=user,
+                reason=reason,
+                typed_confirm=typed,
+                status="pending_returns",
+            )
+
+            # 1) Create return requests for all assets assigned to this user
+            assets = Asset.objects.filter(agency=agency, current_holder=user, status="assigned")
+            created_rr = []
+            for asset in assets:
+                # avoid duplicates
+                if AssetReturnRequest.objects.filter(agency=agency, asset=asset, status="pending_ict").exists():
+                    continue
+                rr = AssetReturnRequest.objects.create(
+                    agency=agency,
+                    asset=asset,
+                    requested_by=user,
+                    reason=f"Exit Organization ({reason})",
+                    status="pending_ict",
+                )
+                created_rr.append(rr)
+
+            # 2) If user has SIM/Data lines: mark suspended + notify cell focal points
+            user_lines = MobileLine.objects.filter(agency=agency, assigned_to=user, status="assigned")
+            for line in user_lines:
+                line.suspend()
+
+        # Emails (after transaction is OK)
+        base_recipients, cell_focal_emails = _get_exit_recipients(user, agency)
+
+        # Email unit head + ops + ict
+        send_email_async(
+            subject=f"Exit Notice: {user.get_full_name() or user.username} ({reason})",
+            to_emails=base_recipients,
+            html_template="emails/exit/exit_submitted.html",
+            context={
+                "user": user,
+                "agency": agency,
+                "reason": reason,
+                "exit_req": exit_req,
+                "assets": assets,
+                "return_requests": created_rr,
+                "lines": user_lines,
+            },
+        )
+
+        # Email cell provider focal point(s) only if there are lines
+        if user_lines.exists() and cell_focal_emails:
+            send_email_async(
+                subject=f"Action Required: Disable lines for {user.get_full_name() or user.username}",
+                to_emails=cell_focal_emails,
+                html_template="emails/exit/disable_lines.html",
+                context={"user": user, "agency": agency, "lines": user_lines, "exit_req": exit_req},
+            )
+
+        messages.success(request, "Exit request submitted. Please return your assigned assets to ICT.")
+        return redirect("accounts:profile")
+
+    # GET
+    return render(request, "accounts/assets/exit_organization.html", {})

@@ -221,8 +221,10 @@ path(
     path("assets/<int:asset_id>/", view_asset_management.asset_detail, name="asset_detail"),
     path("assets/report/", view_asset_management.asset_report, name="asset_report"),
     path("assets/labels.pdf", view_asset_management.asset_labels_pdf, name="asset_labels_pdf"),
-path("assets/verify/", asset_verify, name="asset_verify"),
+    path("assets/verify/", asset_verify, name="asset_verify"),
     path("assets/verification-history/", asset_verification_history, name="asset_verification_history"),
+    path("exit/", view_asset_management.exit_organization, name="exit_organization"),
+
     # # ----- Requests workflow -----
     # path(
     #     "assets/requests/",
