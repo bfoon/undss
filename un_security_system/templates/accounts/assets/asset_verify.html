@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Asset Verification | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .am-hero {
+    background: linear-gradient(135deg, rgba(0,158,219,.10), rgba(0,90,139,.08));
+    border: 1px solid rgba(0,158,219,.15);
+  }
+  .am-scan-box {
+    border: 1px dashed rgba(0,158,219,.35);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(0,158,219,.03);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card am-hero">
+      <div class="card-body p-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+          <h4 class="mb-1 text-un-primary fw-bold">
+            <i class="bi bi-upc-scan me-2"></i> Asset Verification
+          </h4>
+          <div class="text-muted">Enter tag or scan QR, verify, and generate audit-ready history.</div>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{% url 'accounts:asset_verification_history' %}" class="btn btn-un-primary">
+            <i class="bi bi-clock-history me-1"></i> Verification History
+          </a>
+          <a href="{% url 'accounts:asset_management' %}" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-left me-1"></i> Back
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VERIFY FORM -->
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-check2-circle me-2"></i>Verify by Tag</h6></div>
+      <div class="card-body">
+        <form method="post" class="row g-2">
+          {% csrf_token %}
+          <input type="hidden" name="method" id="verifyMethod" value="manual">
+
+          <div class="col-12">
+            <label class="form-label">Asset Tag / QR value</label>
+            <input type="text" class="form-control" name="tag" id="tagInput"
+                   placeholder="Type tag or scan (scanner will auto-type here)" autofocus>
+            <div class="small text-muted mt-1">
+              Tip: Most handheld scanners behave like a keyboard — click here and scan.
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Location (optional)</label>
+            <input type="text" class="form-control" name="location" placeholder="e.g. UN House / Floor 2">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Note (optional)</label>
+            <input type="text" class="form-control" name="note" placeholder="e.g. physically seen, good condition">
+          </div>
+
+          <div class="col-12 d-flex gap-2 mt-2">
+            <button class="btn btn-un-primary">
+              <i class="bi bi-check-lg me-1"></i> Verify
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btnOpenScanner">
+              <i class="bi bi-camera me-1"></i> Scan with Camera
+            </button>
+          </div>
+        </form>
+
+        <!-- camera scanner area -->
+        <div class="am-scan-box mt-3 d-none" id="scanBox">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-semibold"><i class="bi bi-qr-code-scan me-1"></i> Camera Scan</div>
+            <button class="btn btn-sm btn-light" type="button" id="btnCloseScanner">Close</button>
+          </div>
+          <div id="qrReader" style="width:100%;"></div>
+          <div class="small text-muted mt-2">If camera is blocked, allow permission in the browser.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Result</h6></div>
+      <div class="card-body">
+        {% if found_asset %}
+          <div class="alert alert-success">
+            <div class="fw-semibold">Verified: {{ found_asset.name }}</div>
+            <div class="small text-muted">Tag: {{ found_asset.asset_tag }} • Status: {{ found_asset.get_status_display }}</div>
+          </div>
+          <a class="btn btn-outline-primary" href="{% url 'accounts:asset_detail' found_asset.id %}">
+            <i class="bi bi-box-arrow-up-right me-1"></i> Open Asset Detail
+          </a>
+        {% else %}
+          <div class="text-muted">No asset verified yet. Scan or enter a tag, then click Verify.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header"><h6 class="mb-0"><i class="bi bi-person-lines-fill me-2"></i>My Recent Verifications</h6></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>When</th>
+                <th>Asset</th>
+                <th>Tag</th>
+                <th>Method</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in recent %}
+                <tr>
+                  <td class="text-muted small">{{ v.verified_at }}</td>
+                  <td>
+                    <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' v.asset.id %}">
+                      {{ v.asset.name }}
+                    </a>
+                    <div class="small text-muted">{{ v.asset.category.name }}</div>
+                  </td>
+                  <td class="text-muted">{{ v.asset.asset_tag|default:v.tag_entered }}</td>
+                  <td><span class="badge bg-secondary">{{ v.get_method_display }}</span></td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4" class="text-center text-muted py-3">No recent verifications yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Optional scanner: html5-qrcode -->
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+  const scanBox = document.getElementById("scanBox");
+  const btnOpen = document.getElementById("btnOpenScanner");
+  const btnClose = document.getElementById("btnCloseScanner");
+  const tagInput = document.getElementById("tagInput");
+  const methodInput = document.getElementById("verifyMethod");
+
+  let qrScanner = null;
+
+  btnOpen?.addEventListener("click", async () => {
+    scanBox.classList.remove("d-none");
+    methodInput.value = "scan";
+
+    if (!qrScanner) {
+      qrScanner = new Html5Qrcode("qrReader");
+    }
+
+    try {
+      await qrScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 220 },
+        (decodedText) => {
+          tagInput.value = decodedText.trim();
+          // auto-submit after scan:
+          tagInput.form.submit();
+        }
+      );
+    } catch (e) {
+      alert("Unable to start camera scanner. Please allow camera access.");
+    }
+  });
+
+  btnClose?.addEventListener("click", async () => {
+    try { if (qrScanner) await qrScanner.stop(); } catch(e) {}
+    scanBox.classList.add("d-none");
+    methodInput.value = "manual";
+  });
+</script>
+{% endblock %}

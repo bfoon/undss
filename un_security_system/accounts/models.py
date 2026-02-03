@@ -1037,5 +1037,32 @@ class AssetChangeRequest(models.Model):
         return f"AssetChange #{self.id} - {self.asset}"
 
 
+class AssetVerification(models.Model):
+    METHOD_CHOICES = (
+        ("manual", "Manual Entry"),
+        ("scan", "Scan / QR"),
+    )
+
+    agency = models.ForeignKey("Agency", on_delete=models.CASCADE, related_name="asset_verifications")
+    asset = models.ForeignKey("Asset", on_delete=models.CASCADE, related_name="verifications")
+
+    verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    verified_at = models.DateTimeField(default=timezone.now)
+
+    method = models.CharField(max_length=10, choices=METHOD_CHOICES, default="manual")
+    tag_entered = models.CharField(max_length=80, blank=True, default="")
+
+    note = models.TextField(blank=True, default="")
+    location = models.CharField(max_length=120, blank=True, default="")  # optional
+
+    class Meta:
+        ordering = ("-verified_at",)
+        indexes = [
+            models.Index(fields=["agency", "verified_at"]),
+            models.Index(fields=["agency", "tag_entered"]),
+        ]
+
+    def __str__(self):
+        return f"{self.agency} - {self.asset} verified {self.verified_at:%Y-%m-%d}"
 
 from .hr.models import EmployeeIDCardRequest

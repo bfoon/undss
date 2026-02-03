@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Verification History | UN PASS{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>Verification History</h6>
+        <div class="d-flex gap-2">
+          <a class="btn btn-outline-primary" href="{% url 'accounts:asset_verify' %}">
+            <i class="bi bi-upc-scan me-1"></i> Verify Asset
+          </a>
+          <a class="btn btn-un-primary"
+             href="?{% if request.GET.tag %}tag={{ request.GET.tag }}&{% endif %}{% if request.GET.unit %}unit={{ request.GET.unit }}&{% endif %}{% if request.GET.category %}category={{ request.GET.category }}&{% endif %}{% if request.GET.verified_by %}verified_by={{ request.GET.verified_by }}&{% endif %}{% if request.GET.date_from %}date_from={{ request.GET.date_from }}&{% endif %}{% if request.GET.date_to %}date_to={{ request.GET.date_to }}&{% endif %}export=csv">
+            <i class="bi bi-download me-1"></i> Export CSV
+          </a>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <form method="get" class="row g-2">
+          <div class="col-md-3">
+            <label class="form-label">Tag contains</label>
+            <input class="form-control" name="tag" value="{{ request.GET.tag }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Unit</label>
+            <select class="form-select" name="unit">
+              <option value="">All</option>
+              {% for u in units %}
+                <option value="{{ u.id }}" {% if request.GET.unit == u.id|stringformat:"s" %}selected{% endif %}>{{ u.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Category</label>
+            <select class="form-select" name="category">
+              <option value="">All</option>
+              {% for c in categories %}
+                <option value="{{ c.id }}" {% if request.GET.category == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Date From</label>
+            <input type="date" class="form-control" name="date_from" value="{{ request.GET.date_from }}">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Date To</label>
+            <input type="date" class="form-control" name="date_to" value="{{ request.GET.date_to }}">
+          </div>
+
+          <div class="col-12 d-flex gap-2 mt-2">
+            <button class="btn btn-un-primary"><i class="bi bi-search me-1"></i>Apply</button>
+            <a class="btn btn-light" href="{% url 'accounts:asset_verification_history' %}">Reset</a>
+          </div>
+        </form>
+      </div>
+
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Verified</th>
+                <th>Asset</th>
+                <th>Tag</th>
+                <th>Unit</th>
+                <th>Verified By</th>
+                <th>Method</th>
+                <th>Location</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in verifications %}
+                <tr>
+                  <td class="text-muted small">{{ v.verified_at }}</td>
+                  <td>
+                    <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' v.asset.id %}">
+                      {{ v.asset.name }}
+                    </a>
+                    <div class="small text-muted">{{ v.asset.category.name }}</div>
+                  </td>
+                  <td class="text-muted">{{ v.asset.asset_tag|default:v.tag_entered }}</td>
+                  <td>{% if v.asset.unit %}{{ v.asset.unit.name }}{% else %}<span class="text-muted">Unallocated/Core</span>{% endif %}</td>
+                  <td>{{ v.verified_by.get_full_name|default:v.verified_by.username }}</td>
+                  <td><span class="badge bg-secondary">{{ v.get_method_display }}</span></td>
+                  <td class="text-muted">{{ v.location|default:"-" }}</td>
+                  <td class="text-muted">{{ v.note|default:"-"|truncatechars:60 }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="8" class="text-center text-muted py-4">No verifications found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

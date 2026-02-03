@@ -37,6 +37,13 @@
                href="?{% if request.GET.status %}status={{ request.GET.status }}&{% endif %}{% if request.GET.assigned %}assigned={{ request.GET.assigned }}&{% endif %}{% if request.GET.category %}category={{ request.GET.category }}&{% endif %}{% if request.GET.unit %}unit={{ request.GET.unit }}&{% endif %}export=csv">
               <i class="bi bi-download me-1"></i> Export CSV
             </a>
+            <a class="btn btn-outline-primary" href="{% url 'accounts:asset_verify' %}">
+            <i class="bi bi-upc-scan me-1"></i> Verify Assets
+            </a>
+
+            <a class="btn btn-outline-secondary" href="{% url 'accounts:asset_verification_history' %}">
+              <i class="bi bi-clock-history me-1"></i> Verification History
+            </a>
           </div>
         </div>
 

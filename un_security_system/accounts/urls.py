@@ -7,7 +7,7 @@ from .views_room_booking import (
     MyRoomBookingsView, RoomBookingCreateView, MyRoomApprovalsView,
     room_booking_approve_view, room_delete_view
 )
-
+from .views_asset_verify import asset_verify, asset_verification_history
 
 app_name = 'accounts'
 
@@ -221,7 +221,8 @@ path(
     path("assets/<int:asset_id>/", view_asset_management.asset_detail, name="asset_detail"),
     path("assets/report/", view_asset_management.asset_report, name="asset_report"),
     path("assets/labels.pdf", view_asset_management.asset_labels_pdf, name="asset_labels_pdf"),
-
+path("assets/verify/", asset_verify, name="asset_verify"),
+    path("assets/verification-history/", asset_verification_history, name="asset_verification_history"),
     # # ----- Requests workflow -----
     # path(
     #     "assets/requests/",
