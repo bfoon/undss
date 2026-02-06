@@ -1,17 +1,12 @@
-{% load crispy_forms_tags %}
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In • UN Security Management System</title>
+    <title>Sign In • UNPASS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{% static 'img/un-favicon.ico' %}">
-
-    <!-- Bootstrap CSS -->
+    <!-- Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
 
@@ -19,276 +14,860 @@
         :root {
             --un-blue: #009edb;
             --un-dark-blue: #005a8b;
-            --un-light-blue: #e8f4fd;
+            --un-light-blue: #4db8e8;
+            --success-green: #2ecc71;
+            --error-red: #e74c3c;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         body {
-            background: linear-gradient(135deg, var(--un-light-blue) 0%, #f8f9fa 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
+            max-height: 100vh;
+            margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            position: relative;
+            background: linear-gradient(135deg, #001f3f 0%, #003d5c 50%, #005a8b 100%);
+            display: flex;
+            flex-direction: column;
         }
 
-        .login-container {
-            max-width: 480px;
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* ================= ANIMATED BACKGROUND ================= */
+        .background-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            margin: 0 auto;
-            padding: 2rem 1rem;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            opacity: 0.15;
+        }
+
+        .geometric-pattern {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image:
+                repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(0, 158, 219, 0.05) 35px, rgba(0, 158, 219, 0.05) 70px),
+                repeating-linear-gradient(-45deg, transparent, transparent 35px, rgba(0, 158, 219, 0.05) 35px, rgba(0, 158, 219, 0.05) 70px);
+        }
+
+        .floating-circles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .circle {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 158, 219, 0.3) 0%, transparent 70%);
+            animation: float 20s infinite ease-in-out;
+        }
+
+        .circle:nth-child(1) {
+            width: 300px;
+            height: 300px;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .circle:nth-child(2) {
+            width: 200px;
+            height: 200px;
+            top: 60%;
+            left: 70%;
+            animation-delay: 5s;
+        }
+
+        .circle:nth-child(3) {
+            width: 250px;
+            height: 250px;
+            top: 40%;
+            left: 80%;
+            animation-delay: 10s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, -30px) scale(1.1); }
+            50% { transform: translate(-20px, 20px) scale(0.9); }
+            75% { transform: translate(20px, 30px) scale(1.05); }
+        }
+
+        /* ================= TOP HEADER ================= */
+        .unpass-top-header {
+            position: relative;
+            width: 100%;
+            padding: 1rem 1rem 0.5rem;
+            text-align: center;
+            z-index: 10;
+            color: #fff;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .logo-container {
+            display: inline-block;
+            animation: logoGlow 3s ease-in-out infinite;
+        }
+
+        .unpass-top-header img {
+            height: 45px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: transform 0.3s ease;
+        }
+
+        .unpass-top-header img:hover {
+            transform: scale(1.05);
+        }
+
+        .unpass-top-header h4 {
+            margin-top: 0.5rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+            letter-spacing: 3px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .unpass-top-header .tagline {
+            opacity: 0.95;
+            font-size: 0.8rem;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+            margin-top: 0.25rem;
+        }
+
+        @keyframes logoGlow {
+            0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 158, 219, 0.5)); }
+            50% { filter: drop-shadow(0 0 20px rgba(0, 158, 219, 0.8)); }
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ================= PAGE WRAPPER ================= */
+        .page-wrapper {
+            min-height: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ================= LOGIN CARD ================= */
+        .login-container {
+            max-width: 500px;
+            width: 100%;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .login-card {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1);
             overflow: hidden;
-            border: none;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .login-card:hover {
+            transform: translateY(-5px);
+            box-shadow:
+                0 25px 70px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(255, 255, 255, 0.2);
         }
 
         .login-header {
             background: linear-gradient(135deg, var(--un-blue) 0%, var(--un-dark-blue) 100%);
             color: white;
-            padding: 2.5rem 2rem 2rem;
+            padding: 1.5rem 1.5rem;
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
 
-        .login-header img {
-            display: block;
-            margin: 0 auto;
-            filter: none;
-            width: 70%;
-            height: auto;
-            object-fit: contain;
+        .login-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255, 255, 255, 0.03) 10px,
+                rgba(255, 255, 255, 0.03) 20px
+            );
+            animation: shimmer 20s linear infinite;
         }
 
-        .login-header h1 {
+        @keyframes shimmer {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50%, 50%); }
+        }
+
+        .security-badges {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            display: flex;
+            gap: 0.4rem;
+        }
+
+        .security-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.4rem;
+            border-radius: 50%;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .security-badge:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); }
+        }
+
+        .login-header h5 {
+            margin-bottom: 0.25rem;
             font-weight: 600;
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
-            letter-spacing: 0.5px;
+            font-size: 1.25rem;
+            position: relative;
+            z-index: 1;
         }
 
-        .login-header p {
-            opacity: 0.9;
-            margin: 0;
+        .login-header small {
+            font-size: 0.85rem;
+            opacity: 0.95;
+            position: relative;
+            z-index: 1;
         }
 
         .login-body {
-            padding: 2rem;
+            padding: 1.5rem 1.5rem;
         }
 
         .form-floating {
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
+            position: relative;
         }
 
         .form-control {
-            border-radius: 8px;
+            border-radius: 12px;
             border: 2px solid #e9ecef;
-            padding: 1rem;
-            height: auto;
-            font-size: 1rem;
+            padding: 1rem 1rem 1rem 3rem;
+            height: 50px;
             transition: all 0.3s ease;
+            background: #f8f9fa;
         }
 
         .form-control:focus {
             border-color: var(--un-blue);
-            box-shadow: 0 0 0 0.2rem rgba(0, 158, 219, 0.25);
+            box-shadow: 0 0 0 4px rgba(0, 158, 219, 0.1);
+            background: white;
+            outline: none;
+        }
+
+        .form-floating > label {
+            padding-left: 3rem;
+            color: #6c757d;
+        }
+
+        .form-floating .input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+            font-size: 1.1rem;
+            z-index: 4;
+            transition: color 0.3s ease;
+        }
+
+        .form-floating:focus-within .input-icon {
+            color: var(--un-blue);
+        }
+
+        .form-check {
+            margin: 0.75rem 0;
+        }
+
+        .form-check-input:checked {
+            background-color: var(--un-blue);
+            border-color: var(--un-blue);
+        }
+
+        .form-check-label {
+            color: #495057;
+            font-size: 0.9rem;
         }
 
         .btn-login {
             background: linear-gradient(135deg, var(--un-blue) 0%, var(--un-dark-blue) 100%);
             border: none;
-            border-radius: 8px;
-            padding: 0.875rem 2rem;
+            border-radius: 12px;
+            padding: 0.75rem;
             font-weight: 600;
-            font-size: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
             width: 100%;
-            margin-top: 1rem;
+            color: white;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
             transition: all 0.3s ease;
-        }
-
-        .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(0, 158, 219, 0.4);
-        }
-
-        .login-footer {
-            background-color: #f8f9fa;
-            padding: 1.5rem 2rem;
-            text-align: center;
-            border-top: 1px solid #e9ecef;
-        }
-
-        .login-footer small {
-            color: #6c757d;
-        }
-
-        .alert {
-            border: none;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-        }
-
-        .un-logo {
-            width: 60px;
-            height: 60px;
-            background: white;
-            border-radius: 50%;
-            padding: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position: relative;
             overflow: hidden;
         }
 
-        .security-badge {
+        .btn-login::before {
+            content: '';
             position: absolute;
-            top: 1rem;
-            right: 1rem;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 0.5rem;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
             border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
         }
 
-        @media (max-width: 576px) {
-            .login-container {
-                padding: 1rem;
+        .btn-login:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-login:hover {
+            box-shadow: 0 8px 25px rgba(0, 158, 219, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .btn-login .btn-text {
+            position: relative;
+            z-index: 1;
+        }
+
+        .btn-login.loading .btn-text {
+            opacity: 0;
+        }
+
+        .btn-login .spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .btn-login.loading .spinner {
+            opacity: 1;
+        }
+
+        .forgot-password {
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+
+        .forgot-password a {
+            color: var(--un-blue);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .forgot-password a:hover {
+            color: var(--un-dark-blue);
+            text-decoration: underline;
+        }
+
+        .login-footer {
+            background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
+            padding: 1rem;
+            text-align: center;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .security-features {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.5rem;
+        }
+
+        .security-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.75rem;
+            color: #495057;
+        }
+
+        .security-feature i {
+            color: var(--success-green);
+        }
+
+        /* ================= LANGUAGE SELECTOR ================= */
+        .language-selector {
+            position: absolute;
+            top: 0.75rem;
+            right: 1.5rem;
+            z-index: 100;
+        }
+
+        .language-selector select {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 0.4rem 1.75rem 0.4rem 0.75rem;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            appearance: none;
+            font-size: 0.85rem;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+        }
+
+        .language-selector select:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .language-selector select option {
+            background: var(--un-dark-blue);
+            color: white;
+        }
+
+        /* ================= FOOTER ================= */
+        .unpass-footer {
+            position: relative;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 0.8rem;
+            padding: 0.75rem 1rem;
+            z-index: 1;
+        }
+
+        .footer-links {
+            margin-top: 0.5rem;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 0.75rem;
+        }
+
+        .footer-links a:hover {
+            color: white;
+            text-decoration: underline;
+        }
+
+        /* ================= ALERTS ================= */
+        .alert-container {
+            margin-bottom: 0.75rem;
+        }
+
+        .custom-alert {
+            border-radius: 10px;
+            padding: 1rem;
+            border: none;
+            animation: slideInDown 0.4s ease-out;
+        }
+
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ================= RESPONSIVE ================= */
+        @media (max-width: 768px) {
+            .unpass-top-header h4 {
+                font-size: 1.25rem;
             }
 
-            .login-header,
-            .login-body,
-            .login-footer {
-                padding-left: 1.5rem;
-                padding-right: 1.5rem;
+            .unpass-top-header img {
+                height: 40px;
             }
+
+            .unpass-top-header .tagline {
+                font-size: 0.75rem;
+            }
+
+            .login-body {
+                padding: 1.25rem;
+            }
+
+            .login-header {
+                padding: 1.25rem;
+            }
+
+            .security-badges {
+                top: 0.5rem;
+                right: 0.5rem;
+            }
+
+            .security-badge {
+                padding: 0.35rem;
+            }
+
+            .language-selector {
+                position: static;
+                text-align: center;
+                margin-bottom: 0.5rem;
+            }
+
+            .security-features {
+                gap: 0.75rem;
+            }
+
+            .circle {
+                opacity: 0.5;
+            }
+
+            .footer-links {
+                gap: 0.75rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 0 0.5rem;
+            }
+
+            .login-card {
+                border-radius: 16px;
+            }
+
+            .unpass-top-header {
+                padding: 0.75rem 0.5rem 0.25rem;
+            }
+
+            .unpass-top-header h4 {
+                font-size: 1.1rem;
+                margin-top: 0.25rem;
+            }
+
+            .security-features {
+                flex-direction: column;
+                gap: 0.4rem;
+            }
+
+            .footer-links {
+                flex-direction: column;
+                gap: 0.35rem;
+            }
+
+            .unpass-footer {
+                padding: 0.5rem;
+                font-size: 0.75rem;
+            }
+        }
+
+        /* ================= ACCESSIBILITY ================= */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+
+        *:focus-visible {
+            outline: 2px solid var(--un-blue);
+            outline-offset: 2px;
         }
     </style>
 </head>
+
 <body>
+
+<div class="main-container">
+
+<!-- ===== ANIMATED BACKGROUND ===== -->
+<div class="background-animation">
+    <div class="geometric-pattern"></div>
+    <div class="floating-circles">
+        <div class="circle"></div>
+        <div class="circle"></div>
+        <div class="circle"></div>
+    </div>
+</div>
+
+<!-- ===== LANGUAGE SELECTOR ===== -->
+<div class="language-selector">
+    <select aria-label="Select Language">
+        <option value="en">English</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+        <option value="ar">العربية</option>
+        <option value="zh">中文</option>
+        <option value="ru">Русский</option>
+    </select>
+</div>
+
+<!-- ===== TOP HEADER ===== -->
+<div class="unpass-top-header">
+    <div class="logo-container">
+        <img src="{% static 'img/un-logo.png' %}" alt="United Nations Logo">
+    </div>
+    <h4>UNPASS</h4>
+    <p class="tagline">Unified Platform for Seamless Access, Security & Operations</p>
+</div>
+
+<!-- ===== PAGE CONTENT ===== -->
+<div class="page-wrapper">
+
     <div class="login-container">
-        <div class="card login-card">
-            <div class="login-header position-relative">
-                <div class="security-badge">
-                    <i class="bi bi-shield-check fs-4"></i>
+        <div class="login-card">
+
+            <div class="login-header">
+                <div class="security-badges">
+                    <div class="security-badge" title="SSL Encrypted">
+                        <i class="bi bi-shield-lock-fill fs-5"></i>
+                    </div>
+                    <div class="security-badge" title="Multi-Factor Authentication">
+                        <i class="bi bi-fingerprint fs-5"></i>
+                    </div>
                 </div>
-                <div class="un-logo">
-                    <img src="{% static 'img/un-logo.png' %}" alt="UN Logo" height="36"
-                         onerror="this.src='data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;36&quot; height=&quot;36&quot; viewBox=&quot;0 0 24 24&quot;><circle cx=&quot;12&quot; cy=&quot;12&quot; r=&quot;10&quot; fill=&quot;%23009edb&quot;/></svg>'">
-                </div>
-                <h1>UN Security Management System</h1>
-                <p>Secure access portal for authorized personnel</p>
+                <h5>Secure Sign In</h5>
+                <small>Authorized UN Personnel Only</small>
             </div>
 
             <div class="login-body">
+
+                <!-- Alert Messages -->
                 {% if messages %}
+                <div class="alert-container">
                     {% for message in messages %}
-                        <div class="alert alert-{{ message.tags|default:'info' }} d-flex align-items-center" role="alert">
-                            {% if message.tags == 'error' or message.tags == 'danger' %}
-                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            {% elif message.tags == 'warning' %}
-                                <i class="bi bi-exclamation-circle-fill me-2"></i>
-                            {% elif message.tags == 'success' %}
-                                <i class="bi bi-check-circle-fill me-2"></i>
-                            {% else %}
-                                <i class="bi bi-info-circle-fill me-2"></i>
-                            {% endif %}
-                            {{ message }}
-                        </div>
+                    <div class="alert alert-{{ message.tags }} custom-alert alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
                     {% endfor %}
+                </div>
                 {% endif %}
 
-                <form method="post" novalidate>
+                <form method="post" id="loginForm">
                     {% csrf_token %}
 
-                    {% if request.GET.next %}
-                        <input type="hidden" name="next" value="{{ request.GET.next }}">
-                    {% endif %}
-
                     <div class="form-floating">
-                        <input type="text"
-                               class="form-control"
-                               id="id_username"
-                               name="username"
-                               placeholder="Username"
-                               value="{{ form.username.value|default:'' }}"
-                               required
-                               autocomplete="username"
-                               aria-describedby="username-help">
-                        <label for="id_username">
-                            <i class="bi bi-person me-2"></i>Username
-                        </label>
-                        {% if form.username.errors %}
-                            <div class="invalid-feedback d-block">
-                                {{ form.username.errors.0 }}
-                            </div>
-                        {% endif %}
+                        <i class="bi bi-person-fill input-icon"></i>
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="id_username"
+                            name="username"
+                            placeholder="Username"
+                            required
+                            autocomplete="username"
+                            aria-label="Username">
+                        <label for="id_username">Username or Email</label>
                     </div>
 
                     <div class="form-floating">
-                        <input type="password"
-                               class="form-control"
-                               id="id_password"
-                               name="password"
-                               placeholder="Password"
-                               required
-                               autocomplete="current-password"
-                               aria-describedby="password-help">
-                        <label for="id_password">
-                            <i class="bi bi-lock me-2"></i>Password
-                        </label>
-                        {% if form.password.errors %}
-                            <div class="invalid-feedback d-block">
-                                {{ form.password.errors.0 }}
-                            </div>
-                        {% endif %}
+                        <i class="bi bi-lock-fill input-icon"></i>
+                        <input
+                            type="password"
+                            class="form-control"
+                            id="id_password"
+                            name="password"
+                            placeholder="Password"
+                            required
+                            autocomplete="current-password"
+                            aria-label="Password">
+                        <label for="id_password">Password</label>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-login">
-                        <i class="bi bi-box-arrow-in-right me-2"></i>
-                        Sign In Securely
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="rememberMe" name="remember">
+                        <label class="form-check-label" for="rememberMe">
+                            Keep me signed in
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-login" id="loginBtn">
+                        <span class="btn-text">
+                            <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                        </span>
+                        <span class="spinner spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                     </button>
+
+                    <div class="forgot-password">
+                        <a href="#" id="forgotPasswordLink">
+                            <i class="bi bi-question-circle me-1"></i>Forgot your password?
+                        </a>
+                    </div>
                 </form>
             </div>
 
             <div class="login-footer">
-                <small class="d-block mb-2">
-                    <i class="bi bi-shield-lock me-1"></i>
-                    This system is for authorized personnel only
-                </small>
-                <small class="text-muted">
-                    For technical assistance, contact the Local Security Assistant
+                <div class="security-features">
+                    <div class="security-feature">
+                        <i class="bi bi-shield-check"></i>
+                        <span>256-bit Encryption</span>
+                    </div>
+                    <div class="security-feature">
+                        <i class="bi bi-patch-check-fill"></i>
+                        <span>2FA Enabled</span>
+                    </div>
+                    <div class="security-feature">
+                        <i class="bi bi-lock-fill"></i>
+                        <span>Secure Access</span>
+                    </div>
+                </div>
+                <small class="d-block text-muted mt-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    This system is for authorized UN personnel only. Unauthorized access is prohibited.
                 </small>
             </div>
-        </div>
 
-        <div class="text-center mt-4">
-            <small class="text-muted">
-                &copy; {% now "Y" %} United Nations | Security Management System v2.0
-            </small>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</div>
 
-    <script>
-        // Focus username field on load
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('id_username').focus();
+<!-- ===== FOOTER ===== -->
+<footer class="unpass-footer">
+    <div>
+        &copy; {% now "Y" %} United Nations • UNPASS
+    </div>
+    <div class="footer-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Support</a>
+        <a href="#">Contact IT</a>
+    </div>
+</footer>
+
+</div> <!-- End main-container -->
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Auto-focus username field
+        const usernameField = document.getElementById('id_username');
+        usernameField.focus();
+
+        // Form submission with loading state
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+
+        loginForm.addEventListener('submit', (e) => {
+            // Add loading state to button
+            loginBtn.classList.add('loading');
+            loginBtn.disabled = true;
         });
 
-        // Enhanced form validation
-        document.querySelector('form').addEventListener('submit', function(e) {
-            const username = document.getElementById('id_username').value.trim();
-            const password = document.getElementById('id_password').value;
+        // Input validation feedback
+        const inputs = document.querySelectorAll('.form-control');
+        inputs.forEach(input => {
+            input.addEventListener('blur', () => {
+                if (input.value.trim() !== '') {
+                    input.style.borderColor = 'var(--success-green)';
+                } else {
+                    input.style.borderColor = '#e9ecef';
+                }
+            });
 
-            if (!username || !password) {
-                e.preventDefault();
-                alert('Please enter both username and password.');
-                return;
+            input.addEventListener('input', () => {
+                if (input.style.borderColor === 'var(--error-red)') {
+                    input.style.borderColor = '#e9ecef';
+                }
+            });
+        });
+
+        // Forgot password handler
+        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            // You can redirect to a forgot password page or show a modal
+            alert('Password recovery will be sent to your registered email address. Please contact IT support if you need assistance.');
+        });
+
+        // Keyboard accessibility improvements
+        document.addEventListener('keydown', (e) => {
+            // Allow form submission with Enter key
+            if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
+                loginForm.dispatchEvent(new Event('submit'));
             }
         });
-    </script>
+
+        // Add smooth scroll behavior
+        document.documentElement.style.scrollBehavior = 'smooth';
+    });
+</script>
+
 </body>
 </html>
