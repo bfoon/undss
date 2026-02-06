@@ -25,7 +25,7 @@ from .models import (
     AgencyServiceConfig, AgencyAssetRoles, Unit,
     AssetCategory, Asset, AssetRequest,
     AssetHistory, AssetReturnRequest, AssetChangeRequest, ExitRequest,
-    MobileLine, CellServiceFocalPoint
+    MobileLine, CellServiceFocalPoint, User
 )
 from .pdf_assets import build_asset_labels_pdf, LabelSpec
 
@@ -512,6 +512,45 @@ def view_asset_management(request):
             messages.success(request, f"Mobile line registered: {msisdn}")
             return redirect("accounts:asset_management")
 
+        # ============ Assign Mobile Line ============
+        if action == "assign_mobile_line":
+            line_id = request.POST.get("line_id")
+            assignee_id = request.POST.get("assignee_id")
+
+            # Permission: ICT or Ops/Asset Manager
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Asset Manager can assign mobile lines.")
+                return redirect("accounts:asset_management")
+
+            line = get_object_or_404(MobileLine, agency=agency, id=line_id)
+
+            # Only allow assigning available lines (you can relax this if needed)
+            if line.status != "available":
+                messages.warning(request, "This line is not available for assignment.")
+                return redirect("accounts:asset_management")
+
+            # Assignee must be a user in same agency
+            assignee = get_object_or_404(settings.AUTH_USER_MODEL, id=assignee_id)
+            if getattr(assignee, "agency_id", None) != agency.id:
+                messages.error(request, "You can only assign lines to users in your agency.")
+                return redirect("accounts:asset_management")
+
+            # Prevent user from holding duplicate active lines if you want
+            # (optional business rule)
+            # if MobileLine.objects.filter(agency=agency, assigned_to=assignee, status="assigned").exists():
+            #     messages.warning(request, "This user already has an assigned line.")
+            #     return redirect("accounts:asset_management")
+
+            # Assign
+            line.assigned_to = assignee
+            line.status = "assigned"
+            line.issued_at = timezone.now()
+            line.save(update_fields=["assigned_to", "status", "issued_at"])
+
+            messages.success(request,
+                             f"Line {line.msisdn} assigned to {assignee.get_full_name() or assignee.username}.")
+            return redirect("accounts:asset_management")
+
         # ============ 4) ICT assign asset ============
         if action == "assign_asset":
             req_id = request.POST.get("request_id")
@@ -814,6 +853,10 @@ def view_asset_management(request):
             cr for cr in cr_qs if can_user_approve_asset_change(user, cr.asset, roles)
         ]
 
+        agency_users = User.objects.filter(
+            agency=agency, is_active=True
+        ).order_by("first_name", "last_name", "username")
+
 
     return render(request, "accounts/assets/asset_management.html", {
         "svc": svc,
@@ -821,6 +864,7 @@ def view_asset_management(request):
         "is_ict": is_ict,
         "is_manager": is_manager,
         "is_ops": is_ops,
+        "agency_users": agency_users,
         "pending_change_approvals": pending_change_approvals,
 
         "units": units,

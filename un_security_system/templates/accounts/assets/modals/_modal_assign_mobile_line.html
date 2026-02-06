@@ -1,0 +1,63 @@
+<div class="modal fade" id="modalAssignLine" tabindex="-1" aria-labelledby="modalAssignLineLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <form method="post" action="{% url 'accounts:asset_management' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="assign_mobile_line">
+        <input type="hidden" name="line_id" id="assignLineId">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalAssignLineLabel">
+            <i class="bi bi-person-plus me-2"></i> Assign Mobile Line
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <div class="alert alert-info py-2">
+            Assigning: <strong id="assignLineMsisdn">—</strong>
+          </div>
+
+          <label class="form-label fw-semibold">Assign to user</label>
+          <select name="assignee_id" class="form-select" required>
+            <option value="">-- Select user --</option>
+            {% for u in agency_users %}
+              <option value="{{ u.id }}">
+                {{ u.get_full_name|default:u.username }}{% if u.email %} ({{ u.email }}){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+
+          <div class="form-text">
+            Only users in this agency can be selected.
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2-circle me-1"></i> Assign
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    const modal = document.getElementById('modalAssignLine');
+    if(!modal) return;
+
+    modal.addEventListener('show.bs.modal', function (event) {
+      const btn = event.relatedTarget;
+      const lineId = btn.getAttribute('data-line-id');
+      const msisdn = btn.getAttribute('data-msisdn');
+
+      document.getElementById('assignLineId').value = lineId;
+      document.getElementById('assignLineMsisdn').textContent = msisdn || '—';
+    });
+  })();
+</script>

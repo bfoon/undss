@@ -24,6 +24,8 @@
         <th>Assigned To</th>
         <th>Custodian</th>
         <th>Created</th>
+        <th>Actions</th>
+
       </tr>
     </thead>
 
@@ -65,6 +67,20 @@
           </td>
 
           <td class="text-muted">{{ line.created_at|date:"Y-m-d H:i" }}</td>
+          <td>
+        {% if is_ict or is_ops and line.status == "available" %}
+          <button class="btn btn-sm btn-outline-primary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalAssignLine"
+                  data-line-id="{{ line.id }}"
+                  data-msisdn="{{ line.msisdn }}">
+            <i class="bi bi-person-plus me-1"></i> Assign
+          </button>
+        {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+
         </tr>
       {% empty %}
         <tr>
