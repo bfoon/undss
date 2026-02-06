@@ -28,7 +28,7 @@
     </thead>
 
     <tbody>
-      {% for line in mobile_lines %}
+      {% for line in mobile_lines_visible %}
         <tr>
           <td class="fw-semibold">{{ line.msisdn }}</td>
           <td>{{ line.get_line_type_display }}</td>

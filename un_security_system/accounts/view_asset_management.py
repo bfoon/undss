@@ -828,6 +828,7 @@ def view_asset_management(request):
 
         "assets": assets_visible,
         "eol_assets": eol_assets,
+        "mobile_lines_visible": mobile_lines_visible,
 
         "my_requests": my_requests,
         "pending_approvals": pending_approvals,
