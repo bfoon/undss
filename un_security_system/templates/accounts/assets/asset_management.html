@@ -62,6 +62,10 @@
               <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterAsset">
                 <i class="bi bi-plus-circle me-1"></i> Register Asset
               </button>
+
+             <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterMobileLine">
+              <i class="bi bi-sim me-1"></i> Register Mobile Line
+            </button>
             {% endif %}
 
             <a class="btn btn-outline-primary" href="{% url 'accounts:asset_report' %}">
@@ -195,6 +199,13 @@
               <i class="bi bi-laptop me-1"></i> Assets Registry
             </button>
           </li>
+
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-lines" data-bs-toggle="tab" data-bs-target="#pane-lines" type="button" role="tab">
+            <i class="bi bi-sim me-1"></i> Mobile Lines
+          </button>
+          </li>
+
         </ul>
 
         <div class="tab-content" id="assetTabsContent">
@@ -225,6 +236,12 @@
             {% include "accounts/assets/partials/_assets_table.html" %}
           </div>
 
+          <div class="tab-pane fade am-anchor" id="pane-lines" role="tabpanel" aria-labelledby="tab-lines">
+          <div id="mobile-lines"></div>
+          {% include "accounts/assets/partials/_mobile_lines_table.html" %}
+        </div>
+
+
         </div>
 
       </div>
@@ -236,6 +253,7 @@
 {# Modals #}
 {% include "accounts/assets/modals/_modal_request_asset.html" %}
 {% include "accounts/assets/modals/_modal_register_asset.html" %}
+{% include "accounts/assets/modals/_modal_register_mobile_line.html" %}
 {% include "accounts/assets/modals/_modal_reject.html" %}
 {% include "accounts/assets/modals/_modal_assign_asset.html" %}
 {% include "accounts/assets/modals/_modal_return_asset.html" %}

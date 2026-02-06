@@ -1,0 +1,76 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h6 class="mb-0"><i class="bi bi-sim me-2"></i>Mobile Lines</h6>
+    <div class="text-muted small">SIM cards and data plan lines registered by ICT custodian.</div>
+  </div>
+
+  {% if is_ict %}
+    <button class="btn btn-sm btn-outline-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#modalRegisterMobileLine">
+      <i class="bi bi-plus-circle me-1"></i> Register Mobile Line
+    </button>
+  {% endif %}
+</div>
+
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead>
+      <tr>
+        <th>MSISDN</th>
+        <th>Type</th>
+        <th>Provider</th>
+        <th>Status</th>
+        <th>Assigned To</th>
+        <th>Custodian</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for line in mobile_lines %}
+        <tr>
+          <td class="fw-semibold">{{ line.msisdn }}</td>
+          <td>{{ line.get_line_type_display }}</td>
+          <td>{{ line.provider|default:"-" }}</td>
+
+          <td>
+            {% if line.status == "available" %}
+              <span class="badge bg-success-subtle text-success border border-success-subtle">Available</span>
+            {% elif line.status == "assigned" %}
+              <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Assigned</span>
+            {% elif line.status == "suspended" %}
+              <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Suspended</span>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                {{ line.get_status_display }}
+              </span>
+            {% endif %}
+          </td>
+
+          <td>
+            {% if line.assigned_to %}
+              {{ line.assigned_to.get_full_name|default:line.assigned_to.username }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+
+          <td>
+            {% if line.custodian %}
+              {{ line.custodian.get_full_name|default:line.custodian.username }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+
+          <td class="text-muted">{{ line.created_at|date:"Y-m-d H:i" }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="7" class="text-muted">No mobile lines registered yet.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

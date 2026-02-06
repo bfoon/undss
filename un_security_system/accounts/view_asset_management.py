@@ -269,6 +269,19 @@ def view_asset_management(request):
         eol_assets = [a for a in assets_visible if getattr(a, "is_eol_due", False) and a.status != "retired"]
 
     # -----------------------------
+    # Mobile Lines visibility
+    # -----------------------------
+    if is_ict:
+        mobile_lines_visible = MobileLine.objects.filter(agency=agency).select_related(
+            "custodian", "assigned_to"
+        ).order_by("-created_at")
+    else:
+        # Normal users: only see their own assigned lines
+        mobile_lines_visible = MobileLine.objects.filter(
+            agency=agency, assigned_to=user
+        ).select_related("custodian", "assigned_to").order_by("-created_at")
+
+    # -----------------------------
     # POST actions
     # -----------------------------
     if request.method == "POST":
@@ -450,6 +463,55 @@ def view_asset_management(request):
             messages.success(request, "Asset registered successfully (tag + QR generated).")
             return redirect("accounts:asset_management")
 
+        # ============ 3B) Register Mobile Line (SIM/Data) ============
+        if action == "register_mobile_line":
+            # Only ICT can register lines (custodian)
+            if not is_ict:
+                messages.error(request, "Only ICT custodian can register mobile lines.")
+                return redirect("accounts:asset_management")
+
+            line_type = (request.POST.get("line_type") or "").strip()
+            provider = (request.POST.get("provider") or "").strip()
+            msisdn = (request.POST.get("msisdn") or "").strip()
+            sim_serial = (request.POST.get("sim_serial") or "").strip()
+            notes = (request.POST.get("notes") or "").strip()
+
+            valid_types = {"sim", "data", "sim_data"}
+            if line_type not in valid_types:
+                messages.error(request, "Please select a valid line type (SIM, Data, or SIM + Data).")
+                return redirect("accounts:asset_management")
+
+            if not msisdn:
+                messages.error(request, "Phone number (MSISDN) is required.")
+                return redirect("accounts:asset_management")
+
+            # Optional: normalize MSISDN a bit (remove spaces)
+            msisdn = msisdn.replace(" ", "")
+
+            # Prevent duplicates nicely (msisdn is unique in model)
+            if MobileLine.objects.filter(msisdn=msisdn).exists():
+                messages.warning(request, f"This line ({msisdn}) is already registered in the system.")
+                return redirect("accounts:asset_management")
+
+            try:
+                MobileLine.objects.create(
+                    agency=agency,
+                    line_type=line_type,
+                    provider=provider,
+                    msisdn=msisdn,
+                    sim_serial=sim_serial,
+                    custodian=user,  # who registered it
+                    status="available",  # newly registered lines are available
+                    notes=notes,
+                )
+            except IntegrityError:
+                # Safety net for race conditions / double submit
+                messages.warning(request, f"This line ({msisdn}) is already registered in the system.")
+                return redirect("accounts:asset_management")
+
+            messages.success(request, f"Mobile line registered: {msisdn}")
+            return redirect("accounts:asset_management")
+
         # ============ 4) ICT assign asset ============
         if action == "assign_asset":
             req_id = request.POST.get("request_id")
@@ -592,37 +654,60 @@ def view_asset_management(request):
                 messages.info(request, "This return request is already processed.")
                 return redirect("accounts:asset_management")
 
+            # The exiting user (the person who requested the return)
+            exit_user = rr.requested_by
+
+            # 1) Put asset back to pool
             asset = rr.asset
             asset.status = "available"
             asset.current_holder = None
             asset.save(update_fields=["status", "current_holder"])
 
+            # 2) Mark return request received
             rr.status = "received"
             rr.verified_by = user
             rr.verified_at = timezone.now()
             rr.save(update_fields=["status", "verified_by", "verified_at"])
 
-            pending = AssetReturnRequest.objects.filter(
+            # 3) ✅ Clear exit request ONLY if there are no more pending returns for this user
+            still_pending = AssetReturnRequest.objects.filter(
                 agency=agency,
                 requested_by=exit_user,
-                status="pending_ict"
+                status="pending_ict",
             ).exists()
 
-            if not pending:
-                ExitRequest.objects.filter(agency=agency, user=exit_user,
-                                           status__in=["pending_returns", "pending_ict_confirmation"]) \
-                    .update(status="cleared", cleared_at=timezone.now())
+            if not still_pending:
+                ExitRequest.objects.filter(
+                    agency=agency,
+                    user=exit_user,
+                    status__in=["pending_returns", "pending_ict_confirmation", "submitted"]
+                ).update(
+                    status="cleared",
+                    cleared_at=timezone.now()
+                )
 
-            _log_event(agency, asset, user, "return_received", note="ICT verified return and placed asset back to pool.", meta={"return_id": rr.id})
+            _log_event(
+                agency,
+                asset,
+                user,
+                "return_received",
+                note="ICT verified return and placed asset back to pool.",
+                meta={"return_id": rr.id},
+            )
 
+            # Notify the exiting user
             _notify(
                 subject=f"Asset Return #{rr.id} — Received by ICT",
-                to_emails=[getattr(rr.requested_by, "email", None)],
+                to_emails=[getattr(exit_user, "email", None)],
                 html_template="emails/assets/return_received.html",
                 ctx={"rr": rr, "asset": asset},
             )
 
-            messages.success(request, "Return verified. Asset is now back in the pool.")
+            if not still_pending:
+                messages.success(request, "Return verified. All pending returns completed — exit request cleared.")
+            else:
+                messages.success(request, "Return verified. Asset is now back in the pool.")
+
             return redirect("accounts:asset_management")
 
         # ============ 8) ICT mark retired/disposed ============
