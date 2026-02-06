@@ -240,6 +240,14 @@
             .table-responsive {
                 font-size: 0.875rem;
             }
+            .navbar-brand img {
+              display: block;
+          }
+
+          .navbar-brand .bg-white {
+              box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+          }
+
         }
     </style>
 
@@ -249,11 +257,40 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-un-primary shadow-sm" role="navigation" aria-label="Main navigation">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'dashboard:dashboard' %}" aria-label="UN Security System Home">
-                <i class="bi bi-shield-check" aria-hidden="true"></i>
-                <span>UN PASS</span>
-            </a>
+            <a class="navbar-brand d-flex align-items-center gap-2"
+               href="{% url 'dashboard:dashboard' %}"
+               aria-label="UN Security System Home">
 
+                {% if user.is_authenticated %}
+                    {% if user.agency and user.agency.logo %}
+                        <div class="d-flex flex-column align-items-center lh-1">
+
+                            <!-- White logo container -->
+                            <div class="bg-white rounded-2 p-1 d-flex align-items-center justify-content-center"
+                                 style="min-width:40px; min-height:40px;">
+                                <img src="{{ user.agency.logo.url }}"
+                                     alt="{{ user.agency.name }} Logo"
+                                     height="28"
+                                     style="max-width:100px; object-fit:contain;">
+                            </div>
+
+                            {% if user.agency.code %}
+                                <small class="text-white-50 fw-semibold mt-1"
+                                       style="font-size:0.65rem; letter-spacing:0.6px;">
+                                    {{ user.agency.code|upper }}
+                                </small>
+                            {% endif %}
+
+                        </div>
+                    {% else %}
+                        <i class="bi bi-shield-check" aria-hidden="true"></i>
+                    {% endif %}
+                {% else %}
+                    <i class="bi bi-shield-check" aria-hidden="true"></i>
+                {% endif %}
+
+                <span class="fw-semibold">UN PASS</span>
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
                     aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>

@@ -1126,6 +1126,7 @@ class MobileLine(models.Model):
 class ExitRequest(models.Model):
     REASONS = (
         ("resigned", "Resigned"),
+        ("end_of_service", "End Of Service"),
         ("reassigned", "Reassigned"),
     )
 
@@ -1152,6 +1153,27 @@ class ExitRequest(models.Model):
 
     def __str__(self):
         return f"ExitRequest({self.user} - {self.reason} - {self.status})"
+
+class CellServiceFocalPoint(models.Model):
+    agency = models.ForeignKey(
+        Agency,
+        on_delete=models.CASCADE,
+        related_name="cell_service_focal_points"
+    )
+    name = models.CharField(max_length=120)
+    company_name = models.CharField(max_length=160, blank=True)
+    email = models.EmailField()
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("agency", "email")
+        ordering = ["company_name", "name"]
+
+    def __str__(self):
+        company = f" ({self.company_name})" if self.company_name else ""
+        return f"{self.name}{company} - {self.email}"
 
 
 from .hr.models import EmployeeIDCardRequest

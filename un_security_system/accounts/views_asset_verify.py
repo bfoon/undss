@@ -1,10 +1,12 @@
 import csv
+import re
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from urllib.parse import urlparse, parse_qs
 
 from .models import Asset, AssetVerification, AgencyServiceConfig, AgencyAssetRoles, Unit, AssetCategory
 from .view_asset_management import _is_ict, _is_ops_manager, _managed_unit_ids
@@ -15,6 +17,33 @@ def _can_verify_assets(user, agency, roles, is_ict, is_ops, managed_units):
     if user.is_superuser or is_ict or is_ops:
         return True
     return bool(managed_units)
+
+
+def extract_asset_id(raw_value: str) -> int | None:
+    """
+    Supports:
+    - "3"
+    - "/accounts/assets/asset/3/"
+    - "https://domain/.../asset/3/"
+    - Any URL path that ends with /<int>/
+    """
+    if not raw_value:
+        return None
+
+    raw_value = raw_value.strip()
+
+    if raw_value.isdigit():
+        return int(raw_value)
+
+    try:
+        path = urlparse(raw_value).path if raw_value.startswith("http") else raw_value
+        nums = re.findall(r"/(\d+)/?$", path)
+        if nums:
+            return int(nums[0])
+    except Exception:
+        return None
+
+    return None
 
 
 @login_required
@@ -50,19 +79,39 @@ def asset_verify(request):
     last_verifications = []
 
     if request.method == "POST":
-        tag = (request.POST.get("tag") or "").strip()
+        raw = (request.POST.get("tag") or "").strip()
         method = (request.POST.get("method") or "manual").strip()
         note = (request.POST.get("note") or "").strip()
         location = (request.POST.get("location") or "").strip()
 
-        if not tag:
+        if not raw:
             messages.error(request, "Please enter or scan an asset tag.")
             return redirect("accounts:asset_verify")
 
         # Lookup asset by tag within agency
-        asset = Asset.objects.filter(agency=agency, asset_tag__iexact=tag).select_related(
-            "category", "unit", "current_holder"
-        ).first()
+        asset = None
+        tag_entered = ""
+
+        # 1) If scan gives a URL or an ID -> resolve by ID
+        asset_id = extract_asset_id(raw)
+        if asset_id:
+            asset = Asset.objects.filter(
+                agency=agency, id=asset_id
+            ).select_related("category", "unit", "current_holder").first()
+            tag_entered = str(asset_id)  # what was scanned (id/url), for audit trail
+            method = "scan"
+
+        # 2) Otherwise treat as a tag
+        if not asset:
+            tag = raw
+            if not tag:
+                messages.error(request, "Please enter or scan an asset tag.")
+                return redirect("accounts:asset_verify")
+
+            asset = Asset.objects.filter(
+                agency=agency, asset_tag__iexact=tag
+            ).select_related("category", "unit", "current_holder").first()
+            tag_entered = tag
 
         if not asset:
             messages.error(request, f"No asset found for tag: {tag}")
@@ -88,7 +137,7 @@ def asset_verify(request):
             verified_by=user,
             verified_at=timezone.now(),
             method=method if method in ("manual", "scan") else "manual",
-            tag_entered=tag,
+            tag_entered=tag_entered,
             note=note,
             location=location,
         )

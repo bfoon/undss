@@ -133,7 +133,7 @@
                     </a>
                     <div class="small text-muted">{{ v.asset.category.name }}</div>
                   </td>
-                  <td class="text-muted">{{ v.asset.asset_tag|default:v.tag_entered }}</td>
+                  <td class="text-muted">{% if v.asset.asset_tag %}{{ v.asset.asset_tag }}{% endif %}</td>
                   <td><span class="badge bg-secondary">{{ v.get_method_display }}</span></td>
                 </tr>
               {% empty %}

@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.db import transaction
+from django.db import IntegrityError
 
 import csv
 
@@ -16,13 +17,15 @@ from .utils_assets import (get_manager_emails_for_request, get_ict_custodian_ema
                            can_user_approve_asset_change,
                            can_user_approve_return,
                            generate_unique_asset_tag,
-                           build_qr_payload,generate_qr_image,save_qr_to_asset
+                           build_qr_payload,
+                           generate_qr_image, save_qr_to_asset
                            )
 
 from .models import (
     AgencyServiceConfig, AgencyAssetRoles, Unit,
     AssetCategory, Asset, AssetRequest,
-    AssetHistory, AssetReturnRequest, AssetChangeRequest
+    AssetHistory, AssetReturnRequest, AssetChangeRequest, ExitRequest,
+    MobileLine, CellServiceFocalPoint
 )
 from .pdf_assets import build_asset_labels_pdf, LabelSpec
 
@@ -132,22 +135,25 @@ def _safe_email(u):
     return getattr(u, "email", None)
 
 def _get_exit_recipients(user, agency):
-    # Unit head
     unit = getattr(user, "unit", None)
     unit_head_email = _safe_email(getattr(unit, "unit_head", None)) if unit else None
-    # Ops manager + ICT custodians
+
     roles = getattr(agency, "asset_roles", None)
     ops_email = _safe_email(getattr(roles, "operations_manager", None)) if roles else None
     ict_emails = list(roles.ict_custodian.values_list("email", flat=True)) if roles else []
 
-    # Cell company focal points
-    cell_focal_emails = list(roles.cell_service_focal_point.values_list("email", flat=True)) if roles else []
+    # NEW: cell provider focal points (not users)
+    cell_focal_emails = list(
+        CellServiceFocalPoint.objects.filter(agency=agency, is_active=True)
+        .values_list("email", flat=True)
+    )
 
-    # de-dup + remove empty
     base = [unit_head_email, ops_email] + ict_emails
     base = [e for e in dict.fromkeys(base) if e]
     cell_focal_emails = [e for e in dict.fromkeys(cell_focal_emails) if e]
+
     return base, cell_focal_emails
+
 
 
 @login_required
@@ -1279,6 +1285,10 @@ def asset_labels_pdf(request):
     resp["Content-Disposition"] = f'inline; filename="{filename}"'
     return resp
 
+
+PENDING_EXIT_STATUSES = {"submitted", "pending_returns", "pending_ict_confirmation"}
+
+
 @login_required
 def exit_organization(request):
     user = request.user
@@ -1287,18 +1297,39 @@ def exit_organization(request):
         messages.error(request, "No agency/organization found for your profile.")
         return redirect("accounts:profile")
 
-    if request.method == "POST":
-        reason = (request.POST.get("reason") or "").strip()
-        typed = (request.POST.get("typed_confirm") or "").strip()
+    # GET -> show form
+    if request.method != "POST":
+        return redirect("accounts:asset_management")
 
-        if typed != "CONFIRM":
-            messages.error(request, "You must type CONFIRM (in capital letters) to proceed.")
-            return redirect("accounts:profile")
+    # POST -> process
+    reason = (request.POST.get("reason") or "").strip()
+    typed = (request.POST.get("typed_confirm") or "").strip()
 
-        if reason not in ("resigned", "reassigned"):
-            messages.error(request, "Please choose a valid reason (Resigned or Reassigned).")
-            return redirect("accounts:profile")
+    if typed != "CONFIRM":
+        messages.error(request, "You must type CONFIRM (in capital letters) to proceed.")
+        return redirect("accounts:asset_management")
 
+    if reason not in ("resigned", "reassigned"):
+        messages.error(request, "Please choose a valid reason (Resigned or Reassigned).")
+        return redirect("accounts:asset_management")
+
+    # ✅ PRE-CHECK: do we already have a pending exit?
+    existing = ExitRequest.objects.filter(
+        agency=agency,
+        user=user,
+        status__in=PENDING_EXIT_STATUSES
+    ).first()
+
+    if existing:
+        messages.warning(
+            request,
+            "You already have a pending exit request on the system. "
+            "Please wait for the request to complete."
+        )
+        return redirect("accounts:asset_management")
+
+    try:
+        # Keep all DB changes together so we don't create a request without the related actions
         with transaction.atomic():
             exit_req = ExitRequest.objects.create(
                 agency=agency,
@@ -1306,15 +1337,23 @@ def exit_organization(request):
                 reason=reason,
                 typed_confirm=typed,
                 status="pending_returns",
+                # created_at auto
             )
 
             # 1) Create return requests for all assets assigned to this user
-            assets = Asset.objects.filter(agency=agency, current_holder=user, status="assigned")
+            assets = list(
+                Asset.objects.filter(agency=agency, current_holder=user, status="assigned")
+                .select_related("category", "unit")
+            )
+
             created_rr = []
             for asset in assets:
                 # avoid duplicates
-                if AssetReturnRequest.objects.filter(agency=agency, asset=asset, status="pending_ict").exists():
+                if AssetReturnRequest.objects.filter(
+                    agency=agency, asset=asset, status="pending_ict"
+                ).exists():
                     continue
+
                 rr = AssetReturnRequest.objects.create(
                     agency=agency,
                     asset=asset,
@@ -1324,29 +1363,33 @@ def exit_organization(request):
                 )
                 created_rr.append(rr)
 
-            # 2) If user has SIM/Data lines: mark suspended + notify cell focal points
-            user_lines = MobileLine.objects.filter(agency=agency, assigned_to=user, status="assigned")
+            # 2) If user has SIM/Data lines: mark suspended
+            user_lines = MobileLine.objects.filter(
+                agency=agency, assigned_to=user, status="assigned"
+            )
             for line in user_lines:
                 line.suspend()
 
-        # Emails (after transaction is OK)
+        # ✅ Emails (after transaction committed successfully)
         base_recipients, cell_focal_emails = _get_exit_recipients(user, agency)
 
         # Email unit head + ops + ict
-        send_email_async(
-            subject=f"Exit Notice: {user.get_full_name() or user.username} ({reason})",
-            to_emails=base_recipients,
-            html_template="emails/exit/exit_submitted.html",
-            context={
-                "user": user,
-                "agency": agency,
-                "reason": reason,
-                "exit_req": exit_req,
-                "assets": assets,
-                "return_requests": created_rr,
-                "lines": user_lines,
-            },
-        )
+        if base_recipients:
+            send_email_async(
+                subject=f"Exit Notice: {user.get_full_name() or user.username} ({reason})",
+                to_emails=base_recipients,
+                html_template="emails/exit/exit_submitted.html",
+                context={
+                    "user": user,
+                    "agency": agency,
+                    "reason": reason,
+                    "exit_req": exit_req,
+                    "assets": assets,
+                    "return_requests": created_rr,
+                    "lines": list(user_lines),
+                    "submitted_at": timezone.now(),
+                },
+            )
 
         # Email cell provider focal point(s) only if there are lines
         if user_lines.exists() and cell_focal_emails:
@@ -1354,11 +1397,24 @@ def exit_organization(request):
                 subject=f"Action Required: Disable lines for {user.get_full_name() or user.username}",
                 to_emails=cell_focal_emails,
                 html_template="emails/exit/disable_lines.html",
-                context={"user": user, "agency": agency, "lines": user_lines, "exit_req": exit_req},
+                context={
+                    "user": user,
+                    "agency": agency,
+                    "lines": list(user_lines),
+                    "exit_req": exit_req,
+                    "reason": reason,
+                    "submitted_at": timezone.now(),
+                },
             )
 
         messages.success(request, "Exit request submitted. Please return your assigned assets to ICT.")
-        return redirect("accounts:profile")
+        return redirect("accounts:asset_management")
 
-    # GET
-    return render(request, "accounts/assets/exit_organization.html", {})
+    except IntegrityError:
+        # ✅ SAFETY NET: in case two submits happen at the same time (double click)
+        messages.warning(
+            request,
+            "You already have a pending exit request on the system. "
+            "Please wait for the request to complete."
+        )
+        return redirect("accounts:asset_management")

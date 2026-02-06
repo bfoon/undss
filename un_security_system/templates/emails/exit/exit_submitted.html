@@ -1,0 +1,192 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exit Notice</title>
+  <style>
+    body { margin:0; padding:0; background:#f6f8fb; font-family: Arial, Helvetica, sans-serif; color:#1f2a37; }
+    .wrap { width:100%; padding:24px 12px; }
+    .card { max-width:720px; margin:0 auto; background:#ffffff; border-radius:14px; overflow:hidden; box-shadow:0 6px 24px rgba(17,24,39,.08); }
+    .header { background:linear-gradient(135deg,#009edb,#005a8b); padding:22px 24px; color:#fff; }
+    .brand { display:flex; align-items:center; gap:12px; }
+    .logo-box { width:44px; height:44px; background:#fff; border-radius:10px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    .logo-box img { max-width:40px; max-height:40px; display:block; }
+    .brand-title { line-height:1.15; }
+    .brand-title h1 { margin:0; font-size:16px; font-weight:700; letter-spacing:.2px; }
+    .brand-title p { margin:4px 0 0; font-size:12px; opacity:.92; }
+    .content { padding:22px 24px; }
+    .title { margin:0 0 8px; font-size:18px; font-weight:800; }
+    .sub { margin:0 0 14px; color:#4b5563; font-size:13px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; background:#fff3cd; color:#7a5b00; border:1px solid #ffe8a1; }
+    .grid { margin-top:14px; border:1px solid #eef2f7; border-radius:12px; overflow:hidden; }
+    .row { display:flex; gap:0; border-top:1px solid #eef2f7; }
+    .row:first-child { border-top:none; }
+    .cell { padding:12px 14px; font-size:13px; }
+    .cell.k { width:34%; background:#f9fafb; color:#374151; font-weight:700; }
+    .cell.v { width:66%; color:#111827; }
+    .section { margin-top:16px; }
+    .section h3 { margin:0 0 8px; font-size:14px; font-weight:800; color:#111827; }
+    .list { margin:0; padding-left:18px; color:#374151; font-size:13px; }
+    .list li { margin:6px 0; }
+    .table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
+    .table th, .table td { border:1px solid #eef2f7; padding:10px; text-align:left; }
+    .table th { background:#f9fafb; font-weight:800; color:#374151; }
+    .muted { color:#6b7280; font-size:12px; }
+    .footer { padding:16px 24px; background:#f9fafb; border-top:1px solid #eef2f7; color:#6b7280; font-size:12px; }
+    .cta { margin-top:14px; padding:12px 14px; border-radius:12px; border:1px dashed rgba(220,53,69,.35); background:rgba(220,53,69,.06); }
+    .cta strong { color:#b42318; }
+    .badge { display:inline-block; padding:4px 8px; border-radius:8px; background:#eef6ff; color:#1b4d7a; border:1px solid #d6e9ff; font-weight:700; font-size:12px; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+
+      <!-- Header -->
+      <div class="header">
+        <div class="brand">
+          <div class="logo-box">
+            {% if agency and agency.logo %}
+              <img src="{{ agency.logo.url }}" alt="{{ agency.name }} Logo">
+            {% else %}
+              <img src="{% static 'img/un-logo.png' %}" alt="UN Logo">
+            {% endif %}
+          </div>
+
+          <div class="brand-title">
+            <h1>UN PASS • Exit Notification</h1>
+            <p>
+              {% if agency %}{{ agency.name }}{% else %}Organization{% endif %}
+              {% if agency and agency.code %} • {{ agency.code|upper }}{% endif %}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <h2 class="title">Staff Exit Request Submitted</h2>
+        <p class="sub">
+          An exit request has been submitted in UN PASS and the asset return workflow has been initiated.
+        </p>
+
+        <span class="pill">Reason: {{ reason|title }}</span>
+
+        <div class="grid" role="presentation" aria-hidden="true">
+          <div class="row">
+            <div class="cell k">Staff Member</div>
+            <div class="cell v">
+              <strong>{{ user.get_full_name|default:user.username }}</strong>
+              {% if user.email %}<div class="muted">{{ user.email }}</div>{% endif %}
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="cell k">Submitted At</div>
+            <div class="cell v">
+              {% if submitted_at %}{{ submitted_at }}{% else %}{{ exit_req.created_at }}{% endif %}
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="cell k">Exit Request</div>
+            <div class="cell v">
+              <span class="badge">Status: {{ exit_req.status|default:"pending_returns"|title }}</span>
+              {% if exit_req.id %}<span class="muted"> • Ref #{{ exit_req.id }}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="cta">
+          <strong>Action Required:</strong>
+          Please ensure all assigned assets are returned to ICT and receipt is confirmed in the system.
+        </div>
+
+        <!-- Assets -->
+        <div class="section">
+          <h3>Assigned Assets (Return Required)</h3>
+
+          {% if assets and assets|length %}
+            <table class="table" role="table" aria-label="Assigned assets">
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>Tag</th>
+                  <th>Category</th>
+                  <th>Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in assets %}
+                  <tr>
+                    <td>
+                      <strong>{{ a.name }}</strong>
+                      {% if a.serial_number %}<div class="muted">S/N: {{ a.serial_number }}</div>{% endif %}
+                    </td>
+                    <td>{{ a.asset_tag|default:"" }}</td>
+                    <td>{% if a.category %}{{ a.category.name }}{% else %}-{% endif %}</td>
+                    <td>{% if a.unit %}{{ a.unit.name }}{% else %}Core / Unallocated{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+
+            <p class="muted" style="margin-top:8px;">
+              Return requests created: {% if return_requests %}{{ return_requests|length }}{% else %}0{% endif %}
+            </p>
+          {% else %}
+            <p class="muted">No assigned assets were found for this user.</p>
+          {% endif %}
+        </div>
+
+        <!-- SIM/Data Lines -->
+        <div class="section">
+          <h3>SIM / Data Lines</h3>
+          {% if lines and lines|length %}
+            <ul class="list">
+              {% for l in lines %}
+                <li>
+                  <strong>{{ l.msisdn }}</strong>
+                  {% if l.provider %} • {{ l.provider }}{% endif %}
+                  {% if l.line_type %} • {{ l.get_line_type_display|default:l.line_type }}{% endif %}
+                  <span class="muted"> • status: {{ l.status }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+            <p class="muted" style="margin-top:8px;">
+              Note: Cell Service Focal Point(s) have been notified to disable/suspend the line(s) until further notice.
+            </p>
+          {% else %}
+            <p class="muted">No SIM/Data lines are assigned to this user.</p>
+          {% endif %}
+        </div>
+
+        <!-- Next Steps -->
+        <div class="section">
+          <h3>Next Steps</h3>
+          <ul class="list">
+            <li>Unit Head / Operations Manager to monitor clearance progress.</li>
+            <li>ICT to confirm receipt of returned assets in UN PASS.</li>
+            <li>If any SIM/Data lines exist, service should remain disabled until reissued/approved.</li>
+          </ul>
+        </div>
+
+        <p class="muted" style="margin-top:14px;">
+          This is an automated message from UN PASS. Please do not reply to this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        UN PASS • United Nations Security Management System
+        {% if agency %} • {{ agency.name }}{% endif %}
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

@@ -348,14 +348,15 @@
                    name="username"
                    id="username"
                    class="form-control-custom"
-                   placeholder="Enter your username"
+                   placeholder="enter_your_username"
                    required
                    autofocus
+                   pattern="[a-z0-9_]+"
                    value="{{ form_data.username|default:'' }}">
             {% if errors.username %}
               <ul class="errorlist"><li>{{ errors.username }}</li></ul>
             {% endif %}
-            <span class="form-help-text">Choose a unique username for your account</span>
+            <span class="form-help-text">Lowercase letters, numbers, and underscores only (auto-corrected)</span>
           </div>
 
           <div class="form-group">
@@ -460,6 +461,32 @@
     const submitBtn = document.getElementById('submitBtn');
     const password1 = document.getElementById('password1');
     const password2 = document.getElementById('password2');
+    const usernameInput = document.getElementById('username');
+
+    // Username auto-correction: convert to lowercase and remove spaces/special characters
+    usernameInput.addEventListener('input', function(e) {
+      let value = e.target.value;
+
+      // Convert to lowercase
+      value = value.toLowerCase();
+
+      // Remove all characters except lowercase letters, numbers, and underscores
+      value = value.replace(/[^a-z0-9_]/g, '');
+
+      // Update the input value
+      e.target.value = value;
+    });
+
+    // Also apply correction on paste
+    usernameInput.addEventListener('paste', function(e) {
+      // Small delay to allow paste to complete
+      setTimeout(function() {
+        let value = usernameInput.value;
+        value = value.toLowerCase();
+        value = value.replace(/[^a-z0-9_]/g, '');
+        usernameInput.value = value;
+      }, 10);
+    });
 
     // Password match validation
     password2.addEventListener('input', function() {
