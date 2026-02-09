@@ -853,7 +853,7 @@ def view_asset_management(request):
             cr for cr in cr_qs if can_user_approve_asset_change(user, cr.asset, roles)
         ]
 
-        agency_users = User.objects.filter(
+    agency_users = User.objects.filter(
             agency=agency, is_active=True
         ).order_by("first_name", "last_name", "username")
 
