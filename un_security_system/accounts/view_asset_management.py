@@ -530,7 +530,7 @@ def view_asset_management(request):
                 return redirect("accounts:asset_management")
 
             # Assignee must be a user in same agency
-            assignee = get_object_or_404(settings.AUTH_USER_MODEL, id=assignee_id)
+            assignee = get_object_or_404(User, id=assignee_id)
             if getattr(assignee, "agency_id", None) != agency.id:
                 messages.error(request, "You can only assign lines to users in your agency.")
                 return redirect("accounts:asset_management")

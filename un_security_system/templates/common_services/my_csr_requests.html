@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-0">My CSR Requests</h4>
+      <div class="text-muted">Track your submitted common service requests.</div>
+    </div>
+    <a href="{% url 'incidents:csr_queue' %}" class="btn btn-outline-secondary">My Responsibility Queue</a>
+  </div>
+
+  <!-- same filter bar -->
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-5">
+      <input class="form-control" name="q" placeholder="Search..." value="{{ filters.q }}">
+    </div>
+    <div class="col-md-2">
+      <select class="form-select" name="status">
+        <option value="">All status</option>
+        {% for v,l in csr_model.Status.choices %}
+          <option value="{{ v }}" {% if filters.status == v %}selected{% endif %}>{{ l }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <select class="form-select" name="category">
+        <option value="">All categories</option>
+        {% for v,l in csr_model.Category.choices %}
+          <option value="{{ v }}" {% if filters.category == v %}selected{% endif %}>{{ l }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select class="form-select" name="priority">
+        <option value="">All priority</option>
+        {% for v,l in csr_model.Priority.choices %}
+          <option value="{{ v }}" {% if filters.priority == v %}selected{% endif %}>{{ l }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 d-grid d-md-none">
+      <button class="btn btn-primary">Apply</button>
+    </div>
+    <div class="col-md-12 d-none d-md-flex justify-content-end">
+      <button class="btn btn-primary">Apply</button>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Ref</th>
+             {% if is_csm %}<th>Agency</th>{% endif %}
+            <th>Title</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Assigned To</th>
+            <th class="text-end">Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in csrs %}
+          <tr>
+            <td><span class="badge bg-dark">CSR#{{ c.id }}</span></td>
+            <td>
+              <a href="{% url 'common_services:cs_detail' c.id %}" class="text-decoration-none">
+                {{ c.title }}
+              </a>
+              {% if c.incident %}
+                <div class="small text-muted">Linked Incident #{{ c.incident.id }}</div>
+              {% endif %}
+            </td>
+            <td>{{ c.get_category_display }}</td>
+            <td>{{ c.get_status_display }}</td>
+            <td>{{ c.assigned_to.get_full_name|default:c.assigned_to.username }}</td>
+            <td class="text-end">{{ c.created_at|date:"d M Y, H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No CSR requests submitted yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

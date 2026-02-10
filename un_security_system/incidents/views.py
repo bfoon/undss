@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.shortcuts import render, redirect, get_object_or_404
+from django.views.decorators.http import require_http_methods
 from django.urls import reverse_lazy, reverse
 from django.views.generic import CreateView, ListView, DetailView
 from django.utils import timezone
@@ -11,8 +12,10 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.contrib.auth import get_user_model
 
-from .models import IncidentReport
+from .models import IncidentReport, CommonServiceRequest
 from .forms import IncidentReportForm, IncidentUpdateForm
+from .permissions import can_user_manage_csr, is_common_services_manager
+
 
 User = get_user_model()
 
@@ -195,6 +198,151 @@ def _notify_incident_new_update(incident, update_obj):
             f"Best regards,\nUN Security / Common Services System"
         )
         _send_notification(subject, message, assignee.email)
+
+# -------------------------------------------------------------------
+# Common Service Request notifications
+# -------------------------------------------------------------------
+
+def _csr_detail_url(csr, request):
+    try:
+        return request.build_absolute_uri(
+            reverse("common_services:cs_detail", kwargs={"pk": csr.pk})
+        )
+    except Exception:
+        return ""
+
+
+def _notify_cs_requester_created(csr):
+    requester = getattr(csr, "requested_by", None)
+    if not requester or not requester.email:
+        return
+
+    subject = f"[Common Services] Request submitted: CSR#{csr.pk} – {csr.title}"
+    message = (
+        f"Hello {requester.get_full_name() or requester.username},\n\n"
+        f"Your Common Service Request has been submitted successfully.\n\n"
+        f"Reference: CSR#{csr.pk}\n"
+        f"Title: {csr.title}\n"
+        f"Category: {csr.get_category_display() if hasattr(csr, 'get_category_display') else csr.category}\n"
+        f"Priority: {csr.get_priority_display() if hasattr(csr, 'get_priority_display') else csr.priority}\n"
+        f"Status: {csr.get_status_display() if hasattr(csr, 'get_status_display') else csr.status}\n\n"
+        f"Best regards,\nUNPASS – Common Services"
+    )
+    _send_notification(subject, message, requester.email)
+
+def notify_common_services_manager_new_request(csr):
+    managers = User.objects.filter(role="common_services_manager", is_active=True).exclude(email="")
+    recipients = list(managers.values_list("email", flat=True))
+    if not recipients:
+        return
+    _send_notification(
+        f"[Common Services] New Request Submitted: CSR#{csr.pk} – {csr.title}",
+        f"A new CSR was submitted from {csr.agency.code}.\n\nCSR#{csr.pk}: {csr.title}",
+        recipients
+    )
+
+def _notify_cs_level_queue(csr, request, level=None):
+    """
+    Notify approvers in the approval queue (Level N).
+    This assumes you have a CommonServiceApprover model.
+    """
+    from .models import CommonServiceApprover  # adjust import path if needed
+
+    agency_id = getattr(csr.requested_by, "agency_id", None)
+    if not agency_id:
+        return
+
+    level = level or getattr(csr, "current_level", 1)
+
+    qs = CommonServiceApprover.objects.filter(
+        agency_id=agency_id,
+        level=level,
+        is_active=True
+    ).select_related("user")
+
+    recipients = [a.user.email for a in qs if a.user and a.user.email]
+    if not recipients:
+        return
+
+    detail_url = _csr_detail_url(csr, request)
+
+    subject = f"[Common Services] Approval required (Level {level}): CSR#{csr.pk} – {csr.title}"
+    message = (
+        f"Dear Approver,\n\n"
+        f"A Common Service Request requires your approval (Level {level}).\n\n"
+        f"Reference: CSR#{csr.pk}\n"
+        f"Title: {csr.title}\n"
+        f"Category: {csr.get_category_display() if hasattr(csr, 'get_category_display') else csr.category}\n"
+        f"Priority: {csr.get_priority_display() if hasattr(csr, 'get_priority_display') else csr.priority}\n"
+        f"Location: {getattr(csr, 'location', '')}\n\n"
+        f"View request:\n{detail_url}\n\n"
+        f"Best regards,\nUNPASS – Common Services"
+    )
+    _send_notification(subject, message, recipients)
+
+
+def _notify_cs_assigned(csr, is_new_assignment=False):
+    assignee = getattr(csr, "assigned_to", None)
+    if not assignee or not assignee.email:
+        return
+
+    subject = (
+        f"[Common Services] Request assigned: CSR#{csr.pk} – {csr.title}"
+        if is_new_assignment else
+        f"[Common Services] Update on assigned request: CSR#{csr.pk} – {csr.title}"
+    )
+
+    message = (
+        f"Hello {assignee.get_full_name() or assignee.username},\n\n"
+        f"You are {'now assigned to' if is_new_assignment else 'responsible for'} the following Common Service Request:\n\n"
+        f"Reference: CSR#{csr.pk}\n"
+        f"Title: {csr.title}\n"
+        f"Category: {csr.get_category_display() if hasattr(csr, 'get_category_display') else csr.category}\n"
+        f"Priority: {csr.get_priority_display() if hasattr(csr, 'get_priority_display') else csr.priority}\n"
+        f"Status: {csr.get_status_display() if hasattr(csr, 'get_status_display') else csr.status}\n\n"
+        f"Best regards,\nUNPASS – Common Services"
+    )
+    _send_notification(subject, message, assignee.email)
+
+
+def _notify_cs_escalation(csr, request):
+    """
+    Notify escalation target. Supports either:
+    - escalated_to_user (direct)
+    - escalated_to role (ops_manager/ict/lsa/soc)
+    """
+    target_user = getattr(csr, "escalated_to_user", None)
+    target_role = (getattr(csr, "escalated_to", "") or "").strip()
+
+    recipients = []
+
+    if target_user and target_user.email:
+        recipients = [target_user.email]
+    elif target_role:
+        qs = User.objects.filter(is_active=True, role=target_role)
+        # keep agency scope
+        agency_id = getattr(csr.requested_by, "agency_id", None)
+        if agency_id:
+            qs = qs.filter(agency_id=agency_id)
+        recipients = list(qs.values_list("email", flat=True))
+
+    recipients = [r for r in recipients if r]
+    if not recipients:
+        return
+
+    detail_url = _csr_detail_url(csr, request)
+
+    subject = f"[Common Services] Escalated request: CSR#{csr.pk} – {csr.title}"
+    message = (
+        f"Dear Colleague,\n\n"
+        f"A Common Service Request has been escalated to your queue.\n\n"
+        f"Reference: CSR#{csr.pk}\n"
+        f"Title: {csr.title}\n"
+        f"Escalated to: {target_user.get_full_name() if target_user else target_role.upper()}\n\n"
+        f"View request:\n{detail_url}\n\n"
+        f"Best regards,\nUNPASS – Common Services"
+    )
+    _send_notification(subject, message, recipients)
 
 
 # -------------------------------------------------------------------
@@ -397,3 +545,197 @@ def change_status(request, pk):
     else:
         messages.error(request, "Invalid status.")
     return redirect("incidents:incident_detail", pk=pk)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def view_cs_support(request, incident_pk=None):
+    incident = None
+    if incident_pk:
+        # Only security incident can be attached (IncidentReport)
+        incident = get_object_or_404(IncidentReport, pk=incident_pk)
+
+        # Same permission rule as incident detail: reporter or LSA/SOC :contentReference[oaicite:3]{index=3}
+        if incident.reported_by_id != request.user.id and not is_lsa_or_soc(request.user):
+            messages.error(request, "You don't have permission to raise a request for this incident.")
+            return redirect("incidents:my_incidents")
+
+    if request.method == "POST":
+        title = (request.POST.get("title") or "").strip()
+        category = (request.POST.get("category") or CommonServiceRequest.Category.COMMON_PREMISES).strip()
+        description = (request.POST.get("description") or "").strip()
+        location = (request.POST.get("location") or "").strip()
+        priority = (request.POST.get("priority") or CommonServiceRequest.Priority.MEDIUM).strip()
+        attachment = request.FILES.get("attachment")
+
+        is_notice = request.POST.get("is_notice") == "on"
+        disruption_start = request.POST.get("disruption_start") or None
+        disruption_end = request.POST.get("disruption_end") or None
+
+        if not title or not description:
+            messages.error(request, "Title and description are required.")
+            return render(request, "common_services/cs_support_form.html", {"incident": incident})
+
+        csr = CommonServiceRequest.objects.create(
+            incident=incident,
+            title=title,
+            category=category,
+            description=description,
+            location=location,
+            priority=priority,
+            attachment=attachment,
+            requested_by=request.user,
+            is_notice=is_notice,
+            disruption_start=disruption_start,
+            disruption_end=disruption_end,
+        )
+
+        # Validate model rules (notice must have times)
+        try:
+            csr.full_clean()
+            csr.save()
+
+            _notify_cs_requester_created(csr)
+
+            # Notify first approval queue if approvals enabled
+            if getattr(csr, "requires_approval", True):
+                _notify_cs_level_queue(csr, request, level=getattr(csr, "current_level", 1))
+
+        except Exception as e:
+            csr.delete()
+            messages.error(request, str(e))
+            return render(request, "common_services/cs_support_form.html", {"incident": incident})
+
+        messages.success(request, "Common Service Request submitted successfully.")
+        if incident:
+            return redirect("incidents:incident_detail", pk=incident.pk)
+        return redirect("common_services:cs_detail", pk=csr.pk)
+
+    return render(request, "common_services/cs_support_form.html", {"incident": incident})
+
+@login_required
+@require_http_methods(["POST"])
+def csr_assign_view(request, pk):
+    csr = get_object_or_404(CommonServiceRequest, pk=pk)
+
+    if not can_user_manage_csr(request.user, csr):
+        messages.error(request, "You do not have permission to assign this request.")
+        return redirect("common_services:cs_detail", pk=csr.pk)
+
+    assignee_id = request.POST.get("assigned_to")
+    if not assignee_id:
+        messages.error(request, "Please select a user to assign.")
+        return redirect("common_services:cs_detail", pk=csr.pk)
+
+    assignee = get_object_or_404(
+        User,
+        pk=assignee_id,
+        is_active=True,
+        agency_id=csr.agency_id,   # ✅ agency-scoped
+    )
+
+    # Assign
+    csr.assigned_to = assignee
+
+    # Optional: move status automatically when assigned
+    # (Only do this if your CSR workflow expects it)
+    if csr.status == "new":
+        csr.status = "in_progress"
+
+    csr.save(update_fields=["assigned_to", "status", "updated_at"])
+
+    # Notify assigned responsible party
+    try:
+        _notify_cs_assigned(csr, is_new_assignment=True)
+    except Exception:
+        # don’t break the workflow if email not configured
+        pass
+
+    messages.success(request, f"Request assigned to {assignee.get_full_name() or assignee.username}.")
+    return redirect("common_services:cs_detail", pk=csr.pk)
+
+@login_required
+def csr_fulfiller_queue(request):
+    user = request.user
+    role = getattr(user, "role", "") or ""
+
+    # ✅ Base queryset: cross-agency for Common Service Manager
+    if is_common_services_manager(user):
+        qs = CommonServiceRequest.objects.all()
+    else:
+        # normal users stay within agency
+        if not getattr(user, "agency_id", None):
+            qs = CommonServiceRequest.objects.none()
+            return render(request, "common_services/csr_fulfiller_queue.html", {"csrs": qs})
+
+        qs = CommonServiceRequest.objects.filter(agency_id=user.agency_id)
+
+        # responsibility logic for non-manager
+        qs = qs.filter(
+            Q(assigned_to_id=user.id) |
+            Q(escalated_to_user_id=user.id) |
+            (Q(escalated_to=role) if role else Q(pk__in=[]))
+        )
+
+    # Filters (same as before)
+    status = request.GET.get("status") or ""
+    category = request.GET.get("category") or ""
+    priority = request.GET.get("priority") or ""
+    q = (request.GET.get("q") or "").strip()
+
+    if status:
+        qs = qs.filter(status=status)
+    if category:
+        qs = qs.filter(category=category)
+    if priority:
+        qs = qs.filter(priority=priority)
+    if q:
+        qs = qs.filter(
+            Q(title__icontains=q) |
+            Q(description__icontains=q) |
+            Q(location__icontains=q) |
+            Q(requested_by__username__icontains=q) |
+            Q(requested_by__first_name__icontains=q) |
+            Q(requested_by__last_name__icontains=q)
+        )
+
+    qs = qs.select_related("requested_by", "assigned_to", "agency").order_by("-created_at")
+
+    return render(request, "common_services/csr_fulfiller_queue.html", {
+        "csrs": qs,
+        "filters": {"status": status, "category": category, "priority": priority, "q": q},
+        "csr_model": CommonServiceRequest,
+        "is_csm": is_common_services_manager(user),
+    })
+
+@login_required
+def my_csr_requests(request):
+    user = request.user
+
+    qs = CommonServiceRequest.objects.filter(requested_by_id=user.id)
+
+    status = request.GET.get("status") or ""
+    category = request.GET.get("category") or ""
+    priority = request.GET.get("priority") or ""
+    q = (request.GET.get("q") or "").strip()
+
+    if status:
+        qs = qs.filter(status=status)
+    if category:
+        qs = qs.filter(category=category)
+    if priority:
+        qs = qs.filter(priority=priority)
+    if q:
+        qs = qs.filter(
+            Q(title__icontains=q) |
+            Q(description__icontains=q) |
+            Q(location__icontains=q)
+        )
+
+    qs = qs.select_related("assigned_to").order_by("-created_at")
+
+    return render(request, "common_services/my_csr_requests.html", {
+        "csrs": qs,
+        "filters": {"status": status, "category": category, "priority": priority, "q": q},
+        "csr_model": CommonServiceRequest,
+    })

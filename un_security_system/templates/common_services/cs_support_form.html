@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h4 class="mb-1">Common Service Request</h4>
+      <p class="text-muted mb-0">
+        Submit a request related to facilities, utilities, or common premises support
+        {% if incident %}
+          <span class="badge bg-warning text-dark ms-2">
+            Linked to Security Incident #{{ incident.id }}
+          </span>
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <!-- =====================
+             REQUEST OVERVIEW
+        ====================== -->
+        <h6 class="text-uppercase text-muted mb-3">
+          Request Overview
+        </h6>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Request Title <span class="text-danger">*</span></label>
+            <input
+              type="text"
+              name="title"
+              class="form-control"
+              placeholder="e.g. Replace broken electrical outlet – 2nd floor"
+              required
+            >
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Service Category</label>
+            <select name="category" class="form-select">
+              <option value="">— Select category —</option>
+              <option value="common_premises">Common Premises / General</option>
+              <option value="cash_power">Cash Power Refill</option>
+              <option value="facility_notice">Facility Work / Disruption Notice</option>
+              <option value="electrical">Electrical (Bulbs, Switches, Outlets, Failover)</option>
+              <option value="plumbing">Plumbing / Toilets</option>
+              <option value="cleaning">Cleaning Services</option>
+              <option value="waste">Dumpster / Waste Disposal</option>
+              <option value="grounds">Grounds / Tree Trimming</option>
+              <option value="solar">Solar System Issue</option>
+              <option value="cctv">CCTV Issue</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- =====================
+             REQUEST DETAILS
+        ====================== -->
+        <h6 class="text-uppercase text-muted mb-3">
+          Request Details
+        </h6>
+
+        <div class="mb-4">
+          <label class="form-label fw-semibold">
+            Description <span class="text-danger">*</span>
+          </label>
+          <textarea
+            name="description"
+            class="form-control"
+            rows="5"
+            placeholder="Provide clear details of the issue, location, urgency, and any operational impact…"
+            required
+          ></textarea>
+          <div class="form-text">
+            Please include location, urgency, and whether this may disrupt daily operations.
+          </div>
+        </div>
+
+        <!-- =====================
+             ATTACHMENTS
+        ====================== -->
+        <h6 class="text-uppercase text-muted mb-3">
+          Supporting Information
+        </h6>
+
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Attachment (optional)</label>
+          <input type="file" name="attachment" class="form-control">
+          <div class="form-text">
+            You may upload photos, documents, or screenshots (PDF, JPG, PNG).
+          </div>
+        </div>
+
+        <!-- =====================
+             ACTIONS
+        ====================== -->
+        <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+          {% if incident %}
+            <a href="{% url 'incidents:incident_detail' incident.pk %}"
+               class="btn btn-outline-secondary">
+              Cancel
+            </a>
+          {% else %}
+            <a href="{% url 'incidents:my_incidents' %}"
+               class="btn btn-outline-secondary">
+              Cancel
+            </a>
+          {% endif %}
+
+          <button type="submit" class="btn btn-primary px-4">
+            Submit Request
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

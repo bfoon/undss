@@ -27,6 +27,7 @@ class User(AbstractUser):
         ('reception', 'Receptionist'),
         ('registry', 'Registry'),
         ('ict_focal', 'ICT Focal Point'),
+        ("csm", "Common Services Manager"),
 
         # 🔹 NEW ROLE
         ('agency_hr', 'Agency HR'),
