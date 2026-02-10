@@ -1,88 +1,475 @@
 {% extends "base.html" %}
+{% load humanize %}
+
 {% block content %}
 <div class="container py-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
+
+  <!-- =========================
+       PAGE HEADER
+  ========================== -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
     <div>
-      <h4 class="mb-0">My CSR Requests</h4>
-      <div class="text-muted">Track your submitted common service requests.</div>
+      <h4 class="mb-1 fw-bold text-dark">
+        <i class="bi bi-file-earmark-person text-primary me-2"></i>My CSR Requests
+      </h4>
+      <p class="text-muted mb-0">
+        <i class="bi bi-info-circle me-1"></i>
+        Track and manage your submitted common service requests
+      </p>
     </div>
-    <a href="{% url 'incidents:csr_queue' %}" class="btn btn-outline-secondary">My Responsibility Queue</a>
+    <div class="d-flex gap-2">
+      <a href="{% url 'incidents:csr_queue' %}"
+         class="btn btn-outline-primary"
+         title="View your responsibility queue">
+        <i class="bi bi-inbox me-1"></i>My Responsibility Queue
+      </a>
+    </div>
   </div>
 
-  <!-- same filter bar -->
-  <form method="get" class="row g-2 mb-3">
-    <div class="col-md-5">
-      <input class="form-control" name="q" placeholder="Search..." value="{{ filters.q }}">
+  <!-- =========================
+       FILTERS & SEARCH
+  ========================== -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white py-3">
+      <h6 class="mb-0 fw-bold">
+        <i class="bi bi-funnel text-primary me-2"></i>Filter My Requests
+      </h6>
     </div>
-    <div class="col-md-2">
-      <select class="form-select" name="status">
-        <option value="">All status</option>
-        {% for v,l in csr_model.Status.choices %}
-          <option value="{{ v }}" {% if filters.status == v %}selected{% endif %}>{{ l }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-3">
-      <select class="form-select" name="category">
-        <option value="">All categories</option>
-        {% for v,l in csr_model.Category.choices %}
-          <option value="{{ v }}" {% if filters.category == v %}selected{% endif %}>{{ l }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <select class="form-select" name="priority">
-        <option value="">All priority</option>
-        {% for v,l in csr_model.Priority.choices %}
-          <option value="{{ v }}" {% if filters.priority == v %}selected{% endif %}>{{ l }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-12 d-grid d-md-none">
-      <button class="btn btn-primary">Apply</button>
-    </div>
-    <div class="col-md-12 d-none d-md-flex justify-content-end">
-      <button class="btn btn-primary">Apply</button>
-    </div>
-  </form>
+    <div class="card-body">
+      <form method="get" class="row g-3">
 
-  <div class="card">
+        <!-- Search -->
+        <div class="col-md-12 col-lg-5">
+          <label class="form-label small fw-semibold text-muted">
+            <i class="bi bi-search me-1"></i>Search
+          </label>
+          <input class="form-control"
+                 name="q"
+                 placeholder="Search by title, description, reference..."
+                 value="{{ filters.q }}"
+                 aria-label="Search my requests">
+        </div>
+
+        <!-- Status Filter -->
+        <div class="col-md-4 col-lg-2">
+          <label class="form-label small fw-semibold text-muted">
+            <i class="bi bi-circle me-1"></i>Status
+          </label>
+          <select class="form-select" name="status" aria-label="Filter by status">
+            <option value="">All Statuses</option>
+            {% for v, l in csr_model.Status.choices %}
+              <option value="{{ v }}" {% if filters.status == v %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Category Filter -->
+        <div class="col-md-4 col-lg-3">
+          <label class="form-label small fw-semibold text-muted">
+            <i class="bi bi-tag me-1"></i>Category
+          </label>
+          <select class="form-select" name="category" aria-label="Filter by category">
+            <option value="">All Categories</option>
+            {% for v, l in csr_model.Category.choices %}
+              <option value="{{ v }}" {% if filters.category == v %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Priority Filter -->
+        <div class="col-md-4 col-lg-2">
+          <label class="form-label small fw-semibold text-muted">
+            <i class="bi bi-flag me-1"></i>Priority
+          </label>
+          <select class="form-select" name="priority" aria-label="Filter by priority">
+            <option value="">All Priorities</option>
+            {% for v, l in csr_model.Priority.choices %}
+              <option value="{{ v }}" {% if filters.priority == v %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="col-12 d-flex justify-content-end gap-2">
+          <a href="{% url 'incidents:my_csr' %}"
+             class="btn btn-outline-secondary"
+             title="Clear all filters">
+            <i class="bi bi-x-circle me-1"></i>Clear
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-arrow-right-circle me-1"></i>Apply Filters
+          </button>
+        </div>
+      </form>
+
+      <!-- Active Filters Display -->
+      {% if filters.q or filters.status or filters.category or filters.priority %}
+        <div class="mt-3 pt-3 border-top">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="text-muted small fw-semibold">Active filters:</span>
+            {% if filters.q %}
+              <span class="badge bg-light text-dark border">
+                <i class="bi bi-search me-1"></i>Search: "{{ filters.q }}"
+              </span>
+            {% endif %}
+            {% if filters.status %}
+              <span class="badge bg-light text-dark border">
+                <i class="bi bi-circle me-1"></i>Status: {{ filters.get_status_display }}
+              </span>
+            {% endif %}
+            {% if filters.category %}
+              <span class="badge bg-light text-dark border">
+                <i class="bi bi-tag me-1"></i>Category: {{ filters.get_category_display }}
+              </span>
+            {% endif %}
+            {% if filters.priority %}
+              <span class="badge bg-light text-dark border">
+                <i class="bi bi-flag me-1"></i>Priority: {{ filters.get_priority_display }}
+              </span>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- =========================
+       RESULTS TABLE
+  ========================== -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+      <h6 class="mb-0 fw-bold">
+        <i class="bi bi-list-ul text-primary me-2"></i>
+        My Submitted Requests
+        {% if csrs %}
+          <span class="badge bg-primary ms-2">{{ csrs|length }}</span>
+        {% endif %}
+      </h6>
+
+      <!-- Optional: Add export functionality -->
+      <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn btn-outline-secondary" disabled>
+          <i class="bi bi-download me-1"></i>Export
+        </button>
+      </div>
+    </div>
+
     <div class="table-responsive">
-      <table class="table mb-0 align-middle">
+      <table class="table table-hover mb-0 align-middle">
         <thead class="table-light">
           <tr>
-            <th>Ref</th>
-             {% if is_csm %}<th>Agency</th>{% endif %}
-            <th>Title</th>
-            <th>Category</th>
-            <th>Status</th>
-            <th>Assigned To</th>
-            <th class="text-end">Created</th>
+            <th class="fw-semibold">Ref</th>
+            {% if is_csm %}
+              <th class="fw-semibold">Agency</th>
+            {% endif %}
+            <th class="fw-semibold">Title & Details</th>
+            <th class="fw-semibold">Category</th>
+            <th class="fw-semibold">Status</th>
+            <th class="fw-semibold">Priority</th>
+            <th class="fw-semibold">Assigned To</th>
+            <th class="fw-semibold text-end">Created</th>
           </tr>
         </thead>
         <tbody>
           {% for c in csrs %}
-          <tr>
-            <td><span class="badge bg-dark">CSR#{{ c.id }}</span></td>
+          <tr class="{% if c.priority == 'urgent' %}table-danger{% elif c.priority == 'high' %}table-warning{% endif %}">
+
+            <!-- Reference Number -->
             <td>
-              <a href="{% url 'common_services:cs_detail' c.id %}" class="text-decoration-none">
-                {{ c.title }}
+              <span class="badge bg-dark">CSR#{{ c.id }}</span>
+            </td>
+
+            <!-- Agency (CSM only) -->
+            {% if is_csm %}
+              <td>
+                {% if c.agency %}
+                  <div class="small fw-semibold">
+                    <i class="bi bi-building me-1 text-muted"></i>
+                    {{ c.agency.code|default:c.agency.name }}
+                  </div>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+            {% endif %}
+
+            <!-- Title & Details -->
+            <td>
+              <a href="{% url 'incidents:cs_detail' c.id %}"
+                 class="text-decoration-none fw-semibold text-primary d-block mb-1"
+                 title="View request details">
+                {{ c.title|truncatewords:10 }}
               </a>
               {% if c.incident %}
-                <div class="small text-muted">Linked Incident #{{ c.incident.id }}</div>
+                <div class="small">
+                  <span class="badge bg-warning text-dark">
+                    <i class="bi bi-shield-exclamation me-1"></i>Incident #{{ c.incident.id }}
+                  </span>
+                </div>
+              {% endif %}
+              {% if c.is_notice %}
+                <div class="small mt-1">
+                  <span class="badge bg-info text-dark">
+                    <i class="bi bi-megaphone me-1"></i>Notice
+                  </span>
+                </div>
               {% endif %}
             </td>
-            <td>{{ c.get_category_display }}</td>
-            <td>{{ c.get_status_display }}</td>
-            <td>{{ c.assigned_to.get_full_name|default:c.assigned_to.username }}</td>
-            <td class="text-end">{{ c.created_at|date:"d M Y, H:i" }}</td>
+
+            <!-- Category -->
+            <td>
+              <span class="badge bg-light text-dark border">
+                <i class="bi bi-tag me-1"></i>{{ c.get_category_display }}
+              </span>
+            </td>
+
+            <!-- Status -->
+            <td>
+              <span class="badge
+                {% if c.status == 'new' %}bg-secondary
+                {% elif c.status == 'in_progress' %}bg-primary
+                {% elif c.status == 'completed' %}bg-success
+                {% elif c.status == 'cancelled' %}bg-dark
+                {% else %}bg-secondary{% endif %}">
+                <i class="bi
+                  {% if c.status == 'new' %}bi-circle
+                  {% elif c.status == 'in_progress' %}bi-arrow-repeat
+                  {% elif c.status == 'completed' %}bi-check-circle
+                  {% elif c.status == 'cancelled' %}bi-x-circle
+                  {% endif %} me-1"></i>
+                {{ c.get_status_display }}
+              </span>
+            </td>
+
+            <!-- Priority -->
+            <td>
+              <span class="badge
+                {% if c.priority == 'urgent' %}bg-danger
+                {% elif c.priority == 'high' %}bg-warning text-dark
+                {% elif c.priority == 'medium' %}bg-info text-dark
+                {% else %}bg-light text-dark border{% endif %}">
+                <i class="bi
+                  {% if c.priority == 'urgent' %}bi-exclamation-triangle-fill
+                  {% elif c.priority == 'high' %}bi-exclamation-circle-fill
+                  {% else %}bi-flag
+                  {% endif %} me-1"></i>
+                {{ c.get_priority_display }}
+              </span>
+            </td>
+
+            <!-- Assigned To -->
+            <td>
+              {% if c.assigned_to %}
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-person-check text-primary"></i>
+                  <div class="small fw-semibold">
+                    {{ c.assigned_to.get_full_name|default:c.assigned_to.username }}
+                  </div>
+                </div>
+              {% else %}
+                <span class="text-muted small fst-italic">
+                  <i class="bi bi-person-x me-1"></i>Unassigned
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- Created Date -->
+            <td class="text-end">
+              <div class="small">
+                <i class="bi bi-clock text-muted me-1"></i>
+                <span class="fw-semibold">{{ c.created_at|date:"d M Y" }}</span>
+              </div>
+              <div class="text-muted" style="font-size: 0.75rem;">
+                {{ c.created_at|date:"H:i" }}
+              </div>
+            </td>
+
           </tr>
           {% empty %}
-          <tr><td colspan="6" class="text-center text-muted py-4">No CSR requests submitted yet.</td></tr>
+          <tr>
+            <td colspan="{% if is_csm %}8{% else %}7{% endif %}" class="text-center py-5">
+              <div class="text-muted">
+                <i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>
+                <h6 class="fw-semibold">No Requests Found</h6>
+                <p class="small mb-3">
+                  {% if filters.q or filters.status or filters.category or filters.priority %}
+                    No requests match your current filters. Try adjusting your search criteria.
+                  {% else %}
+                    You haven't submitted any CSR requests yet.
+                  {% endif %}
+                </p>
+                {% if not filters.q and not filters.status and not filters.category and not filters.priority %}
+                  <a href="#" class="btn btn-primary btn-sm">
+                    <i class="bi bi-plus-circle me-1"></i>Submit New Request
+                  </a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+
+    <!-- Table Footer with Summary -->
+    {% if csrs %}
+      <div class="card-footer bg-light text-muted small">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+          <div>
+            <i class="bi bi-info-circle me-1"></i>
+            Showing <strong>{{ csrs|length }}</strong> request{{ csrs|length|pluralize }}
+          </div>
+          <div class="d-flex flex-wrap gap-3">
+            <div>
+              <i class="bi bi-circle-fill text-secondary me-1" style="font-size: 0.5rem;"></i>
+              <span class="small">New: <strong>{{ stats.new_count|default:0 }}</strong></span>
+            </div>
+            <div>
+              <i class="bi bi-circle-fill text-primary me-1" style="font-size: 0.5rem;"></i>
+              <span class="small">In Progress: <strong>{{ stats.in_progress_count|default:0 }}</strong></span>
+            </div>
+            <div>
+              <i class="bi bi-circle-fill text-success me-1" style="font-size: 0.5rem;"></i>
+              <span class="small">Completed: <strong>{{ stats.completed_count|default:0 }}</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
   </div>
+
+  <!-- =========================
+       QUICK STATS (Optional)
+  ========================== -->
+  {% if csrs and show_stats %}
+  <div class="row g-3 mt-4">
+    <div class="col-md-3">
+      <div class="card border-start border-secondary border-4 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small fw-semibold mb-1">NEW</div>
+              <div class="fs-3 fw-bold text-secondary">{{ stats.new_count|default:0 }}</div>
+            </div>
+            <i class="bi bi-circle fs-4 text-secondary opacity-25"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-start border-primary border-4 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small fw-semibold mb-1">IN PROGRESS</div>
+              <div class="fs-3 fw-bold text-primary">{{ stats.in_progress_count|default:0 }}</div>
+            </div>
+            <i class="bi bi-arrow-repeat fs-4 text-primary opacity-25"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-start border-success border-4 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small fw-semibold mb-1">COMPLETED</div>
+              <div class="fs-3 fw-bold text-success">{{ stats.completed_count|default:0 }}</div>
+            </div>
+            <i class="bi bi-check-circle fs-4 text-success opacity-25"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-start border-danger border-4 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="text-muted small fw-semibold mb-1">URGENT</div>
+              <div class="fs-3 fw-bold text-danger">{{ stats.urgent_count|default:0 }}</div>
+            </div>
+            <i class="bi bi-exclamation-triangle-fill fs-4 text-danger opacity-25"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
+
+<!-- Custom Styles -->
+<style>
+  .table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+    cursor: pointer;
+  }
+
+  .table td {
+    vertical-align: middle;
+    padding: 1rem 0.75rem;
+  }
+
+  .badge {
+    padding: 0.4rem 0.6rem;
+    font-weight: 500;
+    font-size: 0.75rem;
+  }
+
+  .card {
+    border: none;
+  }
+
+  .card-header {
+    border-bottom: 2px solid #e9ecef;
+  }
+
+  .form-select:focus,
+  .form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+  }
+
+  /* Make entire row clickable */
+  .table tbody tr {
+    transition: all 0.2s ease;
+  }
+
+  /* Priority row highlighting */
+  .table-danger {
+    background-color: rgba(220, 53, 69, 0.05) !important;
+  }
+
+  .table-warning {
+    background-color: rgba(255, 193, 7, 0.05) !important;
+  }
+
+  /* Stats cards hover effect */
+  .card:hover {
+    transform: translateY(-2px);
+    transition: transform 0.2s ease;
+  }
+</style>
+
+<!-- Optional: Make entire row clickable -->
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.querySelectorAll('table tbody tr');
+    rows.forEach(row => {
+      const link = row.querySelector('a[href*="cs_detail"]');
+      if (link) {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function(e) {
+          // Don't navigate if clicking on a link or button
+          if (e.target.tagName !== 'A' && e.target.tagName !== 'BUTTON') {
+            window.location.href = link.href;
+          }
+        });
+      }
+    });
+  });
+</script>
+
 {% endblock %}

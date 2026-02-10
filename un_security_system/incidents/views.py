@@ -16,7 +16,6 @@ from .models import IncidentReport, CommonServiceRequest
 from .forms import IncidentReportForm, IncidentUpdateForm
 from .permissions import can_user_manage_csr, is_common_services_manager
 
-
 User = get_user_model()
 
 
@@ -147,7 +146,7 @@ def _notify_assigned_incident(incident, is_new_assignment=False):
         return
 
     subject = f"[Security Incident] Incident assigned: {incident.title}" if is_new_assignment else \
-              f"[Security Incident] Update on assigned incident: {incident.title}"
+        f"[Security Incident] Update on assigned incident: {incident.title}"
 
     message = (
         f"Hello {assignee.get_full_name() or assignee.username},\n\n"
@@ -199,6 +198,7 @@ def _notify_incident_new_update(incident, update_obj):
         )
         _send_notification(subject, message, assignee.email)
 
+
 # -------------------------------------------------------------------
 # Common Service Request notifications
 # -------------------------------------------------------------------
@@ -230,6 +230,7 @@ def _notify_cs_requester_created(csr):
     )
     _send_notification(subject, message, requester.email)
 
+
 def notify_common_services_manager_new_request(csr):
     managers = User.objects.filter(role="common_services_manager", is_active=True).exclude(email="")
     recipients = list(managers.values_list("email", flat=True))
@@ -240,6 +241,7 @@ def notify_common_services_manager_new_request(csr):
         f"A new CSR was submitted from {csr.agency.code}.\n\nCSR#{csr.pk}: {csr.title}",
         recipients
     )
+
 
 def _notify_cs_level_queue(csr, request, level=None):
     """
@@ -559,7 +561,10 @@ def view_cs_support(request, incident_pk=None):
         if incident.reported_by_id != request.user.id and not is_lsa_or_soc(request.user):
             messages.error(request, "You don't have permission to raise a request for this incident.")
             return redirect("incidents:my_incidents")
-
+    user_agency = getattr(request.user, "agency", None)
+    if not user_agency:
+        messages.error(request, "Your account is not linked to an agency. Please contact ICT.")
+        return redirect("incidents:my_incidents")
     if request.method == "POST":
         title = (request.POST.get("title") or "").strip()
         category = (request.POST.get("category") or CommonServiceRequest.Category.COMMON_PREMISES).strip()
@@ -577,6 +582,7 @@ def view_cs_support(request, incident_pk=None):
             return render(request, "common_services/cs_support_form.html", {"incident": incident})
 
         csr = CommonServiceRequest.objects.create(
+            agency=user_agency,
             incident=incident,
             title=title,
             category=category,
@@ -609,14 +615,20 @@ def view_cs_support(request, incident_pk=None):
         messages.success(request, "Common Service Request submitted successfully.")
         if incident:
             return redirect("incidents:incident_detail", pk=incident.pk)
-        return redirect("common_services:cs_detail", pk=csr.pk)
+        return redirect("incidents:cs_detail", pk=csr.pk)
 
     return render(request, "common_services/cs_support_form.html", {"incident": incident})
+
 
 @login_required
 @require_http_methods(["POST"])
 def csr_assign_view(request, pk):
     csr = get_object_or_404(CommonServiceRequest, pk=pk)
+
+    # ✅ Prevent assignment changes for completed/cancelled requests
+    if csr.status in ['completed', 'cancelled']:
+        messages.error(request, f"Cannot modify assignment. Request is {csr.get_status_display()}.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
 
     if not can_user_manage_csr(request.user, csr):
         messages.error(request, "You do not have permission to assign this request.")
@@ -631,7 +643,7 @@ def csr_assign_view(request, pk):
         User,
         pk=assignee_id,
         is_active=True,
-        agency_id=csr.agency_id,   # ✅ agency-scoped
+        agency_id=csr.agency_id,  # ✅ agency-scoped
     )
 
     # Assign
@@ -652,7 +664,8 @@ def csr_assign_view(request, pk):
         pass
 
     messages.success(request, f"Request assigned to {assignee.get_full_name() or assignee.username}.")
-    return redirect("common_services:cs_detail", pk=csr.pk)
+    return redirect("incidents:cs_detail", pk=csr.pk)
+
 
 @login_required
 def csr_fulfiller_queue(request):
@@ -708,6 +721,7 @@ def csr_fulfiller_queue(request):
         "is_csm": is_common_services_manager(user),
     })
 
+
 @login_required
 def my_csr_requests(request):
     user = request.user
@@ -739,3 +753,313 @@ def my_csr_requests(request):
         "filters": {"status": status, "category": category, "priority": priority, "q": q},
         "csr_model": CommonServiceRequest,
     })
+
+
+@login_required
+def cs_detail(request, pk):
+    csr = get_object_or_404(
+        CommonServiceRequest.objects.select_related("requested_by", "assigned_to", "incident", "agency"),
+        pk=pk
+    )
+
+    user = request.user
+    is_csm = is_common_services_manager(user)
+    can_manage = can_user_manage_csr(user, csr)
+
+    # ✅ Access rule
+    # - Common Service Manager (all agencies) OR superuser
+    # - Request owner
+    # - Assigned fulfiller
+    # - Any user who can manage CSR (approver/level1 manager/role overrides)
+    if not (
+            is_csm or user.is_superuser or csr.requested_by_id == user.id or csr.assigned_to_id == user.id or can_manage):
+        messages.error(request, "You don't have permission to view this Common Service Request.")
+        return redirect("incidents:my_csr")
+
+    # ✅ Assignable users list
+    # - Managers can assign across all agencies
+    # - Others assign only within same agency
+    if is_csm or user.is_superuser:
+        assignable_users = User.objects.filter(is_active=True).order_by("first_name", "last_name", "username")
+    else:
+        assignable_users = User.objects.filter(
+            is_active=True,
+            agency_id=csr.agency_id
+        ).order_by("first_name", "last_name", "username")
+
+    return render(request, "common_services/cs_detail.html", {
+        "csr": csr,
+        "assignable_users": assignable_users,
+        "can_manage": can_manage or is_csm or user.is_superuser,
+        "is_csm": is_csm,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def cs_update_status(request, pk):
+    csr = get_object_or_404(CommonServiceRequest, pk=pk)
+
+    user = request.user
+    is_csm = is_common_services_manager(user)
+
+    # ✅ Permission: assigned fulfiller OR CSM OR superuser
+    if not (user.is_superuser or is_csm or csr.assigned_to_id == user.id):
+        messages.error(request, "You are not allowed to update the status of this request.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
+
+    new_status = (request.POST.get("status") or "").strip()
+    allowed = {v for v, _ in csr.Status.choices}  # uses model choices safely
+
+    if new_status not in allowed:
+        messages.error(request, "Invalid status.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
+
+    # Optional: prevent random jumps (professional workflow)
+    # New -> In Progress -> Completed/Cancelled
+    valid_transitions = {
+        "new": {"in_progress", "cancelled"},
+        "in_progress": {"completed", "cancelled"},
+        "completed": set(),
+        "cancelled": set(),
+    }
+
+    if csr.status in valid_transitions and new_status not in valid_transitions[csr.status] and new_status != csr.status:
+        messages.error(request, f"You cannot move from {csr.get_status_display()} to the selected status.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
+
+    if csr.status == new_status:
+        messages.info(request, "Status is already set to that value.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
+
+    csr.status = new_status
+    csr.save(update_fields=["status", "updated_at"])
+
+    messages.success(request, f"Status updated to: {csr.get_status_display()}.")
+    return redirect("incidents:cs_detail", pk=csr.pk)
+
+
+@login_required
+def csr_dashboard(request):
+    """
+    CSR Dashboard - accessible by superusers and Common Service Managers only.
+    Shows overview statistics, charts, recent activity, and management tools.
+    """
+    user = request.user
+    is_csm = is_common_services_manager(user)
+
+    # ✅ Permission check: only superuser or CSM can access
+    if not (user.is_superuser or is_csm):
+        messages.error(request, "You don't have permission to access the CSR Dashboard.")
+        return redirect("incidents:my_csr")
+
+    # ✅ Base queryset - CSM sees all
+    qs = CommonServiceRequest.objects.all()
+
+    # Optional agency filter for multi-agency CSMs
+    agency_filter = request.GET.get("agency") or ""
+    if agency_filter:
+        qs = qs.filter(agency_id=agency_filter)
+
+    # Date range filter (optional)
+    from datetime import datetime, timedelta
+    date_range = request.GET.get("range", "30")  # default 30 days
+    try:
+        days = int(date_range)
+        if days > 0:
+            cutoff = timezone.now() - timedelta(days=days)
+            qs_filtered = qs.filter(created_at__gte=cutoff)
+        else:
+            qs_filtered = qs
+    except (ValueError, TypeError):
+        qs_filtered = qs
+        days = 30
+
+    # ✅ Statistics
+    from django.db.models import Count, Q
+
+    # Total counts
+    total_requests = qs.count()
+    total_filtered = qs_filtered.count()
+
+    # By status
+    status_stats = {
+        "new": qs.filter(status="new").count(),
+        "in_progress": qs.filter(status="in_progress").count(),
+        "completed": qs.filter(status="completed").count(),
+        "cancelled": qs.filter(status="cancelled").count(),
+    }
+
+    # By priority
+    priority_stats = {
+        "urgent": qs.filter(priority="urgent").count(),
+        "high": qs.filter(priority="high").count(),
+        "medium": qs.filter(priority="medium").count(),
+        "low": qs.filter(priority="low").count(),
+    }
+
+    # By category (top 5)
+    category_stats = (
+        qs.values("category")
+        .annotate(count=Count("id"))
+        .order_by("-count")[:5]
+    )
+
+    # Recent activity - last 10 requests
+    recent_requests = (
+        qs.select_related("requested_by", "assigned_to", "agency")
+        .order_by("-created_at")[:10]
+    )
+
+    # Pending/Actionable items
+    pending_new = qs.filter(status="new").count()
+    unassigned = qs.filter(assigned_to__isnull=True).exclude(status="cancelled").count()
+    urgent_open = qs.filter(priority="urgent").exclude(status__in=["completed", "cancelled"]).count()
+    escalated = qs.exclude(escalated_to="").count()
+
+    # Agency breakdown (if managing multiple agencies)
+    from accounts.models import Agency
+    agencies = Agency.objects.all().order_by("name")
+    agency_breakdown = []
+    for agency in agencies:
+        agency_breakdown.append({
+            "agency": agency,
+            "total": qs.filter(agency=agency).count(),
+            "new": qs.filter(agency=agency, status="new").count(),
+            "in_progress": qs.filter(agency=agency, status="in_progress").count(),
+            "completed": qs.filter(agency=agency, status="completed").count(),
+        })
+
+    # Monthly trend (last 6 months)
+    from django.db.models.functions import TruncMonth
+    monthly_trend = (
+        qs.filter(created_at__gte=timezone.now() - timedelta(days=180))
+        .annotate(month=TruncMonth("created_at"))
+        .values("month")
+        .annotate(count=Count("id"))
+        .order_by("month")
+    )
+
+    # Average resolution time (for completed requests in last 30 days)
+    completed_recent = qs.filter(
+        status="completed",
+        created_at__gte=timezone.now() - timedelta(days=30)
+    )
+
+    resolution_times = []
+    for csr in completed_recent:
+        if csr.created_at and csr.updated_at:
+            delta = csr.updated_at - csr.created_at
+            resolution_times.append(delta.total_seconds() / 3600)  # hours
+
+    avg_resolution_hours = sum(resolution_times) / len(resolution_times) if resolution_times else 0
+
+    context = {
+        "total_requests": total_requests,
+        "total_filtered": total_filtered,
+        "date_range_days": days,
+        "status_stats": status_stats,
+        "priority_stats": priority_stats,
+        "category_stats": category_stats,
+        "recent_requests": recent_requests,
+        "pending_new": pending_new,
+        "unassigned": unassigned,
+        "urgent_open": urgent_open,
+        "escalated": escalated,
+        "agency_breakdown": agency_breakdown,
+        "agencies": agencies,
+        "selected_agency": agency_filter,
+        "monthly_trend": list(monthly_trend),
+        "avg_resolution_hours": avg_resolution_hours,
+        "is_csm": is_csm,
+        "csr_model": CommonServiceRequest,
+    }
+
+    return render(request, "common_services/csr_dashboard.html", context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def cs_escalate(request, pk):
+    """
+    Escalate a CSR to a specific role or user.
+    Only CSM or superuser can escalate.
+    """
+    csr = get_object_or_404(CommonServiceRequest, pk=pk)
+
+    user = request.user
+    is_csm = is_common_services_manager(user)
+
+    # ✅ Permission: only CSM or superuser can escalate
+    if not (user.is_superuser or is_csm):
+        messages.error(request, "You are not allowed to escalate this request.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
+
+    # ✅ Prevent escalation changes for completed/cancelled requests
+    if csr.status in ['completed', 'cancelled']:
+        messages.error(request, f"Cannot escalate request. Request is {csr.get_status_display()}.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
+
+    escalate_to_role = (request.POST.get("escalate_to_role") or "").strip()
+    escalate_to_user_id = request.POST.get("escalate_to_user") or ""
+
+    # Clear escalation if neither is provided
+    if not escalate_to_role and not escalate_to_user_id:
+        csr.escalated_to = ""
+        csr.escalated_to_user = None
+        csr.escalated_at = None
+        csr.save(update_fields=["escalated_to", "escalated_to_user", "escalated_at", "updated_at"])
+        messages.success(request, "Escalation cleared.")
+        return redirect("incidents:cs_detail", pk=csr.pk)
+
+    # Set escalation
+    csr.escalated_to = escalate_to_role
+
+    if escalate_to_user_id:
+        try:
+            escalate_user = User.objects.get(pk=int(escalate_to_user_id), is_active=True)
+            csr.escalated_to_user = escalate_user
+        except (User.DoesNotExist, ValueError):
+            messages.error(request, "Invalid user selected for escalation.")
+            return redirect("incidents:cs_detail", pk=csr.pk)
+    else:
+        csr.escalated_to_user = None
+
+    csr.escalated_at = timezone.now()
+    csr.save(update_fields=["escalated_to", "escalated_to_user", "escalated_at", "updated_at"])
+
+    # Notify escalated user
+    if csr.escalated_to_user and csr.escalated_to_user.email:
+        try:
+            _notify_cs_escalated(csr)
+        except Exception:
+            pass
+
+    messages.success(request, f"Request escalated successfully.")
+    return redirect("incidents:cs_detail", pk=csr.pk)
+
+
+def _notify_cs_escalated(csr):
+    """
+    Notify the escalated user about the escalation.
+    """
+    if not csr.escalated_to_user or not csr.escalated_to_user.email:
+        return
+
+    subject = f"[CSR Escalated] Common Service Request #{csr.id}: {csr.title}"
+    message = (
+        f"Hello {csr.escalated_to_user.get_full_name() or csr.escalated_to_user.username},\n\n"
+        f"A Common Service Request has been escalated to you.\n\n"
+        f"Request ID: CSR#{csr.id}\n"
+        f"Title: {csr.title}\n"
+        f"Category: {csr.get_category_display()}\n"
+        f"Priority: {csr.get_priority_display()}\n"
+        f"Status: {csr.get_status_display()}\n"
+        f"Requested by: {csr.requested_by.get_full_name() or csr.requested_by.username}\n"
+        f"Escalated role: {csr.escalated_to or 'N/A'}\n"
+        f"Escalated at: {csr.escalated_at.strftime('%Y-%m-%d %H:%M') if csr.escalated_at else 'N/A'}\n\n"
+        f"Description:\n{csr.description}\n\n"
+        f"Please review and take appropriate action.\n\n"
+        f"Best regards,\nUN Security / Common Services System"
+    )
+    _send_notification(subject, message, csr.escalated_to_user.email)

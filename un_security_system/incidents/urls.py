@@ -11,6 +11,9 @@ urlpatterns = [
     path("<int:pk>/update/", views.add_update, name="add_update"),
     path("<int:pk>/status/", views.change_status, name="change_status"),  # LSA/SOC
 
+    # CSR Dashboard (for superuser and CSM)
+    path("common-services/dashboard/", views.csr_dashboard, name="csr_dashboard"),
+
     # Create CS request (general)
     path("common-services/request/", views.view_cs_support, name="cs_support"),
 
@@ -20,5 +23,9 @@ urlpatterns = [
 
     path("queue/", views.csr_fulfiller_queue, name="csr_queue"),
     path("mine/", views.my_csr_requests, name="my_csr"),
+    path("common-services/<int:pk>/", views.cs_detail, name="cs_detail"),
+    path("common-services/<int:pk>/status/", views.cs_update_status, name="cs_update_status"),
+
+    path("common-services/<int:pk>/escalate/", views.cs_escalate, name="cs_escalate"),
 
 ]

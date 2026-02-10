@@ -4,123 +4,330 @@
 {% block content %}
 <div class="container py-4">
 
-  <!-- Header -->
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-      <h4 class="mb-1">Common Service Request</h4>
-      <p class="text-muted mb-0">
-        Submit a request related to facilities, utilities, or common premises support
-        {% if incident %}
-          <span class="badge bg-warning text-dark ms-2">
-            Linked to Security Incident #{{ incident.id }}
-          </span>
-        {% endif %}
-      </p>
+  <!-- =========================
+       PAGE HEADER
+  ========================== -->
+  <div class="mb-4">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <h4 class="mb-0 fw-bold text-dark">
+        <i class="bi bi-file-earmark-plus text-primary me-2"></i>
+        Submit Common Service Request
+      </h4>
+      {% if incident %}
+        <span class="badge bg-warning text-dark">
+          <i class="bi bi-shield-exclamation me-1"></i>
+          Linked to Security Incident #{{ incident.id }}
+        </span>
+      {% endif %}
     </div>
+    <p class="text-muted mb-0">
+      <i class="bi bi-info-circle me-1"></i>
+      Submit requests related to facilities, utilities, or common premises support
+    </p>
   </div>
 
-  <!-- Form Card -->
-  <div class="card shadow-sm border-0">
+  <!-- =========================
+       FORM CARD
+  ========================== -->
+  <div class="card shadow-sm">
     <div class="card-body p-4">
 
-      <form method="post" enctype="multipart/form-data">
+      <form method="post" enctype="multipart/form-data" id="csrForm">
         {% csrf_token %}
+
+        <!-- Hidden field for incident linkage -->
+        {% if incident %}
+          <input type="hidden" name="incident" value="{{ incident.id }}">
+        {% endif %}
 
         <!-- =====================
              REQUEST OVERVIEW
         ====================== -->
-        <h6 class="text-uppercase text-muted mb-3">
-          Request Overview
-        </h6>
-
-        <div class="row g-3 mb-4">
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Request Title <span class="text-danger">*</span></label>
-            <input
-              type="text"
-              name="title"
-              class="form-control"
-              placeholder="e.g. Replace broken electrical outlet – 2nd floor"
-              required
-            >
+        <div class="mb-5">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <i class="bi bi-1-circle-fill text-primary fs-5"></i>
+            <h5 class="mb-0 fw-bold">Request Overview</h5>
           </div>
 
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Service Category</label>
-            <select name="category" class="form-select">
-              <option value="">— Select category —</option>
-              <option value="common_premises">Common Premises / General</option>
-              <option value="cash_power">Cash Power Refill</option>
-              <option value="facility_notice">Facility Work / Disruption Notice</option>
-              <option value="electrical">Electrical (Bulbs, Switches, Outlets, Failover)</option>
-              <option value="plumbing">Plumbing / Toilets</option>
-              <option value="cleaning">Cleaning Services</option>
-              <option value="waste">Dumpster / Waste Disposal</option>
-              <option value="grounds">Grounds / Tree Trimming</option>
-              <option value="solar">Solar System Issue</option>
-              <option value="cctv">CCTV Issue</option>
-              <option value="other">Other</option>
-            </select>
+          <div class="row g-3">
+
+            <!-- Title -->
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-card-heading me-1 text-muted"></i>
+                Request Title <span class="text-danger">*</span>
+              </label>
+              <input
+                type="text"
+                name="title"
+                class="form-control form-control-lg"
+                placeholder="e.g., Replace broken electrical outlet – 2nd floor lobby"
+                maxlength="200"
+                required
+                aria-required="true">
+              <div class="form-text">
+                <i class="bi bi-lightbulb me-1"></i>
+                Be specific and include the location
+              </div>
+            </div>
+
+            <!-- Category -->
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-tag me-1 text-muted"></i>
+                Service Category <span class="text-danger">*</span>
+              </label>
+              <select name="category" class="form-select" required aria-required="true" id="categorySelect">
+                <option value="">— Select a category —</option>
+                <option value="common_premises">Common Premises / General</option>
+                <option value="cash_power">Cash Power Refill</option>
+                <option value="facility_notice">Facility Work / Disruption Notice</option>
+                <option value="electrical">Electrical (Bulbs, Switches, Outlets, Failover)</option>
+                <option value="plumbing">Plumbing / Toilets</option>
+                <option value="cleaning">Cleaning Services</option>
+                <option value="waste">Dumpster / Waste Disposal</option>
+                <option value="grounds">Grounds / Tree Trimming</option>
+                <option value="solar">Solar System Issue</option>
+                <option value="cctv">CCTV Issue</option>
+                <option value="other">Other</option>
+              </select>
+              <div class="form-text">
+                <i class="bi bi-info-circle me-1"></i>
+                Select the most relevant category
+              </div>
+            </div>
+
+            <!-- Priority -->
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-flag me-1 text-muted"></i>
+                Priority Level <span class="text-danger">*</span>
+              </label>
+              <select name="priority" class="form-select" required aria-required="true">
+                <option value="">— Select priority —</option>
+                <option value="low">
+                  Low - Can wait (routine maintenance)
+                </option>
+                <option value="medium" selected>
+                  Medium - Normal urgency (within days)
+                </option>
+                <option value="high">
+                  High - Soon (within 24 hours)
+                </option>
+                <option value="urgent">
+                  Urgent - Immediate attention required
+                </option>
+              </select>
+              <div class="form-text">
+                <i class="bi bi-info-circle me-1"></i>
+                Honest assessment helps prioritize work
+              </div>
+            </div>
+
+            <!-- Location -->
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-geo-alt me-1 text-muted"></i>
+                Location
+              </label>
+              <input
+                type="text"
+                name="location"
+                class="form-control"
+                placeholder="e.g., Building A, 2nd Floor, East Wing, Room 204"
+                maxlength="200">
+              <div class="form-text">
+                <i class="bi bi-geo-alt me-1"></i>
+                Specify building, floor, room, or area for faster service
+              </div>
+            </div>
+
           </div>
         </div>
 
         <!-- =====================
              REQUEST DETAILS
         ====================== -->
-        <h6 class="text-uppercase text-muted mb-3">
-          Request Details
-        </h6>
+        <div class="mb-5">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <i class="bi bi-2-circle-fill text-primary fs-5"></i>
+            <h5 class="mb-0 fw-bold">Request Details</h5>
+          </div>
 
-        <div class="mb-4">
-          <label class="form-label fw-semibold">
-            Description <span class="text-danger">*</span>
-          </label>
-          <textarea
-            name="description"
-            class="form-control"
-            rows="5"
-            placeholder="Provide clear details of the issue, location, urgency, and any operational impact…"
-            required
-          ></textarea>
-          <div class="form-text">
-            Please include location, urgency, and whether this may disrupt daily operations.
+          <div class="row g-3">
+
+            <!-- Description -->
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-card-text me-1 text-muted"></i>
+                Detailed Description <span class="text-danger">*</span>
+              </label>
+              <textarea
+                name="description"
+                class="form-control"
+                rows="6"
+                placeholder="Provide clear details including:&#10;• What is the issue or request?&#10;• Where exactly is it located?&#10;• When did it start (if applicable)?&#10;• How urgent is it?&#10;• Does it affect daily operations?&#10;• Any safety concerns?"
+                required
+                aria-required="true"></textarea>
+              <div class="form-text">
+                <i class="bi bi-info-circle me-1"></i>
+                Please include location, urgency, operational impact, and any safety concerns
+              </div>
+            </div>
+
           </div>
         </div>
 
         <!-- =====================
-             ATTACHMENTS
+             FACILITY NOTICE SECTION (Conditional)
         ====================== -->
-        <h6 class="text-uppercase text-muted mb-3">
-          Supporting Information
-        </h6>
+        <div class="mb-5" id="facilityNoticeSection" style="display: none;">
+          <div class="alert alert-info border-info">
+            <div class="d-flex gap-2">
+              <i class="bi bi-megaphone fs-5"></i>
+              <div class="flex-grow-1">
+                <h6 class="alert-heading fw-bold mb-2">Facility Work / Disruption Notice</h6>
+                <p class="small mb-3">
+                  If this request is to notify others about planned facility work or a service disruption,
+                  please provide the expected start and end times below.
+                </p>
 
-        <div class="mb-4">
-          <label class="form-label fw-semibold">Attachment (optional)</label>
-          <input type="file" name="attachment" class="form-control">
-          <div class="form-text">
-            You may upload photos, documents, or screenshots (PDF, JPG, PNG).
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold small">
+                      <i class="bi bi-calendar-event me-1"></i>Disruption Start
+                    </label>
+                    <input
+                      type="datetime-local"
+                      name="disruption_start"
+                      class="form-control"
+                      id="disruptionStart">
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold small">
+                      <i class="bi bi-calendar-check me-1"></i>Disruption End
+                    </label>
+                    <input
+                      type="datetime-local"
+                      name="disruption_end"
+                      class="form-control"
+                      id="disruptionEnd">
+                  </div>
+                </div>
+
+                <div class="form-text mt-2">
+                  <i class="bi bi-info-circle me-1"></i>
+                  Optional: Helps communicate expected downtime to affected parties
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- =====================
-             ACTIONS
+             SUPPORTING INFORMATION
         ====================== -->
-        <div class="d-flex justify-content-end gap-2 pt-3 border-top">
-          {% if incident %}
-            <a href="{% url 'incidents:incident_detail' incident.pk %}"
-               class="btn btn-outline-secondary">
-              Cancel
-            </a>
-          {% else %}
-            <a href="{% url 'incidents:my_incidents' %}"
-               class="btn btn-outline-secondary">
-              Cancel
-            </a>
-          {% endif %}
+        <div class="mb-5">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <i class="bi bi-3-circle-fill text-primary fs-5"></i>
+            <h5 class="mb-0 fw-bold">Supporting Information</h5>
+          </div>
 
-          <button type="submit" class="btn btn-primary px-4">
-            Submit Request
-          </button>
+          <div class="row g-3">
+
+            <!-- Attachment -->
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-paperclip me-1 text-muted"></i>
+                Attachment <span class="text-muted small">(optional)</span>
+              </label>
+              <input
+                type="file"
+                name="attachment"
+                class="form-control"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                id="attachmentInput">
+              <div class="form-text">
+                <i class="bi bi-file-earmark-image me-1"></i>
+                Upload photos, documents, or screenshots (PDF, JPG, PNG, DOC - max 10MB)
+              </div>
+              <div id="attachmentPreview" class="mt-2"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- =====================
+             REQUESTOR INFORMATION (if not auto-filled)
+        ====================== -->
+        <div class="mb-4">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <i class="bi bi-4-circle-fill text-primary fs-5"></i>
+            <h5 class="mb-0 fw-bold">Contact Information</h5>
+          </div>
+
+          <div class="alert alert-light border">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="small text-muted fw-semibold">Submitted by</div>
+                <div class="fw-semibold">
+                  <i class="bi bi-person-circle me-1 text-primary"></i>
+                  {{ request.user.get_full_name|default:request.user.username }}
+                </div>
+                {% if request.user.email %}
+                  <div class="text-muted small">
+                    <i class="bi bi-envelope me-1"></i>{{ request.user.email }}
+                  </div>
+                {% endif %}
+              </div>
+
+              {% if request.user.agency %}
+                <div class="col-md-6">
+                  <div class="small text-muted fw-semibold">Agency</div>
+                  <div class="fw-semibold">
+                    <i class="bi bi-building me-1 text-primary"></i>
+                    {{ request.user.agency.code|default:request.user.agency.name }}
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="form-text mt-2">
+              <i class="bi bi-shield-check me-1"></i>
+              Your contact information will be used to follow up on this request
+            </div>
+          </div>
+        </div>
+
+        <!-- =====================
+             FORM ACTIONS
+        ====================== -->
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 pt-4 border-top">
+
+          <div class="form-text mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            Fields marked with <span class="text-danger">*</span> are required
+          </div>
+
+          <div class="d-flex gap-2">
+            {% if incident %}
+              <a href="{% url 'incidents:incident_detail' incident.pk %}"
+                 class="btn btn-outline-secondary">
+                <i class="bi bi-x-circle me-1"></i>Cancel
+              </a>
+            {% else %}
+              <a href="{% url 'incidents:my_csr' %}"
+                 class="btn btn-outline-secondary">
+                <i class="bi bi-x-circle me-1"></i>Cancel
+              </a>
+            {% endif %}
+
+            <button type="submit" class="btn btn-primary px-4">
+              <i class="bi bi-send me-1"></i>Submit Request
+            </button>
+          </div>
+
         </div>
 
       </form>
@@ -128,5 +335,186 @@
     </div>
   </div>
 
+  <!-- =====================
+       HELP SECTION
+  ====================== -->
+  <div class="card bg-light border-0 mt-4">
+    <div class="card-body">
+      <h6 class="fw-bold mb-3">
+        <i class="bi bi-question-circle text-primary me-2"></i>Need Help?
+      </h6>
+      <div class="row g-3 small">
+        <div class="col-md-4">
+          <div class="fw-semibold mb-1">
+            <i class="bi bi-lightning-charge text-warning me-1"></i>Emergency Issues
+          </div>
+          <p class="mb-0 text-muted">
+            For immediate safety concerns (electrical, plumbing leaks, security),
+            please contact the facility manager directly or call the emergency hotline.
+          </p>
+        </div>
+        <div class="col-md-4">
+          <div class="fw-semibold mb-1">
+            <i class="bi bi-clock-history text-info me-1"></i>Response Time
+          </div>
+          <p class="mb-0 text-muted">
+            Most requests are acknowledged within 24 hours. Urgent issues receive
+            priority attention. You'll receive updates via email.
+          </p>
+        </div>
+        <div class="col-md-4">
+          <div class="fw-semibold mb-1">
+            <i class="bi bi-envelope text-success me-1"></i>Track Your Request
+          </div>
+          <p class="mb-0 text-muted">
+            After submission, you can track your request status in
+            <a href="{% url 'incidents:my_csr' %}">My CSR Requests</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
+
+<!-- Custom Styles -->
+<style>
+  .card {
+    border: none;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+  }
+
+  .form-label {
+    margin-bottom: 0.5rem;
+  }
+
+  .border-bottom {
+    border-color: #dee2e6 !important;
+  }
+
+  textarea.form-control {
+    resize: vertical;
+    min-height: 120px;
+  }
+
+  .alert {
+    border-radius: 0.5rem;
+  }
+
+  /* File preview styling */
+  #attachmentPreview {
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 0.375rem;
+    display: none;
+  }
+
+  #attachmentPreview.show {
+    display: block;
+  }
+
+  /* Form validation */
+  .was-validated .form-control:invalid,
+  .was-validated .form-select:invalid {
+    border-color: #dc3545;
+  }
+
+  .was-validated .form-control:valid,
+  .was-validated .form-select:valid {
+    border-color: #198754;
+  }
+</style>
+
+<!-- JavaScript for Dynamic Behavior -->
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+
+    // Toggle Facility Notice section based on category
+    const categorySelect = document.getElementById('categorySelect');
+    const facilitySection = document.getElementById('facilityNoticeSection');
+    const disruptionStart = document.getElementById('disruptionStart');
+    const disruptionEnd = document.getElementById('disruptionEnd');
+
+    if (categorySelect && facilitySection) {
+      categorySelect.addEventListener('change', function() {
+        if (this.value === 'facility_notice') {
+          facilitySection.style.display = 'block';
+          facilitySection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+          facilitySection.style.display = 'none';
+          if (disruptionStart) disruptionStart.value = '';
+          if (disruptionEnd) disruptionEnd.value = '';
+        }
+      });
+    }
+
+    // File attachment preview
+    const attachmentInput = document.getElementById('attachmentInput');
+    const attachmentPreview = document.getElementById('attachmentPreview');
+
+    if (attachmentInput && attachmentPreview) {
+      attachmentInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const fileSize = (file.size / 1024 / 1024).toFixed(2); // MB
+          const fileName = file.name;
+          const fileType = file.type;
+
+          // Check file size (10MB limit)
+          if (fileSize > 10) {
+            alert('File size exceeds 10MB limit. Please choose a smaller file.');
+            attachmentInput.value = '';
+            attachmentPreview.classList.remove('show');
+            return;
+          }
+
+          // Display preview
+          attachmentPreview.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-file-earmark-check text-success fs-4"></i>
+                <div>
+                  <div class="fw-semibold small">${fileName}</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">${fileSize} MB</div>
+                </div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearAttachment()">
+                <i class="bi bi-x-circle"></i>
+              </button>
+            </div>
+          `;
+          attachmentPreview.classList.add('show');
+        } else {
+          attachmentPreview.classList.remove('show');
+        }
+      });
+    }
+
+    // Form validation on submit
+    const form = document.getElementById('csrForm');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        if (!form.checkValidity()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        form.classList.add('was-validated');
+      });
+    }
+  });
+
+  // Clear attachment function
+  function clearAttachment() {
+    const attachmentInput = document.getElementById('attachmentInput');
+    const attachmentPreview = document.getElementById('attachmentPreview');
+    if (attachmentInput) attachmentInput.value = '';
+    if (attachmentPreview) attachmentPreview.classList.remove('show');
+  }
+</script>
+
 {% endblock %}

@@ -414,10 +414,6 @@
                           <a class="dropdown-item" href="{% url 'incidents:triage' %}">
                             <i class="bi bi-life-preserver"></i> Incident Triage
                           </a>
-                            <a class="btn btn-warning"
-   href="{% url 'incidents:incident_cs_support' incident.pk %}">
-  Request Common Service Support
-</a>
 
                         </li>
                       </ul>
@@ -504,48 +500,55 @@
 
                 {% endif %}
 
-{% if request.user.is_authenticated %}
-  <li class="nav-item dropdown">
-    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-      <i class="bi bi-tools me-1"></i> Common Services
-    </a>
+                {% if request.user.is_authenticated %}
+                  <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                      <i class="bi bi-tools me-1"></i> Common Services
+                    </a>
 
-    <ul class="dropdown-menu">
+                    <ul class="dropdown-menu">
 
-      <li>
-        <a class="dropdown-item" href="{% url 'incidents:cs_support' %}">
-          <i class="bi bi-plus-circle me-2"></i> New Service Request
-        </a>
-      </li>
+                      <li>
+                        <a class="dropdown-item" href="{% url 'incidents:cs_support' %}">
+                          <i class="bi bi-plus-circle me-2"></i> New Service Request
+                        </a>
+                      </li>
 
-      <li>
-        <a class="dropdown-item" href="{% url 'incidents:my_csr' %}">
-          <i class="bi bi-file-earmark-text me-2"></i> My Service Requests
-        </a>
-      </li>
+                      <li>
+                        <a class="dropdown-item" href="{% url 'incidents:my_csr' %}">
+                          <i class="bi bi-file-earmark-text me-2"></i> My Service Requests
+                        </a>
+                      </li>
 
-      {% if is_csr_fulfiller or is_csm %}
-      <li>
-        <a class="dropdown-item" href="{% url 'incidents:csr_queue' %}">
-          <i class="bi bi-inbox me-2"></i> My CSR Queue
-        </a>
-      </li>
-      {% endif %}
+                      {% if is_csr_fulfiller or is_csm %}
+                      <li>
+                        <a class="dropdown-item" href="{% url 'incidents:csr_queue' %}">
+                          <i class="bi bi-inbox me-2"></i> My CSR Queue
+                        </a>
+                      </li>
+                      {% endif %}
 
-      {% if is_csm %}
-      <li><hr class="dropdown-divider"></li>
-      <li>
-        <a class="dropdown-item fw-semibold text-primary" href="{% url 'incidents:csr_queue' %}?scope=all">
-          <i class="bi bi-globe me-2"></i> All Agencies (Manager)
-        </a>
-      </li>
-      {% endif %}
 
-    </ul>
-  </li>
+{% if is_csm %}
+<li><hr class="dropdown-divider"></li>
+<li class="dropdown-header text-muted small">
+  <i class="bi bi-shield-check me-1"></i> MANAGER TOOLS
+</li>
+<li>
+  <a class="dropdown-item fw-semibold text-primary" href="{% url 'incidents:csr_dashboard' %}">
+    <i class="bi bi-speedometer2 me-2"></i> CSR Dashboard
+  </a>
+</li>
+<li>
+  <a class="dropdown-item fw-semibold text-primary" href="{% url 'incidents:csr_queue' %}?scope=all">
+    <i class="bi bi-globe me-2"></i> All Agencies Queue
+  </a>
+</li>
 {% endif %}
 
-
+                    </ul>
+                  </li>
+                {% endif %}
 
                 {% if user.is_authenticated %}
                 <li class="nav-item dropdown">
