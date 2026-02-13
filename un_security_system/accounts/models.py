@@ -294,6 +294,24 @@ class RoomAmenity(models.Model):
 
 
 class Room(models.Model):
+    APPROVAL_MODES = (
+        ("manual", "Manual approval (always)"),
+        ("auto", "Auto approval (always)"),
+        ("mixed", "Mixed (auto if no approver configured, otherwise manual)"),
+    )
+
+    approval_mode = models.CharField(
+        max_length=10,
+        choices=APPROVAL_MODES,
+        default="manual",
+        help_text="Controls whether bookings require approval for this room.",
+    )
+
+    auto_approve_notify_approvers = models.BooleanField(
+        default=False,
+        help_text="If auto-approved, still email approvers for visibility (optional)."
+    )
+
     """
     A bookable room (library, conference room, meeting room, etc.)
     """
@@ -462,6 +480,112 @@ class Room(models.Model):
             return f"{hours}h"
         return f"{minutes}m"
 
+class RoomBookingSeries(models.Model):
+    FREQ_CHOICES = (
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+        ("yearly", "Yearly"),
+    )
+
+    room = models.ForeignKey("Room", on_delete=models.CASCADE, related_name="booking_series")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="room_booking_series")
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)  # optional "until"
+
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+
+    frequency = models.CharField(max_length=10, choices=FREQ_CHOICES, null=True, blank=True)
+    interval = models.PositiveIntegerField(default=1)  # every 1 week, every 2 weeks, etc.
+
+    # for weekly recurrence (Mon=0 ... Sun=6), store CSV: "0,2,4"
+    weekdays_csv = models.CharField(max_length=50, blank=True, default="")
+
+    # NEW: Approval fields for the series
+    STATUS_CHOICES = (
+        ("pending", "Pending approval"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+        help_text="Approval status for the entire series"
+    )
+
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="approved_room_series",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="User who approved/rejected this series"
+    )
+
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the series was approved/rejected"
+    )
+
+    rejection_reason = models.TextField(
+        blank=True,
+        help_text="Reason for rejection (if applicable)"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_recurring(self):
+        return bool(self.frequency)
+
+    def approve(self, user):
+        """Approve the series and all its occurrences"""
+        self.status = "approved"
+        self.approved_by = user
+        self.approved_at = timezone.now()
+        self.save(update_fields=["status", "approved_by", "approved_at"])
+
+        # Approve all pending occurrences
+        self.occurrences.filter(status="pending").update(
+            status="approved",
+            approved_by=user,
+            approved_at=timezone.now()
+        )
+
+    def reject(self, user, reason=""):
+        """Reject the series and all its occurrences"""
+        self.status = "rejected"
+        self.approved_by = user
+        self.approved_at = timezone.now()
+        self.rejection_reason = reason
+        self.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason"])
+
+        # Reject all pending occurrences
+        self.occurrences.filter(status="pending").update(
+            status="rejected",
+            approved_by=user,
+            rejection_reason=reason,
+            approved_at=timezone.now()
+        )
+
+    def __str__(self):
+        freq_display = self.get_frequency_display() if self.frequency else "One-time"
+        return f"{self.title} - {freq_display} ({self.room})"
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Room booking series"
+        verbose_name_plural = "Room booking series"
+
+
 class RoomBooking(models.Model):
     """
     A booking request for a room (with approval workflow).
@@ -505,6 +629,12 @@ class RoomBooking(models.Model):
     )
     approved_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True)
+    series = models.ForeignKey(
+        "RoomBookingSeries",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="occurrences",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

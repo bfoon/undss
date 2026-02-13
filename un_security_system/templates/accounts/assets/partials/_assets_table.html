@@ -1,18 +1,97 @@
+<!-- Enhanced Assets Table with Filter, Search, and Analysis -->
+
+<!-- Filter and Search Controls -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <!-- Search -->
+      <div class="col-md-4">
+        <label class="form-label small fw-semibold">Search Assets</label>
+        <input type="text"
+               class="form-control"
+               id="assetSearchInput"
+               placeholder="Search by name, serial, tag...">
+      </div>
+
+      <!-- Category Filter -->
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Category</label>
+        <select class="form-select" id="assetCategoryFilter">
+          <option value="">All Categories</option>
+          {% for cat in categories %}
+            <option value="{{ cat.name }}">{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Unit Filter -->
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Unit</label>
+        <select class="form-select" id="assetUnitFilter">
+          <option value="">All Units</option>
+          <option value="unallocated">Unallocated/Core</option>
+          {% for unit in units %}
+            <option value="{{ unit.name }}">{{ unit.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Status</label>
+        <select class="form-select" id="assetStatusFilter">
+          <option value="">All Status</option>
+          <option value="available">Available</option>
+          <option value="assigned">Assigned</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="retired">Retired</option>
+        </select>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="col-md-2">
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary btn-sm" id="btnResetFilters" title="Reset Filters">
+            <i class="bi bi-arrow-counterclockwise"></i>
+          </button>
+          <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAssetAnalysis" title="View Analytics">
+            <i class="bi bi-graph-up"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Summary -->
+    <div class="mt-3">
+      <small class="text-muted">
+        Showing <span id="assetResultCount" class="fw-semibold">{{ assets|length }}</span> of {{ assets|length }} assets
+      </small>
+    </div>
+  </div>
+</div>
+
+<!-- Header with Actions -->
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <div>
     <h6 class="mb-0 fw-semibold">Assets Registry</h6>
     <small class="text-muted">Agency-owned inventory (laptops, phones, accessories, etc.).</small>
   </div>
 
-  {% if user.is_superuser or user.role == "ict_focal" %}
-    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterAsset">
-      <i class="bi bi-plus-circle me-1"></i> Register Asset
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-outline-secondary" id="btnPrintSelected">
+      <i class="bi bi-printer me-1"></i> Print Selected
     </button>
-  {% endif %}
+    {% if user.is_superuser or user.role == "ict_focal" %}
+      <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterAsset">
+        <i class="bi bi-plus-circle me-1"></i> Register Asset
+      </button>
+    {% endif %}
+  </div>
 </div>
 
+<!-- Assets Table -->
 <div class="table-responsive">
-  <table class="table align-middle">
+  <table class="table align-middle" id="assetsTable">
     <thead>
       <tr>
         <th>Name</th>
@@ -26,9 +105,16 @@
     </thead>
     <tbody>
       {% for a in assets %}
-        <tr>
+        <tr class="asset-row"
+            data-name="{{ a.name|lower }}"
+            data-category="{{ a.category.name }}"
+            data-unit="{{ a.unit.name|default:'unallocated' }}"
+            data-status="{{ a.status }}"
+            data-serial="{{ a.serial_number|default:'' }}"
+            data-tag="{{ a.asset_tag|default:'' }}"
+            data-holder="{{ a.current_holder.get_full_name }}">
           <td class="fw-semibold">
-            <input type="checkbox" class="form-check-input am-asset-check" value="{{ a.id }}">
+            <input type="checkbox" class="form-check-input am-asset-check me-2" value="{{ a.id }}">
             <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' a.id %}">
               {{ a.name }}
             </a>
@@ -60,7 +146,7 @@
             {% endif %}
           </td>
 
-          <td class="text-muted">
+          <td class="text-muted small">
             SN: {{ a.serial_number|default:"-" }} <br>
             Tag: {{ a.asset_tag|default:"-" }}
           </td>
@@ -80,18 +166,378 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="7" class="text-center text-muted py-4">No assets registered yet.</td></tr>
+        <tr class="no-results"><td colspan="7" class="text-center text-muted py-4">No assets registered yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <!-- No Results Message (Hidden by default) -->
+  <div id="noAssetResults" class="text-center text-muted py-4" style="display: none;">
+    <i class="bi bi-search fs-3 mb-2"></i>
+    <p>No assets match your current filters.</p>
+  </div>
 </div>
+
+<!-- Asset Analysis Modal -->
+<div class="modal fade" id="modalAssetAnalysis" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-graph-up me-2"></i>Asset Analytics Dashboard
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Summary Cards -->
+        <div class="row g-3 mb-4">
+          <div class="col-md-3">
+            <div class="card bg-primary text-white">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2 opacity-75">Total Assets</h6>
+                    <h3 class="mb-0" id="totalAssets">{{ assets|length }}</h3>
+                  </div>
+                  <i class="bi bi-box-seam fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-success text-white">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2 opacity-75">Available</h6>
+                    <h3 class="mb-0" id="availableAssets">0</h3>
+                  </div>
+                  <i class="bi bi-check-circle fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-info text-white">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2 opacity-75">Assigned</h6>
+                    <h3 class="mb-0" id="assignedAssets">0</h3>
+                  </div>
+                  <i class="bi bi-person-check fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2">In Maintenance</h6>
+                    <h3 class="mb-0" id="maintenanceAssets">0</h3>
+                  </div>
+                  <i class="bi bi-tools fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6 class="mb-0">Assets by Category</h6>
+              </div>
+              <div class="card-body">
+                <canvas id="chartCategory" height="250"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6 class="mb-0">Assets by Status</h6>
+              </div>
+              <div class="card-body">
+                <canvas id="chartStatus" height="250"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header">
+                <h6 class="mb-0">Assets by Unit</h6>
+              </div>
+              <div class="card-body">
+                <canvas id="chartUnit" height="150"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+(function() {
+  // Asset Table Filtering
+  const searchInput = document.getElementById('assetSearchInput');
+  const categoryFilter = document.getElementById('assetCategoryFilter');
+  const unitFilter = document.getElementById('assetUnitFilter');
+  const statusFilter = document.getElementById('assetStatusFilter');
+  const resetBtn = document.getElementById('btnResetFilters');
+  const resultCount = document.getElementById('assetResultCount');
+  const noResults = document.getElementById('noAssetResults');
+  const tableBody = document.querySelector('#assetsTable tbody');
+
+  function filterAssets() {
+    const searchTerm = searchInput.value.toLowerCase();
+    const category = categoryFilter.value;
+    const unit = unitFilter.value;
+    const status = statusFilter.value;
+
+    const rows = document.querySelectorAll('.asset-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+      const name = row.dataset.name || '';
+      const serial = row.dataset.serial.toLowerCase();
+      const tag = row.dataset.tag.toLowerCase();
+      const holder = row.dataset.holder.toLowerCase();
+      const rowCategory = row.dataset.category;
+      const rowUnit = row.dataset.unit;
+      const rowStatus = row.dataset.status;
+
+      const matchesSearch = !searchTerm ||
+        name.includes(searchTerm) ||
+        serial.includes(searchTerm) ||
+        tag.includes(searchTerm) ||
+        holder.includes(searchTerm);
+      const matchesCategory = !category || rowCategory === category;
+      const matchesUnit = !unit || rowUnit === unit;
+      const matchesStatus = !status || rowStatus === status;
+
+      if (matchesSearch && matchesCategory && matchesUnit && matchesStatus) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    resultCount.textContent = visibleCount;
+
+    // Show/hide no results message
+    if (visibleCount === 0 && rows.length > 0) {
+      tableBody.style.display = 'none';
+      noResults.style.display = 'block';
+    } else {
+      tableBody.style.display = '';
+      noResults.style.display = 'none';
+    }
+  }
+
+  function resetFilters() {
+    searchInput.value = '';
+    categoryFilter.value = '';
+    unitFilter.value = '';
+    statusFilter.value = '';
+    filterAssets();
+  }
+
+  // Event listeners
+  searchInput?.addEventListener('input', filterAssets);
+  categoryFilter?.addEventListener('change', filterAssets);
+  unitFilter?.addEventListener('change', filterAssets);
+  statusFilter?.addEventListener('change', filterAssets);
+  resetBtn?.addEventListener('click', resetFilters);
+
+  // Print selected assets
   document.getElementById("btnPrintSelected")?.addEventListener("click", () => {
     const ids = Array.from(document.querySelectorAll(".am-asset-check:checked"))
       .map(cb => cb.value).join(",");
-    if (!ids) { alert("Select assets first."); return; }
+    if (!ids) {
+      alert("Please select at least one asset to print.");
+      return;
+    }
 
     const url = "{% url 'accounts:asset_labels_pdf' %}?mode=a4&include_url=1&ids=" + encodeURIComponent(ids);
     window.open(url, "_blank");
   });
+
+  // Asset Analytics Charts
+  const modalElement = document.getElementById('modalAssetAnalysis');
+  if (modalElement) {
+    modalElement.addEventListener('shown.bs.modal', function() {
+      initializeAssetCharts();
+    });
+  }
+
+  function initializeAssetCharts() {
+    const assets = [
+      {% for a in assets %}
+      {
+        category: "{{ a.category.name|escapejs }}",
+        unit: "{{ a.unit.name|default:'Unallocated/Core'|escapejs }}",
+        status: "{{ a.status }}"
+      },
+      {% endfor %}
+    ];
+
+    // Calculate statistics
+    const categoryData = {};
+    const unitData = {};
+    const statusData = {
+      available: 0,
+      assigned: 0,
+      maintenance: 0,
+      retired: 0
+    };
+
+    assets.forEach(asset => {
+      // Category count
+      categoryData[asset.category] = (categoryData[asset.category] || 0) + 1;
+
+      // Unit count
+      unitData[asset.unit] = (unitData[asset.unit] || 0) + 1;
+
+      // Status count
+      if (statusData.hasOwnProperty(asset.status)) {
+        statusData[asset.status]++;
+      }
+    });
+
+    // Update summary cards
+    document.getElementById('availableAssets').textContent = statusData.available;
+    document.getElementById('assignedAssets').textContent = statusData.assigned;
+    document.getElementById('maintenanceAssets').textContent = statusData.maintenance;
+
+    // Chart colors
+    const colors = {
+      primary: ['#0d6efd', '#6610f2', '#6f42c1', '#d63384', '#dc3545', '#fd7e14', '#ffc107', '#198754', '#20c997', '#0dcaf0'],
+      status: {
+        available: '#198754',
+        assigned: '#0d6efd',
+        maintenance: '#ffc107',
+        retired: '#6c757d'
+      }
+    };
+
+    // Category Chart
+    const ctxCategory = document.getElementById('chartCategory');
+    if (ctxCategory) {
+      new Chart(ctxCategory, {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(categoryData),
+          datasets: [{
+            data: Object.values(categoryData),
+            backgroundColor: colors.primary,
+            borderWidth: 2,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || '';
+                  const value = context.parsed || 0;
+                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const percentage = ((value / total) * 100).toFixed(1);
+                  return `${label}: ${value} (${percentage}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Status Chart
+    const ctxStatus = document.getElementById('chartStatus');
+    if (ctxStatus) {
+      new Chart(ctxStatus, {
+        type: 'pie',
+        data: {
+          labels: ['Available', 'Assigned', 'Maintenance', 'Retired'],
+          datasets: [{
+            data: [
+              statusData.available,
+              statusData.assigned,
+              statusData.maintenance,
+              statusData.retired
+            ],
+            backgroundColor: [
+              colors.status.available,
+              colors.status.assigned,
+              colors.status.maintenance,
+              colors.status.retired
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right'
+            }
+          }
+        }
+      });
+    }
+
+    // Unit Chart
+    const ctxUnit = document.getElementById('chartUnit');
+    if (ctxUnit) {
+      new Chart(ctxUnit, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(unitData),
+          datasets: [{
+            label: 'Number of Assets',
+            data: Object.values(unitData),
+            backgroundColor: '#0d6efd',
+            borderColor: '#0d6efd',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                stepSize: 1
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    }
+  }
+})();
 </script>

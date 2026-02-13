@@ -448,10 +448,10 @@
                                             {% if b.created_by %}
                                                 <div class="d-flex align-items-center mt-2">
                                                     <div class="user-avatar">
-                                                        {{ b.created_by.get_full_name|default:b.created_by.username|slice:":1"|upper }}
+                                                        {{ b.created_by.get_full_name|slice:":1"|upper }}
                                                     </div>
                                                     <div class="small text-muted">
-                                                        {{ b.created_by.get_full_name|default:b.created_by.username }}
+                                                        {{ b.created_by.get_full_name }}
                                                     </div>
                                                 </div>
                                             {% endif %}

@@ -5,7 +5,8 @@ from .hr import views_hr
 from .views_room_booking import (
     RoomListView, RoomDetailView, RoomCreateView, RoomUpdateView,
     MyRoomBookingsView, RoomBookingCreateView, MyRoomApprovalsView,
-    room_booking_approve_view, room_delete_view
+    room_booking_approve_view, room_delete_view, room_series_approve_view,
+    cancel_booking, cancel_booking_series, cancel_series_occurrence
 )
 from .views_asset_verify import asset_verify, asset_verification_history
 
@@ -212,6 +213,12 @@ path(
     # Approvals
     path("rooms/approvals/", MyRoomApprovalsView.as_view(), name="room_approvals"),
     path("rooms/bookings/<int:pk>/approve/", room_booking_approve_view, name="booking_approve"),
+    path("rooms/series/<int:pk>/approve/", room_series_approve_view, name="series_approve"),
+
+    # Room Booking - Cancel Actions
+    path("rooms/bookings/<int:pk>/cancel/", cancel_booking, name="cancel_booking"),
+    path("rooms/series/<int:pk>/cancel/", cancel_booking_series, name="cancel_series"),
+path("rooms/occurrences/<int:pk>/cancel/", cancel_series_occurrence, name="cancel_occurrence"),
     # ------------------------------------------------------------------
     # Asset Management (Agency Service)
     # ------------------------------------------------------------------

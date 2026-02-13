@@ -1,0 +1,529 @@
+{% extends "base.html" %}
+{% block title %}Approve Recurring Series{% endblock %}
+
+{% block extra_css %}
+<style>
+    .approval-container {
+        max-width: 900px;
+        margin: 2rem auto;
+    }
+
+    .series-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 16px 16px 0 0;
+        margin-bottom: 0;
+    }
+
+    .series-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .series-subtitle {
+        font-size: 1rem;
+        opacity: 0.9;
+    }
+
+    .series-badge {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .series-details {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-top: none;
+        border-radius: 0 0 16px 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .detail-box {
+        background: #f8f9fa;
+        padding: 1.25rem;
+        border-radius: 12px;
+        border-left: 4px solid #667eea;
+    }
+
+    .detail-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .detail-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .detail-sub {
+        font-size: 0.9rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+
+    .occurrences-preview {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .preview-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .occurrence-list {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .occurrence-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 10px;
+        border-left: 3px solid #667eea;
+    }
+
+    .occurrence-date {
+        font-weight: 600;
+        color: #1f2937;
+        min-width: 120px;
+    }
+
+    .occurrence-time {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+    .requester-card {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .requester-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .requester-avatar {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .requester-info h4 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .requester-meta {
+        color: #6b7280;
+        font-size: 0.9rem;
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.25rem;
+    }
+
+    .approval-form {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 2rem;
+    }
+
+    .form-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .btn-approve {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border: none;
+        color: white;
+        padding: 1rem 2rem;
+        font-weight: 600;
+        border-radius: 12px;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .btn-approve:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1.5rem rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-reject {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        border: none;
+        color: white;
+        padding: 1rem 2rem;
+        font-weight: 600;
+        border-radius: 12px;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .btn-reject:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1.5rem rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-cancel {
+        background: #f3f4f6;
+        color: #6b7280;
+        padding: 1rem 2rem;
+        font-weight: 600;
+        border-radius: 12px;
+        border: 2px solid #e5e7eb;
+        transition: all 0.3s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .btn-cancel:hover {
+        background: #e5e7eb;
+        color: #4b5563;
+        border-color: #d1d5db;
+    }
+
+    .radio-options {
+        display: grid;
+        gap: 1rem;
+        margin: 1.5rem 0;
+    }
+
+    .radio-option {
+        display: flex;
+        align-items: center;
+        padding: 1.25rem;
+        background: #f8f9fa;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .radio-option:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+    }
+
+    .radio-option input[type="radio"]:checked + label {
+        color: #667eea;
+    }
+
+    .radio-option input[type="radio"] {
+        margin-right: 1rem;
+        width: 20px;
+        height: 20px;
+    }
+
+    .radio-option label {
+        font-weight: 600;
+        margin: 0;
+        cursor: pointer;
+        flex: 1;
+    }
+
+    .alert-warning {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+
+    .alert-warning strong {
+        color: #856404;
+    }
+
+    #reasonField {
+        margin-top: 1.5rem;
+        display: none;
+    }
+
+    #reasonField.show {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="approval-container">
+    <!-- Series Header -->
+    <div class="series-header">
+        <div class="series-title">
+            <i class="bi bi-calendar-range"></i>
+            Recurring Series Approval
+            <span class="series-badge">
+                <i class="bi bi-arrow-repeat"></i>
+                {{ series.occurrence_count }} occurrences
+            </span>
+        </div>
+        <div class="series-subtitle">
+            Review and approve this recurring booking series
+        </div>
+    </div>
+
+    <!-- Series Details -->
+    <div class="series-details">
+        <div class="detail-grid">
+            <div class="detail-box">
+                <div class="detail-label">Meeting Title</div>
+                <div class="detail-value">{{ series.title }}</div>
+            </div>
+
+            <div class="detail-box">
+                <div class="detail-label">Room</div>
+                <div class="detail-value">{{ room.name }}</div>
+                <div class="detail-sub">{{ room.code }}</div>
+            </div>
+
+            <div class="detail-box">
+                <div class="detail-label">Frequency</div>
+                <div class="detail-value">{{ series.get_frequency_display }}</div>
+                {% if series.interval > 1 %}
+                <div class="detail-sub">Every {{ series.interval }} {{ series.get_frequency_display|lower }}s</div>
+                {% endif %}
+            </div>
+
+            <div class="detail-box">
+                <div class="detail-label">Time</div>
+                <div class="detail-value">
+                    {{ series.start_time|time:"H:i" }} – {{ series.end_time|time:"H:i" }}
+                </div>
+            </div>
+
+            <div class="detail-box">
+                <div class="detail-label">Start Date</div>
+                <div class="detail-value">{{ series.start_date|date:"M d, Y" }}</div>
+                <div class="detail-sub">{{ series.start_date|date:"l" }}</div>
+            </div>
+
+            <div class="detail-box">
+                <div class="detail-label">End Date</div>
+                <div class="detail-value">
+                    {% if series.end_date %}
+                        {{ series.end_date|date:"M d, Y" }}
+                    {% else %}
+                        No end date
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if series.description %}
+        <div class="detail-box" style="margin-top: 1rem;">
+            <div class="detail-label">Description</div>
+            <div class="detail-value">{{ series.description }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Requester Info -->
+    <div class="requester-card">
+        <div class="requester-header">
+            <div class="requester-avatar">
+                {{ series.requested_by.get_full_name|slice:":1"|upper }}
+            </div>
+            <div class="requester-info">
+                <h4>{{ series.requested_by.get_full_name }}</h4>
+                <div class="requester-meta">
+                    <span>
+                        <i class="bi bi-envelope"></i>
+                        {{ series.requested_by.email }}
+                    </span>
+                    <span>
+                        <i class="bi bi-clock-history"></i>
+                        Requested {{ series.created_at|timesince }} ago
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Occurrences Preview -->
+    <div class="occurrences-preview">
+        <div class="preview-title">
+            <i class="bi bi-list-ul"></i>
+            Sample Occurrences (showing first 5)
+        </div>
+
+        <div class="occurrence-list">
+            {% for occurrence in sample_occurrences %}
+            <div class="occurrence-item">
+                <div class="occurrence-date">
+                    {{ occurrence.date|date:"M d, Y" }}
+                </div>
+                <div class="occurrence-time">
+                    <i class="bi bi-clock"></i>
+                    {{ occurrence.start_time|time:"H:i" }} – {{ occurrence.end_time|time:"H:i" }}
+                </div>
+                <div style="flex: 1"></div>
+                <div class="occurrence-time">
+                    {{ occurrence.date|date:"l" }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if series.occurrence_count > 5 %}
+        <div style="text-align: center; margin-top: 1rem; color: #6b7280; font-size: 0.9rem;">
+            <i class="bi bi-three-dots"></i>
+            And {{ series.occurrence_count|add:"-5" }} more occurrence{{ series.occurrence_count|add:"-5"|pluralize }}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Approval Form -->
+    <div class="approval-form">
+        <div class="form-title">
+            <i class="bi bi-check-circle"></i>
+            Approval Decision
+        </div>
+
+        <div class="alert-warning">
+            <strong>
+                <i class="bi bi-exclamation-triangle"></i>
+                Important:
+            </strong>
+            Your decision will apply to ALL {{ series.occurrence_count }} occurrences in this series.
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="radio-options">
+                {% for choice in form.action %}
+                <div class="radio-option">
+                    {{ choice.tag }}
+                    <label for="{{ choice.id_for_label }}">
+                        {% if choice.choice_label == "Approve entire series" %}
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        {% else %}
+                            <i class="bi bi-x-circle-fill text-danger"></i>
+                        {% endif %}
+                        {{ choice.choice_label }}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div id="reasonField">
+                <label for="{{ form.reason.id_for_label }}" class="form-label">
+                    {{ form.reason.label }}
+                </label>
+                {{ form.reason }}
+                <small class="form-text text-muted">{{ form.reason.help_text }}</small>
+                {% if form.reason.errors %}
+                <div class="text-danger mt-1">
+                    {{ form.reason.errors }}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="action-buttons" style="margin-top: 2rem;">
+                <a href="{% url 'accounts:room_approvals' %}" class="btn-cancel">
+                    <i class="bi bi-arrow-left"></i>
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 1rem 2rem; font-weight: 600; border-radius: 12px;">
+                    <i class="bi bi-send"></i>
+                    Submit Decision
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const radioButtons = document.querySelectorAll('input[name="action"]');
+    const reasonField = document.getElementById('reasonField');
+    
+    radioButtons.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'reject') {
+                reasonField.classList.add('show');
+            } else {
+                reasonField.classList.remove('show');
+            }
+        });
+    });
+    
+    // Initialize
+    const selectedRadio = document.querySelector('input[name="action"]:checked');
+    if (selectedRadio && selectedRadio.value === 'reject') {
+        reasonField.classList.add('show');
+    }
+});
+</script>
+{% endblock %}

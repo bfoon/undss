@@ -1,3 +1,76 @@
+<!-- Enhanced Mobile Lines Table with Filter, Search, and Analysis -->
+
+<!-- Filter and Search Controls -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <!-- Search -->
+      <div class="col-md-4">
+        <label class="form-label small fw-semibold">Search Mobile Lines</label>
+        <input type="text"
+               class="form-control"
+               id="lineSearchInput"
+               placeholder="Search by MSISDN, provider, user...">
+      </div>
+
+      <!-- Type Filter -->
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Type</label>
+        <select class="form-select" id="lineTypeFilter">
+          <option value="">All Types</option>
+          <option value="voice">Voice</option>
+          <option value="data">Data</option>
+          <option value="voice_data">Voice + Data</option>
+        </select>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Status</label>
+        <select class="form-select" id="lineStatusFilter">
+          <option value="">All Status</option>
+          <option value="available">Available</option>
+          <option value="assigned">Assigned</option>
+          <option value="suspended">Suspended</option>
+        </select>
+      </div>
+
+      <!-- Provider Filter -->
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Provider</label>
+        <select class="form-select" id="lineProviderFilter">
+          <option value="">All Providers</option>
+          {% for line in mobile_lines_visible %}
+            {% if line.provider %}
+              <option value="{{ line.provider }}">{{ line.provider }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="col-md-2">
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary btn-sm" id="btnResetLineFilters" title="Reset Filters">
+            <i class="bi bi-arrow-counterclockwise"></i>
+          </button>
+          <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalLineAnalysis" title="View Analytics">
+            <i class="bi bi-graph-up"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Summary -->
+    <div class="mt-3">
+      <small class="text-muted">
+        Showing <span id="lineResultCount" class="fw-semibold">{{ mobile_lines_visible|length }}</span> of {{ mobile_lines_visible|length }} mobile lines
+      </small>
+    </div>
+  </div>
+</div>
+
+<!-- Header with Actions -->
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h6 class="mb-0"><i class="bi bi-sim me-2"></i>Mobile Lines</h6>
@@ -13,8 +86,9 @@
   {% endif %}
 </div>
 
+<!-- Mobile Lines Table -->
 <div class="table-responsive">
-  <table class="table table-sm align-middle">
+  <table class="table table-sm align-middle" id="mobileLinesTable">
     <thead>
       <tr>
         <th>MSISDN</th>
@@ -25,13 +99,18 @@
         <th>Custodian</th>
         <th>Created</th>
         <th>Actions</th>
-
       </tr>
     </thead>
 
     <tbody>
       {% for line in mobile_lines_visible %}
-        <tr>
+        <tr class="line-row"
+            data-msisdn="{{ line.msisdn|lower }}"
+            data-type="{{ line.line_type }}"
+            data-provider="{{ line.provider|default:''|lower }}"
+            data-status="{{ line.status }}"
+            data-assigned="{{ line.assigned_to.get_full_name|default:''|lower }}"
+            data-custodian="{{ line.custodian.get_full_name|default:''|lower }}">
           <td class="fw-semibold">{{ line.msisdn }}</td>
           <td>{{ line.get_line_type_display }}</td>
           <td>{{ line.provider|default:"-" }}</td>
@@ -52,41 +131,475 @@
 
           <td>
             {% if line.assigned_to %}
-              {{ line.assigned_to.get_full_name|default:line.assigned_to.username }}
+              {{ line.assigned_to.get_full_name }}
             {% else %}
-              -
+              <span class="text-muted">-</span>
             {% endif %}
           </td>
 
           <td>
             {% if line.custodian %}
-              {{ line.custodian.get_full_name|default:line.custodian.username }}
+              {{ line.custodian.get_full_name }}
             {% else %}
-              -
+              <span class="text-muted">-</span>
             {% endif %}
           </td>
 
           <td class="text-muted">{{ line.created_at|date:"Y-m-d H:i" }}</td>
-          <td>
-        {% if is_ict or is_ops and line.status == "available" %}
-          <button class="btn btn-sm btn-outline-primary"
-                  data-bs-toggle="modal"
-                  data-bs-target="#modalAssignLine"
-                  data-line-id="{{ line.id }}"
-                  data-msisdn="{{ line.msisdn }}">
-            <i class="bi bi-person-plus me-1"></i> Assign
-          </button>
-        {% else %}
-            <span class="text-muted">-</span>
-          {% endif %}
-        </td>
 
+          <td>
+            {% if is_ict or is_ops and line.status == "available" %}
+              <button class="btn btn-sm btn-outline-primary"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modalAssignLine"
+                      data-line-id="{{ line.id }}"
+                      data-msisdn="{{ line.msisdn }}">
+                <i class="bi bi-person-plus me-1"></i> Assign
+              </button>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </td>
         </tr>
       {% empty %}
-        <tr>
-          <td colspan="7" class="text-muted">No mobile lines registered yet.</td>
+        <tr class="no-results">
+          <td colspan="8" class="text-center text-muted py-4">No mobile lines registered yet.</td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <!-- No Results Message (Hidden by default) -->
+  <div id="noLineResults" class="text-center text-muted py-4" style="display: none;">
+    <i class="bi bi-search fs-3 mb-2"></i>
+    <p>No mobile lines match your current filters.</p>
+  </div>
 </div>
+
+<!-- Mobile Lines Analysis Modal -->
+<div class="modal fade" id="modalLineAnalysis" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-graph-up me-2"></i>Mobile Lines Analytics Dashboard
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Summary Cards -->
+        <div class="row g-3 mb-4">
+          <div class="col-md-3">
+            <div class="card bg-primary text-white">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2 opacity-75">Total Lines</h6>
+                    <h3 class="mb-0" id="totalLines">{{ mobile_lines_visible|length }}</h3>
+                  </div>
+                  <i class="bi bi-sim fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-success text-white">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2 opacity-75">Available</h6>
+                    <h3 class="mb-0" id="availableLines">0</h3>
+                  </div>
+                  <i class="bi bi-check-circle fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-info text-white">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2 opacity-75">Assigned</h6>
+                    <h3 class="mb-0" id="assignedLines">0</h3>
+                  </div>
+                  <i class="bi bi-person-check fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h6 class="card-subtitle mb-2">Suspended</h6>
+                    <h3 class="mb-0" id="suspendedLines">0</h3>
+                  </div>
+                  <i class="bi bi-pause-circle fs-1 opacity-50"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6 class="mb-0">Lines by Type</h6>
+              </div>
+              <div class="card-body">
+                <canvas id="chartLineType" height="250"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">
+                <h6 class="mb-0">Lines by Status</h6>
+              </div>
+              <div class="card-body">
+                <canvas id="chartLineStatus" height="250"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header">
+                <h6 class="mb-0">Lines by Provider</h6>
+              </div>
+              <div class="card-body">
+                <canvas id="chartLineProvider" height="150"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Provider Breakdown Table -->
+        <div class="card mt-3">
+          <div class="card-header">
+            <h6 class="mb-0">Detailed Provider Breakdown</h6>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-sm" id="providerBreakdownTable">
+                <thead>
+                  <tr>
+                    <th>Provider</th>
+                    <th class="text-center">Total</th>
+                    <th class="text-center">Available</th>
+                    <th class="text-center">Assigned</th>
+                    <th class="text-center">Suspended</th>
+                  </tr>
+                </thead>
+                <tbody id="providerBreakdownBody">
+                  <!-- Populated by JavaScript -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // Mobile Lines Table Filtering
+  const searchInput = document.getElementById('lineSearchInput');
+  const typeFilter = document.getElementById('lineTypeFilter');
+  const statusFilter = document.getElementById('lineStatusFilter');
+  const providerFilter = document.getElementById('lineProviderFilter');
+  const resetBtn = document.getElementById('btnResetLineFilters');
+  const resultCount = document.getElementById('lineResultCount');
+  const noResults = document.getElementById('noLineResults');
+  const tableBody = document.querySelector('#mobileLinesTable tbody');
+
+  // Populate unique providers in filter
+  if (providerFilter) {
+    const providers = new Set();
+    document.querySelectorAll('.line-row').forEach(row => {
+      const provider = row.dataset.provider;
+      if (provider) providers.add(provider);
+    });
+
+    // Clear existing options except "All Providers"
+    while (providerFilter.options.length > 1) {
+      providerFilter.remove(1);
+    }
+
+    // Add unique providers
+    Array.from(providers).sort().forEach(provider => {
+      const option = document.createElement('option');
+      option.value = provider;
+      option.textContent = provider.charAt(0).toUpperCase() + provider.slice(1);
+      providerFilter.appendChild(option);
+    });
+  }
+
+  function filterLines() {
+    const searchTerm = searchInput.value.toLowerCase();
+    const type = typeFilter.value;
+    const status = statusFilter.value;
+    const provider = providerFilter.value;
+
+    const rows = document.querySelectorAll('.line-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+      const msisdn = row.dataset.msisdn || '';
+      const rowProvider = row.dataset.provider || '';
+      const assigned = row.dataset.assigned || '';
+      const custodian = row.dataset.custodian || '';
+      const rowType = row.dataset.type;
+      const rowStatus = row.dataset.status;
+
+      const matchesSearch = !searchTerm ||
+        msisdn.includes(searchTerm) ||
+        rowProvider.includes(searchTerm) ||
+        assigned.includes(searchTerm) ||
+        custodian.includes(searchTerm);
+      const matchesType = !type || rowType === type;
+      const matchesStatus = !status || rowStatus === status;
+      const matchesProvider = !provider || rowProvider === provider;
+
+      if (matchesSearch && matchesType && matchesStatus && matchesProvider) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    resultCount.textContent = visibleCount;
+
+    // Show/hide no results message
+    if (visibleCount === 0 && rows.length > 0) {
+      tableBody.style.display = 'none';
+      noResults.style.display = 'block';
+    } else {
+      tableBody.style.display = '';
+      noResults.style.display = 'none';
+    }
+  }
+
+  function resetFilters() {
+    searchInput.value = '';
+    typeFilter.value = '';
+    statusFilter.value = '';
+    providerFilter.value = '';
+    filterLines();
+  }
+
+  // Event listeners
+  searchInput?.addEventListener('input', filterLines);
+  typeFilter?.addEventListener('change', filterLines);
+  statusFilter?.addEventListener('change', filterLines);
+  providerFilter?.addEventListener('change', filterLines);
+  resetBtn?.addEventListener('click', resetFilters);
+
+  // Mobile Lines Analytics Charts
+  const modalElement = document.getElementById('modalLineAnalysis');
+  if (modalElement) {
+    modalElement.addEventListener('shown.bs.modal', function() {
+      initializeLineCharts();
+    });
+  }
+
+  function initializeLineCharts() {
+    const lines = [
+      {% for line in mobile_lines_visible %}
+      {
+        type: "{{ line.line_type }}",
+        typeDisplay: "{{ line.get_line_type_display|escapejs }}",
+        provider: "{{ line.provider|default:'Unknown'|escapejs }}",
+        status: "{{ line.status }}"
+      },
+      {% endfor %}
+    ];
+
+    // Calculate statistics
+    const typeData = {};
+    const providerData = {};
+    const statusData = {
+      available: 0,
+      assigned: 0,
+      suspended: 0
+    };
+    const providerBreakdown = {};
+
+    lines.forEach(line => {
+      // Type count
+      typeData[line.typeDisplay] = (typeData[line.typeDisplay] || 0) + 1;
+
+      // Provider count
+      providerData[line.provider] = (providerData[line.provider] || 0) + 1;
+
+      // Status count
+      if (statusData.hasOwnProperty(line.status)) {
+        statusData[line.status]++;
+      }
+
+      // Provider breakdown by status
+      if (!providerBreakdown[line.provider]) {
+        providerBreakdown[line.provider] = {
+          total: 0,
+          available: 0,
+          assigned: 0,
+          suspended: 0
+        };
+      }
+      providerBreakdown[line.provider].total++;
+      if (statusData.hasOwnProperty(line.status)) {
+        providerBreakdown[line.provider][line.status]++;
+      }
+    });
+
+    // Update summary cards
+    document.getElementById('availableLines').textContent = statusData.available;
+    document.getElementById('assignedLines').textContent = statusData.assigned;
+    document.getElementById('suspendedLines').textContent = statusData.suspended;
+
+    // Populate provider breakdown table
+    const tbody = document.getElementById('providerBreakdownBody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      Object.keys(providerBreakdown).sort().forEach(provider => {
+        const data = providerBreakdown[provider];
+        const row = `
+          <tr>
+            <td class="fw-semibold">${provider}</td>
+            <td class="text-center">${data.total}</td>
+            <td class="text-center"><span class="badge bg-success">${data.available}</span></td>
+            <td class="text-center"><span class="badge bg-primary">${data.assigned}</span></td>
+            <td class="text-center"><span class="badge bg-warning text-dark">${data.suspended}</span></td>
+          </tr>
+        `;
+        tbody.insertAdjacentHTML('beforeend', row);
+      });
+    }
+
+    // Chart colors
+    const colors = {
+      primary: ['#0d6efd', '#6610f2', '#6f42c1', '#d63384', '#dc3545', '#fd7e14', '#ffc107', '#198754', '#20c997', '#0dcaf0'],
+      status: {
+        available: '#198754',
+        assigned: '#0d6efd',
+        suspended: '#ffc107'
+      }
+    };
+
+    // Type Chart
+    const ctxType = document.getElementById('chartLineType');
+    if (ctxType) {
+      new Chart(ctxType, {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(typeData),
+          datasets: [{
+            data: Object.values(typeData),
+            backgroundColor: colors.primary.slice(0, Object.keys(typeData).length),
+            borderWidth: 2,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || '';
+                  const value = context.parsed || 0;
+                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                  const percentage = ((value / total) * 100).toFixed(1);
+                  return `${label}: ${value} (${percentage}%)`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Status Chart
+    const ctxStatus = document.getElementById('chartLineStatus');
+    if (ctxStatus) {
+      new Chart(ctxStatus, {
+        type: 'pie',
+        data: {
+          labels: ['Available', 'Assigned', 'Suspended'],
+          datasets: [{
+            data: [
+              statusData.available,
+              statusData.assigned,
+              statusData.suspended
+            ],
+            backgroundColor: [
+              colors.status.available,
+              colors.status.assigned,
+              colors.status.suspended
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right'
+            }
+          }
+        }
+      });
+    }
+
+    // Provider Chart
+    const ctxProvider = document.getElementById('chartLineProvider');
+    if (ctxProvider) {
+      new Chart(ctxProvider, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(providerData),
+          datasets: [{
+            label: 'Number of Lines',
+            data: Object.values(providerData),
+            backgroundColor: '#0d6efd',
+            borderColor: '#0d6efd',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                stepSize: 1
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    }
+  }
+})();
+</script>

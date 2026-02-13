@@ -557,11 +557,11 @@
                 </h6>
                 <div class="requester-card">
                     <div class="requester-avatar">
-                        {{ booking.requested_by.get_full_name|default:booking.requested_by.username|slice:":1"|upper }}
+                        {{ booking.requested_by.get_full_name|slice:":1"|upper }}
                     </div>
                     <div class="requester-info">
                         <div class="requester-name">
-                            {{ booking.requested_by.get_full_name|default:booking.requested_by.username }}
+                            {{ booking.requested_by.get_full_name }}
                         </div>
                         <div class="requester-label">
                             <i class="bi bi-envelope me-1"></i>

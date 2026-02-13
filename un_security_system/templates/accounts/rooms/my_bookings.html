@@ -64,24 +64,92 @@
         margin-top: 0.25rem;
     }
 
+    /* Search & Filter Section */
     .filter-card {
         background: white;
-        border-radius: 12px;
+        border-radius: 16px;
         padding: 1.5rem;
         box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         margin-bottom: 2rem;
     }
 
-    .filter-section-title {
-        font-weight: 700;
-        font-size: 0.9rem;
+    .search-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .search-box {
+        position: relative;
+        max-width: 600px;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 0.85rem 3rem 0.85rem 1.25rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 0.95rem;
+        transition: all 0.3s;
+    }
+
+    .search-box input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .search-box i {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        pointer-events: none;
+    }
+
+    .search-box .clear-search {
+        position: absolute;
+        right: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 0.5rem;
+        display: none;
+    }
+
+    .search-box .clear-search.show {
+        display: block;
+    }
+
+    .advanced-filters {
+        display: none;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 2px solid #e5e7eb;
+    }
+
+    .advanced-filters.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+
+    .toggle-advanced {
+        background: none;
+        border: none;
         color: #667eea;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0.5rem 0;
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        transition: all 0.2s;
+    }
+
+    .toggle-advanced:hover {
+        color: #764ba2;
     }
 
     .filter-tabs {
@@ -124,6 +192,7 @@
         font-size: 0.75rem;
     }
 
+    /* Booking Cards */
     .booking-card {
         background: white;
         border-radius: 16px;
@@ -161,6 +230,149 @@
         background: linear-gradient(180deg, #6b7280 0%, #4b5563 100%);
     }
 
+    /* Recurring Series Card */
+    .booking-card.series {
+        border-left: 4px solid #f59e0b;
+        background: linear-gradient(to right, #fffbeb 0%, white 100%);
+    }
+
+    .booking-card.series::before {
+        background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .series-badge {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .series-meta {
+        background: white;
+        border: 2px solid #fef3c7;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+
+    .series-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .series-meta-icon {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #d97706;
+        font-size: 1.1rem;
+    }
+
+    .series-meta-content {
+        flex: 1;
+    }
+
+    .series-meta-label {
+        font-size: 0.75rem;
+        color: #92400e;
+        text-transform: uppercase;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .series-meta-value {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #78350f;
+    }
+
+    .series-dates-toggle {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 2px solid #fbbf24;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 1rem 0;
+        font-weight: 600;
+        color: #92400e;
+    }
+
+    .series-dates-toggle:hover {
+        background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+        transform: translateY(-2px);
+    }
+
+    .series-dates-list {
+        display: none;
+        max-height: 400px;
+        overflow-y: auto;
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 1rem;
+    }
+
+    .series-dates-list.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+
+    .series-date-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .series-date-item:last-child {
+        border-bottom: none;
+    }
+
+    .series-date-item:hover {
+        background: #f9fafb;
+    }
+
+    .series-date-item .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+
+    .series-date-item .btn-outline-danger {
+        border-color: #fee2e2;
+        color: #dc2626;
+    }
+
+    .series-date-item .btn-outline-danger:hover {
+        background: #fee2e2;
+        border-color: #dc2626;
+        transform: translateY(-1px);
+    }
+
+    .series-date-item .btn-outline-danger:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     .booking-card:hover {
         border-color: #667eea;
         transform: translateY(-2px);
@@ -176,10 +388,8 @@
         justify-content: space-between;
         align-items: start;
         margin-bottom: 1rem;
-    }
-
-    .booking-title-section {
-        flex: 1;
+        flex-wrap: wrap;
+        gap: 1rem;
     }
 
     .booking-title {
@@ -209,6 +419,7 @@
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
+        white-space: nowrap;
     }
 
     .status-approved {
@@ -222,8 +433,8 @@
     }
 
     .status-rejected {
-        background: #ffe0e0;
-        color: #b91c1c;
+        background: #fee2e2;
+        color: #991b1b;
     }
 
     .status-cancelled {
@@ -231,29 +442,10 @@
         color: #4b5563;
     }
 
-    .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: currentColor;
-    }
-
-    .status-pending .status-dot {
-        animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-
     .booking-details {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 1rem;
-        padding: 1rem;
-        background: #f8f9fa;
-        border-radius: 12px;
         margin-bottom: 1rem;
     }
 
@@ -266,7 +458,7 @@
     .detail-icon {
         width: 40px;
         height: 40px;
-        background: white;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         border-radius: 10px;
         display: flex;
         align-items: center;
@@ -282,11 +474,12 @@
     }
 
     .detail-label {
-        font-size: 0.7rem;
+        font-size: 0.75rem;
         color: #6b7280;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         font-weight: 600;
+        margin-bottom: 0.15rem;
     }
 
     .detail-value {
@@ -298,14 +491,15 @@
     .booking-actions {
         display: flex;
         gap: 0.5rem;
+        flex-wrap: wrap;
         padding-top: 1rem;
         border-top: 1px solid #e5e7eb;
     }
 
     .action-btn {
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
+        padding: 0.6rem 1.25rem;
         border: 2px solid #e5e7eb;
+        border-radius: 10px;
         background: white;
         font-size: 0.85rem;
         font-weight: 600;
@@ -314,102 +508,40 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        text-decoration: none;
+        color: #6b7280;
     }
 
     .action-btn:hover {
         border-color: #667eea;
         background: #f0f4ff;
         color: #667eea;
+        transform: translateY(-1px);
     }
 
     .action-btn.primary {
+        border-color: #667eea;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        border-color: #667eea;
     }
 
     .action-btn.primary:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-    }
-
-    .empty-state {
-        text-align: center;
-        padding: 5rem 2rem;
-        background: white;
-        border-radius: 16px;
-        border: 2px dashed #e5e7eb;
-    }
-
-    .empty-state-icon {
-        font-size: 5rem;
-        color: #d1d5db;
-        margin-bottom: 1.5rem;
-    }
-
-    .timeline-indicator {
-        position: absolute;
-        top: 1.5rem;
-        left: -2px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        border: 3px solid white;
-    }
-
-    .timeline-indicator.approved {
-        background: #10b981;
-    }
-
-    .timeline-indicator.pending {
-        background: #f59e0b;
-    }
-
-    .timeline-indicator.rejected {
-        background: #ef4444;
-    }
-
-    .timeline-indicator.cancelled {
-        background: #6b7280;
-    }
-
-    .view-toggle {
-        background: white;
-        border-radius: 10px;
-        padding: 0.35rem;
-        display: inline-flex;
-        gap: 0.25rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-
-    .view-toggle button {
-        padding: 0.5rem 1rem;
-        border: none;
-        background: transparent;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.85rem;
-        transition: all 0.2s;
-        cursor: pointer;
-    }
-
-    .view-toggle button.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 0.25rem 0.75rem rgba(102, 126, 234, 0.3);
     }
 
     .rejection-reason {
-        background: #fef2f2;
-        border-left: 4px solid #ef4444;
+        background: #fee2e2;
+        border: 2px solid #ef4444;
+        border-radius: 10px;
         padding: 1rem;
-        border-radius: 8px;
-        margin-top: 1rem;
+        margin: 1rem 0;
     }
 
     .rejection-reason-title {
         font-weight: 700;
         color: #991b1b;
-        font-size: 0.85rem;
         margin-bottom: 0.5rem;
         display: flex;
         align-items: center;
@@ -421,19 +553,144 @@
         font-size: 0.9rem;
     }
 
+    /* Pagination */
+    .pagination-container {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-top: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .pagination .page-item {
+        margin: 0;
+    }
+
+    .pagination .page-link {
+        padding: 0.75rem 1rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        color: #6b7280;
+        font-weight: 600;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 45px;
+    }
+
+    .pagination .page-link:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+        color: #667eea;
+        transform: translateY(-1px);
+    }
+
+    .pagination .page-item.active .page-link {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    .pagination-info {
+        text-align: center;
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
+
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .results-count {
+        font-size: 0.95rem;
+        color: #6b7280;
+    }
+
+    .view-options {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .sort-dropdown {
+        padding: 0.6rem 1rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .sort-dropdown:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: white;
+        border-radius: 16px;
+        border: 2px dashed #e5e7eb;
+    }
+
+    .empty-state-icon {
+        font-size: 4rem;
+        color: #d1d5db;
+        margin-bottom: 1rem;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
     @media (max-width: 768px) {
         .booking-details {
             grid-template-columns: 1fr;
         }
-        .booking-header {
-            flex-direction: column;
-            gap: 1rem;
-        }
+
         .stats-grid {
             grid-template-columns: repeat(2, 1fr);
         }
-        .booking-actions {
-            flex-direction: column;
+
+        .pagination .page-link {
+            padding: 0.5rem 0.75rem;
+            min-width: 35px;
+            font-size: 0.85rem;
         }
     }
 </style>
@@ -442,27 +699,17 @@
 {% block content %}
 <div class="container py-4">
     <div class="bookings-container">
-
         <!-- Page Header -->
         <div class="page-header">
             <div class="page-header-content">
-                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-                    <div>
-                        <h2 class="mb-2 fw-bold">
-                            <i class="bi bi-calendar-check me-2"></i>
-                            My Room Bookings
-                        </h2>
-                        <p class="mb-0 opacity-90">
-                            Manage and track all your room reservations
-                        </p>
-                    </div>
-                    <a href="{% url 'accounts:room_list' %}" class="btn btn-light">
-                        <i class="bi bi-plus-circle me-1"></i>
-                        New Booking
-                    </a>
-                </div>
+                <h1 style="margin: 0; font-size: 2rem; font-weight: 700;">
+                    <i class="bi bi-calendar-check me-2"></i>
+                    My Room Bookings
+                </h1>
+                <p style="margin: 0.5rem 0 0; opacity: 0.9;">
+                    View and manage your room reservations
+                </p>
 
-                <!-- Stats -->
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-number">{{ total_bookings|default:0 }}</div>
@@ -474,296 +721,464 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-number">{{ pending_count|default:0 }}</div>
-                        <div class="stat-label">Pending Approval</div>
+                        <div class="stat-label">Pending</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">{{ approved_count|default:0 }}</div>
-                        <div class="stat-label">Approved</div>
+                        <div class="stat-number">{{ series_count|default:0 }}</div>
+                        <div class="stat-label">Recurring Series</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Filters -->
+        <!-- Search & Filter Card -->
         <div class="filter-card">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div class="filter-section-title">
-                    <i class="bi bi-funnel"></i>
-                    Filter Bookings
+            <div class="search-section">
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text"
+                           id="searchInput"
+                           placeholder="Search by title, room name, or description..."
+                           value="{{ search_query|default:'' }}">
+                    <button class="clear-search" id="clearSearch">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </button>
                 </div>
-                <div class="view-toggle">
-                    <button class="active" data-view="card">
-                        <i class="bi bi-grid me-1"></i> Cards
-                    </button>
-                    <button data-view="table">
-                        <i class="bi bi-list me-1"></i> Table
-                    </button>
+
+                <button class="toggle-advanced mt-3" id="toggleAdvanced">
+                    <i class="bi bi-funnel"></i>
+                    Advanced Filters
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+
+                <div class="advanced-filters" id="advancedFilters">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-muted">Date From</label>
+                            <input type="date" class="form-control" id="dateFrom" name="date_from" value="{{ date_from|default:'' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-muted">Date To</label>
+                            <input type="date" class="form-control" id="dateTo" name="date_to" value="{{ date_to|default:'' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-muted">Room</label>
+                            <select class="form-select" id="roomFilter" name="room">
+                                <option value="">All Rooms</option>
+                                {% for room in available_rooms %}
+                                    <option value="{{ room.id }}" {% if room_filter == room.id|stringformat:"s" %}selected{% endif %}>
+                                        {{ room.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-muted">&nbsp;</label>
+                            <button type="button" class="btn btn-outline-secondary w-100" onclick="clearFilters()">
+                                <i class="bi bi-x-circle me-1"></i>
+                                Clear Filters
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <form method="get" id="filterForm">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label small text-muted mb-1">Status</label>
-                        <select name="status" class="form-select" onchange="this.form.submit()">
-                            <option value="">All Statuses</option>
-                            {% for value, label in status_choices %}
-                                <option value="{{ value }}" {% if value == status_filter %}selected{% endif %}>
-                                    {{ label }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small text-muted mb-1">Time Period</label>
-                        <select name="when" class="form-select" onchange="this.form.submit()">
-                            <option value="">Any Time</option>
-                            <option value="upcoming" {% if when_filter == "upcoming" %}selected{% endif %}>
-                                Upcoming
-                            </option>
-                            <option value="today" {% if when_filter == "today" %}selected{% endif %}>
-                                Today
-                            </option>
-                            <option value="this-week" {% if when_filter == "this-week" %}selected{% endif %}>
-                                This Week
-                            </option>
-                            <option value="past" {% if when_filter == "past" %}selected{% endif %}>
-                                Past
-                            </option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small text-muted mb-1">Search</label>
-                        <input type="text" name="search" class="form-control"
-                               placeholder="Room or title..."
-                               value="{{ search_query }}">
-                    </div>
-                </div>
-
-                <!-- Quick Filters -->
-                <div class="filter-tabs mt-3">
-                    <button type="button" class="filter-tab active" onclick="clearFilters()">
-                        <i class="bi bi-grid"></i>
-                        All
-                        <span class="count">{{ bookings|length }}</span>
-                    </button>
-                    <button type="button" class="filter-tab" onclick="setFilter('status', 'approved')">
-                        <i class="bi bi-check-circle"></i>
-                        Approved
-                    </button>
-                    <button type="button" class="filter-tab" onclick="setFilter('status', 'pending')">
-                        <i class="bi bi-clock"></i>
-                        Pending
-                    </button>
-                    <button type="button" class="filter-tab" onclick="setFilter('when', 'upcoming')">
-                        <i class="bi bi-calendar-plus"></i>
-                        Upcoming
-                    </button>
-                </div>
-            </form>
+            <!-- Status Filter Tabs -->
+            <div class="filter-tabs">
+                <button class="filter-tab {% if not status_filter %}active{% endif %}" onclick="setFilter('status', '')">
+                    <i class="bi bi-list-ul"></i>
+                    All
+                    <span class="count">{{ total_bookings|default:0 }}</span>
+                </button>
+                <button class="filter-tab {% if status_filter == 'pending' %}active{% endif %}" onclick="setFilter('status', 'pending')">
+                    <i class="bi bi-clock-history"></i>
+                    Pending
+                    <span class="count">{{ pending_count|default:0 }}</span>
+                </button>
+                <button class="filter-tab {% if status_filter == 'approved' %}active{% endif %}" onclick="setFilter('status', 'approved')">
+                    <i class="bi bi-check-circle"></i>
+                    Approved
+                    <span class="count">{{ approved_count|default:0 }}</span>
+                </button>
+                <button class="filter-tab {% if status_filter == 'rejected' %}active{% endif %}" onclick="setFilter('status', 'rejected')">
+                    <i class="bi bi-x-circle"></i>
+                    Rejected
+                </button>
+                <button class="filter-tab {% if when_filter == 'upcoming' %}active{% endif %}" onclick="setFilter('when', 'upcoming')">
+                    <i class="bi bi-calendar-event"></i>
+                    Upcoming
+                    <span class="count">{{ upcoming_count|default:0 }}</span>
+                </button>
+                <button class="filter-tab {% if when_filter == 'past' %}active{% endif %}" onclick="setFilter('when', 'past')">
+                    <i class="bi bi-calendar-x"></i>
+                    Past
+                </button>
+            </div>
         </div>
 
-        <!-- Card View -->
-        {% if bookings %}
-            <div id="cardView">
-                {% for b in bookings %}
-                    <div class="booking-card {{ b.status }}">
-                        <div class="timeline-indicator {{ b.status }}"></div>
+        {% if items %}
+            <!-- Results Header -->
+            <div class="results-header">
+                <div class="results-count">
+                    <strong>{{ paginator.count }}</strong> result{{ paginator.count|pluralize }} found
+                    {% if search_query %}for "{{ search_query }}"{% endif %}
+                </div>
+                <div class="view-options">
+                    <select class="sort-dropdown" id="sortBy" onchange="applySort(this.value)">
+                        <option value="-created_at" {% if sort_by == '-created_at' %}selected{% endif %}>Newest First</option>
+                        <option value="created_at" {% if sort_by == 'created_at' %}selected{% endif %}>Oldest First</option>
+                        <option value="date" {% if sort_by == 'date' %}selected{% endif %}>Date (Upcoming)</option>
+                        <option value="-date" {% if sort_by == '-date' %}selected{% endif %}>Date (Recent)</option>
+                        <option value="title" {% if sort_by == 'title' %}selected{% endif %}>Title (A-Z)</option>
+                    </select>
+                </div>
+            </div>
 
-                        <div class="booking-header">
-                            <div class="booking-title-section">
-                                <div class="booking-title">
-                                    <i class="bi bi-calendar-event"></i>
-                                    {{ b.title }}
+            <!-- Bookings List -->
+            <div id="bookingsList">
+                {% for item in items %}
+                    {% if item.is_series %}
+                        {# Recurring Series Card #}
+                        <div class="booking-card series {{ item.series.status }}"
+                             data-searchable="{{ item.series.title|lower }} {{ item.series.room.name|lower }} {{ item.series.description|lower }}">
+
+                            <div class="booking-header">
+                                <div class="booking-title-section">
+                                    <div class="booking-title">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                        {{ item.series.title }}
+                                    </div>
+                                    <div class="booking-subtitle">
+                                        <i class="bi bi-door-open me-1"></i>
+                                        {{ item.series.room.name }} ({{ item.series.room.code }})
+                                    </div>
                                 </div>
-                                <div class="booking-subtitle">
-                                    Booking #{{ b.id }} · Created {{ b.created_at|timesince }} ago
+                                <div>
+                                    <div class="series-badge mb-2">
+                                        <i class="bi bi-calendar-range"></i>
+                                        Recurring Series
+                                    </div>
+                                    {% if item.series.status == "approved" %}
+                                        <span class="status-badge status-approved">
+                                            <i class="bi bi-check-circle"></i>
+                                            Approved
+                                        </span>
+                                    {% elif item.series.status == "pending" %}
+                                        <span class="status-badge status-pending">
+                                            <i class="bi bi-clock-history"></i>
+                                            Pending
+                                        </span>
+                                    {% elif item.series.status == "rejected" %}
+                                        <span class="status-badge status-rejected">
+                                            <i class="bi bi-x-circle"></i>
+                                            Rejected
+                                        </span>
+                                    {% endif %}
                                 </div>
                             </div>
-                            <div>
-                                {% if b.status == "approved" %}
-                                    <span class="status-badge status-approved">
-                                        <span class="status-dot"></span>
-                                        Approved
-                                    </span>
-                                {% elif b.status == "pending" %}
-                                    <span class="status-badge status-pending">
-                                        <span class="status-dot"></span>
-                                        Pending
-                                    </span>
-                                {% elif b.status == "rejected" %}
-                                    <span class="status-badge status-rejected">
-                                        <span class="status-dot"></span>
-                                        Rejected
-                                    </span>
-                                {% elif b.status == "cancelled" %}
-                                    <span class="status-badge status-cancelled">
-                                        <span class="status-dot"></span>
-                                        Cancelled
-                                    </span>
+
+                            <!-- Series Meta Information -->
+                            <div class="series-meta">
+                                <div class="series-meta-item">
+                                    <div class="series-meta-icon">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </div>
+                                    <div class="series-meta-content">
+                                        <div class="series-meta-label">Frequency</div>
+                                        <div class="series-meta-value">{{ item.series.get_frequency_display }}</div>
+                                    </div>
+                                </div>
+
+                                <div class="series-meta-item">
+                                    <div class="series-meta-icon">
+                                        <i class="bi bi-calendar-range"></i>
+                                    </div>
+                                    <div class="series-meta-content">
+                                        <div class="series-meta-label">Occurrences</div>
+                                        <div class="series-meta-value">{{ item.occurrence_count }} meetings</div>
+                                    </div>
+                                </div>
+
+                                <div class="series-meta-item">
+                                    <div class="series-meta-icon">
+                                        <i class="bi bi-calendar3"></i>
+                                    </div>
+                                    <div class="series-meta-content">
+                                        <div class="series-meta-label">Date Range</div>
+                                        <div class="series-meta-value">
+                                            {{ item.series.start_date|date:"M d" }} –
+                                            {% if item.series.end_date %}{{ item.series.end_date|date:"M d, Y" }}{% else %}Ongoing{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="series-meta-item">
+                                    <div class="series-meta-icon">
+                                        <i class="bi bi-clock"></i>
+                                    </div>
+                                    <div class="series-meta-content">
+                                        <div class="series-meta-label">Time</div>
+                                        <div class="series-meta-value">
+                                            {{ item.series.start_time|time:"H:i" }} – {{ item.series.end_time|time:"H:i" }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {% if item.series.description %}
+                                <div style="margin: 1rem 0; padding: 1rem; background: white; border-radius: 10px; border: 2px solid #e5e7eb;">
+                                    <div class="detail-label mb-2">Description</div>
+                                    <div style="color: #4b5563;">{{ item.series.description }}</div>
+                                </div>
+                            {% endif %}
+
+                            <!-- Toggle to show all dates -->
+                            <div class="series-dates-toggle" onclick="toggleSeriesDates({{ item.series.id }})">
+                                <span>
+                                    <i class="bi bi-calendar-week me-2"></i>
+                                    View All {{ item.occurrence_count }} Dates
+                                </span>
+                                <i class="bi bi-chevron-down" id="chevron-{{ item.series.id }}"></i>
+                            </div>
+
+                            <div class="series-dates-list" id="dates-{{ item.series.id }}">
+                                {% for occurrence in item.occurrences %}
+                                    <div class="series-date-item" id="occurrence-{{ occurrence.id }}" data-occurrence-id="{{ occurrence.id }}">
+                                        <div>
+                                            <strong>{{ occurrence.date|date:"l, M d, Y" }}</strong>
+                                            <span class="text-muted ms-2">
+                                                {{ occurrence.start_time|time:"H:i" }} – {{ occurrence.end_time|time:"H:i" }}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            {% if occurrence.status == "approved" %}
+                                                <span class="badge bg-success">Approved</span>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        onclick="cancelOccurrence({{ occurrence.id }}, '{{ occurrence.date|date:"M d, Y" }}')"
+                                                        title="Cancel this occurrence only">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            {% elif occurrence.status == "pending" %}
+                                                <span class="badge bg-warning text-dark">Pending</span>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        onclick="cancelOccurrence({{ occurrence.id }}, '{{ occurrence.date|date:"M d, Y" }}')"
+                                                        title="Cancel this occurrence only">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            {% elif occurrence.status == "rejected" %}
+                                                <span class="badge bg-danger">Rejected</span>
+                                            {% elif occurrence.status == "cancelled" %}
+                                                <span class="badge bg-secondary">Cancelled</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+
+                            {% if item.series.status == "rejected" and item.series.rejection_reason %}
+                                <div class="rejection-reason">
+                                    <div class="rejection-reason-title">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        Rejection Reason
+                                    </div>
+                                    <div class="rejection-reason-text">
+                                        {{ item.series.rejection_reason }}
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                            <div class="booking-actions">
+                                <a href="{% url 'accounts:room_detail' item.series.room.id %}" class="action-btn primary">
+                                    <i class="bi bi-eye"></i>
+                                    View Room
+                                </a>
+                                {% if item.series.status == "pending" %}
+                                    <button class="action-btn" onclick="cancelSeries({{ item.series.id }})">
+                                        <i class="bi bi-x-circle"></i>
+                                        Cancel Series
+                                    </button>
+                                {% elif item.series.status == "approved" %}
+                                    <button class="action-btn" onclick="cancelSeries({{ item.series.id }})">
+                                        <i class="bi bi-x-circle"></i>
+                                        Cancel Series
+                                    </button>
+                                    <small class="text-muted d-block mt-2">
+                                        <i class="bi bi-info-circle"></i>
+                                        Cancelling will free up the room for all {{ item.occurrence_count }} time slots
+                                    </small>
                                 {% endif %}
                             </div>
                         </div>
 
-                        <div class="booking-details">
-                            <div class="detail-item">
-                                <div class="detail-icon">
-                                    <i class="bi bi-door-open"></i>
-                                </div>
-                                <div class="detail-content">
-                                    <div class="detail-label">Room</div>
-                                    <div class="detail-value">{{ b.room.name }}</div>
-                                </div>
-                            </div>
+                    {% else %}
+                        {# Single Booking Card #}
+                        <div class="booking-card {{ item.status }}"
+                             data-searchable="{{ item.title|lower }} {{ item.room.name|lower }} {{ item.description|lower }}">
 
-                            <div class="detail-item">
-                                <div class="detail-icon">
-                                    <i class="bi bi-calendar3"></i>
-                                </div>
-                                <div class="detail-content">
-                                    <div class="detail-label">Date</div>
-                                    <div class="detail-value">{{ b.date|date:"M d, Y" }}</div>
-                                </div>
-                            </div>
-
-                            <div class="detail-item">
-                                <div class="detail-icon">
-                                    <i class="bi bi-clock"></i>
-                                </div>
-                                <div class="detail-content">
-                                    <div class="detail-label">Time</div>
-                                    <div class="detail-value">
-                                        {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
+                            <div class="booking-header">
+                                <div class="booking-title-section">
+                                    <div class="booking-title">
+                                        <i class="bi bi-calendar-event"></i>
+                                        {{ item.title }}
+                                    </div>
+                                    <div class="booking-subtitle">
+                                        <i class="bi bi-door-open me-1"></i>
+                                        {{ item.room.name }} ({{ item.room.code }})
                                     </div>
                                 </div>
+                                <div>
+                                    {% if item.status == "approved" %}
+                                        <span class="status-badge status-approved">
+                                            <i class="bi bi-check-circle"></i>
+                                            Approved
+                                        </span>
+                                    {% elif item.status == "pending" %}
+                                        <span class="status-badge status-pending">
+                                            <i class="bi bi-clock-history"></i>
+                                            Pending
+                                        </span>
+                                    {% elif item.status == "rejected" %}
+                                        <span class="status-badge status-rejected">
+                                            <i class="bi bi-x-circle"></i>
+                                            Rejected
+                                        </span>
+                                    {% elif item.status == "cancelled" %}
+                                        <span class="status-badge status-cancelled">
+                                            <i class="bi bi-slash-circle"></i>
+                                            Cancelled
+                                        </span>
+                                    {% endif %}
+                                </div>
                             </div>
 
-                            {% if b.duration_minutes %}
+                            <div class="booking-details">
                                 <div class="detail-item">
                                     <div class="detail-icon">
-                                        <i class="bi bi-hourglass-split"></i>
+                                        <i class="bi bi-calendar3"></i>
                                     </div>
                                     <div class="detail-content">
-                                        <div class="detail-label">Duration</div>
-                                        <div class="detail-value">{{ b.duration_minutes }} min</div>
+                                        <div class="detail-label">Date</div>
+                                        <div class="detail-value">{{ item.date|date:"M d, Y" }}</div>
+                                    </div>
+                                </div>
+
+                                <div class="detail-item">
+                                    <div class="detail-icon">
+                                        <i class="bi bi-clock"></i>
+                                    </div>
+                                    <div class="detail-content">
+                                        <div class="detail-label">Time</div>
+                                        <div class="detail-value">
+                                            {{ item.start_time|time:"H:i" }} – {{ item.end_time|time:"H:i" }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="detail-item">
+                                    <div class="detail-icon">
+                                        <i class="bi bi-person"></i>
+                                    </div>
+                                    <div class="detail-content">
+                                        <div class="detail-label">Requested</div>
+                                        <div class="detail-value">{{ item.created_at|timesince }} ago</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {% if item.description %}
+                                <div style="margin: 1rem 0; padding: 1rem; background: #f9fafb; border-radius: 10px;">
+                                    <div class="detail-label mb-2">Description</div>
+                                    <div style="color: #4b5563;">{{ item.description }}</div>
+                                </div>
+                            {% endif %}
+
+                            {% if item.status == "rejected" and item.rejection_reason %}
+                                <div class="rejection-reason">
+                                    <div class="rejection-reason-title">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        Rejection Reason
+                                    </div>
+                                    <div class="rejection-reason-text">
+                                        {{ item.rejection_reason }}
                                     </div>
                                 </div>
                             {% endif %}
-                        </div>
 
-                        {% if b.status == "rejected" and b.rejection_reason %}
-                            <div class="rejection-reason">
-                                <div class="rejection-reason-title">
-                                    <i class="bi bi-exclamation-triangle"></i>
-                                    Rejection Reason
-                                </div>
-                                <div class="rejection-reason-text">
-                                    {{ b.rejection_reason }}
-                                </div>
+                            <div class="booking-actions">
+                                <a href="{% url 'accounts:room_detail' item.room.id %}" class="action-btn primary">
+                                    <i class="bi bi-eye"></i>
+                                    View Room
+                                </a>
+                                {% if item.status == "pending" %}
+                                    <button class="action-btn" onclick="cancelBooking({{ item.id }})">
+                                        <i class="bi bi-x-circle"></i>
+                                        Cancel Request
+                                    </button>
+                                {% elif item.status == "approved" %}
+                                    <button class="action-btn" onclick="cancelBooking({{ item.id }})">
+                                        <i class="bi bi-x-circle"></i>
+                                        Cancel Booking
+                                    </button>
+                                    <small class="text-muted d-block mt-2">
+                                        <i class="bi bi-info-circle"></i>
+                                        Cancelling will free up the room for this time slot
+                                    </small>
+                                {% endif %}
                             </div>
-                        {% endif %}
-
-                        <div class="booking-actions">
-                            <a href="{% url 'accounts:room_detail' b.room_id %}"
-                               class="action-btn primary">
-                                <i class="bi bi-eye"></i>
-                                View Room
-                            </a>
-                            {% if b.status == "pending" %}
-                                <button class="action-btn" onclick="cancelBooking({{ b.id }})">
-                                    <i class="bi bi-x-circle"></i>
-                                    Cancel Request
-                                </button>
-                            {% endif %}
-                            {% if b.status == "approved" and b.is_upcoming %}
-                                <button class="action-btn" onclick="modifyBooking({{ b.id }})">
-                                    <i class="bi bi-pencil"></i>
-                                    Modify
-                                </button>
-                            {% endif %}
                         </div>
-                    </div>
+                    {% endif %}
                 {% endfor %}
             </div>
 
-            <!-- Table View (Hidden by default) -->
-            <div id="tableView" style="display: none;">
-                <div class="card shadow-sm border-0" style="border-radius: 16px; overflow: hidden;">
-                    <div class="table-responsive">
-                        <table class="table align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th class="ps-3">Room</th>
-                                    <th>Title</th>
-                                    <th>Date</th>
-                                    <th>Time</th>
-                                    <th>Status</th>
-                                    <th class="text-end pe-3">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for b in bookings %}
-                                    <tr>
-                                        <td class="ps-3">
-                                            <a href="{% url 'accounts:room_detail' b.room_id %}" class="text-decoration-none fw-semibold">
-                                                {{ b.room.name }}
-                                            </a>
-                                        </td>
-                                        <td>{{ b.title }}</td>
-                                        <td>{{ b.date|date:"M d, Y" }}</td>
-                                        <td>{{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}</td>
-                                        <td>
-                                            {% if b.status == "approved" %}
-                                                <span class="status-badge status-approved">Approved</span>
-                                            {% elif b.status == "pending" %}
-                                                <span class="status-badge status-pending">Pending</span>
-                                            {% elif b.status == "rejected" %}
-                                                <span class="status-badge status-rejected">Rejected</span>
-                                            {% elif b.status == "cancelled" %}
-                                                <span class="status-badge status-cancelled">Cancelled</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end pe-3">
-                                            <a href="{% url 'accounts:room_detail' b.room_id %}"
-                                               class="btn btn-sm btn-outline-primary">
-                                                <i class="bi bi-eye"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+            <!-- Pagination -->
+            {% if is_paginated %}
+                <div class="pagination-container">
+                    <div class="pagination-info">
+                        Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} results
                     </div>
+                    <ul class="pagination">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if when_filter %}&when={{ when_filter }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}">
+                                    <i class="bi bi-chevron-double-left"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if when_filter %}&when={{ when_filter }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                        {% endif %}
 
-                    {% if is_paginated %}
-                        <div class="card-footer bg-white border-top">
-                            <nav aria-label="Bookings pagination">
-                                <ul class="pagination justify-content-center mb-0">
-                                    {% if page_obj.has_previous %}
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&status={{ status_filter }}&when={{ when_filter }}">
-                                                <i class="bi bi-chevron-left"></i>
-                                            </a>
-                                        </li>
-                                    {% endif %}
-                                    <li class="page-item disabled">
-                                        <span class="page-link">
-                                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-                                        </span>
-                                    </li>
-                                    {% if page_obj.has_next %}
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page={{ page_obj.next_page_number }}&status={{ status_filter }}&when={{ when_filter }}">
-                                                <i class="bi bi-chevron-right"></i>
-                                            </a>
-                                        </li>
-                                    {% endif %}
-                                </ul>
-                            </nav>
-                        </div>
-                    {% endif %}
+                        {% for num in page_obj.paginator.page_range %}
+                            {% if num == page_obj.number %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if when_filter %}&when={{ when_filter }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}">
+                                        {{ num }}
+                                    </a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if when_filter %}&when={{ when_filter }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if when_filter %}&when={{ when_filter }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}">
+                                    <i class="bi bi-chevron-double-right"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
                 </div>
-            </div>
+            {% endif %}
 
         {% else %}
             <!-- Empty State -->
@@ -773,15 +1188,22 @@
                 </div>
                 <h4 class="text-muted mb-3">No Bookings Found</h4>
                 <p class="text-muted mb-4">
-                    {% if status_filter or when_filter %}
-                        Try adjusting your filters to see more results.
+                    {% if search_query or status_filter or when_filter %}
+                        No bookings match your current filters.<br>
+                        Try adjusting your search or filters to see more results.
                     {% else %}
                         You haven't made any room bookings yet.<br>
                         Get started by booking your first room!
                     {% endif %}
                 </p>
-                <a href="{% url 'accounts:room_list' %}" class="btn btn-primary btn-lg">
-                    <i class="bi bi-plus-circle me-2"></i>
+                {% if search_query or status_filter or when_filter %}
+                    <button onclick="clearFilters()" class="btn btn-outline-secondary me-2">
+                        <i class="bi bi-x-circle me-1"></i>
+                        Clear Filters
+                    </button>
+                {% endif %}
+                <a href="{% url 'accounts:room_list' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-1"></i>
                     Book a Room
                 </a>
             </div>
@@ -794,51 +1216,464 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // View toggle
-    const viewButtons = document.querySelectorAll('.view-toggle button');
-    const cardView = document.getElementById('cardView');
-    const tableView = document.getElementById('tableView');
+    const searchInput = document.getElementById('searchInput');
+    const clearSearch = document.getElementById('clearSearch');
+    const toggleAdvanced = document.getElementById('toggleAdvanced');
+    const advancedFilters = document.getElementById('advancedFilters');
+    const bookingCards = document.querySelectorAll('.booking-card');
 
-    viewButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            viewButtons.forEach(btn => btn.classList.remove('active'));
-            this.classList.add('active');
+    // Search functionality
+    if (searchInput) {
+        // Show clear button if there's text
+        if (searchInput.value) {
+            clearSearch.classList.add('show');
+        }
 
-            const view = this.dataset.view;
-            if (view === 'card') {
-                cardView.style.display = 'block';
-                tableView.style.display = 'none';
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+
+            if (searchTerm) {
+                clearSearch.classList.add('show');
             } else {
-                cardView.style.display = 'none';
-                tableView.style.display = 'block';
+                clearSearch.classList.remove('show');
+            }
+
+            // Filter cards
+            bookingCards.forEach(card => {
+                const searchableText = card.getAttribute('data-searchable') || '';
+                if (searchableText.includes(searchTerm)) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+
+        clearSearch.addEventListener('click', function() {
+            searchInput.value = '';
+            clearSearch.classList.remove('show');
+            bookingCards.forEach(card => {
+                card.style.display = '';
+            });
+            // Also reload page without search parameter
+            const url = new URL(window.location);
+            url.searchParams.delete('search');
+            window.location = url;
+        });
+    }
+
+    // Advanced filters toggle
+    if (toggleAdvanced) {
+        toggleAdvanced.addEventListener('click', function() {
+            advancedFilters.classList.toggle('show');
+            const icon = this.querySelector('.bi-chevron-down');
+            if (advancedFilters.classList.contains('show')) {
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                icon.style.transform = 'rotate(0deg)';
             }
         });
+    }
+
+    // Apply filters when advanced filters change
+    ['dateFrom', 'dateTo', 'roomFilter'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', function() {
+                applyFilters();
+            });
+        }
     });
 });
 
-function setFilter(field, value) {
-    const form = document.getElementById('filterForm');
-    const input = form.querySelector(`[name="${field}"]`);
-    if (input) {
-        input.value = value;
-        form.submit();
+function toggleSeriesDates(seriesId) {
+    const datesList = document.getElementById(`dates-${seriesId}`);
+    const chevron = document.getElementById(`chevron-${seriesId}`);
+
+    datesList.classList.toggle('show');
+
+    if (datesList.classList.contains('show')) {
+        chevron.style.transform = 'rotate(180deg)';
+    } else {
+        chevron.style.transform = 'rotate(0deg)';
     }
+}
+
+function setFilter(field, value) {
+    const url = new URL(window.location);
+    if (value) {
+        url.searchParams.set(field, value);
+    } else {
+        url.searchParams.delete(field);
+    }
+    // Preserve other parameters
+    window.location = url;
 }
 
 function clearFilters() {
-    window.location.href = window.location.pathname;
+    window.location = window.location.pathname;
+}
+
+function applySort(sortValue) {
+    const url = new URL(window.location);
+    url.searchParams.set('sort', sortValue);
+    window.location = url;
+}
+
+function applyFilters() {
+    const url = new URL(window.location);
+
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    const room = document.getElementById('roomFilter').value;
+
+    if (dateFrom) url.searchParams.set('date_from', dateFrom);
+    else url.searchParams.delete('date_from');
+
+    if (dateTo) url.searchParams.set('date_to', dateTo);
+    else url.searchParams.delete('date_to');
+
+    if (room) url.searchParams.set('room', room);
+    else url.searchParams.delete('room');
+
+    window.location = url;
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
 }
 
 function cancelBooking(bookingId) {
-    if (confirm('Are you sure you want to cancel this booking request?')) {
-        // Implement cancel logic
-        console.log('Cancelling booking:', bookingId);
+    if (!confirm('Are you sure you want to cancel this booking?\n\nThis will free up the room for this time slot.')) {
+        return;
     }
+
+    const csrftoken = getCookie('csrftoken');
+    const button = event.target.closest('button');
+    const card = event.target.closest('.booking-card');
+
+    // Disable button and show loading
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cancelling...';
+    }
+
+    fetch(`/accounts/rooms/bookings/${bookingId}/cancel/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            if (card) {
+                card.style.transition = 'all 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(-20px)';
+
+                setTimeout(() => {
+                    card.remove();
+
+                    // Check if there are any cards left
+                    const remainingCards = document.querySelectorAll('.booking-card');
+                    if (remainingCards.length === 0) {
+                        location.reload();
+                    }
+                }, 300);
+            }
+
+            // Show success notification
+            showNotification('Booking cancelled successfully', 'success');
+        } else {
+            // Show error message
+            showNotification(data.message || 'Failed to cancel booking', 'error');
+
+            // Re-enable button
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-x-circle"></i> Cancel Request';
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('An error occurred while cancelling the booking', 'error');
+
+        // Re-enable button
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-x-circle"></i> Cancel Request';
+        }
+    });
 }
 
-function modifyBooking(bookingId) {
-    // Implement modify logic
-    console.log('Modifying booking:', bookingId);
+function cancelSeries(seriesId) {
+    if (!confirm('⚠️ Cancel Entire Recurring Series?\n\nThis will cancel ALL occurrences in this series.\nThe room will be freed up for all these time slots.\n\nAre you sure you want to continue?')) {
+        return;
+    }
+
+    const csrftoken = getCookie('csrftoken');
+    const button = event.target.closest('button');
+    const card = event.target.closest('.booking-card');
+
+    // Disable button and show loading
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cancelling Series...';
+    }
+
+    fetch(`/accounts/rooms/series/${seriesId}/cancel/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            if (card) {
+                card.style.transition = 'all 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(-20px)';
+
+                setTimeout(() => {
+                    card.remove();
+
+                    // Check if there are any cards left
+                    const remainingCards = document.querySelectorAll('.booking-card');
+                    if (remainingCards.length === 0) {
+                        location.reload();
+                    }
+                }, 300);
+            }
+
+            // Show success notification
+            showNotification(`Series cancelled successfully (${data.occurrence_count} occurrences)`, 'success');
+        } else {
+            // Show error message
+            showNotification(data.message || 'Failed to cancel series', 'error');
+
+            // Re-enable button
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-x-circle"></i> Cancel Series';
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('An error occurred while cancelling the series', 'error');
+
+        // Re-enable button
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-x-circle"></i> Cancel Series';
+        }
+    });
+}
+
+function cancelOccurrence(occurrenceId, occurrenceDate) {
+    if (!confirm(`Cancel occurrence on ${occurrenceDate}?\n\nThis will cancel only this specific occurrence.\nThe room will be freed up for this time slot.\n\nOther occurrences in the series will remain active.`)) {
+        return;
+    }
+
+    const csrftoken = getCookie('csrftoken');
+    const button = event.target.closest('button');
+    const occurrenceItem = document.getElementById(`occurrence-${occurrenceId}`);
+    const card = event.target.closest('.booking-card');
+
+    // Disable button and show loading
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    }
+
+    fetch(`/accounts/rooms/occurrences/${occurrenceId}/cancel/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the occurrence item in the list
+            if (occurrenceItem) {
+                // Replace status badge with cancelled badge
+                const badgeContainer = occurrenceItem.querySelector('.d-flex');
+                badgeContainer.innerHTML = '<span class="badge bg-secondary">Cancelled</span>';
+
+                // Fade out the row slightly
+                occurrenceItem.style.opacity = '0.6';
+                occurrenceItem.style.textDecoration = 'line-through';
+            }
+
+            // Show success notification
+            showNotification(data.message || `Occurrence on ${occurrenceDate} cancelled successfully`, 'success');
+
+            // If all occurrences are cancelled, remove the entire card
+            if (data.series_cancelled) {
+                setTimeout(() => {
+                    if (card) {
+                        card.style.transition = 'all 0.3s ease';
+                        card.style.opacity = '0';
+                        card.style.transform = 'translateX(-20px)';
+
+                        setTimeout(() => {
+                            card.remove();
+                            showNotification('All occurrences cancelled - series removed', 'info');
+
+                            const remainingCards = document.querySelectorAll('.booking-card');
+                            if (remainingCards.length === 0) {
+                                location.reload();
+                            }
+                        }, 300);
+                    }
+                }, 1000);
+            } else {
+                // Update the occurrence count in the series card
+                const countDisplay = card.querySelector('.series-meta-value');
+                if (countDisplay && data.active_occurrences !== undefined) {
+                    const currentText = countDisplay.textContent;
+                    countDisplay.textContent = `${data.active_occurrences} meetings`;
+
+                    // Also update the "View All X Dates" button
+                    const viewAllButton = card.querySelector('.series-dates-toggle');
+                    if (viewAllButton) {
+                        const buttonText = viewAllButton.querySelector('span');
+                        if (buttonText) {
+                            buttonText.innerHTML = `<i class="bi bi-calendar-week me-2"></i>View All ${data.active_occurrences} Active Dates`;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Show error message
+            showNotification(data.message || 'Failed to cancel occurrence', 'error');
+
+            // Re-enable button
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-x-circle"></i>';
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('An error occurred while cancelling the occurrence', 'error');
+
+        // Re-enable button
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-x-circle"></i>';
+        }
+    });
+}
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+            <span>${message}</span>
+        </div>
+    `;
+
+    // Add styles if not already present
+    if (!document.getElementById('notification-styles')) {
+        const style = document.createElement('style');
+        style.id = 'notification-styles';
+        style.textContent = `
+            .notification {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 1rem 1.5rem;
+                border-radius: 10px;
+                box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.2);
+                z-index: 9999;
+                animation: slideInRight 0.3s ease;
+                max-width: 400px;
+                font-weight: 600;
+            }
+
+            .notification-success {
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                color: white;
+            }
+
+            .notification-error {
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                color: white;
+            }
+
+            .notification-info {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+
+            .notification-content {
+                display: flex;
+                align-items: center;
+            }
+
+            @keyframes slideInRight {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+
+            @keyframes slideOutRight {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Add to page
+    document.body.appendChild(notification);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }, 5000);
 }
 </script>
 {% endblock %}

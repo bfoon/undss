@@ -84,6 +84,11 @@ class CommonServiceConfig(models.Model):
 
 
 class CommonServiceApprover(models.Model):
+    config = models.ForeignKey(
+        "CommonServiceConfig",
+        on_delete=models.CASCADE,
+        related_name="approvers"
+    )
     agency = models.ForeignKey("accounts.Agency", on_delete=models.CASCADE, related_name="cs_approvers")
     level = models.PositiveIntegerField(help_text="Approval level: 1..N")
 

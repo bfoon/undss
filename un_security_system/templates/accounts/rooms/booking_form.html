@@ -4,7 +4,7 @@
 {% block extra_css %}
 <style>
     .booking-form-container {
-        max-width: 800px;
+        max-width: 900px;
         margin: 0 auto;
     }
 
@@ -114,23 +114,6 @@
         resize: vertical;
     }
 
-    .input-icon {
-        position: relative;
-    }
-
-    .input-icon i {
-        position: absolute;
-        left: 1rem;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #9ca3af;
-        pointer-events: none;
-    }
-
-    .input-icon .form-control {
-        padding-left: 2.75rem;
-    }
-
     .time-estimate {
         background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
         border: 2px solid #f59e0b;
@@ -213,6 +196,258 @@
         font-size: 0.9rem;
     }
 
+    /* Recurring Booking Styles */
+    .recurring-toggle {
+        background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+        border: 2px solid #667eea;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .recurring-toggle:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(102, 126, 234, 0.2);
+    }
+
+    .recurring-toggle-content {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .recurring-toggle-icon {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+    }
+
+    .recurring-toggle-text {
+        flex: 1;
+    }
+
+    .recurring-toggle-title {
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 0.25rem;
+        font-size: 1.1rem;
+    }
+
+    .recurring-toggle-desc {
+        font-size: 0.9rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .recurring-switch {
+        width: 60px;
+        height: 32px;
+        position: relative;
+    }
+
+    .recurring-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .recurring-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #cbd5e1;
+        transition: 0.4s;
+        border-radius: 34px;
+    }
+
+    .recurring-slider:before {
+        position: absolute;
+        content: "";
+        height: 24px;
+        width: 24px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+    }
+
+    input:checked + .recurring-slider {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    input:checked + .recurring-slider:before {
+        transform: translateX(28px);
+    }
+
+    .recurring-options {
+        display: none;
+        animation: slideDown 0.3s ease;
+    }
+
+    .recurring-options.show {
+        display: block;
+    }
+
+    .frequency-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .frequency-option {
+        position: relative;
+    }
+
+    .frequency-option input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+    }
+
+    .frequency-option label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem 0.5rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s;
+        gap: 0.5rem;
+        text-align: center;
+    }
+
+    .frequency-option label i {
+        font-size: 1.5rem;
+        color: #9ca3af;
+        transition: all 0.3s;
+    }
+
+    .frequency-option label span {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #6b7280;
+        transition: all 0.3s;
+    }
+
+    .frequency-option input:checked + label {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+    }
+
+    .frequency-option input:checked + label i {
+        color: #667eea;
+    }
+
+    .frequency-option input:checked + label span {
+        color: #667eea;
+    }
+
+    .frequency-option label:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+    }
+
+    .weekdays-selector {
+        display: none;
+        margin-top: 1rem;
+    }
+
+    .weekdays-selector.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+
+    .weekdays-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .weekday-option {
+        position: relative;
+    }
+
+    .weekday-option input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+    }
+
+    .weekday-option label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem 0.25rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+
+    .weekday-option input:checked + label {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .weekday-option label:hover {
+        border-color: #667eea;
+        transform: translateY(-1px);
+    }
+
+    .occurrence-preview {
+        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+        border: 2px solid #0ea5e9;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-top: 1rem;
+        display: none;
+    }
+
+    .occurrence-preview.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+
+    .occurrence-preview-content {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .occurrence-preview-icon {
+        font-size: 2rem;
+    }
+
+    .occurrence-preview-text {
+        flex: 1;
+    }
+
+    .occurrence-count {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #075985;
+    }
+
     .form-footer {
         background: #f8f9fa;
         padding: 1.5rem 2rem;
@@ -226,26 +461,6 @@
         font-weight: 600;
         border-radius: 10px;
         transition: all 0.3s;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .btn-submit::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 0;
-        height: 0;
-        border-radius: 50%;
-        background: rgba(255,255,255,0.3);
-        transform: translate(-50%, -50%);
-        transition: width 0.6s, height 0.6s;
-    }
-
-    .btn-submit:hover::before {
-        width: 300px;
-        height: 300px;
     }
 
     .btn-submit:hover {
@@ -254,31 +469,26 @@
     }
 
     .btn-cancel {
+        background: #f3f4f6;
+        color: #6b7280;
         border: 2px solid #e5e7eb;
-        padding: 0.75rem 2rem;
+        padding: 0.65rem 2rem;
         font-weight: 600;
         border-radius: 10px;
-        transition: all 0.2s;
+        transition: all 0.3s;
+        text-decoration: none;
     }
 
     .btn-cancel:hover {
-        border-color: #667eea;
-        background: #f0f4ff;
-        color: #667eea;
-    }
-
-    .alert-error {
-        border-left: 4px solid #dc3545;
-        background: #f8d7da;
-        border-radius: 10px;
-        padding: 1rem;
-        margin-bottom: 1.5rem;
+        background: #e5e7eb;
+        color: #374151;
+        transform: translateY(-2px);
     }
 
     .room-preview {
         background: white;
         border: 2px solid #e5e7eb;
-        border-radius: 10px;
+        border-radius: 12px;
         padding: 1rem;
         margin-top: 0.5rem;
         display: none;
@@ -286,48 +496,35 @@
 
     .room-preview.show {
         display: flex;
-        align-items: center;
-        gap: 1rem;
         animation: slideDown 0.3s ease;
     }
 
     .room-preview-icon {
         width: 50px;
         height: 50px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
         border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: white;
+        color: #667eea;
         font-size: 1.5rem;
+        margin-right: 1rem;
     }
 
-    .room-preview-info {
+    .room-preview-details {
         flex: 1;
     }
 
     .room-preview-name {
         font-weight: 700;
         color: #1f2937;
+        margin-bottom: 0.25rem;
     }
 
-    .room-preview-details {
+    .room-preview-meta {
         font-size: 0.85rem;
         color: #6b7280;
-    }
-
-    @media (max-width: 768px) {
-        .form-header {
-            padding: 1.5rem;
-        }
-        .form-footer {
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-        .btn-submit, .btn-cancel {
-            width: 100%;
-        }
     }
 </style>
 {% endblock %}
@@ -335,80 +532,61 @@
 {% block content %}
 <div class="container py-4">
     <div class="booking-form-container">
-
         <form method="post" class="booking-form-card" id="bookingForm">
             {% csrf_token %}
 
-            <!-- Form Header -->
+            <!-- Header -->
             <div class="form-header">
                 <h3>
-                    <i class="bi bi-calendar-plus me-2"></i>
-                    Request Room Booking
+                    <i class="bi bi-calendar-check me-2"></i>
+                    Book a Room
                 </h3>
-                <p class="mb-0">Fill in the details below to request a room reservation</p>
+                <p>Reserve a meeting room for your upcoming session</p>
             </div>
 
             <!-- Form Body -->
-            <div class="card-body p-4">
+            <div class="p-4">
 
-                <!-- Non-field Errors -->
-                {% if form.non_field_errors %}
-                    <div class="alert-error">
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="bi bi-exclamation-triangle-fill text-danger"></i>
-                            <div>
-                                {{ form.non_field_errors }}
-                            </div>
-                        </div>
-                    </div>
-                {% endif %}
-
-                <!-- Room Selection Section -->
+                <!-- Room Selection -->
                 <div class="form-section">
                     <div class="form-section-title">
                         <i class="bi bi-door-open"></i>
                         Room Selection
                     </div>
 
-                    <div class="mb-0">
-                        <label class="form-label">
-                            <i class="bi bi-building"></i>
-                            Select Room
-                            <span class="required">*</span>
-                        </label>
-                        {{ form.room }}
-                        {% if form.room.errors %}
-                            <div class="text-danger small mt-1">{{ form.room.errors }}</div>
-                        {% endif %}
-                        <div class="help-text">
-                            <i class="bi bi-info-circle"></i>
-                            Choose the room that best fits your needs
-                        </div>
-                    </div>
+                    <label class="form-label">
+                        <i class="bi bi-geo-alt"></i>
+                        Select Room
+                        <span class="required">*</span>
+                    </label>
+                    {{ form.room }}
+                    {% if form.room.errors %}
+                        <div class="text-danger small mt-1">{{ form.room.errors }}</div>
+                    {% endif %}
 
-                    <!-- Room Preview (shown when room is selected) -->
+                    <!-- Room Preview -->
                     <div class="room-preview" id="roomPreview">
                         <div class="room-preview-icon">
                             <i class="bi bi-door-open"></i>
                         </div>
-                        <div class="room-preview-info">
+                        <div class="room-preview-details">
                             <div class="room-preview-name" id="roomPreviewName">—</div>
-                            <div class="room-preview-details" id="roomPreviewDetails">—</div>
+                            <div class="room-preview-meta" id="roomPreviewDetails">—</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Meeting Details Section -->
+                <!-- Meeting Details -->
                 <div class="form-section">
                     <div class="form-section-title">
-                        <i class="bi bi-card-text"></i>
+                        <i class="bi bi-pencil-square"></i>
                         Meeting Details
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">
-                            <i class="bi bi-type"></i>
-                            Title / Purpose
+                            <i class="bi bi-card-heading"></i>
+                            Meeting Title
                             <span class="required">*</span>
                         </label>
                         {{ form.title }}
@@ -417,14 +595,15 @@
                         {% endif %}
                         <div class="help-text">
                             <i class="bi bi-info-circle"></i>
-                            A brief, descriptive title for your meeting
+                            Provide a clear, descriptive title for your meeting
                         </div>
                     </div>
 
-                    <div class="mb-0">
+                    <div>
                         <label class="form-label">
                             <i class="bi bi-text-paragraph"></i>
-                            Additional Details
+                            Description
+                            <span class="text-muted small">(Optional)</span>
                         </label>
                         {{ form.description }}
                         {% if form.description.errors %}
@@ -432,29 +611,190 @@
                         {% endif %}
                         <div class="help-text">
                             <i class="bi bi-info-circle"></i>
-                            Include agenda, attendees, or special requirements (optional)
+                            Add any additional details about the meeting
                         </div>
                     </div>
                 </div>
 
-                <!-- Date & Time Section -->
+                <!-- Recurring Booking Toggle -->
+                <div class="recurring-toggle" id="recurringToggle">
+                    <div class="recurring-toggle-content">
+                        <div class="recurring-toggle-icon">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </div>
+                        <div class="recurring-toggle-text">
+                            <div class="recurring-toggle-title">Recurring Meeting</div>
+                            <p class="recurring-toggle-desc">Schedule this meeting to repeat on a regular basis</p>
+                        </div>
+                        <label class="recurring-switch">
+                            <input type="checkbox" id="recurringCheckbox">
+                            <span class="recurring-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Recurring Options (Hidden by default) -->
+                <div class="recurring-options" id="recurringOptions">
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            Recurrence Pattern
+                        </div>
+
+                        <!-- Frequency Selection -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="bi bi-calendar-range"></i>
+                                Repeat Every
+                            </label>
+                            <div class="frequency-grid">
+                                <div class="frequency-option">
+                                    <input type="radio" name="frequency" value="daily" id="freq-daily">
+                                    <label for="freq-daily">
+                                        <i class="bi bi-sun"></i>
+                                        <span>Daily</span>
+                                    </label>
+                                </div>
+                                <div class="frequency-option">
+                                    <input type="radio" name="frequency" value="weekly" id="freq-weekly" checked>
+                                    <label for="freq-weekly">
+                                        <i class="bi bi-calendar-week"></i>
+                                        <span>Weekly</span>
+                                    </label>
+                                </div>
+                                <div class="frequency-option">
+                                    <input type="radio" name="frequency" value="monthly" id="freq-monthly">
+                                    <label for="freq-monthly">
+                                        <i class="bi bi-calendar-month"></i>
+                                        <span>Monthly</span>
+                                    </label>
+                                </div>
+                                <div class="frequency-option">
+                                    <input type="radio" name="frequency" value="yearly" id="freq-yearly">
+                                    <label for="freq-yearly">
+                                        <i class="bi bi-calendar-event"></i>
+                                        <span>Yearly</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Interval -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="bi bi-arrow-repeat"></i>
+                                Repeat Every
+                            </label>
+                            <div class="row g-3 align-items-center">
+                                <div class="col-auto">
+                                    {{ form.interval }}
+                                </div>
+                                <div class="col-auto">
+                                    <span id="intervalLabel">week(s)</span>
+                                </div>
+                            </div>
+                            {% if form.interval.errors %}
+                                <div class="text-danger small mt-1">{{ form.interval.errors }}</div>
+                            {% endif %}
+                            <div class="help-text">
+                                <i class="bi bi-info-circle"></i>
+                                For example: "2" for every 2 weeks, "3" for every 3 months
+                            </div>
+                        </div>
+
+                        <!-- Weekdays (only for weekly) -->
+                        <div class="weekdays-selector" id="weekdaysSelector">
+                            <label class="form-label">
+                                <i class="bi bi-calendar-check"></i>
+                                Select Days of the Week
+                            </label>
+                            <div class="weekdays-grid">
+                                <div class="weekday-option">
+                                    <input type="checkbox" name="weekdays" value="0" id="day-mon">
+                                    <label for="day-mon">Mon</label>
+                                </div>
+                                <div class="weekday-option">
+                                    <input type="checkbox" name="weekdays" value="1" id="day-tue">
+                                    <label for="day-tue">Tue</label>
+                                </div>
+                                <div class="weekday-option">
+                                    <input type="checkbox" name="weekdays" value="2" id="day-wed">
+                                    <label for="day-wed">Wed</label>
+                                </div>
+                                <div class="weekday-option">
+                                    <input type="checkbox" name="weekdays" value="3" id="day-thu">
+                                    <label for="day-thu">Thu</label>
+                                </div>
+                                <div class="weekday-option">
+                                    <input type="checkbox" name="weekdays" value="4" id="day-fri">
+                                    <label for="day-fri">Fri</label>
+                                </div>
+                                <div class="weekday-option">
+                                    <input type="checkbox" name="weekdays" value="5" id="day-sat">
+                                    <label for="day-sat">Sat</label>
+                                </div>
+                                <div class="weekday-option">
+                                    <input type="checkbox" name="weekdays" value="6" id="day-sun">
+                                    <label for="day-sun">Sun</label>
+                                </div>
+                            </div>
+                            {% if form.weekdays.errors %}
+                                <div class="text-danger small mt-1">{{ form.weekdays.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- End Date -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="bi bi-calendar-x"></i>
+                                End Date (Repeat Until)
+                            </label>
+                            {{ form.until }}
+                            {% if form.until.errors %}
+                                <div class="text-danger small mt-1">{{ form.until.errors }}</div>
+                            {% endif %}
+                            <div class="help-text">
+                                <i class="bi bi-info-circle"></i>
+                                Leave blank to continue indefinitely (up to 1 year maximum)
+                            </div>
+                        </div>
+
+                        <!-- Occurrence Preview -->
+                        <div class="occurrence-preview" id="occurrencePreview">
+                            <div class="occurrence-preview-content">
+                                <div class="occurrence-preview-icon">📅</div>
+                                <div class="occurrence-preview-text">
+                                    <div class="small text-muted mb-1">Estimated Occurrences</div>
+                                    <div class="occurrence-count" id="occurrenceCount">—</div>
+                                    <div class="small">meetings will be created</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Date & Time -->
                 <div class="form-section">
                     <div class="form-section-title">
                         <i class="bi bi-clock"></i>
-                        Date & Time
+                        <span id="dateTimeTitle">Date & Time</span>
                     </div>
 
                     <div class="row g-3">
                         <div class="col-md-12">
                             <label class="form-label">
                                 <i class="bi bi-calendar3"></i>
-                                Date
+                                <span id="dateLabel">Date</span>
                                 <span class="required">*</span>
                             </label>
                             {{ form.date }}
                             {% if form.date.errors %}
                                 <div class="text-danger small mt-1">{{ form.date.errors }}</div>
                             {% endif %}
+                            <div class="help-text" id="dateHelp">
+                                <i class="bi bi-info-circle"></i>
+                                Select the date for your meeting
+                            </div>
                         </div>
 
                         <div class="col-md-6">
@@ -517,7 +857,7 @@
             <div class="form-footer d-flex justify-content-between align-items-center">
                 <div class="text-muted small">
                     <i class="bi bi-info-circle me-1"></i>
-                    Your request will be sent to the room approvers
+                    <span id="footerText">Your request will be sent to the room approvers</span>
                 </div>
                 <div class="d-flex gap-2">
                     <a href="{% url 'accounts:room_list' %}" class="btn btn-cancel">
@@ -526,7 +866,7 @@
                     </a>
                     <button type="submit" class="btn btn-submit text-white">
                         <i class="bi bi-send me-1"></i>
-                        Submit Request
+                        <span id="submitText">Submit Request</span>
                     </button>
                 </div>
             </div>
@@ -549,13 +889,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const durationAdvice = document.getElementById('durationAdvice');
     const roomPreview = document.getElementById('roomPreview');
 
+    // Recurring elements
+    const recurringCheckbox = document.getElementById('recurringCheckbox');
+    const recurringOptions = document.getElementById('recurringOptions');
+    const frequencyRadios = document.querySelectorAll('input[name="frequency"]');
+    const weekdaysSelector = document.getElementById('weekdaysSelector');
+    const intervalLabel = document.getElementById('intervalLabel');
+    const untilInput = document.querySelector('input[name="until"]');
+    const occurrencePreview = document.getElementById('occurrencePreview');
+    const occurrenceCount = document.getElementById('occurrenceCount');
+
     // Set minimum date to today
     if (dateInput) {
         const today = new Date().toISOString().split('T')[0];
         dateInput.setAttribute('min', today);
     }
 
-    // Room preview (you can customize this with actual room data)
+    if (untilInput) {
+        const today = new Date().toISOString().split('T')[0];
+        untilInput.setAttribute('min', today);
+    }
+
+    // Room preview
     if (roomSelect) {
         roomSelect.addEventListener('change', function() {
             const selectedOption = this.options[this.selectedIndex];
@@ -568,10 +923,128 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Trigger on load if room is pre-selected
         if (roomSelect.value) {
             roomSelect.dispatchEvent(new Event('change'));
         }
+    }
+
+    // Recurring toggle
+    if (recurringCheckbox) {
+        recurringCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                recurringOptions.classList.add('show');
+                updateLabelsForRecurring(true);
+                calculateOccurrences();
+            } else {
+                recurringOptions.classList.remove('show');
+                updateLabelsForRecurring(false);
+                occurrencePreview.classList.remove('show');
+            }
+        });
+    }
+
+    // Frequency change
+    frequencyRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const frequency = this.value;
+            updateIntervalLabel(frequency);
+
+            // Show/hide weekdays selector
+            if (frequency === 'weekly') {
+                weekdaysSelector.classList.add('show');
+            } else {
+                weekdaysSelector.classList.remove('show');
+            }
+
+            calculateOccurrences();
+        });
+    });
+
+    // Update interval label based on frequency
+    function updateIntervalLabel(frequency) {
+        const labels = {
+            'daily': 'day(s)',
+            'weekly': 'week(s)',
+            'monthly': 'month(s)',
+            'yearly': 'year(s)'
+        };
+        intervalLabel.textContent = labels[frequency] || 'week(s)';
+    }
+
+    // Update labels when recurring is enabled
+    function updateLabelsForRecurring(isRecurring) {
+        const dateLabel = document.getElementById('dateLabel');
+        const dateHelp = document.getElementById('dateHelp');
+        const dateTimeTitle = document.getElementById('dateTimeTitle');
+        const submitText = document.getElementById('submitText');
+        const footerText = document.getElementById('footerText');
+
+        if (isRecurring) {
+            dateLabel.innerHTML = 'Start Date';
+            dateHelp.innerHTML = '<i class="bi bi-info-circle"></i> Select the first occurrence date';
+            dateTimeTitle.innerHTML = '<i class="bi bi-clock"></i> First Occurrence Time';
+            submitText.innerHTML = 'Create Recurring Series';
+            footerText.innerHTML = 'A series of meetings will be created and sent for approval';
+        } else {
+            dateLabel.innerHTML = 'Date';
+            dateHelp.innerHTML = '<i class="bi bi-info-circle"></i> Select the date for your meeting';
+            dateTimeTitle.innerHTML = '<i class="bi bi-clock"></i> Date & Time';
+            submitText.innerHTML = 'Submit Request';
+            footerText.innerHTML = 'Your request will be sent to the room approvers';
+        }
+    }
+
+    // Calculate occurrences
+    function calculateOccurrences() {
+        if (!recurringCheckbox.checked || !dateInput.value) {
+            occurrencePreview.classList.remove('show');
+            return;
+        }
+
+        const startDate = new Date(dateInput.value);
+        let endDate = untilInput.value ? new Date(untilInput.value) : new Date(startDate.getTime() + (365 * 24 * 60 * 60 * 1000));
+
+        const frequency = document.querySelector('input[name="frequency"]:checked')?.value || 'weekly';
+        const interval = parseInt(document.querySelector('input[name="interval"]')?.value || 1);
+
+        let count = 0;
+        let current = new Date(startDate);
+
+        // Simple estimation
+        if (frequency === 'daily') {
+            const days = Math.floor((endDate - startDate) / (24 * 60 * 60 * 1000));
+            count = Math.floor(days / interval) + 1;
+        } else if (frequency === 'weekly') {
+            const selectedDays = document.querySelectorAll('input[name="weekdays"]:checked').length;
+            const weeks = Math.floor((endDate - startDate) / (7 * 24 * 60 * 60 * 1000));
+            count = Math.floor(weeks / interval) * (selectedDays || 1);
+        } else if (frequency === 'monthly') {
+            const months = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth());
+            count = Math.floor(months / interval) + 1;
+        } else if (frequency === 'yearly') {
+            const years = endDate.getFullYear() - startDate.getFullYear();
+            count = Math.floor(years / interval) + 1;
+        }
+
+        count = Math.max(1, Math.min(count, 365)); // Cap at 365
+
+        occurrenceCount.textContent = count;
+        occurrencePreview.classList.add('show');
+    }
+
+    // Listen for changes that affect occurrence count
+    if (untilInput) {
+        untilInput.addEventListener('change', calculateOccurrences);
+    }
+
+    document.querySelector('input[name="interval"]')?.addEventListener('change', calculateOccurrences);
+
+    document.querySelectorAll('input[name="weekdays"]').forEach(checkbox => {
+        checkbox.addEventListener('change', calculateOccurrences);
+    });
+
+    if (dateInput) {
+        dateInput.addEventListener('change', calculateOccurrences);
     }
 
     // Quick time buttons
@@ -626,7 +1099,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const startMinutes = parseInt(start[0]) * 60 + parseInt(start[1]);
         let endMinutes = parseInt(end[0]) * 60 + parseInt(end[1]);
 
-        // Handle cases where end time is before start time (next day)
         if (endMinutes < startMinutes) {
             endMinutes += 24 * 60;
         }
@@ -636,7 +1108,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (durationMinutes > 0) {
             timeEstimate.classList.add('show');
 
-            // Format duration
             const hours = Math.floor(durationMinutes / 60);
             const minutes = durationMinutes % 60;
             let durationStr = '';
@@ -651,7 +1122,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             durationText.textContent = durationStr;
 
-            // Advice based on duration
             if (durationMinutes <= 60) {
                 durationAdvice.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Optimal duration – easy to share the room</span>';
             } else if (durationMinutes <= 180) {
@@ -664,7 +1134,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Form validation feedback
+    // Form submission
     const form = document.getElementById('bookingForm');
     if (form) {
         form.addEventListener('submit', function(e) {
@@ -672,12 +1142,6 @@ document.addEventListener('DOMContentLoaded', function() {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
         });
-    }
-
-    // Initialize tooltips if Bootstrap is available
-    if (typeof bootstrap !== 'undefined') {
-        const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-        tooltips.forEach(el => new bootstrap.Tooltip(el));
     }
 });
 </script>

@@ -403,14 +403,79 @@ class RegistrationInviteForm(forms.ModelForm):
         return value
 
 class RoomBookingForm(forms.ModelForm):
+
+    FREQUENCY_CHOICES = (
+        ("", "Does not repeat"),
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+        ("yearly", "Yearly"),
+    )
+
+    frequency = forms.ChoiceField(
+        choices=FREQUENCY_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"})
+    )
+
+    interval = forms.IntegerField(
+        required=False,
+        min_value=1,
+        initial=1,
+        widget=forms.NumberInput(attrs={
+            "class": "form-control",
+            "min": 1
+        }),
+        help_text="Repeat every N units (e.g. every 2 weeks)"
+    )
+
+    until = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        help_text="End date for recurrence"
+    )
+
+    weekdays = forms.MultipleChoiceField(
+        required=False,
+        choices=[
+            (0, "Mon"), (1, "Tue"), (2, "Wed"),
+            (3, "Thu"), (4, "Fri"), (5, "Sat"), (6, "Sun"),
+        ],
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Select weekdays (for weekly recurrence)"
+    )
+
     class Meta:
         model = RoomBooking
-        fields = ["room", "title", "description", "date", "start_time", "end_time"]
+        fields = [
+            "room", "title", "description",
+            "date", "start_time", "end_time"
+        ]
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
-            "start_time": forms.TimeInput(attrs={"type": "time"}),
-            "end_time": forms.TimeInput(attrs={"type": "time"}),
+            "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+            "start_time": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
+            "end_time": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+
+        frequency = cleaned.get("frequency")
+        until = cleaned.get("until")
+        interval = cleaned.get("interval")
+
+        if frequency:
+            if not interval:
+                raise ValidationError("Please specify repeat interval.")
+
+            if not until:
+                raise ValidationError("Please specify end date for recurring booking.")
+
+            if until and cleaned.get("date") and until < cleaned.get("date"):
+                raise ValidationError("End date cannot be before start date.")
+
+        return cleaned
+
 
 
 class RoomBookingApprovalForm(forms.Form):
@@ -425,82 +490,164 @@ class RoomBookingApprovalForm(forms.Form):
         required=False,
     )
 
+class RoomSeriesApprovalForm(forms.Form):
+    """
+    Form for approving/rejecting an entire recurring booking series.
+    """
+    ACTION_CHOICES = (
+        ("approve", "Approve entire series"),
+        ("reject", "Reject entire series"),
+    )
+    action = forms.ChoiceField(choices=ACTION_CHOICES, widget=forms.RadioSelect)
+    reason = forms.CharField(
+        label="Reason (optional for approval, required for rejection)",
+        widget=forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+        required=False,
+        help_text="Provide a reason for rejection. This will be sent to the requester."
+    )
+
 
 class RoomForm(forms.ModelForm):
-    """Form for creating and editing rooms."""
+    """
+    Professional Room create/update form.
+
+    - Allows selecting amenities (RoomAmenity)
+    - Allows selecting approvers (Users)
+    - Adds approval_mode (manual/auto/mixed) to control workflow
+    - Keeps RoomApprover links in sync with selected approvers
+      because your booking approval views use RoomApprover links.
+    """
 
     amenities = forms.ModelMultipleChoiceField(
         queryset=RoomAmenity.objects.filter(is_active=True),
         widget=forms.CheckboxSelectMultiple,
         required=False,
-        help_text="Select all amenities available in this room"
+        help_text="Select all amenities available in this room",
     )
 
     approvers = forms.ModelMultipleChoiceField(
         queryset=User.objects.filter(is_active=True),
         widget=forms.CheckboxSelectMultiple,
         required=False,
-        help_text="Select users who can approve bookings for this room"
+        help_text="Select users who can approve bookings for this room",
     )
 
     class Meta:
         model = Room
         fields = [
-            'name', 'code', 'room_type', 'location',
-            'capacity', 'description', 'is_active',
-            'amenities', 'approvers'
+            "name",
+            "code",
+            "room_type",
+            "location",
+            "capacity",
+            "description",
+            "approval_mode",  # ✅ add this field in Room model
+            "is_active",
+            "amenities",
+            "approvers",
         ]
         widgets = {
-            'name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., Conference Room A'
-            }),
-            'code': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., CR-A, LIB-1'
-            }),
-            'room_type': forms.Select(attrs={
-                'class': 'form-select'
-            }),
-            'location': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., UN House 1st Floor'
-            }),
-            'capacity': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Number of people',
-                'min': 1
-            }),
-            'description': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 4,
-                'placeholder': 'Describe the room and its purpose'
-            }),
-            'is_active': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
+            "name": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "e.g. Conference Room A"}
+            ),
+            "code": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "e.g. CR-A, LIB-1"}
+            ),
+            "room_type": forms.Select(attrs={"class": "form-select"}),
+            "location": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "e.g. UN House 1st Floor"}
+            ),
+            "capacity": forms.NumberInput(
+                attrs={"class": "form-control", "placeholder": "Number of people", "min": 1}
+            ),
+            "description": forms.Textarea(
+                attrs={"class": "form-control", "rows": 4, "placeholder": "Describe the room and its purpose"}
+            ),
+            "approval_mode": forms.Select(attrs={"class": "form-select"}),  # ✅
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # If editing, prefill selections
+        if self.instance.pk:
+            # Amenities already M2M on Room
+            self.fields["amenities"].initial = self.instance.amenities.filter(is_active=True)
+
+            # Approvers:
+            # Prefer RoomApprover links (since your workflow uses them), fall back to Room.approvers.
+            linked_users = User.objects.filter(
+                room_approver_roles__room=self.instance,
+                room_approver_roles__is_active=True,
+            ).distinct()
+
+            if linked_users.exists():
+                self.fields["approvers"].initial = linked_users
+            else:
+                self.fields["approvers"].initial = self.instance.approvers.filter(is_active=True)
 
     def clean_code(self):
         """Validate that code is unique (excluding current instance if editing)."""
-        code = self.cleaned_data.get('code')
+        code = self.cleaned_data.get("code")
         if code:
             code = code.strip().upper()
             qs = Room.objects.filter(code=code)
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
-                raise ValidationError('A room with this code already exists.')
+                raise ValidationError("A room with this code already exists.")
         return code
 
     def clean_name(self):
         """Validate that name is unique (excluding current instance if editing)."""
-        name = self.cleaned_data.get('name')
+        name = self.cleaned_data.get("name")
         if name:
             name = name.strip()
             qs = Room.objects.filter(name=name)
             if self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
-                raise ValidationError('A room with this name already exists.')
+                raise ValidationError("A room with this name already exists.")
         return name
+
+    def save(self, commit=True):
+        """
+        Save room + sync:
+        - Room.amenities M2M
+        - Room.approvers M2M (optional/legacy)
+        - RoomApprover links (ACTIVE) to match selected approvers (this is what your workflow uses)
+        """
+        room = super().save(commit=commit)
+
+        # M2M saving
+        if commit:
+            self.save_m2m()
+
+        selected_amenities = self.cleaned_data.get("amenities")
+        selected_approvers = self.cleaned_data.get("approvers")
+
+        # Ensure amenities match selection (defensive)
+        if selected_amenities is not None:
+            room.amenities.set(selected_amenities)
+
+        # Keep Room.approvers updated too (since you have this M2M on the model)
+        if selected_approvers is not None:
+            room.approvers.set(selected_approvers)
+
+            # ---- Sync RoomApprover links (THIS is what your views use) ----
+            selected_ids = set(selected_approvers.values_list("id", flat=True))
+
+            # Deactivate links not selected
+            RoomApprover.objects.filter(room=room).exclude(user_id__in=selected_ids).update(is_active=False)
+
+            # Activate/create selected links
+            existing = set(RoomApprover.objects.filter(room=room, user_id__in=selected_ids).values_list("user_id", flat=True))
+
+            to_create = [RoomApprover(room=room, user_id=uid, is_active=True) for uid in (selected_ids - existing)]
+            if to_create:
+                RoomApprover.objects.bulk_create(to_create)
+
+            RoomApprover.objects.filter(room=room, user_id__in=selected_ids).update(is_active=True)
+
+        return room
