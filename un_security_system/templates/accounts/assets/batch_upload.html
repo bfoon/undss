@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h4 class="mb-2">Batch Upload: {{ kind|title }}</h4>
+
+      <div class="mb-3">
+        <a class="btn btn-outline-primary"
+           href="{% url 'accounts:batch_template' kind %}">
+          Download CSV Template
+        </a>
+      </div>
+
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label">Upload filled CSV</label>
+          <input class="form-control" type="file" name="file" accept=".csv" required>
+        </div>
+        <button class="btn btn-success">Upload</button>
+      </form>
+
+      <p class="text-muted mt-3 mb-0">
+        Tip: Keep dates as <b>YYYY-MM-DD</b>. If any rows fail, you’ll get an “errors CSV” to fix and re-upload.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

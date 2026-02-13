@@ -1,3 +1,6 @@
+<!-- templates/accounts/assets/partials/_assets_table.html -->
+<!-- Updated: Pagination + Select All (current page) + Keeps your analytics + printing -->
+
 <!-- Enhanced Assets Table with Filter, Search, and Analysis -->
 
 <!-- Filter and Search Controls -->
@@ -62,10 +65,25 @@
     </div>
 
     <!-- Results Summary -->
-    <div class="mt-3">
+    <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
       <small class="text-muted">
         Showing <span id="assetResultCount" class="fw-semibold">{{ assets|length }}</span> of {{ assets|length }} assets
       </small>
+
+      <!-- NEW: Pagination Controls -->
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0">Rows</label>
+        <select id="assetPageSize" class="form-select form-select-sm" style="width:110px;">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+
+        <nav aria-label="Assets pagination">
+          <ul class="pagination pagination-sm mb-0" id="assetPagination"></ul>
+        </nav>
+      </div>
     </div>
   </div>
 </div>
@@ -78,7 +96,7 @@
   </div>
 
   <div class="d-flex gap-2">
-    <button class="btn btn-sm btn-outline-secondary" id="btnPrintSelected">
+    <button class="btn btn-outline-primary" type="button" id="btnPrintSelected">
       <i class="bi bi-printer me-1"></i> Print Selected
     </button>
     {% if user.is_superuser or user.role == "ict_focal" %}
@@ -94,7 +112,13 @@
   <table class="table align-middle" id="assetsTable">
     <thead>
       <tr>
-        <th>Name</th>
+        <!-- UPDATED: Select All checkbox in header -->
+        <th>
+          <div class="d-flex align-items-center gap-2">
+            <input type="checkbox" class="form-check-input" id="selectAllAssets">
+            <span>Name</span>
+          </div>
+        </th>
         <th>Category</th>
         <th>Unit</th>
         <th>Status</th>
@@ -103,6 +127,7 @@
         <th class="text-end">Action</th>
       </tr>
     </thead>
+
     <tbody>
       {% for a in assets %}
         <tr class="asset-row"
@@ -112,15 +137,17 @@
             data-status="{{ a.status }}"
             data-serial="{{ a.serial_number|default:'' }}"
             data-tag="{{ a.asset_tag|default:'' }}"
-            data-holder="{{ a.current_holder.get_full_name }}">
+            data-holder="{{ a.current_holder.get_full_name|default:'' }}">
           <td class="fw-semibold">
             <input type="checkbox" class="form-check-input am-asset-check me-2" value="{{ a.id }}">
             <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' a.id %}">
               {{ a.name }}
             </a>
           </td>
+
           <td>{{ a.category.name }}</td>
           <td>{{ a.unit.name|default:"Unallocated/Core" }}</td>
+
           <td>
             <span class="badge
               {% if a.status == 'available' %}bg-success
@@ -166,7 +193,9 @@
           </td>
         </tr>
       {% empty %}
-        <tr class="no-results"><td colspan="7" class="text-center text-muted py-4">No assets registered yet.</td></tr>
+        <tr class="no-results">
+          <td colspan="7" class="text-center text-muted py-4">No assets registered yet.</td>
+        </tr>
       {% endfor %}
     </tbody>
   </table>
@@ -278,6 +307,7 @@
             </div>
           </div>
         </div>
+
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -288,7 +318,8 @@
 
 <script>
 (function() {
-  // Asset Table Filtering
+  // Asset Table Filtering + Pagination + Select All (current page)
+
   const searchInput = document.getElementById('assetSearchInput');
   const categoryFilter = document.getElementById('assetCategoryFilter');
   const unitFilter = document.getElementById('assetUnitFilter');
@@ -298,72 +329,210 @@
   const noResults = document.getElementById('noAssetResults');
   const tableBody = document.querySelector('#assetsTable tbody');
 
-  function filterAssets() {
-    const searchTerm = searchInput.value.toLowerCase();
-    const category = categoryFilter.value;
-    const unit = unitFilter.value;
-    const status = statusFilter.value;
+  // NEW
+  const paginationEl = document.getElementById("assetPagination");
+  const pageSizeEl = document.getElementById("assetPageSize");
+  const selectAllEl = document.getElementById("selectAllAssets");
 
-    const rows = document.querySelectorAll('.asset-row');
-    let visibleCount = 0;
+  let currentPage = 1;
+  let pageSize = parseInt(pageSizeEl?.value || "25", 10);
 
-    rows.forEach(row => {
-      const name = row.dataset.name || '';
-      const serial = row.dataset.serial.toLowerCase();
-      const tag = row.dataset.tag.toLowerCase();
-      const holder = row.dataset.holder.toLowerCase();
-      const rowCategory = row.dataset.category;
-      const rowUnit = row.dataset.unit;
-      const rowStatus = row.dataset.status;
+  function getAllRows() {
+    return Array.from(document.querySelectorAll('.asset-row'));
+  }
+
+  function getFilteredRows() {
+    const searchTerm = (searchInput?.value || '').toLowerCase();
+    const category = categoryFilter?.value || '';
+    const unit = unitFilter?.value || '';
+    const status = statusFilter?.value || '';
+
+    return getAllRows().filter(row => {
+      const name = (row.dataset.name || '').toLowerCase();
+      const serial = (row.dataset.serial || '').toLowerCase();
+      const tag = (row.dataset.tag || '').toLowerCase();
+      const holder = (row.dataset.holder || '').toLowerCase();
+      const rowCategory = row.dataset.category || '';
+      const rowUnit = row.dataset.unit || '';
+      const rowStatus = row.dataset.status || '';
 
       const matchesSearch = !searchTerm ||
         name.includes(searchTerm) ||
         serial.includes(searchTerm) ||
         tag.includes(searchTerm) ||
         holder.includes(searchTerm);
+
       const matchesCategory = !category || rowCategory === category;
       const matchesUnit = !unit || rowUnit === unit;
       const matchesStatus = !status || rowStatus === status;
 
-      if (matchesSearch && matchesCategory && matchesUnit && matchesStatus) {
-        row.style.display = '';
-        visibleCount++;
-      } else {
-        row.style.display = 'none';
-      }
+      return matchesSearch && matchesCategory && matchesUnit && matchesStatus;
     });
+  }
 
-    resultCount.textContent = visibleCount;
+  function getVisiblePageRows(filteredRows) {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredRows.slice(start, end);
+  }
 
-    // Show/hide no results message
-    if (visibleCount === 0 && rows.length > 0) {
-      tableBody.style.display = 'none';
-      noResults.style.display = 'block';
+  function renderPagination(totalItems) {
+    if (!paginationEl) return;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    paginationEl.innerHTML = "";
+
+    const makeBtn = (label, page, disabled = false, active = false) => {
+      const li = document.createElement("li");
+      li.className = "page-item" + (disabled ? " disabled" : "") + (active ? " active" : "");
+      const a = document.createElement("a");
+      a.className = "page-link";
+      a.href = "javascript:void(0)";
+      a.textContent = label;
+      a.addEventListener("click", () => {
+        if (disabled) return;
+        currentPage = page;
+        applyFilters(); // rerender
+      });
+      li.appendChild(a);
+      return li;
+    };
+
+    // Prev
+    paginationEl.appendChild(makeBtn("«", Math.max(1, currentPage - 1), currentPage === 1));
+
+    // Page numbers (compact)
+    const windowSize = 5;
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+
+    if (start > 1) paginationEl.appendChild(makeBtn("1", 1, false, currentPage === 1));
+    if (start > 2) {
+      const li = document.createElement("li");
+      li.className = "page-item disabled";
+      li.innerHTML = `<span class="page-link">…</span>`;
+      paginationEl.appendChild(li);
+    }
+
+    for (let p = start; p <= end; p++) {
+      paginationEl.appendChild(makeBtn(String(p), p, false, p === currentPage));
+    }
+
+    if (end < totalPages - 1) {
+      const li = document.createElement("li");
+      li.className = "page-item disabled";
+      li.innerHTML = `<span class="page-link">…</span>`;
+      paginationEl.appendChild(li);
+    }
+    if (end < totalPages) paginationEl.appendChild(makeBtn(String(totalPages), totalPages, false, currentPage === totalPages));
+
+    // Next
+    paginationEl.appendChild(makeBtn("»", Math.min(totalPages, currentPage + 1), currentPage === totalPages));
+  }
+
+  function updateSelectAllState(pageRows) {
+    if (!selectAllEl) return;
+    const checks = pageRows.map(r => r.querySelector(".am-asset-check")).filter(Boolean);
+    const checkedCount = checks.filter(cb => cb.checked).length;
+
+    if (checks.length === 0) {
+      selectAllEl.checked = false;
+      selectAllEl.indeterminate = false;
+      return;
+    }
+
+    if (checkedCount === 0) {
+      selectAllEl.checked = false;
+      selectAllEl.indeterminate = false;
+    } else if (checkedCount === checks.length) {
+      selectAllEl.checked = true;
+      selectAllEl.indeterminate = false;
     } else {
-      tableBody.style.display = '';
-      noResults.style.display = 'none';
+      selectAllEl.checked = false;
+      selectAllEl.indeterminate = true;
     }
   }
 
-  function resetFilters() {
-    searchInput.value = '';
-    categoryFilter.value = '';
-    unitFilter.value = '';
-    statusFilter.value = '';
-    filterAssets();
+  function applyFilters() {
+    const filteredRows = getFilteredRows();
+
+    if (resultCount) resultCount.textContent = filteredRows.length;
+
+    // No results
+    if (filteredRows.length === 0) {
+      // hide rows
+      getAllRows().forEach(r => (r.style.display = "none"));
+      tableBody.style.display = 'none';
+      noResults.style.display = 'block';
+      renderPagination(0);
+      updateSelectAllState([]);
+      return;
+    }
+
+    tableBody.style.display = '';
+    noResults.style.display = 'none';
+
+    // Hide all rows first
+    getAllRows().forEach(r => (r.style.display = "none"));
+
+    // Show page rows
+    const pageRows = getVisiblePageRows(filteredRows);
+    pageRows.forEach(r => (r.style.display = ""));
+
+    renderPagination(filteredRows.length);
+    updateSelectAllState(pageRows);
   }
 
-  // Event listeners
-  searchInput?.addEventListener('input', filterAssets);
-  categoryFilter?.addEventListener('change', filterAssets);
-  unitFilter?.addEventListener('change', filterAssets);
-  statusFilter?.addEventListener('change', filterAssets);
+  function resetFilters() {
+    if (searchInput) searchInput.value = '';
+    if (categoryFilter) categoryFilter.value = '';
+    if (unitFilter) unitFilter.value = '';
+    if (statusFilter) statusFilter.value = '';
+    currentPage = 1;
+    applyFilters();
+  }
+
+  // Event listeners (filters)
+  searchInput?.addEventListener('input', () => { currentPage = 1; applyFilters(); });
+  categoryFilter?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
+  unitFilter?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
+  statusFilter?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
   resetBtn?.addEventListener('click', resetFilters);
 
-  // Print selected assets
+  // Page size
+  pageSizeEl?.addEventListener("change", () => {
+    pageSize = parseInt(pageSizeEl.value, 10) || 25;
+    currentPage = 1;
+    applyFilters();
+  });
+
+  // Select all (current page)
+  selectAllEl?.addEventListener("change", () => {
+    const filtered = getFilteredRows();
+    const pageRows = getVisiblePageRows(filtered);
+    pageRows.forEach(r => {
+      const cb = r.querySelector(".am-asset-check");
+      if (cb) cb.checked = selectAllEl.checked;
+    });
+    updateSelectAllState(pageRows);
+  });
+
+  // Update select-all state on individual checkbox changes
+  document.addEventListener("change", (e) => {
+    if (!e.target.classList?.contains("am-asset-check")) return;
+    const filtered = getFilteredRows();
+    const pageRows = getVisiblePageRows(filtered);
+    updateSelectAllState(pageRows);
+  });
+
+  // Print selected assets (selection persists across pages)
   document.getElementById("btnPrintSelected")?.addEventListener("click", () => {
     const ids = Array.from(document.querySelectorAll(".am-asset-check:checked"))
       .map(cb => cb.value).join(",");
+
     if (!ids) {
       alert("Please select at least one asset to print.");
       return;
@@ -373,7 +542,7 @@
     window.open(url, "_blank");
   });
 
-  // Asset Analytics Charts
+  // Asset Analytics Charts (unchanged)
   const modalElement = document.getElementById('modalAssetAnalysis');
   if (modalElement) {
     modalElement.addEventListener('shown.bs.modal', function() {
@@ -392,66 +561,38 @@
       {% endfor %}
     ];
 
-    // Calculate statistics
     const categoryData = {};
     const unitData = {};
-    const statusData = {
-      available: 0,
-      assigned: 0,
-      maintenance: 0,
-      retired: 0
-    };
+    const statusData = { available: 0, assigned: 0, maintenance: 0, retired: 0 };
 
     assets.forEach(asset => {
-      // Category count
       categoryData[asset.category] = (categoryData[asset.category] || 0) + 1;
-
-      // Unit count
       unitData[asset.unit] = (unitData[asset.unit] || 0) + 1;
-
-      // Status count
-      if (statusData.hasOwnProperty(asset.status)) {
-        statusData[asset.status]++;
-      }
+      if (Object.prototype.hasOwnProperty.call(statusData, asset.status)) statusData[asset.status]++;
     });
 
-    // Update summary cards
     document.getElementById('availableAssets').textContent = statusData.available;
     document.getElementById('assignedAssets').textContent = statusData.assigned;
     document.getElementById('maintenanceAssets').textContent = statusData.maintenance;
 
-    // Chart colors
     const colors = {
       primary: ['#0d6efd', '#6610f2', '#6f42c1', '#d63384', '#dc3545', '#fd7e14', '#ffc107', '#198754', '#20c997', '#0dcaf0'],
-      status: {
-        available: '#198754',
-        assigned: '#0d6efd',
-        maintenance: '#ffc107',
-        retired: '#6c757d'
-      }
+      status: { available: '#198754', assigned: '#0d6efd', maintenance: '#ffc107', retired: '#6c757d' }
     };
 
-    // Category Chart
     const ctxCategory = document.getElementById('chartCategory');
     if (ctxCategory) {
       new Chart(ctxCategory, {
         type: 'doughnut',
         data: {
           labels: Object.keys(categoryData),
-          datasets: [{
-            data: Object.values(categoryData),
-            backgroundColor: colors.primary,
-            borderWidth: 2,
-            borderColor: '#fff'
-          }]
+          datasets: [{ data: Object.values(categoryData), backgroundColor: colors.primary, borderWidth: 2, borderColor: '#fff' }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: {
-              position: 'right'
-            },
+            legend: { position: 'right' },
             tooltip: {
               callbacks: {
                 label: function(context) {
@@ -468,7 +609,6 @@
       });
     }
 
-    // Status Chart
     const ctxStatus = document.getElementById('chartStatus');
     if (ctxStatus) {
       new Chart(ctxStatus, {
@@ -476,35 +616,15 @@
         data: {
           labels: ['Available', 'Assigned', 'Maintenance', 'Retired'],
           datasets: [{
-            data: [
-              statusData.available,
-              statusData.assigned,
-              statusData.maintenance,
-              statusData.retired
-            ],
-            backgroundColor: [
-              colors.status.available,
-              colors.status.assigned,
-              colors.status.maintenance,
-              colors.status.retired
-            ],
-            borderWidth: 2,
-            borderColor: '#fff'
+            data: [statusData.available, statusData.assigned, statusData.maintenance, statusData.retired],
+            backgroundColor: [colors.status.available, colors.status.assigned, colors.status.maintenance, colors.status.retired],
+            borderWidth: 2, borderColor: '#fff'
           }]
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right'
-            }
-          }
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
       });
     }
 
-    // Unit Chart
     const ctxUnit = document.getElementById('chartUnit');
     if (ctxUnit) {
       new Chart(ctxUnit, {
@@ -522,22 +642,17 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                stepSize: 1
-              }
-            }
-          },
-          plugins: {
-            legend: {
-              display: false
-            }
-          }
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+          plugins: { legend: { display: false } }
         }
       });
     }
   }
+
+  // INIT
+  document.addEventListener("DOMContentLoaded", () => {
+    applyFilters();
+  });
+
 })();
 </script>

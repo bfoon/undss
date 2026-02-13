@@ -1,6 +1,6 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
-from . import views, views_ict, view_asset_management
+from . import views, views_ict, view_asset_management, views_batch
 from .hr import views_hr
 from .views_room_booking import (
     RoomListView, RoomDetailView, RoomCreateView, RoomUpdateView,
@@ -218,7 +218,7 @@ path(
     # Room Booking - Cancel Actions
     path("rooms/bookings/<int:pk>/cancel/", cancel_booking, name="cancel_booking"),
     path("rooms/series/<int:pk>/cancel/", cancel_booking_series, name="cancel_series"),
-path("rooms/occurrences/<int:pk>/cancel/", cancel_series_occurrence, name="cancel_occurrence"),
+    path("rooms/occurrences/<int:pk>/cancel/", cancel_series_occurrence, name="cancel_occurrence"),
     # ------------------------------------------------------------------
     # Asset Management (Agency Service)
     # ------------------------------------------------------------------
@@ -231,6 +231,10 @@ path("rooms/occurrences/<int:pk>/cancel/", cancel_series_occurrence, name="cance
     path("assets/verify/", asset_verify, name="asset_verify"),
     path("assets/verification-history/", asset_verification_history, name="asset_verification_history"),
     path("exit/", view_asset_management.exit_organization, name="exit_organization"),
+
+    # -------- Batch upload -----------
+    path("batch/template/<str:kind>/", views_batch.download_csv_template, name="batch_template"),
+    path("batch/upload/<str:kind>/", views_batch.batch_upload_csv, name="batch_upload"),
 
     # # ----- Requests workflow -----
     # path(

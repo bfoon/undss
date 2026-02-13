@@ -59,15 +59,66 @@
             </button>
 
             {% if is_ict %}
-              <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterAsset">
-                <i class="bi bi-plus-circle me-1"></i> Register Asset
-              </button>
+            <button class="btn btn-outline-primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalRegisterAsset">
+              <i class="bi bi-plus-circle me-1"></i> Register Asset
+            </button>
 
-             <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterMobileLine">
+            <button class="btn btn-outline-primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalRegisterMobileLine">
               <i class="bi bi-sim me-1"></i> Register Mobile Line
             </button>
-            {% endif %}
 
+            <!-- NEW: Batch Upload Dropdown -->
+            <div class="btn-group">
+              <button type="button"
+                      class="btn btn-outline-success dropdown-toggle"
+                      data-bs-toggle="dropdown">
+                <i class="bi bi-upload me-1"></i> Batch Upload
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end shadow">
+                <li class="dropdown-header text-muted small">Assets</li>
+
+                <li>
+                  <a class="dropdown-item"
+                     href="{% url 'accounts:batch_template' 'assets' %}">
+                    <i class="bi bi-download me-2 text-primary"></i>
+                    Download Asset Template
+                  </a>
+                </li>
+
+                <li>
+                  <a class="dropdown-item"
+                     href="{% url 'accounts:batch_upload' 'assets' %}">
+                    <i class="bi bi-upload me-2 text-success"></i>
+                    Upload Asset CSV
+                  </a>
+                </li>
+
+                <li><hr class="dropdown-divider"></li>
+
+                <li class="dropdown-header text-muted small">Mobile Lines</li>
+
+                <li>
+                  <a class="dropdown-item"
+                     href="{% url 'accounts:batch_template' 'mobile-lines' %}">
+                    <i class="bi bi-download me-2 text-primary"></i>
+                    Download Line Template
+                  </a>
+                </li>
+
+                <li>
+                  <a class="dropdown-item"
+                     href="{% url 'accounts:batch_upload' 'mobile-lines' %}">
+                    <i class="bi bi-upload me-2 text-success"></i>
+                    Upload Line CSV
+                  </a>
+                </li>
+              </ul>
+            </div>
+          {% endif %}
             <a class="btn btn-outline-primary" href="{% url 'accounts:asset_report' %}">
               <i class="bi bi-file-earmark-spreadsheet me-1"></i> Reports
             </a>
@@ -126,9 +177,9 @@
     <div class="card">
       <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
         <h5 class="mb-0"><i class="bi bi-grid-1x2 me-2"></i> Workspace</h5>
-        <button class="btn btn-outline-primary" type="button" id="btnPrintSelected">
-          <i class="bi bi-upc-scan me-1"></i> Print Selected Labels
-        </button>
+<!--        <button class="btn btn-outline-primary" type="button" id="btnPrintSelected">-->
+<!--          <i class="bi bi-upc-scan me-1"></i> Print Selected Labels-->
+<!--        </button>-->
         <div class="small text-muted">
           <div class="d-flex align-items-center gap-2">
             {% if request.user.agency.logo %}
