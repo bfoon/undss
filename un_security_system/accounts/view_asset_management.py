@@ -25,7 +25,7 @@ from .models import (
     AgencyServiceConfig, AgencyAssetRoles, Unit,
     AssetCategory, Asset, AssetRequest,
     AssetHistory, AssetReturnRequest, AssetChangeRequest, ExitRequest,
-    MobileLine, CellServiceFocalPoint, User
+    MobileLine, CellServiceFocalPoint, User, MobileLineReactivationRequest
 )
 from .pdf_assets import build_asset_labels_pdf, LabelSpec
 
@@ -154,7 +154,56 @@ def _get_exit_recipients(user, agency):
 
     return base, cell_focal_emails
 
+def _get_line_suspend_recipients(agency):
+    """
+    Returns (provider_focals, ops_manager_email, registry_emails)
+    """
+    # Provider focal points (not necessarily system users)
+    provider_focals = list(
+        CellServiceFocalPoint.objects.filter(agency=agency, is_active=True)
+        .values_list("email", flat=True)
+    )
 
+    # Ops Manager (from AgencyAssetRoles)
+    roles = getattr(agency, "asset_roles", None)
+    ops_email = None
+    if roles and roles.operations_manager:
+        ops_email = roles.operations_manager.email
+
+    # Registry users in this agency
+    registry_emails = list(
+        User.objects.filter(agency=agency, role="registry", is_active=True)
+        .exclude(email__isnull=True).exclude(email__exact="")
+        .values_list("email", flat=True)
+    )
+
+    # De-dupe
+    provider_focals = list(dict.fromkeys([e for e in provider_focals if e]))
+    registry_emails = list(dict.fromkeys([e for e in registry_emails if e]))
+
+    return provider_focals, ops_email, registry_emails
+
+def _get_line_suspend_recipients(agency):
+    provider_focals = list(
+        CellServiceFocalPoint.objects.filter(agency=agency, is_active=True)
+        .values_list("email", flat=True)
+    )
+
+    roles = getattr(agency, "asset_roles", None)
+    ops_email = roles.operations_manager.email if roles and roles.operations_manager else None
+
+    registry_emails = list(
+        User.objects.filter(agency=agency, role="registry", is_active=True)
+        .exclude(email__isnull=True).exclude(email__exact="")
+        .values_list("email", flat=True)
+    )
+
+    # de-dupe
+    def _uniq(lst): return list(dict.fromkeys([e for e in lst if e]))
+    return _uniq(provider_focals), ops_email, _uniq(registry_emails)
+
+
+# ------------ Main Views -----------------------------------------------------------
 
 @login_required
 def view_asset_management(request):
@@ -512,6 +561,51 @@ def view_asset_management(request):
             messages.success(request, f"Mobile line registered: {msisdn}")
             return redirect("accounts:asset_management")
 
+        # ============ Reactivate Mobile Line ============
+        if action == "request_reactivate_line":
+            line_id = request.POST.get("line_id")
+            reason = (request.POST.get("reason") or "").strip()
+
+            # who can request? (you decide)
+            if not (is_ict or is_ops or getattr(user, "role", "") == "registry"):
+                messages.error(request, "You are not allowed to request reactivation.")
+                return redirect("accounts:asset_management")
+
+            line = get_object_or_404(MobileLine, agency=agency, id=line_id)
+
+            if line.status != "suspended":
+                messages.info(request, "Only suspended lines can be reactivated.")
+                return redirect("accounts:asset_management")
+
+            # prevent duplicate pending requests
+            if MobileLineReactivationRequest.objects.filter(
+                    agency=agency, line=line, status="pending_ops"
+            ).exists():
+                messages.warning(request, "A reactivation request is already pending approval.")
+                return redirect("accounts:asset_management")
+
+            rr = MobileLineReactivationRequest.objects.create(
+                agency=agency,
+                line=line,
+                requested_by=user,
+                reason=reason,
+                status="pending_ops",
+            )
+
+            # notify ops manager
+            roles = getattr(agency, "asset_roles", None)
+            ops = roles.operations_manager if roles and roles.operations_manager else None
+            if ops and ops.email:
+                send_email_async(
+                    subject=f"Approval Needed: Reactivate Mobile Line {line.msisdn}",
+                    to_emails=[ops.email],
+                    html_template="emails/mobile_lines/reactivation_requested.html",
+                    context={"agency": agency, "line": line, "req": rr, "portal_url": portal_url},
+                )
+
+            messages.success(request, f"Reactivation request submitted for {line.msisdn} (pending Ops approval).")
+            return redirect("accounts:asset_management")
+
         # ============ Assign Mobile Line ============
         if action == "assign_mobile_line":
             line_id = request.POST.get("line_id")
@@ -551,6 +645,54 @@ def view_asset_management(request):
                              f"Line {line.msisdn} assigned to {assignee.get_full_name() or assignee.username}.")
             return redirect("accounts:asset_management")
 
+        # ============ C) Reject reactivation (Ops Manager) ============
+        if action == "approve_reactivate_line":
+            req_id = request.POST.get("reactivation_request_id")
+            note = (request.POST.get("manager_note") or "").strip()
+
+            roles = getattr(agency, "asset_roles", None)
+            ops_id = roles.operations_manager_id if roles else None
+            if not (user.is_superuser or (ops_id and user.id == ops_id)):
+                messages.error(request, "Only the Operations Manager can approve reactivations.")
+                return redirect("accounts:asset_management")
+
+            rr = get_object_or_404(MobileLineReactivationRequest, id=req_id, agency=agency)
+
+            if rr.status != "pending_ops":
+                messages.info(request, "This reactivation request is already processed.")
+                return redirect("accounts:asset_management")
+
+            line = rr.line
+            if line.status != "suspended":
+                messages.warning(request, "Line is no longer suspended; nothing to approve.")
+                rr.status = "cancelled"
+                rr.save(update_fields=["status"])
+                return redirect("accounts:asset_management")
+
+            # approve + reactivate
+            rr.approve(user, note=note)
+            line.reactivate()
+
+            # notify provider focal + registry + requester
+            provider_focals, ops_email, registry_emails = _get_line_suspend_recipients(agency)
+            to_emails = []
+            to_emails += provider_focals
+            to_emails += registry_emails
+            if rr.requested_by and rr.requested_by.email:
+                to_emails.append(rr.requested_by.email)
+            to_emails = list(dict.fromkeys([e for e in to_emails if e]))
+
+            if to_emails:
+                send_email_async(
+                    subject=f"Approved: Mobile Line Reactivated {line.msisdn}",
+                    to_emails=to_emails,
+                    html_template="emails/mobile_lines/reactivation_approved.html",
+                    context={"agency": agency, "line": line, "req": rr, "approved_by": user, "portal_url": portal_url},
+                )
+
+            messages.success(request, f"Approved and reactivated: {line.msisdn}")
+            return redirect("accounts:asset_management")
+
         # ============ 4) ICT assign asset ============
         if action == "assign_asset":
             req_id = request.POST.get("request_id")
@@ -586,6 +728,66 @@ def view_asset_management(request):
             )
 
             messages.success(request, f"Asset assigned for request #{req_obj.id}.")
+            return redirect("accounts:asset_management")
+
+        # ============ Suspend Mobile Line ============
+        if action == "suspend_mobile_line":
+            line_id = request.POST.get("line_id")
+            reason = (request.POST.get("reason") or "").strip()
+
+            # Permission: ICT or Ops Manager (you can tighten/relax this)
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Operations Manager can suspend mobile lines.")
+                return redirect("accounts:asset_management")
+
+            line = get_object_or_404(MobileLine, agency=agency, id=line_id)
+
+            if line.status == "suspended":
+                messages.info(request, "This line is already suspended.")
+                return redirect("accounts:asset_management")
+
+            if line.status == "retired":
+                messages.warning(request, "Retired lines cannot be suspended.")
+                return redirect("accounts:asset_management")
+
+            # Suspend it (uses your model method)
+            line.suspend()  # sets status + suspended_at :contentReference[oaicite:4]{index=4}
+
+            # Optional: log in notes (keeps history)
+            if reason:
+                line.notes = (line.notes or "").strip()
+                stamp = f"\n\n[SUSPENDED {timezone.now():%Y-%m-%d %H:%M}] by {user.get_full_name() or user.username}: {reason}"
+                line.notes = (line.notes + stamp).strip()
+                line.save(update_fields=["notes"])
+
+            # Build recipients
+            provider_focals, ops_email, registry_emails = _get_line_suspend_recipients(agency)
+
+            # Email list (provider focals + ops + registry)
+            to_emails = []
+            to_emails += provider_focals
+            if ops_email:
+                to_emails.append(ops_email)
+            to_emails += registry_emails
+            to_emails = list(dict.fromkeys([e for e in to_emails if e]))
+
+            # Send notification email
+            if to_emails:
+                send_email_async(
+                    subject=f"Mobile Line Suspended: {line.msisdn}",
+                    to_emails=to_emails,
+                    html_template="emails/mobile_lines/line_suspended.html",
+                    context={
+                        "agency": agency,
+                        "line": line,
+                        "reason": reason,
+                        "suspended_by": user,
+                        "portal_url": portal_url,
+                        "when": timezone.now(),
+                    },
+                )
+
+            messages.success(request, f"Line suspended: {line.msisdn}")
             return redirect("accounts:asset_management")
 
         # ============ 5) Requester verifies receipt ============
@@ -857,6 +1059,9 @@ def view_asset_management(request):
             agency=agency, is_active=True
         ).order_by("first_name", "last_name", "username")
 
+    pending_line_reactivations = MobileLineReactivationRequest.objects.filter(
+        agency=agency, status="pending_ops"
+    ).select_related("line", "requested_by")
 
     return render(request, "accounts/assets/asset_management.html", {
         "svc": svc,
@@ -875,6 +1080,7 @@ def view_asset_management(request):
         "mobile_lines_visible": mobile_lines_visible,
 
         "my_requests": my_requests,
+        "pending_line_reactivations": pending_line_reactivations,
         "pending_approvals": pending_approvals,
         "pending_ict": pending_ict,
 

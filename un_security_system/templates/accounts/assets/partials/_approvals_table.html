@@ -2,6 +2,56 @@
   <h6 class="mb-0 fw-semibold">My Approval Queue</h6>
   <small class="text-muted">Approve requests for your unit (or core assets if you are Operations Manager).</small>
 </div>
+{% if is_ops %}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="fw-semibold">
+        Pending Line Reactivations
+        <span class="badge bg-warning text-dark ms-2">{{ pending_line_reactivations|length }}</span>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>MSISDN</th>
+              <th>Requested By</th>
+              <th>Reason</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for rr in pending_line_reactivations %}
+            <tr>
+              <td class="fw-semibold">{{ rr.line.msisdn }}</td>
+              <td>{{ rr.requested_by.get_full_name|default:rr.requested_by.username }}</td>
+              <td class="text-muted">{{ rr.reason|default:"-" }}</td>
+              <td class="d-flex gap-2">
+                <form method="post" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="approve_reactivate_line">
+                  <input type="hidden" name="reactivation_request_id" value="{{ rr.id }}">
+                  <button class="btn btn-sm btn-success">Approve</button>
+                </form>
+                <form method="post" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="reject_reactivate_line">
+                  <input type="hidden" name="reactivation_request_id" value="{{ rr.id }}">
+                  <button class="btn btn-sm btn-outline-danger">Reject</button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-3">No pending requests.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
 
 <div class="table-responsive">
   <table class="table align-middle">

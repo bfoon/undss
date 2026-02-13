@@ -1250,9 +1250,76 @@ class MobileLine(models.Model):
         self.suspended_at = timezone.now()
         self.save(update_fields=["status", "suspended_at"])
 
+    def reactivate(self):
+        """
+        Reactivate a suspended line. Restore to assigned if assigned_to exists, else available.
+        """
+        if self.status != "suspended":
+            return
+
+        new_status = "assigned" if self.assigned_to_id else "available"
+        self.status = new_status
+        self.suspended_at = None
+        self.save(update_fields=["status", "suspended_at"])
+
     def __str__(self):
         return f"{self.msisdn} ({self.get_line_type_display()})"
 
+class MobileLineReactivationRequest(models.Model):
+    STATUS_CHOICES = (
+        ("pending_ops", "Pending Operations Manager Approval"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("cancelled", "Cancelled"),
+    )
+
+    agency = models.ForeignKey("Agency", on_delete=models.CASCADE, related_name="line_reactivation_requests")
+    line = models.ForeignKey("MobileLine", on_delete=models.CASCADE, related_name="reactivation_requests")
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="line_reactivation_requests"
+    )
+
+    reason = models.TextField(blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending_ops")
+
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="line_reactivation_requests_decided"
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    manager_note = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["agency", "status"]),
+            models.Index(fields=["agency", "line"]),
+        ]
+
+    def approve(self, manager_user, note=""):
+        self.status = "approved"
+        self.decided_by = manager_user
+        self.decided_at = timezone.now()
+        self.manager_note = note or ""
+        self.save(update_fields=["status", "decided_by", "decided_at", "manager_note"])
+
+    def reject(self, manager_user, note=""):
+        self.status = "rejected"
+        self.decided_by = manager_user
+        self.decided_at = timezone.now()
+        self.manager_note = note or ""
+        self.save(update_fields=["status", "decided_by", "decided_at", "manager_note"])
+
+    def __str__(self):
+        return f"LineReactivation#{self.id} {self.line.msisdn} ({self.status})"
 
 class ExitRequest(models.Model):
     REASONS = (

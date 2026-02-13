@@ -191,17 +191,52 @@
           <td class="text-muted">{{ line.created_at|date:"Y-m-d H:i" }}</td>
 
           <td>
-            {% if is_ict or is_ops and line.status == "available" %}
-              <button class="btn btn-sm btn-outline-primary"
+            <div class="d-flex gap-2 flex-wrap">
+
+              {# Assign: ICT OR Ops AND available #}
+              {% if is_ict or is_ops and line.status == "available" %}
+                <button class="btn btn-sm btn-outline-primary"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalAssignLine"
+                        data-line-id="{{ line.id }}"
+                        data-msisdn="{{ line.msisdn }}">
+                  <i class="bi bi-person-plus me-1"></i> Assign
+                </button>
+              {% endif %}
+
+              {# Suspend: (ICT OR Ops) AND not suspended AND not retired #}
+              {% if is_ict and line.status != "suspended" and line.status != "retired" %}
+                <button class="btn btn-sm btn-outline-warning"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalSuspendLine"
+                        data-line-id="{{ line.id }}"
+                        data-msisdn="{{ line.msisdn }}">
+                  <i class="bi bi-pause-circle me-1"></i> Suspend
+                </button>
+              {% elif is_ops and line.status != "suspended" and line.status != "retired" %}
+                <button class="btn btn-sm btn-outline-warning"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalSuspendLine"
+                        data-line-id="{{ line.id }}"
+                        data-msisdn="{{ line.msisdn }}">
+                  <i class="bi bi-pause-circle me-1"></i> Suspend
+                </button>
+              {% endif %}
+
+              {% if line.status == "suspended" %}
+              <button class="btn btn-sm btn-outline-success"
                       data-bs-toggle="modal"
-                      data-bs-target="#modalAssignLine"
+                      data-bs-target="#modalRequestLineReactivation"
                       data-line-id="{{ line.id }}"
                       data-msisdn="{{ line.msisdn }}">
-                <i class="bi bi-person-plus me-1"></i> Assign
+                <i class="bi bi-arrow-repeat me-1"></i> Request Reactivation
               </button>
-            {% else %}
-              <span class="text-muted">-</span>
             {% endif %}
+
+              {% if not is_ict and not is_ops %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </div>
           </td>
         </tr>
       {% empty %}
@@ -352,6 +387,94 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modalSuspendLine" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="suspend_mobile_line">
+      <input type="hidden" name="line_id" id="suspendLineId">
+
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-pause-circle me-2"></i> Suspend Mobile Line
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="alert alert-warning">
+          You are about to suspend: <strong id="suspendLineMsisdn">—</strong><br>
+          This will notify the Provider Focal Point, Operations Manager, and Registry.
+        </div>
+
+        <label class="form-label fw-semibold">Reason (optional)</label>
+        <textarea class="form-control" name="reason" rows="3"
+                  placeholder="Example: Staff separated / SIM lost / Security incident / Request from management"></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-warning">
+          <i class="bi bi-pause-circle me-1"></i> Suspend Line
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="modalRequestLineReactivation" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="request_reactivate_line">
+      <input type="hidden" name="line_id" id="reactivateLineId">
+
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Request Line Reactivation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="alert alert-info">
+          You are requesting to reactivate: <strong id="reactivateLineMsisdn">—</strong><br>
+          This requires Operations Manager approval.
+        </div>
+
+        <label class="form-label fw-semibold">Reason (optional)</label>
+        <textarea class="form-control" name="reason" rows="3"
+                  placeholder="Why should this line be reactivated?"></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-success">
+          <i class="bi bi-send me-1"></i> Submit Request
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('modalRequestLineReactivation')?.addEventListener('show.bs.modal', function (event) {
+  const btn = event.relatedTarget;
+  if (!btn) return;
+  document.getElementById('reactivateLineId').value = btn.getAttribute('data-line-id') || '';
+  document.getElementById('reactivateLineMsisdn').textContent = btn.getAttribute('data-msisdn') || '—';
+});
+</script>
+
+
+<script>
+document.getElementById('modalSuspendLine')?.addEventListener('show.bs.modal', function (event) {
+  const btn = event.relatedTarget;
+  if (!btn) return;
+
+  document.getElementById('suspendLineId').value = btn.getAttribute('data-line-id') || '';
+  document.getElementById('suspendLineMsisdn').textContent = btn.getAttribute('data-msisdn') || '—';
+});
+</script>
 
 <script>
 (function() {
