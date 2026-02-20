@@ -3,7 +3,33 @@
 {% block title %}{{ room.name }} – Schedule{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
 <style>
+  #roomCalendar { min-height: 650px; }
+
+  /* booking colors by status */
+  .bk-status-approved { background: #198754 !important; border-color: #198754 !important; }
+  .bk-status-pending  { background: #ffc107 !important; border-color: #ffc107 !important; color: #000 !important; }
+  .bk-status-rejected { background: #dc3545 !important; border-color: #dc3545 !important; }
+  .bk-status-cancelled{ background: #6c757d !important; border-color: #6c757d !important; }
+
+  .calendar-shell {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e9ecef;
+    overflow: hidden;
+  }
+
+  .calendar-shell .calendar-toolbar {
+    padding: 1rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    background: #fff;
+  }
+
+  .calendar-shell .calendar-body {
+    padding: 1rem;
+  }
+
     .room-header-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -251,6 +277,83 @@
         margin-bottom: 1rem;
     }
 
+    /* ── Timeline ─────────────────────────────────────── */
+    .tl-wrap {
+        padding: 0.5rem 0 1rem;
+    }
+
+    .tl-grid {
+        min-width: 480px;
+    }
+
+    .tl-row {
+        position: relative;
+    }
+
+    .tl-hour-label {
+        line-height: 1;
+        position: relative;
+        top: -8px;
+        user-select: none;
+    }
+
+    .tl-booking {
+        z-index: 2;
+        transition: filter 0.15s;
+    }
+
+    .tl-booking:hover .tl-booking-inner {
+        filter: brightness(1.1);
+        box-shadow: 0 4px 16px rgba(102,126,234,.5) !important;
+    }
+
+    /* ── FullCalendar overrides ───────────────────────── */
+    .fc .fc-toolbar-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    .fc .fc-button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: .85rem !important;
+        padding: .35rem .75rem !important;
+    }
+
+    .fc .fc-button-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        border-color: transparent !important;
+    }
+
+    .fc .fc-button-primary:not(.fc-button-active):hover {
+        background: linear-gradient(135deg, #5a6fd6 0%, #6a3f9a 100%) !important;
+    }
+
+    .fc .fc-button-primary.fc-button-active {
+        background: #4f46e5 !important;
+        border-color: transparent !important;
+    }
+
+    .fc-event {
+        border-radius: 6px !important;
+        padding: 1px 4px !important;
+        font-size: .82rem !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: filter .15s !important;
+    }
+
+    .fc-event:hover {
+        filter: brightness(1.12) !important;
+    }
+
+    .fc-daygrid-event-dot { display: none; }
+
+    .fc .fc-list-event:hover td {
+        background: #f0f4ff !important;
+        cursor: pointer;
+    }
+
     @media (max-width: 768px) {
         .room-header-card {
             padding: 1.5rem;
@@ -360,12 +463,15 @@
             Schedule Overview
         </h5>
         <div class="calendar-toggle">
-            <button class="active" data-view="list">
-                <i class="bi bi-list-ul me-1"></i>List
-            </button>
-            <button data-view="timeline">
-                <i class="bi bi-clock me-1"></i>Timeline
-            </button>
+          <button class="active" data-view="list">
+            <i class="bi bi-list-ul me-1"></i>List
+          </button>
+          <button data-view="timeline">
+            <i class="bi bi-clock me-1"></i>Timeline
+          </button>
+          <button data-view="calendar">
+            <i class="bi bi-calendar3 me-1"></i>Calendar
+          </button>
         </div>
     </div>
 
@@ -445,13 +551,13 @@
                                                 </div>
                                             {% endif %}
 
-                                            {% if b.created_by %}
+                                            {% if b.requested_by %}
                                                 <div class="d-flex align-items-center mt-2">
                                                     <div class="user-avatar">
-                                                        {{ b.created_by.get_full_name|slice:":1"|upper }}
+                                                        {{ b.requested_by.get_full_name|slice:":1"|upper }}
                                                     </div>
                                                     <div class="small text-muted">
-                                                        {{ b.created_by.get_full_name }}
+                                                        {{ b.requested_by.get_full_name }}
                                                     </div>
                                                 </div>
                                             {% endif %}
@@ -480,46 +586,119 @@
             <!-- Timeline View (Hidden by default) -->
                 <div id="timelineView" style="display: none;">
                     <div class="card shadow-sm border-0">
-                        <div class="card-header bg-white border-bottom">
+                        <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
                             <h6 class="mb-0 fw-semibold">
-                                <i class="bi bi-clock-history me-2"></i>
+                                <i class="bi bi-clock-history me-2 text-primary"></i>
                                 Today's Timeline
                             </h6>
+                            <span class="badge bg-primary rounded-pill">
+                                {{ timeline_bookings_today|length }} booking{{ timeline_bookings_today|length|pluralize }}
+                            </span>
                         </div>
-                        <div class="card-body">
-                            <div class="timeline-view">
-                                {% for hour in timeline_hours %}
-                                    <div class="timeline-hour">
-                                        <div class="timeline-label">{{ hour }}:00</div>
-
-                                        {# Show bookings whose start_time hour == this hour #}
-                                        {% for b in timeline_bookings_today %}
-                                            {% if b.start_time.hour == hour %}
-                                                <div class="timeline-booking" style="top: 8px;">
-                                                    <div class="fw-semibold small">
-                                                        {{ b.title }}
-                                                    </div>
-                                                    <div class="small">
-                                                        {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
-                                                    </div>
-                                                </div>
-                                            {% endif %}
-                                        {% endfor %}
+                        <div class="card-body p-0">
+                            {% if timeline_bookings_today %}
+                            <div class="tl-wrap" style="position:relative; overflow-x:auto;">
+                                {# Hour grid — each hour = 60px #}
+                                <div class="tl-grid" style="position:relative; min-height:{{ timeline_hours|length|add:1 }}rem;">
+                                    {% for hour in timeline_hours %}
+                                    <div class="tl-row d-flex align-items-start" style="height:60px; border-top: 1px solid #f0f0f0;">
+                                        <div class="tl-hour-label text-muted fw-semibold" style="width:52px;min-width:52px;font-size:.78rem;padding:4px 8px;">
+                                            {{ hour }}:00
+                                        </div>
+                                        <div style="flex:1;border-left:2px solid #e9ecef;height:100%;"></div>
                                     </div>
-                                {% endfor %}
-                            </div>
+                                    {% endfor %}
 
-                            {% if not timeline_bookings_today %}
-                                <p class="text-muted small text-center mb-0">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    No approved bookings for today.
-                                </p>
+                                    {# Bookings absolutely positioned over the grid #}
+                                    {% for b in timeline_bookings_today %}
+                                    <div class="tl-booking"
+                                         style="position:absolute;
+                                                top:{{ b.timeline_top }}px;
+                                                left:60px;
+                                                right:12px;
+                                                height:{{ b.timeline_height }}px;
+                                                min-height:28px;"
+                                         title="{{ b.title }} ({{ b.start_time|time:'H:i' }}–{{ b.end_time|time:'H:i' }})">
+                                        <div class="tl-booking-inner h-100 d-flex flex-column justify-content-center px-2 py-1"
+                                             style="background:linear-gradient(135deg,#667eea,#764ba2);
+                                                    border-radius:8px;
+                                                    color:white;
+                                                    box-shadow:0 2px 8px rgba(102,126,234,.35);
+                                                    overflow:hidden;">
+                                            <div class="fw-semibold" style="font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                                {{ b.title }}
+                                            </div>
+                                            {% if b.timeline_height >= 36 %}
+                                            <div style="font-size:.75rem;opacity:.9;">
+                                                {{ b.start_time|time:"H:i" }} – {{ b.end_time|time:"H:i" }}
+                                                {% if b.requested_by %}· {{ b.requested_by.get_full_name|default:b.requested_by.username }}{% endif %}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+
+                                    {# "Now" indicator #}
+                                    <div id="tlNowLine" style="display:none;position:absolute;left:60px;right:0;height:2px;background:#dc3545;z-index:5;">
+                                        <div style="position:absolute;left:-6px;top:-5px;width:12px;height:12px;background:#dc3545;border-radius:50%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                                <div class="empty-state-mini py-5">
+                                    <i class="bi bi-calendar-check" style="font-size:2.5rem;color:#dee2e6;"></i>
+                                    <h6 class="text-muted mt-3">No bookings today</h6>
+                                    <p class="small text-muted mb-0">This room is free all day</p>
+                                </div>
                             {% endif %}
                         </div>
                     </div>
                 </div>
-                </div>
 
+                <!-- Calendar View (Hidden by default) -->
+                <div id="calendarView" style="display:none;">
+                  <div class="calendar-shell shadow-sm">
+                    <div class="calendar-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+                      <div>
+                        <div class="fw-bold">
+                          <i class="bi bi-calendar3 me-1 text-primary"></i>Room Calendar
+                        </div>
+                        <div class="small text-muted">
+                          Browse day/week/month and see bookings for this room (today & future by default).
+                        </div>
+                      </div>
+
+                      <div class="d-flex flex-wrap align-items-center gap-2">
+                        <div class="form-check me-2">
+                          <input class="form-check-input" type="checkbox" id="calMineOnly">
+                          <label class="form-check-label" for="calMineOnly">My bookings</label>
+                        </div>
+
+                        <div class="form-check me-2">
+                          <input class="form-check-input" type="checkbox" id="calFutureOnly" checked>
+                          <label class="form-check-label" for="calFutureOnly">Today & future</label>
+                        </div>
+
+                        <select id="calStatus" class="form-select form-select-sm" style="min-width: 160px;">
+                          <option value="">All status</option>
+                          <option value="approved">Approved</option>
+                          <option value="pending">Pending</option>
+                          <option value="rejected">Rejected</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+
+                        <button class="btn btn-sm btn-outline-dark" id="calReset">
+                          <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="calendar-body">
+                      <div id="roomCalendar"></div>
+                    </div>
+                  </div>
+                </div>
+            </div>
 
         <!-- Right Column: Sidebar -->
         <div class="col-lg-4">
@@ -629,46 +808,259 @@
     </div>
 
 </div>
+
+{# ─── Booking Detail Modal ─────────────────────────────────────── #}
+<div class="modal fade" id="bookingDetailModal" tabindex="-1" aria-labelledby="bookingDetailModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius:20px;overflow:hidden;">
+
+      <div class="modal-header border-0 pb-0" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:1.5rem 1.75rem 1rem;">
+        <div class="w-100">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="small opacity-75 mb-1">
+                <i class="bi bi-door-open me-1"></i>
+                <span id="bkModalRoom">—</span>
+              </div>
+              <h5 class="modal-title fw-bold mb-0" id="bookingDetailModalLabel">
+                <span id="bkModalTitle">—</span>
+              </h5>
+            </div>
+            <button type="button" class="btn-close btn-close-white mt-1" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-body p-0">
+        <div style="padding:1.25rem 1.75rem;">
+          {# Status badge #}
+          <div class="mb-4">
+            <span id="bkModalStatus" style="display:inline-block;padding:.4rem 1rem;border-radius:20px;font-weight:600;font-size:.85rem;">—</span>
+          </div>
+
+          {# Detail rows #}
+          <div style="display:flex;flex-direction:column;gap:.85rem;">
+
+            <div style="display:flex;align-items:center;gap:.75rem;">
+              <div style="width:36px;height:36px;background:#f0f4ff;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#667eea;font-size:1rem;flex-shrink:0;">
+                <i class="bi bi-calendar3"></i>
+              </div>
+              <div>
+                <div style="font-size:.75rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Date</div>
+                <div style="font-weight:600;color:#1f2937;" id="bkModalDate">—</div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:.75rem;">
+              <div style="width:36px;height:36px;background:#f0f4ff;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#667eea;font-size:1rem;flex-shrink:0;">
+                <i class="bi bi-clock"></i>
+              </div>
+              <div>
+                <div style="font-size:.75rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Time</div>
+                <div style="font-weight:600;color:#1f2937;" id="bkModalTime">—</div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:.75rem;">
+              <div style="width:36px;height:36px;background:#f0f4ff;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#667eea;font-size:1rem;flex-shrink:0;">
+                <i class="bi bi-person"></i>
+              </div>
+              <div>
+                <div style="font-size:.75rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Requested By</div>
+                <div style="font-weight:600;color:#1f2937;" id="bkModalBy">—</div>
+              </div>
+            </div>
+
+            <div id="bkModalDescRow" style="display:flex;align-items:flex-start;gap:.75rem;">
+              <div style="width:36px;height:36px;background:#f0f4ff;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#667eea;font-size:1rem;flex-shrink:0;margin-top:2px;">
+                <i class="bi bi-chat-left-text"></i>
+              </div>
+              <div>
+                <div style="font-size:.75rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Notes</div>
+                <div style="color:#374151;" id="bkModalDesc">—</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0" style="padding:1rem 1.75rem 1.5rem;background:#f9fafb;">
+        <button type="button" class="btn btn-light fw-semibold rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // View toggle functionality
     const toggleButtons = document.querySelectorAll('.calendar-toggle button');
     const listView = document.getElementById('listView');
     const timelineView = document.getElementById('timelineView');
+    const calendarView = document.getElementById('calendarView');
 
-    toggleButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            // Remove active class from all buttons
-            toggleButtons.forEach(btn => btn.classList.remove('active'));
-            // Add active class to clicked button
-            this.classList.add('active');
-
-            // Toggle views
-            const view = this.dataset.view;
-            if (view === 'list') {
-                listView.style.display = 'block';
-                timelineView.style.display = 'none';
-            } else {
-                listView.style.display = 'none';
-                timelineView.style.display = 'block';
-            }
-        });
-    });
-
-    // Animate duration bars on load
+    // Animate duration bars on load (keeps your feature)
     const durationBars = document.querySelectorAll('.duration-bar-fill');
     setTimeout(() => {
         durationBars.forEach(bar => {
             const width = bar.style.width;
             bar.style.width = '0';
-            setTimeout(() => {
-                bar.style.width = width;
-            }, 100);
+            setTimeout(() => { bar.style.width = width; }, 100);
         });
     }, 200);
+
+    // ---- Calendar Setup ----
+    let calendar = null;
+    const eventsUrl = "{% url 'accounts:rooms_calendar_events' %}"; // uses your existing endpoint
+    const roomId = "{{ room.pk }}";
+
+    const calMineOnly = document.getElementById('calMineOnly');
+    const calFutureOnly = document.getElementById('calFutureOnly');
+    const calStatus = document.getElementById('calStatus');
+    const calReset = document.getElementById('calReset');
+
+    function initCalendarOnce() {
+        if (calendar) return;
+
+        const calendarEl = document.getElementById('roomCalendar');
+        if (!calendarEl) return;
+
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: "dayGridMonth",
+            height: "auto",
+            nowIndicator: true,
+            firstDay: 1,
+            headerToolbar: {
+                left: "prev,next today",
+                center: "title",
+                right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
+            },
+            buttonText: {
+                today: "Today",
+                month: "Month",
+                week: "Week",
+                day: "Day",
+                list: "List"
+            },
+            events: {
+                url: eventsUrl,
+                method: "GET",
+                extraParams: function() {
+                    return {
+                        room_id: roomId,
+                        mine: calMineOnly && calMineOnly.checked ? "1" : "0",
+                        future_only: calFutureOnly && calFutureOnly.checked ? "1" : "0",
+                        status: calStatus ? (calStatus.value || "") : "",
+                    };
+                }
+            },
+            eventClick: function(info) {
+                const p = info.event.extendedProps || {};
+                const rawTitle = info.event.title || "Booking";
+                // Title format from backend is "Room • Meeting Title" — extract just meeting title
+                const titleParts = rawTitle.split(' • ');
+                const meetingTitle = titleParts.length > 1 ? titleParts.slice(1).join(' • ') : rawTitle;
+
+                const status  = (p.status || "unknown");
+                const by      = p.requested_by || "Unknown";
+                const desc    = p.description || "";
+                const room    = p.room || "";
+
+                const startDt = info.event.start;
+                const endDt   = info.event.end;
+
+                const fmtDate = (dt) => dt ? dt.toLocaleDateString(undefined, {weekday:'long',year:'numeric',month:'long',day:'numeric'}) : "";
+                const fmtTime = (dt) => dt ? dt.toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'}) : "";
+
+                const statusConfig = {
+                    approved:  { bg: "#d1f4e0", color: "#0f6938", icon: "✅", label: "Approved" },
+                    pending:   { bg: "#fff3cd", color: "#856404", icon: "⏳", label: "Pending Approval" },
+                    rejected:  { bg: "#fde8e8", color: "#b91c1c", icon: "❌", label: "Rejected" },
+                    cancelled: { bg: "#f3f4f6", color: "#6b7280", icon: "🚫", label: "Cancelled" },
+                    unknown:   { bg: "#f3f4f6", color: "#6b7280", icon: "❓", label: status },
+                };
+                const sc = statusConfig[status] || statusConfig.unknown;
+
+                document.getElementById('bkModalTitle').textContent   = meetingTitle;
+                document.getElementById('bkModalRoom').textContent    = room;
+                document.getElementById('bkModalDate').textContent    = fmtDate(startDt);
+                document.getElementById('bkModalTime').textContent    = fmtTime(startDt) + " – " + fmtTime(endDt);
+                document.getElementById('bkModalBy').textContent      = by;
+                document.getElementById('bkModalDesc').textContent    = desc || "No description provided.";
+                document.getElementById('bkModalDescRow').style.display = desc ? "flex" : "none";
+
+                const statusEl = document.getElementById('bkModalStatus');
+                statusEl.textContent       = sc.icon + " " + sc.label;
+                statusEl.style.background  = sc.bg;
+                statusEl.style.color       = sc.color;
+
+                new bootstrap.Modal(document.getElementById('bookingDetailModal')).show();
+            }
+        });
+
+        calendar.render();
+
+        // filter interactions
+        if (calMineOnly) calMineOnly.addEventListener("change", () => calendar.refetchEvents());
+        if (calFutureOnly) calFutureOnly.addEventListener("change", () => calendar.refetchEvents());
+        if (calStatus) calStatus.addEventListener("change", () => calendar.refetchEvents());
+
+        if (calReset) calReset.addEventListener("click", () => {
+            if (calMineOnly) calMineOnly.checked = false;
+            if (calFutureOnly) calFutureOnly.checked = true;
+            if (calStatus) calStatus.value = "";
+            calendar.refetchEvents();
+        });
+    }
+
+    // ---- Toggle buttons ----
+    function showView(view) {
+        listView.style.display = (view === "list") ? "block" : "none";
+        timelineView.style.display = (view === "timeline") ? "block" : "none";
+        calendarView.style.display = (view === "calendar") ? "block" : "none";
+
+        if (view === "calendar") {
+            initCalendarOnce();
+            // sometimes calendar needs a resize after showing
+            setTimeout(() => { calendar && calendar.updateSize(); }, 60);
+        }
+    }
+
+    toggleButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            toggleButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            showView(this.dataset.view);
+        });
+    });
+
+    // default view
+    showView("list");
+
+    // ---- Timeline "now" line ----
+    function updateNowLine() {
+        const line = document.getElementById('tlNowLine');
+        if (!line) return;
+        const now = new Date();
+        const TIMELINE_START = 7 * 60; // 7:00 in minutes
+        const TIMELINE_END   = 22 * 60;
+        const currentMins = now.getHours() * 60 + now.getMinutes();
+        if (currentMins >= TIMELINE_START && currentMins <= TIMELINE_END) {
+            const top = currentMins - TIMELINE_START;
+            line.style.top    = top + "px";
+            line.style.display = "block";
+        } else {
+            line.style.display = "none";
+        }
+    }
+    updateNowLine();
+    setInterval(updateNowLine, 60000); // update every minute
 });
 </script>
+
 {% endblock %}

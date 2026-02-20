@@ -1,10 +1,17 @@
 from django import forms
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
-from django.contrib.auth import authenticate
+from django.core.exceptions import ValidationError
+
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column
-from .models import User, SecurityIncident, RegistrationInvite, RoomBooking, Room, RoomAmenity
-from django.core.exceptions import ValidationError
+
+from .models import (
+    SecurityIncident, RegistrationInvite, RoomBooking, Room, RoomAmenity,
+    RoomApprover,
+)
+
+User = get_user_model()
 
 
 class CustomUserCreationForm(UserCreationForm):
@@ -80,13 +87,14 @@ class SecurityIncidentForm(forms.ModelForm):
 
 
 class LoginForm(forms.Form):
-    username = forms.CharField(
+    login = forms.CharField(
         max_length=150,
         widget=forms.TextInput(attrs={
             'class': 'form-control form-control-lg',
-            'placeholder': 'Username'
+            'placeholder': 'Username or Email'
         })
     )
+
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
             'class': 'form-control form-control-lg',
@@ -97,29 +105,41 @@ class LoginForm(forms.Form):
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
+
         self.helper = FormHelper()
         self.helper.form_method = 'post'
         self.helper.layout = Layout(
-            'username',
+            'login',
             'password',
             Submit('submit', 'Login', css_class='btn btn-primary btn-lg w-100')
         )
 
     def clean(self):
         cleaned_data = super().clean()
-        username = cleaned_data.get('username')
+        login_value = (cleaned_data.get('login') or '').strip()
         password = cleaned_data.get('password')
 
-        if username and password:
-            user = authenticate(self.request, username=username, password=password)
-            if user is None:
-                raise forms.ValidationError('Invalid username or password.')
-            if not user.is_active:
-                raise forms.ValidationError('This account is inactive.')
+        if not login_value or not password:
+            return cleaned_data
 
-            self.user = user
+        # 1) Try username
+        user = authenticate(self.request, username=login_value, password=password)
 
+        # 2) Try email (case-insensitive)
+        if user is None and "@" in login_value:
+            user_obj = User.objects.filter(email__iexact=login_value).first()
+            if user_obj:
+                user = authenticate(self.request, username=user_obj.username, password=password)
+
+        if user is None:
+            raise forms.ValidationError("Invalid username/email or password.")
+
+        if not user.is_active:
+            raise forms.ValidationError("This account is inactive.")
+
+        self.user = user
         return cleaned_data
+
 
 
 class UserProfileForm(forms.ModelForm):
@@ -150,13 +170,6 @@ class UserProfileForm(forms.ModelForm):
         )
 
 
-# accounts/forms.py (ICT-related forms to add to your existing forms.py)
-
-from django import forms
-from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
-
-User = get_user_model()
 
 # Which roles ICT is allowed to assign (adjust as needed)
 ICT_ASSIGNABLE_ROLES = [
@@ -229,13 +242,9 @@ class ICTUserCreateForm(forms.ModelForm):
         return username
 
     def clean_email(self):
-        """Validate that email is unique if provided."""
-        email = self.cleaned_data.get('email')
-        if email:
-            # Strip whitespace
-            email = email.strip()
-            if User.objects.filter(email=email).exists():
-                raise ValidationError('A user with this email already exists.')
+        email = (self.cleaned_data.get('email') or '').strip()
+        if email and User.objects.filter(email__iexact=email).exists():
+            raise ValidationError('A user with this email already exists.')
         return email
 
     def clean_employee_id(self):
@@ -412,6 +421,14 @@ class RoomBookingForm(forms.ModelForm):
         ("yearly", "Yearly"),
     )
 
+    # Hidden flag set by JS when the recurring toggle is ON.
+    # This is the authoritative server-side gate — never relies on
+    # whether radio/interval inputs happened to be submitted.
+    is_recurring = forms.BooleanField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
+
     frequency = forms.ChoiceField(
         choices=FREQUENCY_CHOICES,
         required=False,
@@ -460,19 +477,27 @@ class RoomBookingForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
 
+        # Only validate recurring fields when the user explicitly
+        # enabled the recurring toggle (is_recurring=True).
+        is_recurring = cleaned.get("is_recurring")
+        if not is_recurring:
+            return cleaned
+
         frequency = cleaned.get("frequency")
         until = cleaned.get("until")
         interval = cleaned.get("interval")
 
-        if frequency:
-            if not interval:
-                raise ValidationError("Please specify repeat interval.")
+        if not frequency:
+            raise ValidationError("Please select a repeat frequency.")
 
-            if not until:
-                raise ValidationError("Please specify end date for recurring booking.")
+        if not interval:
+            raise ValidationError("Please specify the repeat interval (e.g. every 1 week).")
 
-            if until and cleaned.get("date") and until < cleaned.get("date"):
-                raise ValidationError("End date cannot be before start date.")
+        if not until:
+            raise ValidationError("Please specify an end date for the recurring booking.")
+
+        if until and cleaned.get("date") and until < cleaned.get("date"):
+            raise ValidationError("End date cannot be before the start date.")
 
         return cleaned
 

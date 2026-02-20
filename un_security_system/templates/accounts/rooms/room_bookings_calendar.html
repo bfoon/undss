@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Bookings Calendar{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h3 class="mb-0">
+        <i class="bi bi-calendar3 me-2 text-primary"></i>Bookings Calendar
+      </h3>
+      <div class="text-muted small">View bookings for today and future dates. Switch day/week/month and filter easily.</div>
+    </div>
+    <a href="{% url 'accounts:rooms_list' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Rooms
+    </a>
+  </div>
+
+  <!-- Filters -->
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+
+        <div class="col-md-4">
+          <label class="form-label small text-muted mb-1">Room</label>
+          <select id="filterRoom" class="form-select">
+            <option value="">All Rooms</option>
+            {% for r in rooms %}
+              <option value="{{ r.id }}">{{ r.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label small text-muted mb-1">Status</label>
+          <select id="filterStatus" class="form-select">
+            <option value="">All Status</option>
+            {% for v,l in status_choices %}
+              <option value="{{ v }}">{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" id="filterMine">
+            <label class="form-check-label" for="filterMine">
+              My bookings only
+            </label>
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="filterFutureOnly" checked>
+            <label class="form-check-label" for="filterFutureOnly">
+              Today & future only
+            </label>
+          </div>
+        </div>
+
+        <div class="col-md-2 d-grid">
+          <button id="btnReset" class="btn btn-outline-dark">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Calendar -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <div id="calendar"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FullCalendar (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+
+<style>
+  /* Status styling */
+  .bk-status-approved { background: #198754 !important; border-color: #198754 !important; }
+  .bk-status-pending { background: #0dcaf0 !important; border-color: #0dcaf0 !important; color: #000 !important; }
+  .bk-status-rejected { background: #dc3545 !important; border-color: #dc3545 !important; }
+  .bk-status-cancelled { background: #6c757d !important; border-color: #6c757d !important; }
+
+  #calendar { min-height: 650px; }
+</style>
+
+<script>
+(function() {
+  const roomSelect = document.getElementById("filterRoom");
+  const statusSelect = document.getElementById("filterStatus");
+  const mineCheck = document.getElementById("filterMine");
+  const futureOnlyCheck = document.getElementById("filterFutureOnly");
+  const resetBtn = document.getElementById("btnReset");
+
+  const eventsUrl = "{% url 'accounts:rooms_calendar_events' %}";
+
+  let calendar;
+
+  function buildExtraParams() {
+    return {
+      room_id: roomSelect.value || "",
+      status: statusSelect.value || "",
+      mine: mineCheck.checked ? "1" : "0",
+      future_only: futureOnlyCheck.checked ? "1" : "0",
+    };
+  }
+
+  function refetch() {
+    if (calendar) calendar.refetchEvents();
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    const calendarEl = document.getElementById("calendar");
+
+    calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: "dayGridMonth",
+      height: "auto",
+      nowIndicator: true,
+      firstDay: 1, // Monday
+      headerToolbar: {
+        left: "prev,next today",
+        center: "title",
+        right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
+      },
+      buttonText: {
+        today: "Today",
+        month: "Month",
+        week: "Week",
+        day: "Day",
+        list: "List"
+      },
+
+      events: {
+        url: eventsUrl,
+        method: "GET",
+        extraParams: function() {
+          return buildExtraParams();
+        }
+      },
+
+      eventClick: function(info) {
+        const p = info.event.extendedProps || {};
+        const title = info.event.title || "Booking";
+        const status = (p.status || "").toUpperCase();
+        const by = p.requested_by || "Unknown";
+        const desc = p.description || "";
+
+        const start = info.event.start ? info.event.start.toLocaleString() : "";
+        const end = info.event.end ? info.event.end.toLocaleString() : "";
+
+        // Simple modal-less popup (fast). If you want Bootstrap modal, tell me.
+        alert(
+          `${title}\n\n` +
+          `Status: ${status}\n` +
+          `Requested by: ${by}\n` +
+          `Start: ${start}\nEnd: ${end}\n\n` +
+          (desc ? `Notes: ${desc}` : "")
+        );
+      }
+    });
+
+    calendar.render();
+
+    // Filter listeners
+    roomSelect.addEventListener("change", refetch);
+    statusSelect.addEventListener("change", refetch);
+    mineCheck.addEventListener("change", refetch);
+    futureOnlyCheck.addEventListener("change", refetch);
+
+    resetBtn.addEventListener("click", function() {
+      roomSelect.value = "";
+      statusSelect.value = "";
+      mineCheck.checked = false;
+      futureOnlyCheck.checked = true;
+      refetch();
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -534,6 +534,8 @@
     <div class="booking-form-container">
         <form method="post" class="booking-form-card" id="bookingForm">
             {% csrf_token %}
+            {# Authoritative recurring flag — set by JS when the toggle is on #}
+            <input type="hidden" name="is_recurring" id="isRecurringInput" value="">
 
             <!-- Header -->
             <div class="form-header">
@@ -656,7 +658,7 @@
                                     </label>
                                 </div>
                                 <div class="frequency-option">
-                                    <input type="radio" name="frequency" value="weekly" id="freq-weekly" checked>
+                                    <input type="radio" name="frequency" value="weekly" id="freq-weekly">
                                     <label for="freq-weekly">
                                         <i class="bi bi-calendar-week"></i>
                                         <span>Weekly</span>
@@ -928,15 +930,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Disable/enable all recurring inputs so they are NOT submitted when toggle is off
+    function setRecurringInputsDisabled(disabled) {
+        if (!recurringOptions) return;
+        recurringOptions.querySelectorAll('input, select, textarea').forEach(function(el) {
+            el.disabled = disabled;
+        });
+    }
+
+    // On page load: recurring is off, disable all recurring inputs immediately
+    setRecurringInputsDisabled(true);
+
     // Recurring toggle
+    const isRecurringInput = document.getElementById('isRecurringInput');
+
     if (recurringCheckbox) {
         recurringCheckbox.addEventListener('change', function() {
             if (this.checked) {
+                isRecurringInput.value = 'on';   // truthy → Django BooleanField = True
                 recurringOptions.classList.add('show');
+                setRecurringInputsDisabled(false);
                 updateLabelsForRecurring(true);
                 calculateOccurrences();
             } else {
+                isRecurringInput.value = '';     // empty → Django BooleanField = False
                 recurringOptions.classList.remove('show');
+                setRecurringInputsDisabled(true);
                 updateLabelsForRecurring(false);
                 occurrencePreview.classList.remove('show');
             }
@@ -1134,10 +1153,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Form submission
+    // Form submission — safety: if recurring toggle is off, uncheck all frequency radios
+    // before submit so the server never sees a frequency value for a single booking.
     const form = document.getElementById('bookingForm');
     if (form) {
         form.addEventListener('submit', function(e) {
+            if (recurringCheckbox && !recurringCheckbox.checked) {
+                document.querySelectorAll('input[name="frequency"]').forEach(function(r) {
+                    r.checked = false;
+                    r.disabled = true;
+                });
+                document.querySelectorAll('input[name="interval"], input[name="until"], input[name="weekdays"]').forEach(function(el) {
+                    el.disabled = true;
+                });
+            }
             const submitBtn = form.querySelector('button[type="submit"]');
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';

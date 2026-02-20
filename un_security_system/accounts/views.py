@@ -66,7 +66,7 @@ def login_view(request):
     if request.method == 'POST':
         form = LoginForm(request.POST, request=request)
         if form.is_valid():
-            user = form.user
+            user = form.user  # set in LoginForm.clean()
 
             # 1) Check if this device is already trusted for this user
             device_id = request.COOKIES.get(DEVICE_COOKIE_NAME)
@@ -86,13 +86,14 @@ def login_view(request):
                 trusted.save(update_fields=["expires_at"])
 
                 messages.success(request, f'Welcome back, {user.first_name or user.username}!')
+
                 response = redirect('accounts:profile')
                 response.set_cookie(
                     DEVICE_COOKIE_NAME,
                     device_id,
                     max_age=DEVICE_COOKIE_AGE,
                     httponly=True,
-                    secure=False,   # set to True in production (HTTPS)
+                    secure=request.is_secure(),  # True on HTTPS automatically
                     samesite="Lax",
                 )
                 return response
@@ -105,9 +106,7 @@ def login_view(request):
 
             otp = create_otp_for_user(user, new_device_id, ip_address=ip, user_agent=ua)
 
-            # DEBUG: confirm this path is hit
-            # print("Sending OTP", otp.code, "to", user.email)
-
+            # Send OTP
             send_otp_email(user, otp.code)
 
             # Store pending info in session
@@ -124,6 +123,7 @@ def login_view(request):
         form = LoginForm(request=request)
 
     return render(request, 'accounts/login.html', {'form': form})
+
 
 @login_required
 def logout_view(request):

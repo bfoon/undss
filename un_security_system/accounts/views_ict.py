@@ -1,5 +1,10 @@
+import base64
+import io
+
+import qrcode
 from django.conf import settings
 from django.contrib import messages
+from django.http import HttpResponse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.forms import SetPasswordForm
@@ -28,6 +33,29 @@ from .permissions import is_ict_focal
 
 User = get_user_model()
 
+
+# you already use this check in the file
+def is_ict_focal_point(user):
+    return user.is_authenticated and (user.is_superuser or getattr(user, "role", "") in ("ict_focal", "lsa", "soc"))
+
+
+def _make_qr_png_bytes(text: str) -> bytes:
+    """
+    Generate QR code PNG bytes for a given text (URL).
+    """
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=2,
+    )
+    qr.add_data(text)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 def send_account_activation_email_async(user):
     """Send an account activated email in the background."""
@@ -554,9 +582,9 @@ def ict_user_toggle_status(request, pk):
 @user_passes_test(is_ict_focal_point)
 def create_registration_link(request):
     """
-    ICT focal point generates a new registration link.
-    - Default max_uses = 100 (from model)
-    - valid_for_hours < 24 (enforced by form)
+    ICT focal point generates a new registration link + QR code.
+    - Shows QR code on the success page
+    - Provides a downloadable QR PNG endpoint
     """
     if request.method == "POST":
         form = RegistrationInviteForm(request.POST)
@@ -565,24 +593,51 @@ def create_registration_link(request):
             invite.created_by = request.user
             invite.save()
 
-            # Build the full URL that new users will use
+            # Build full URL for registration
             invite_url = request.build_absolute_uri(
                 reverse("accounts:register_with_invite", args=[invite.code])
             )
 
+            # Build QR
+            qr_png = _make_qr_png_bytes(invite_url)
+            qr_data_uri = "data:image/png;base64," + base64.b64encode(qr_png).decode("utf-8")
+
+            # Download URL for QR PNG
+            qr_download_url = reverse("accounts:invite_qr_download", args=[invite.code])
+
             return render(
                 request,
                 "accounts/invite_created.html",
-                {"invite": invite, "invite_url": invite_url},
+                {
+                    "invite": invite,
+                    "invite_url": invite_url,
+                    "qr_data_uri": qr_data_uri,
+                    "qr_download_url": qr_download_url,
+                },
             )
     else:
         form = RegistrationInviteForm()
 
-    return render(
-        request,
-        "accounts/create_invite.html",
-        {"form": form},
+    return render(request, "accounts/create_invite.html", {"form": form})
+
+
+@login_required
+@user_passes_test(is_ict_focal_point)
+def invite_qr_download(request, code):
+    """
+    Download QR as PNG for an invite code.
+    """
+    invite = get_object_or_404(RegistrationInvite, code=code)
+
+    invite_url = request.build_absolute_uri(
+        reverse("accounts:register_with_invite", args=[invite.code])
     )
+
+    png_bytes = _make_qr_png_bytes(invite_url)
+
+    response = HttpResponse(png_bytes, content_type="image/png")
+    response["Content-Disposition"] = f'attachment; filename="registration_invite_qr_{invite.code}.png"'
+    return response
 
 
 def register_with_invite(request, code):

@@ -6,11 +6,13 @@ from django.urls import reverse_lazy, reverse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.contrib import messages
 from django.utils import timezone
 from datetime import datetime, timedelta, date as date_cls
+from datetime import datetime, date, time
 import threading
+from django.shortcuts import render
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -439,6 +441,50 @@ class RoomListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         return Room.objects.filter(is_active=True).prefetch_related("amenities")
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        import json
+        from datetime import datetime as _dt
+
+        user  = self.request.user
+        today = timezone.localtime().date()
+        rooms = ctx["rooms"]
+
+        # ── Stats for the banner ──────────────────────────────────────────
+        ctx["total_capacity"]  = sum(r.capacity or 0 for r in rooms)
+        ctx["available_now"]   = sum(1 for r in rooms if getattr(r, "is_available_now", False))
+        ctx["bookings_today"]  = RoomBooking.objects.filter(
+            room__in=rooms, date=today, status="approved"
+        ).count()
+
+        # ── Pending approvals badge ───────────────────────────────────────
+        ctx["pending_approvals"] = RoomBooking.objects.filter(
+            status="pending",
+            room__room_approver_links__user=user,
+            room__room_approver_links__is_active=True,
+            series__isnull=True,
+        ).distinct().count()
+
+        # ── Per-room today bookings as JSON for live JS ───────────────────
+        # Single query — no N+1
+        today_bookings = (
+            RoomBooking.objects
+            .filter(room__in=rooms, date=today, status="approved")
+            .values("room_id", "start_time", "end_time", "title")
+        )
+
+        bookings_by_room = {}
+        for b in today_bookings:
+            rid = str(b["room_id"])          # JS uses String(roomId)
+            bookings_by_room.setdefault(rid, []).append({
+                "start": b["start_time"].strftime("%H:%M"),
+                "end":   b["end_time"].strftime("%H:%M"),
+                "title": b["title"],
+            })
+
+        ctx["bookings_by_room_json"] = json.dumps(bookings_by_room)
+        return ctx
+
 
 class RoomDetailView(LoginRequiredMixin, DetailView):
     model = Room
@@ -448,12 +494,13 @@ class RoomDetailView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         room = self.object
+        user = self.request.user
 
-        # Upcoming approved bookings (next 30 days)
         today = timezone.localtime().date()
         future_limit = today + timedelta(days=30)
 
-        ctx["upcoming_bookings"] = (
+        # ── Approved upcoming bookings (list view) ──────────────────────
+        approved_bookings = list(
             room.bookings.filter(
                 date__gte=today,
                 date__lte=future_limit,
@@ -462,6 +509,60 @@ class RoomDetailView(LoginRequiredMixin, DetailView):
             .select_related("requested_by")
             .order_by("date", "start_time")
         )
+
+        from datetime import datetime as _dt
+        for b in approved_bookings:
+            start = _dt.combine(today, b.start_time)
+            end   = _dt.combine(today, b.end_time)
+            mins  = max(int((end - start).total_seconds() / 60), 0)
+            b.duration_minutes = mins
+            b.duration_class = (
+                "heavy"  if mins > 180 else
+                "medium" if mins > 60  else
+                "light"
+            )
+
+        ctx["approved_bookings"]  = approved_bookings
+        ctx["upcoming_bookings"]  = approved_bookings
+
+        # ── Timeline: today's approved bookings ─────────────────────────
+        TIMELINE_START_HOUR = 7
+        timeline_bookings = list(
+            room.bookings.filter(date=today, status="approved")
+            .select_related("requested_by")
+            .order_by("start_time")
+        )
+
+        for b in timeline_bookings:
+            top  = (b.start_time.hour - TIMELINE_START_HOUR) * 60 + b.start_time.minute
+            start = _dt.combine(today, b.start_time)
+            end   = _dt.combine(today, b.end_time)
+            mins  = max(int((end - start).total_seconds() / 60), 15)
+            b.timeline_top    = max(top, 0)
+            b.timeline_height = mins
+            b.duration_minutes = mins
+
+        ctx["timeline_bookings_today"] = timeline_bookings
+        ctx["timeline_hours"]          = list(range(TIMELINE_START_HOUR, 22))
+
+        # ── Sidebar: my pending bookings ────────────────────────────────
+        ctx["my_pending_bookings"] = list(
+            room.bookings.filter(requested_by=user, status="pending")
+            .order_by("date", "start_time")[:5]
+        )
+
+        # ── Is current user an approver for this room? ──────────────────
+        ctx["is_approver"] = room.room_approver_links.filter(
+            user=user, is_active=True
+        ).exists()
+
+        # ── Stats ────────────────────────────────────────────────────────
+        ctx["bookings_today"] = room.bookings.filter(
+            date=today, status="approved"
+        ).count()
+
+        total_mins = sum(b.duration_minutes for b in timeline_bookings)
+        ctx["utilization_rate"] = min(round(total_mins / 480 * 100), 100)
 
         return ctx
 
@@ -1271,3 +1372,129 @@ def room_delete_view(request, pk):
         return redirect("accounts:room_list")
 
     return render(request, "accounts/rooms/room_confirm_delete.html", {"room": room})
+
+def _parse_iso_dt(value: str):
+    """
+    FullCalendar sends ISO datetimes like:
+      2026-02-19T00:00:00Z
+      2026-02-19T00:00:00+00:00
+      2026-02-19T00:00:00
+    """
+    if not value:
+        return None
+
+    value = value.strip()
+
+    # Handle Zulu time (Z)
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+    # If naive, assume current timezone
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+
+    return dt
+
+
+@login_required
+def room_bookings_calendar(request):
+    """
+    Calendar page (Day/Week/Month/List).
+    Loads bookings via AJAX from room_bookings_events endpoint.
+    """
+    rooms = Room.objects.filter(is_active=True).order_by("name")
+
+    # Optional: restrict rooms per agency if you have agency field
+    # if hasattr(Room, "agency_id") and request.user.agency_id:
+    #     rooms = rooms.filter(agency_id=request.user.agency_id)
+
+    context = {
+        "rooms": rooms,
+        "status_choices": RoomBooking.STATUS_CHOICES,
+    }
+    return render(request, "accounts/rooms/room_bookings_calendar.html", context)
+
+
+@require_GET
+@login_required
+def room_bookings_events(request):
+    """
+    JSON endpoint for FullCalendar.
+    Query params:
+      start=ISO datetime
+      end=ISO datetime
+      mine=1 (optional)
+      room_id= (optional)
+      status= (optional)
+      future_only=1 (optional default on frontend)
+    """
+    start_dt = _parse_iso_dt(request.GET.get("start"))
+    end_dt = _parse_iso_dt(request.GET.get("end"))
+
+    mine = (request.GET.get("mine") or "").strip() == "1"
+    room_id = (request.GET.get("room_id") or "").strip()
+    status = (request.GET.get("status") or "").strip()
+    future_only = (request.GET.get("future_only") or "1").strip() == "1"
+
+    # Base queryset
+    qs = RoomBooking.objects.select_related("room", "requested_by").all()
+
+    # Optional: agency restriction if your models have agency
+    # if hasattr(RoomBooking, "agency_id") and request.user.agency_id:
+    #     qs = qs.filter(room__agency_id=request.user.agency_id)
+
+    if mine:
+        qs = qs.filter(requested_by=request.user)
+
+    if room_id.isdigit():
+        qs = qs.filter(room_id=int(room_id))
+
+    if status:
+        qs = qs.filter(status=status)
+
+    # Date range from FullCalendar
+    if start_dt and end_dt:
+        qs = qs.filter(date__gte=start_dt.date(), date__lte=end_dt.date())
+
+    # Today/future only (default ON)
+    if future_only:
+        qs = qs.filter(date__gte=timezone.localdate())
+
+    # Build events list
+    events = []
+    tz = timezone.get_current_timezone()
+
+    for b in qs:
+        start = datetime.combine(b.date, b.start_time)
+        end = datetime.combine(b.date, b.end_time)
+
+        if timezone.is_naive(start):
+            start = timezone.make_aware(start, tz)
+        if timezone.is_naive(end):
+            end = timezone.make_aware(end, tz)
+
+        # Status color classes (FullCalendar can use classNames)
+        # You can style these in CSS.
+        class_names = [f"bk-status-{b.status}"]
+
+        events.append({
+            "id": b.id,
+            "title": f"{b.room.name} • {b.title}",
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "allDay": False,
+            "classNames": class_names,
+            "extendedProps": {
+                "room": b.room.name,
+                "status": b.status,
+                "requested_by": (b.requested_by.get_full_name() or b.requested_by.username),
+                "description": b.description or "",
+            }
+        })
+
+    return JsonResponse(events, safe=False)

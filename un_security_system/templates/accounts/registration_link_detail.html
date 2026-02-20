@@ -5,7 +5,8 @@
 <div class="container py-5">
   <div class="row justify-content-center">
     <div class="col-lg-10">
-      <!-- Header Section -->
+
+      <!-- Header -->
       <div class="d-flex justify-content-between align-items-start mb-4">
         <div>
           <h1 class="h3 mb-2">
@@ -13,7 +14,8 @@
           </h1>
           <p class="text-muted mb-0">
             <i class="bi bi-person-badge me-1"></i>
-            Created by: <strong>{{ invite.created_by.get_full_name|default:invite.created_by.username }}</strong>
+            Created by:
+            <strong>{{ invite.created_by.get_full_name|default:invite.created_by.username }}</strong>
             <span class="mx-2">•</span>
             <span class="small">{{ invite.created_at|date:"F d, Y \a\t g:i A" }}</span>
           </p>
@@ -23,16 +25,14 @@
         </a>
       </div>
 
-      <!-- Status Alert -->
+      <!-- Status -->
       <div class="mb-4">
         {% if not invite.is_active %}
           <div class="alert alert-secondary border-secondary d-flex align-items-center" role="alert">
             <i class="bi bi-slash-circle-fill me-3 fs-4"></i>
             <div>
               <h4 class="alert-heading h6 mb-1">Link Deactivated</h4>
-              <p class="mb-0 small">
-                This registration link was manually deactivated and cannot be used until it is reactivated.
-              </p>
+              <p class="mb-0 small">This registration link was manually deactivated and cannot be used until reactivated.</p>
             </div>
           </div>
         {% elif invite.is_expired %}
@@ -56,13 +56,16 @@
             <i class="bi bi-check-circle-fill me-3 fs-4"></i>
             <div>
               <h4 class="alert-heading h6 mb-1">Link Active</h4>
-              <p class="mb-0 small">This registration link is currently active and ready to use. {{ invite.remaining_uses }} registration{{ invite.remaining_uses|pluralize }} remaining.</p>
+              <p class="mb-0 small">
+                This registration link is active and ready to use.
+                <strong>{{ invite.remaining_uses }}</strong> registration{{ invite.remaining_uses|pluralize }} remaining.
+              </p>
             </div>
           </div>
         {% endif %}
       </div>
 
-      <!-- Main Details Card -->
+      <!-- Main Card -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-light border-bottom py-3">
           <h2 class="h6 mb-0">
@@ -71,38 +74,37 @@
         </div>
 
         <div class="card-body p-4">
-          <!-- Registration URL Section -->
+
+          <!-- URL -->
           <div class="mb-4">
             <label class="form-label fw-semibold text-dark mb-2">
               <i class="bi bi-globe me-1"></i>Full Registration URL
             </label>
+
             {% url 'accounts:register_with_invite' invite.code as rel_url %}
             {% with full_url=request.scheme|add:"://"|add:request.get_host|add:rel_url %}
               <div class="input-group mb-2">
-                <input
-                  type="text"
-                  class="form-control font-monospace"
-                  value="{{ full_url }}"
-                  readonly
-                  id="invite-url"
-                  style="background-color: #f8f9fa; font-size: 0.875rem;"
-                >
-                <button
-                  class="btn btn-primary px-4"
-                  type="button"
-                  onclick="copyToClipboard()"
-                  id="copy-btn"
-                >
+                <input type="text"
+                       class="form-control font-monospace"
+                       value="{{ full_url }}"
+                       readonly
+                       id="invite-url"
+                       style="background-color:#f8f9fa; font-size:0.875rem;">
+                <button class="btn btn-primary px-4" type="button" onclick="copyToClipboard()" id="copy-btn">
                   <i class="bi bi-clipboard me-1"></i>Copy
                 </button>
+                <a class="btn btn-outline-secondary" href="{{ full_url }}" target="_blank" rel="noopener">
+                  <i class="bi bi-box-arrow-up-right me-1"></i>Open
+                </a>
               </div>
             {% endwith %}
+
             <small class="text-muted">
-              <i class="bi bi-info-circle me-1"></i>Share this URL with authorized personnel to enable registration
+              <i class="bi bi-info-circle me-1"></i>Share this URL only with authorized personnel.
             </small>
           </div>
 
-          <!-- Quick Stats Grid -->
+          <!-- Stats -->
           <div class="row g-3 mb-4">
             <div class="col-md-4">
               <div class="stat-card p-3 border rounded bg-light">
@@ -144,37 +146,41 @@
             </div>
           </div>
 
-          <!-- Usage Progress Bar -->
+          <!-- Progress -->
           <div class="mb-4">
+            {% widthratio invite.used_count invite.max_uses 100 as usage_percent %}
             <div class="d-flex justify-content-between align-items-center mb-2">
               <span class="fw-semibold text-dark">Usage Progress</span>
-              <span class="text-muted small">
-                {{ invite.used_count }} / {{ invite.max_uses }} ({% widthratio invite.used_count invite.max_uses 100 %}%)
-              </span>
+              <span class="text-muted small">{{ invite.used_count }} / {{ invite.max_uses }} ({{ usage_percent }}%)</span>
             </div>
-            <div class="progress" style="height: 12px;">
-              {% widthratio invite.used_count invite.max_uses 100 as usage_percent %}
-              <div class="progress-bar {% if usage_percent >= 100 %}bg-danger{% elif usage_percent >= 80 %}bg-warning{% elif usage_percent >= 50 %}bg-info{% else %}bg-success{% endif %}"
-                   role="progressbar"
-                   style="width: {{ usage_percent }}%"
-                   aria-valuenow="{{ usage_percent }}"
-                   aria-valuemin="0"
-                   aria-valuemax="100">
+
+            <div class="progress" style="height:12px;">
+              <div class="progress-bar
+                {% if usage_percent >= 100 %}bg-danger
+                {% elif usage_percent >= 80 %}bg-warning
+                {% elif usage_percent >= 50 %}bg-info
+                {% else %}bg-success{% endif %}"
+                role="progressbar"
+                style="width: {{ usage_percent }}%;"
+                aria-valuenow="{{ usage_percent }}"
+                aria-valuemin="0"
+                aria-valuemax="100">
                 {{ usage_percent }}%
               </div>
             </div>
           </div>
 
-          <!-- Detailed Information Table -->
+          <!-- Details -->
           <div class="mb-4">
             <h3 class="h6 fw-semibold mb-3 text-dark">
               <i class="bi bi-list-ul me-2"></i>Detailed Information
             </h3>
+
             <div class="table-responsive">
               <table class="table table-hover align-middle mb-0">
                 <tbody>
                   <tr>
-                    <td class="fw-semibold text-dark" style="width: 35%;">
+                    <td class="fw-semibold text-dark" style="width:35%;">
                       <i class="bi bi-calendar-plus me-2 text-primary"></i>Created At
                     </td>
                     <td>
@@ -205,22 +211,7 @@
                     <td class="fw-semibold text-dark">
                       <i class="bi bi-hash me-2 text-secondary"></i>Invite Code
                     </td>
-                    <td>
-                      <code class="bg-light px-2 py-1 rounded">{{ invite.code }}</code>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="fw-semibold text-dark">
-                      <i class="bi bi-person-circle me-2 text-success"></i>Created By
-                    </td>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <div class="avatar-placeholder bg-primary bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
-                          <i class="bi bi-person text-primary"></i>
-                        </div>
-                        <span>{{ invite.created_by.get_full_name|default:invite.created_by.username }}</span>
-                      </div>
-                    </td>
+                    <td><code class="bg-light px-2 py-1 rounded">{{ invite.code }}</code></td>
                   </tr>
                   <tr>
                     <td class="fw-semibold text-dark">
@@ -228,35 +219,57 @@
                     </td>
                     <td>
                       {% if invite.is_expired %}
-                        <span class="badge bg-secondary me-1">
-                          <i class="bi bi-clock-history me-1"></i>Expired
-                        </span>
-                        {% if invite.is_active %}
-                          <span class="badge bg-success">
-                            <i class="bi bi-check-circle me-1"></i>Active Flag (no longer usable)
-                          </span>
-                        {% else %}
-                          <span class="badge bg-dark">
-                            <i class="bi bi-slash-circle me-1"></i>Deactivated
-                          </span>
-                        {% endif %}
+                        <span class="badge bg-secondary"><i class="bi bi-clock-history me-1"></i>Expired</span>
                       {% elif not invite.is_active %}
-                        <span class="badge bg-secondary">
-                          <i class="bi bi-slash-circle me-1"></i>Manually Deactivated
-                        </span>
+                        <span class="badge bg-secondary"><i class="bi bi-slash-circle me-1"></i>Deactivated</span>
                       {% elif invite.remaining_uses <= 0 %}
-                        <span class="badge bg-warning text-dark">
-                          <i class="bi bi-dash-circle me-1"></i>Usage Limit Reached
-                        </span>
+                        <span class="badge bg-warning text-dark"><i class="bi bi-dash-circle me-1"></i>Limit Reached</span>
                       {% else %}
-                        <span class="badge bg-success">
-                          <i class="bi bi-check-circle me-1"></i>Active & Available
-                        </span>
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>
                       {% endif %}
                     </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- ✅ QR Code Card (properly placed, not inside table) -->
+          <div class="card border-0 bg-light mb-4">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="h6 fw-semibold mb-0 text-dark">
+                  <i class="bi bi-qr-code-scan me-1"></i>QR Code
+                </h3>
+                <div class="d-flex gap-2">
+                  <a href="{{ qr_download_url }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-download me-1"></i>Download PNG
+                  </a>
+                  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#qrPreviewModal">
+                    <i class="bi bi-arrows-fullscreen me-1"></i>Preview
+                  </button>
+                </div>
+              </div>
+
+              <div class="row g-3 align-items-center">
+                <div class="col-md-4">
+                  <div class="p-3 border rounded bg-white text-center">
+                    <img src="{{ qr_data_uri }}" alt="Registration QR Code" class="img-fluid" style="max-width: 220px;">
+                    <div class="text-muted small mt-2">Scan to open the registration link</div>
+                  </div>
+                </div>
+                <div class="col-md-8">
+                  <div class="alert alert-info mb-0">
+                    <div class="d-flex">
+                      <div class="flex-shrink-0"><i class="bi bi-info-circle-fill"></i></div>
+                      <div class="flex-grow-1 ms-3 small">
+                        Share the QR code only with authorized users. It opens the same registration link above.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -267,17 +280,18 @@
               <div>
                 <h4 class="alert-heading h6 mb-2">Security Guidelines</h4>
                 <ul class="mb-0 small ps-3">
-                  <li>Share this link only through secure, encrypted communication channels</li>
-                  <li>Verify recipient identity before distributing registration access</li>
-                  <li>Monitor link usage regularly through the registration links management dashboard</li>
-                  <li>Report any suspicious activity or unauthorized access attempts immediately</li>
+                  <li>Share only through secure channels</li>
+                  <li>Verify recipient identity before sharing</li>
+                  <li>Monitor usage regularly</li>
+                  <li>Report suspicious activity immediately</li>
                 </ul>
               </div>
             </div>
           </div>
+
         </div>
 
-        <!-- Card Footer with Actions -->
+        <!-- Footer Actions -->
         <div class="card-footer bg-light border-top py-3">
           <div class="d-flex justify-content-between align-items-center">
             <a href="{% url 'accounts:registration_links_list' %}" class="btn btn-outline-secondary">
@@ -305,7 +319,7 @@
         </div>
       </div>
 
-      <!-- Additional Information + Registered Users -->
+      <!-- Registered Users (kept as your original logic) -->
       <div class="row g-3">
         <div class="col-md-6">
           <div class="card border-0 bg-light h-100">
@@ -324,11 +338,7 @@
               <div class="d-flex justify-content-between">
                 <span class="text-muted small">Time Remaining</span>
                 <span class="fw-semibold">
-                  {% if invite.is_expired %}
-                    Expired
-                  {% else %}
-                    {{ invite.expires_at|timeuntil }}
-                  {% endif %}
+                  {% if invite.is_expired %}Expired{% else %}{{ invite.expires_at|timeuntil }}{% endif %}
                 </span>
               </div>
             </div>
@@ -342,8 +352,7 @@
                 <i class="bi bi-info-circle me-2 text-primary"></i>Link Management
               </h3>
               <p class="small text-muted mb-3">
-                Use the registration links dashboard to view all active and expired links,
-                track usage patterns, and manage access control effectively.
+                Use the registration links dashboard to view all links, track usage, and manage access.
               </p>
               <a href="{% url 'accounts:registration_links_list' %}" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-list-ul me-1"></i>View All Links
@@ -366,7 +375,6 @@
                     {% for reg in registrations %}
                       <li class="list-group-item">
                         <div class="d-flex justify-content-between align-items-center">
-                          <!-- User info -->
                           <div>
                             <div class="fw-semibold">
                               {{ reg.user.get_full_name|default:reg.user.username }}
@@ -382,8 +390,6 @@
                               {% endif %}
                             </div>
                           </div>
-
-                          <!-- Right side: date + activate/deactivate -->
                           <div class="text-end">
                             <div class="small text-muted">
                               <div>{{ reg.created_at|date:"M d, Y" }}</div>
@@ -391,18 +397,14 @@
                             </div>
 
                             {% if request.user.agency_id and reg.user.agency_id == request.user.agency_id %}
-                              <form method="post"
-                                    action="{% url 'accounts:ict_user_toggle_status' reg.user.pk %}"
-                                    class="mt-2">
+                              <form method="post" action="{% url 'accounts:ict_user_toggle_status' reg.user.pk %}" class="mt-2">
                                 {% csrf_token %}
                                 {% if reg.user.is_active %}
-                                  <button type="submit"
-                                          class="btn btn-sm btn-outline-danger">
+                                  <button type="submit" class="btn btn-sm btn-outline-danger">
                                     <i class="bi bi-person-dash me-1"></i>Deactivate
                                   </button>
                                 {% else %}
-                                  <button type="submit"
-                                          class="btn btn-sm btn-outline-success">
+                                  <button type="submit" class="btn btn-sm btn-outline-success">
                                     <i class="bi bi-person-check me-1"></i>Activate
                                   </button>
                                 {% endif %}
@@ -428,6 +430,29 @@
           </div>
         {% endif %}
       </div>
+
+      <!-- QR Preview Modal -->
+      <div class="modal fade" id="qrPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title"><i class="bi bi-qr-code-scan me-2"></i>QR Code Preview</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+              <img src="{{ qr_data_uri }}" alt="QR Code Preview" class="img-fluid" style="max-width: 360px;">
+              <div class="text-muted small mt-2">Scan to open the registration link</div>
+            </div>
+            <div class="modal-footer">
+              <a href="{{ qr_download_url }}" class="btn btn-primary">
+                <i class="bi bi-download me-1"></i>Download PNG
+              </a>
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -436,10 +461,11 @@
 function copyToClipboard() {
   const input = document.getElementById('invite-url');
   const button = document.getElementById('copy-btn');
+  if (!input || !button) return;
+
   const originalHTML = button.innerHTML;
 
   navigator.clipboard.writeText(input.value).then(() => {
-    // Success feedback
     button.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
     button.classList.remove('btn-primary');
     button.classList.add('btn-success');
@@ -448,8 +474,8 @@ function copyToClipboard() {
       button.innerHTML = originalHTML;
       button.classList.remove('btn-success');
       button.classList.add('btn-primary');
-    }, 2000);
-  }).catch(err => {
+    }, 1800);
+  }).catch(() => {
     button.innerHTML = '<i class="bi bi-x-lg me-1"></i>Failed';
     button.classList.remove('btn-primary');
     button.classList.add('btn-danger');
@@ -458,50 +484,21 @@ function copyToClipboard() {
       button.innerHTML = originalHTML;
       button.classList.remove('btn-danger');
       button.classList.add('btn-primary');
-    }, 2000);
-    console.error('Copy failed:', err);
+    }, 1800);
   });
 }
 </script>
 
 <style>
-  .stat-card {
-    transition: all 0.3s ease;
-  }
-  .stat-card:hover {
-    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.075);
-    transform: translateY(-2px);
-  }
-  .stat-icon {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .progress {
-    border-radius: 6px;
-  }
-  .progress-bar {
-    transition: width 0.6s ease;
-  }
-  .card {
-    border-radius: 0.5rem;
-  }
-  .table tbody tr {
-    transition: background-color 0.2s ease;
-  }
-  .table tbody tr:hover {
-    background-color: rgba(13, 110, 253, 0.05);
-  }
-  code {
-    font-size: 0.875rem;
-  }
-  .avatar-placeholder {
-    flex-shrink: 0;
-  }
-  .font-monospace {
-    font-size: 0.875rem;
-  }
+.stat-card { transition: all .25s ease; }
+.stat-card:hover { box-shadow: 0 .125rem .5rem rgba(0,0,0,.075); transform: translateY(-2px); }
+.stat-icon { width: 32px; height: 32px; display:flex; align-items:center; justify-content:center; }
+.progress { border-radius: 6px; }
+.progress-bar { transition: width .6s ease; }
+.card { border-radius: .65rem; }
+.table tbody tr { transition: background-color .2s ease; }
+.table tbody tr:hover { background-color: rgba(13,110,253,.05); }
+code { font-size: .875rem; }
+.font-monospace { font-size: .875rem; }
 </style>
 {% endblock %}

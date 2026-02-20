@@ -6,7 +6,8 @@ from .views_room_booking import (
     RoomListView, RoomDetailView, RoomCreateView, RoomUpdateView,
     MyRoomBookingsView, RoomBookingCreateView, MyRoomApprovalsView,
     room_booking_approve_view, room_delete_view, room_series_approve_view,
-    cancel_booking, cancel_booking_series, cancel_series_occurrence
+    cancel_booking, cancel_booking_series, cancel_series_occurrence, room_bookings_calendar,
+    room_bookings_events
 )
 from .views_asset_verify import asset_verify, asset_verification_history
 
@@ -187,6 +188,11 @@ path(
         name="registration_links_list",
     ),
     path(
+            "register/<str:code>/qr.png",
+            views_ict.invite_qr_download,
+            name="invite_qr_download",
+        ),
+    path(
         "invites/<int:pk>/",
         views_ict.registration_link_detail,
         name="registration_link_detail",
@@ -209,6 +215,9 @@ path(
     # Room Booking
     path("rooms/book/", RoomBookingCreateView.as_view(), name="room_book"),
     path("rooms/my-bookings/", MyRoomBookingsView.as_view(), name="my_bookings"),
+    path("rooms/calendar/", room_bookings_calendar, name="rooms_calendar"),
+    path("rooms/calendar/events/", room_bookings_events, name="rooms_calendar_events"),
+
 
     # Approvals
     path("rooms/approvals/", MyRoomApprovalsView.as_view(), name="room_approvals"),
