@@ -3,871 +3,650 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Sign In • UNPASS</title>
+    <title>Sign In · UNPASS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            --un-blue: #009edb;
-            --un-dark-blue: #005a8b;
-            --un-light-blue: #4db8e8;
-            --success-green: #2ecc71;
-            --error-red: #e74c3c;
+            --blue:      #009edb;
+            --blue-dark: #005a8b;
+            --blue-deep: #001f3f;
+            --blue-mid:  #003d5c;
+            --white:     #ffffff;
+            --off-white: #f7f8fa;
+            --border:    #e4e7ec;
+            --text:      #0d1b2a;
+            --muted:     #6b7685;
+            --success:   #12b76a;
+            --error:     #f04438;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
+        html, body { min-height: 100%; font-family: 'DM Sans', -apple-system, sans-serif; color: var(--text); }
+
+        /* ── Full-page background ─────────────────────────── */
+        .page {
             min-height: 100vh;
-            max-height: 100vh;
-            margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
+            width: 100%;
+            background: linear-gradient(160deg, var(--blue-deep) 0%, var(--blue-mid) 55%, #006fa0 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2.5rem 1rem;
             position: relative;
-            background: linear-gradient(135deg, #001f3f 0%, #003d5c 50%, #005a8b 100%);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .main-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            overflow-y: auto;
-            overflow-x: hidden;
-        }
-
-        /* ================= ANIMATED BACKGROUND ================= */
-        .background-animation {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 0;
             overflow: hidden;
-            opacity: 0.15;
         }
 
-        .geometric-pattern {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background-image:
-                repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(0, 158, 219, 0.05) 35px, rgba(0, 158, 219, 0.05) 70px),
-                repeating-linear-gradient(-45deg, transparent, transparent 35px, rgba(0, 158, 219, 0.05) 35px, rgba(0, 158, 219, 0.05) 70px);
+        /* Noise grain overlay */
+        .page::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+            opacity: .45;
+            pointer-events: none;
+            z-index: 0;
         }
 
-        .floating-circles {
-            position: absolute;
-            width: 100%;
-            height: 100%;
+        /* Ambient glow blobs */
+        .blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(90px);
+            pointer-events: none;
+            z-index: 0;
         }
+        .blob-1 { width: 420px; height: 420px; top: -130px; left: -110px;
+            background: radial-gradient(circle, rgba(0,158,219,.2) 0%, transparent 70%); }
+        .blob-2 { width: 360px; height: 360px; bottom: -100px; right: -80px;
+            background: radial-gradient(circle, rgba(0,90,139,.28) 0%, transparent 70%); }
 
-        .circle {
+        /* Decorative concentric rings */
+        .rings {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .rings span {
             position: absolute;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(0, 158, 219, 0.3) 0%, transparent 70%);
-            animation: float 20s infinite ease-in-out;
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            border: 1px solid rgba(255,255,255,.07);
         }
+        .rings span:nth-child(1) { width: 280px;  height: 280px;  border-color: rgba(255,255,255,.11); }
+        .rings span:nth-child(2) { width: 430px;  height: 430px; }
+        .rings span:nth-child(3) { width: 580px;  height: 580px;  border-color: rgba(255,255,255,.04); }
+        .rings span:nth-child(4) { width: 730px;  height: 730px;  border-color: rgba(255,255,255,.025); }
 
-        .circle:nth-child(1) {
-            width: 300px;
-            height: 300px;
-            top: 10%;
-            left: 10%;
-            animation-delay: 0s;
-        }
-
-        .circle:nth-child(2) {
-            width: 200px;
-            height: 200px;
-            top: 60%;
-            left: 70%;
-            animation-delay: 5s;
-        }
-
-        .circle:nth-child(3) {
-            width: 250px;
-            height: 250px;
-            top: 40%;
-            left: 80%;
-            animation-delay: 10s;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            25% { transform: translate(30px, -30px) scale(1.1); }
-            50% { transform: translate(-20px, 20px) scale(0.9); }
-            75% { transform: translate(20px, 30px) scale(1.05); }
-        }
-
-        /* ================= TOP HEADER ================= */
-        .unpass-top-header {
+        /* ── Brand mark above the card ───────────────────── */
+        .brand {
             position: relative;
-            width: 100%;
-            padding: 1rem 1rem 0.5rem;
+            z-index: 2;
             text-align: center;
-            z-index: 10;
-            color: #fff;
-            animation: fadeInDown 0.8s ease-out;
+            margin-bottom: 1.75rem;
+            animation: fadeUp .55s ease both;
         }
 
-        .logo-container {
-            display: inline-block;
-            animation: logoGlow 3s ease-in-out infinite;
-        }
-
-        .unpass-top-header img {
-            height: 45px;
-            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
-            transition: transform 0.3s ease;
-        }
-
-        .unpass-top-header img:hover {
-            transform: scale(1.05);
-        }
-
-        .unpass-top-header h4 {
-            margin-top: 0.5rem;
-            font-weight: 700;
-            font-size: 1.5rem;
-            letter-spacing: 3px;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-        }
-
-        .unpass-top-header .tagline {
-            opacity: 0.95;
-            font-size: 0.8rem;
-            font-weight: 300;
-            letter-spacing: 0.5px;
-            margin-top: 0.25rem;
-        }
-
-        @keyframes logoGlow {
-            0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 158, 219, 0.5)); }
-            50% { filter: drop-shadow(0 0 20px rgba(0, 158, 219, 0.8)); }
-        }
-
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* ================= PAGE WRAPPER ================= */
-        .page-wrapper {
-            min-height: auto;
+        .brand-logo {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 0.5rem 1rem;
-            position: relative;
-            z-index: 1;
+            gap: .7rem;
+            margin-bottom: .4rem;
         }
 
-        /* ================= LOGIN CARD ================= */
-        .login-container {
-            max-width: 500px;
+        .brand-logo img {
+            height: 42px;
+            opacity: .95;
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,.3));
+        }
+
+        .wordmark {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-size: 1.85rem;
+            color: var(--white);
+            letter-spacing: 5px;
+            line-height: 1;
+        }
+
+        .brand-sub {
+            color: rgba(255,255,255,.48);
+            font-size: .76rem;
+            font-weight: 300;
+            letter-spacing: .3px;
+        }
+
+        /* ── Card ────────────────────────────────────────── */
+        .card {
+            position: relative;
+            z-index: 2;
             width: 100%;
-            animation: fadeInUp 0.8s ease-out 0.2s both;
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(40px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .login-card {
-            background: rgba(255, 255, 255, 0.98);
+            max-width: 430px;
+            background: var(--white);
             border-radius: 20px;
-            box-shadow:
-                0 20px 60px rgba(0, 0, 0, 0.4),
-                0 0 0 1px rgba(255, 255, 255, 0.1);
+            box-shadow: 0 24px 64px rgba(0,0,0,.38), 0 0 0 1px rgba(255,255,255,.07);
             overflow: hidden;
-            backdrop-filter: blur(10px);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeUp .65s .08s ease both;
         }
 
-        .login-card:hover {
-            transform: translateY(-5px);
-            box-shadow:
-                0 25px 70px rgba(0, 0, 0, 0.5),
-                0 0 0 1px rgba(255, 255, 255, 0.2);
+        /* Card header strip */
+        .card-head {
+            padding: 1.75rem 2rem 1.5rem;
+            border-bottom: 1px solid var(--border);
         }
 
-        .login-header {
-            background: linear-gradient(135deg, var(--un-blue) 0%, var(--un-dark-blue) 100%);
-            color: white;
-            padding: 1.5rem 1.5rem;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .login-header::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: repeating-linear-gradient(
-                45deg,
-                transparent,
-                transparent 10px,
-                rgba(255, 255, 255, 0.03) 10px,
-                rgba(255, 255, 255, 0.03) 20px
-            );
-            animation: shimmer 20s linear infinite;
-        }
-
-        @keyframes shimmer {
-            0% { transform: translate(0, 0); }
-            100% { transform: translate(50%, 50%); }
-        }
-
-        .security-badges {
-            position: absolute;
-            top: 0.75rem;
-            right: 0.75rem;
+        .eyebrow {
             display: flex;
-            gap: 0.4rem;
-        }
-
-        .security-badge {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 0.4rem;
-            border-radius: 50%;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            transition: all 0.3s ease;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .security-badge:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(1.1);
-        }
-
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
-            50% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); }
-        }
-
-        .login-header h5 {
-            margin-bottom: 0.25rem;
+            align-items: center;
+            gap: .45rem;
+            color: var(--blue);
+            font-size: .72rem;
             font-weight: 600;
-            font-size: 1.25rem;
-            position: relative;
-            z-index: 1;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: .6rem;
         }
 
-        .login-header small {
-            font-size: 0.85rem;
-            opacity: 0.95;
-            position: relative;
-            z-index: 1;
+        .card-title {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-size: 1.7rem;
+            color: var(--text);
+            line-height: 1.15;
+            margin-bottom: .3rem;
         }
 
-        .login-body {
-            padding: 1.5rem 1.5rem;
+        .card-subtitle {
+            color: var(--muted);
+            font-size: .85rem;
+            font-weight: 300;
         }
 
-        .form-floating {
-            margin-bottom: 0.75rem;
-            position: relative;
+        /* Card body */
+        .card-body { padding: 1.75rem 2rem; }
+
+        /* ── Alerts ──────────────────────────────────────── */
+        .alerts { margin-bottom: 1.2rem; }
+
+        .alert {
+            display: flex;
+            align-items: flex-start;
+            gap: .6rem;
+            padding: .8rem 1rem;
+            border-radius: 10px;
+            font-size: .84rem;
+            border: 1px solid transparent;
+            margin-bottom: .5rem;
+            animation: slideDown .3s ease;
+        }
+        .alert:last-child { margin-bottom: 0; }
+        .alert i { flex-shrink: 0; font-size: .95rem; margin-top: .05rem; }
+        .alert-danger  { background:#fef3f2; border-color:#fecdca; color:#b42318; }
+        .alert-success { background:#ecfdf3; border-color:#a9efc5; color:#067647; }
+        .alert-info    { background:#f0f9ff; border-color:#b9e6fe; color:#026aa2; }
+        .alert-warning { background:#fffaeb; border-color:#fedf89; color:#b54708; }
+
+        .alert-close {
+            margin-left: auto; background: none; border: none;
+            cursor: pointer; opacity: .5; transition: opacity .2s;
+            padding: 0; color: inherit; line-height: 1; flex-shrink: 0;
+        }
+        .alert-close:hover { opacity: 1; }
+
+        /* ── Form fields ─────────────────────────────────── */
+        .field { margin-bottom: 1.1rem; }
+
+        .field-label {
+            display: block;
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: .42rem;
         }
 
-        .form-control {
-            border-radius: 12px;
-            border: 2px solid #e9ecef;
-            padding: 1rem 1rem 1rem 3rem;
-            height: 50px;
-            transition: all 0.3s ease;
-            background: #f8f9fa;
+        .field-wrap { position: relative; }
+
+        .field-icon {
+            position: absolute;
+            left: .9rem; top: 50%;
+            transform: translateY(-50%);
+            color: var(--muted);
+            font-size: 1rem;
+            pointer-events: none;
+            transition: color .2s;
+            z-index: 2;
         }
 
-        .form-control:focus {
-            border-color: var(--un-blue);
-            box-shadow: 0 0 0 4px rgba(0, 158, 219, 0.1);
-            background: white;
+        .field-input {
+            width: 100%;
+            height: 48px;
+            padding: 0 2.75rem 0 2.65rem;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            font-size: .9rem;
+            font-family: inherit;
+            color: var(--text);
+            background: var(--off-white);
+            transition: border-color .2s, box-shadow .2s, background .2s;
             outline: none;
         }
-
-        .form-floating > label {
-            padding-left: 3rem;
-            color: #6c757d;
+        .field-input::placeholder { color: #aab0ba; }
+        .field-input:hover:not(:focus) { border-color: #bcc2cc; }
+        .field-input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3.5px rgba(0,158,219,.12);
+            background: var(--white);
         }
+        .field-wrap:focus-within .field-icon { color: var(--blue); }
+        .field-input.is-valid   { border-color: var(--success); background: var(--white); }
+        .field-input.is-invalid { border-color: var(--error); box-shadow: 0 0 0 3.5px rgba(240,68,56,.1); }
 
-        .form-floating .input-icon {
+        .field-error { font-size: .76rem; color: var(--error); margin-top: .3rem; }
+
+        /* Password toggle */
+        .pw-toggle {
             position: absolute;
-            left: 1rem;
-            top: 50%;
+            right: .8rem; top: 50%;
             transform: translateY(-50%);
-            color: #6c757d;
-            font-size: 1.1rem;
-            z-index: 4;
-            transition: color 0.3s ease;
+            background: none; border: none;
+            padding: .25rem; cursor: pointer;
+            color: var(--muted); font-size: 1.05rem;
+            transition: color .2s; z-index: 2; line-height: 1;
         }
+        .pw-toggle:hover { color: var(--blue); }
 
-        .form-floating:focus-within .input-icon {
-            color: var(--un-blue);
-        }
-
-        .form-check {
-            margin: 0.75rem 0;
-        }
-
-        .form-check-input:checked {
-            background-color: var(--un-blue);
-            border-color: var(--un-blue);
-        }
-
-        .form-check-label {
-            color: #495057;
-            font-size: 0.9rem;
-        }
-
-        .btn-login {
-            background: linear-gradient(135deg, var(--un-blue) 0%, var(--un-dark-blue) 100%);
-            border: none;
-            border-radius: 12px;
-            padding: 0.75rem;
-            font-weight: 600;
-            width: 100%;
-            color: white;
-            font-size: 1rem;
-            letter-spacing: 0.5px;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn-login::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0;
-            height: 0;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            transform: translate(-50%, -50%);
-            transition: width 0.6s, height 0.6s;
-        }
-
-        .btn-login:hover::before {
-            width: 300px;
-            height: 300px;
-        }
-
-        .btn-login:hover {
-            box-shadow: 0 8px 25px rgba(0, 158, 219, 0.4);
-            transform: translateY(-2px);
-        }
-
-        .btn-login:active {
-            transform: translateY(0);
-        }
-
-        .btn-login .btn-text {
-            position: relative;
-            z-index: 1;
-        }
-
-        .btn-login.loading .btn-text {
-            opacity: 0;
-        }
-
-        .btn-login .spinner {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .btn-login.loading .spinner {
-            opacity: 1;
-        }
-
-        .forgot-password {
-            text-align: center;
-            margin-top: 0.5rem;
-        }
-
-        .forgot-password a {
-            color: var(--un-blue);
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
-        }
-
-        .forgot-password a:hover {
-            color: var(--un-dark-blue);
-            text-decoration: underline;
-        }
-
-        .login-footer {
-            background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
-            padding: 1rem;
-            text-align: center;
-            border-top: 1px solid #dee2e6;
-        }
-
-        .security-features {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-            margin-bottom: 0.5rem;
-        }
-
-        .security-feature {
+        /* ── Options row ─────────────────────────────────── */
+        .options-row {
             display: flex;
             align-items: center;
-            gap: 0.3rem;
-            font-size: 0.75rem;
-            color: #495057;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
         }
 
-        .security-feature i {
-            color: var(--success-green);
+        .remember {
+            display: flex; align-items: center;
+            gap: .45rem; cursor: pointer;
         }
+        .remember input[type="checkbox"] {
+            width: 16px; height: 16px;
+            border: 1.5px solid var(--border);
+            border-radius: 4px; cursor: pointer;
+            accent-color: var(--blue); flex-shrink: 0;
+        }
+        .remember span { font-size: .84rem; color: var(--muted); user-select: none; }
 
-        /* ================= LANGUAGE SELECTOR ================= */
-        .language-selector {
+        /* Forgot popover wrapper */
+        .forgot-wrap { position: relative; }
+
+        .forgot-link {
+            font-size: .82rem; color: var(--blue);
+            text-decoration: none; font-weight: 500;
+            transition: color .2s;
+        }
+        .forgot-link:hover { color: var(--blue-dark); text-decoration: underline; }
+
+        .forgot-popover {
+            display: none;
             position: absolute;
-            top: 0.75rem;
-            right: 1.5rem;
-            z-index: 100;
-        }
-
-        .language-selector select {
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            padding: 0.4rem 1.75rem 0.4rem 0.75rem;
-            border-radius: 8px;
-            backdrop-filter: blur(10px);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            appearance: none;
-            font-size: 0.85rem;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 0.5rem center;
-        }
-
-        .language-selector select:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .language-selector select option {
-            background: var(--un-dark-blue);
-            color: white;
-        }
-
-        /* ================= FOOTER ================= */
-        .unpass-footer {
-            position: relative;
-            width: 100%;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 0.8rem;
-            padding: 0.75rem 1rem;
-            z-index: 1;
-        }
-
-        .footer-links {
-            margin-top: 0.5rem;
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .footer-links a {
-            color: rgba(255, 255, 255, 0.8);
-            text-decoration: none;
-            transition: all 0.3s ease;
-            font-size: 0.75rem;
-        }
-
-        .footer-links a:hover {
-            color: white;
-            text-decoration: underline;
-        }
-
-        /* ================= ALERTS ================= */
-        .alert-container {
-            margin-bottom: 0.75rem;
-        }
-
-        .custom-alert {
+            bottom: calc(100% + 10px);
+            right: 0;
+            background: var(--text);
+            color: var(--white);
+            padding: .85rem 1rem;
             border-radius: 10px;
-            padding: 1rem;
-            border: none;
-            animation: slideInDown 0.4s ease-out;
+            font-size: .8rem;
+            line-height: 1.55;
+            width: 228px;
+            z-index: 50;
+            box-shadow: 0 8px 28px rgba(0,0,0,.28);
+            animation: fadeUp .2s ease;
+        }
+        .forgot-popover.show { display: block; }
+        .forgot-popover strong { display: block; margin-bottom: .3rem; }
+        .forgot-popover::after {
+            content: ''; position: absolute;
+            bottom: -5px; right: 14px;
+            width: 10px; height: 10px;
+            background: var(--text);
+            transform: rotate(45deg);
+            border-radius: 2px;
         }
 
-        @keyframes slideInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        /* ── Submit button ───────────────────────────────── */
+        .btn-sign {
+            width: 100%; height: 50px;
+            border: none; border-radius: 10px;
+            background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+            color: var(--white);
+            font-family: inherit; font-size: .95rem;
+            font-weight: 600; letter-spacing: .3px;
+            cursor: pointer; position: relative; overflow: hidden;
+            transition: transform .15s, box-shadow .15s;
+        }
+        .btn-sign:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,90,139,.38);
+        }
+        .btn-sign:active:not(:disabled)  { transform: translateY(0); box-shadow: none; }
+        .btn-sign:disabled { opacity: .72; cursor: not-allowed; }
+
+        .btn-inner {
+            display: flex; align-items: center;
+            justify-content: center; gap: .5rem;
+            transition: opacity .2s;
+        }
+        .btn-loader {
+            position: absolute; inset: 0;
+            display: flex; align-items: center;
+            justify-content: center;
+            opacity: 0; transition: opacity .2s;
+        }
+        .btn-loader .spinner-border { width: 1.2rem; height: 1.2rem; border-width: 2px; }
+        .btn-sign.loading .btn-inner  { opacity: 0; }
+        .btn-sign.loading .btn-loader { opacity: 1; }
+
+        /* Security note */
+        .sec-note {
+            display: flex; gap: .45rem;
+            align-items: flex-start;
+            font-size: .74rem; color: var(--muted);
+            line-height: 1.5; margin-top: 1.1rem;
+        }
+        .sec-note i { flex-shrink: 0; color: var(--blue); margin-top: .1rem; }
+
+        /* ── Card footer ─────────────────────────────────── */
+        .card-foot {
+            padding: 1rem 2rem;
+            background: var(--off-white);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: .5rem;
+        }
+        .foot-copy { font-size: .71rem; color: #aab0ba; }
+        .foot-links { display: flex; gap: 1rem; }
+        .foot-links a {
+            font-size: .71rem; color: #aab0ba;
+            text-decoration: none; transition: color .2s;
+        }
+        .foot-links a:hover { color: var(--blue); }
+
+        /* ── Trust strip below card ──────────────────────── */
+        .trust-strip {
+            position: relative; z-index: 2;
+            margin-top: 1.5rem;
+            display: flex; justify-content: center;
+            gap: 1.75rem; flex-wrap: wrap;
+            animation: fadeUp .65s .2s ease both;
+        }
+        .trust-item {
+            display: flex; align-items: center;
+            gap: .4rem; color: rgba(255,255,255,.48);
+            font-size: .74rem;
+        }
+        .trust-item i { color: rgba(0,158,219,.8); font-size: .82rem; }
+
+        /* ── Animations ──────────────────────────────────── */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
-        /* ================= RESPONSIVE ================= */
-        @media (max-width: 768px) {
-            .unpass-top-header h4 {
-                font-size: 1.25rem;
-            }
-
-            .unpass-top-header img {
-                height: 40px;
-            }
-
-            .unpass-top-header .tagline {
-                font-size: 0.75rem;
-            }
-
-            .login-body {
-                padding: 1.25rem;
-            }
-
-            .login-header {
-                padding: 1.25rem;
-            }
-
-            .security-badges {
-                top: 0.5rem;
-                right: 0.5rem;
-            }
-
-            .security-badge {
-                padding: 0.35rem;
-            }
-
-            .language-selector {
-                position: static;
-                text-align: center;
-                margin-bottom: 0.5rem;
-            }
-
-            .security-features {
-                gap: 0.75rem;
-            }
-
-            .circle {
-                opacity: 0.5;
-            }
-
-            .footer-links {
-                gap: 0.75rem;
-            }
+        /* ── Responsive ──────────────────────────────────── */
+        @media (max-width: 500px) {
+            .page       { padding: 1.5rem .75rem; }
+            .card       { border-radius: 16px; }
+            .card-head  { padding: 1.5rem 1.5rem 1.25rem; }
+            .card-body  { padding: 1.5rem 1.5rem; }
+            .card-foot  { padding: .875rem 1.5rem; }
+            .trust-strip { gap: 1rem; }
+            .forgot-popover { right: -0.5rem; }
         }
 
-        @media (max-width: 480px) {
-            .login-container {
-                padding: 0 0.5rem;
-            }
-
-            .login-card {
-                border-radius: 16px;
-            }
-
-            .unpass-top-header {
-                padding: 0.75rem 0.5rem 0.25rem;
-            }
-
-            .unpass-top-header h4 {
-                font-size: 1.1rem;
-                margin-top: 0.25rem;
-            }
-
-            .security-features {
-                flex-direction: column;
-                gap: 0.4rem;
-            }
-
-            .footer-links {
-                flex-direction: column;
-                gap: 0.35rem;
-            }
-
-            .unpass-footer {
-                padding: 0.5rem;
-                font-size: 0.75rem;
-            }
+        @media (max-height: 680px) {
+            .page { padding: 1rem; }
+            .brand { margin-bottom: 1.1rem; }
+            .brand-sub { display: none; }
         }
 
-        /* ================= ACCESSIBILITY ================= */
-        .visually-hidden {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            margin: -1px;
-            padding: 0;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            border: 0;
-        }
-
-        *:focus-visible {
-            outline: 2px solid var(--un-blue);
-            outline-offset: 2px;
-        }
+        :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     </style>
 </head>
 
 <body>
+<div class="page">
 
-<div class="main-container">
+    <!-- Background decorations -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="rings"><span></span><span></span><span></span><span></span></div>
 
-<!-- ===== ANIMATED BACKGROUND ===== -->
-<div class="background-animation">
-    <div class="geometric-pattern"></div>
-    <div class="floating-circles">
-        <div class="circle"></div>
-        <div class="circle"></div>
-        <div class="circle"></div>
-    </div>
-</div>
-
-<!-- ===== LANGUAGE SELECTOR ===== -->
-<div class="language-selector">
-    <select aria-label="Select Language">
-        <option value="en">English</option>
-        <option value="fr">Français</option>
-        <option value="es">Español</option>
-        <option value="ar">العربية</option>
-        <option value="zh">中文</option>
-        <option value="ru">Русский</option>
-    </select>
-</div>
-
-<!-- ===== TOP HEADER ===== -->
-<div class="unpass-top-header">
-    <div class="logo-container">
-        <img src="{% static 'img/un-logo.png' %}" alt="United Nations Logo">
-    </div>
-    <h4>UNPASS</h4>
-    <p class="tagline">Unified Platform for Seamless Access, Security & Operations</p>
-</div>
-
-<!-- ===== PAGE CONTENT ===== -->
-<div class="page-wrapper">
-
-    <div class="login-container">
-        <div class="login-card">
-
-            <div class="login-header">
-                <div class="security-badges">
-                    <div class="security-badge" title="SSL Encrypted">
-                        <i class="bi bi-shield-lock-fill fs-5"></i>
-                    </div>
-                    <div class="security-badge" title="Multi-Factor Authentication">
-                        <i class="bi bi-fingerprint fs-5"></i>
-                    </div>
-                </div>
-                <h5>Secure Sign In</h5>
-                <small>Authorized UN Personnel Only</small>
-            </div>
-
-            <div class="login-body">
-
-                <!-- Alert Messages -->
-                {% if messages %}
-                <div class="alert-container">
-                    {% for message in messages %}
-                    <div class="alert alert-{{ message.tags }} custom-alert alert-dismissible fade show" role="alert">
-                        <i class="bi bi-exclamation-circle-fill me-2"></i>
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                <form method="post" id="loginForm">
-                    {% csrf_token %}
-
-                    <div class="form-floating">
-                        <i class="bi bi-person-fill input-icon"></i>
-                        <input
-                            type="text"
-                            class="form-control"
-                            id="id_username"
-                            name="login"
-                            placeholder="Username or Email"
-                            required
-                            autocomplete="login"
-                            aria-label="Username">
-                        <label for="id_username">Username or Email</label>
-                    </div>
-
-                    <div class="form-floating">
-                        <i class="bi bi-lock-fill input-icon"></i>
-                        <input
-                            type="password"
-                            class="form-control"
-                            id="id_password"
-                            name="password"
-                            placeholder="Password"
-                            required
-                            autocomplete="current-password"
-                            aria-label="Password">
-                        <label for="id_password">Password</label>
-                    </div>
-
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="rememberMe" name="remember">
-                        <label class="form-check-label" for="rememberMe">
-                            Keep me signed in
-                        </label>
-                    </div>
-
-                    <button type="submit" class="btn btn-login" id="loginBtn">
-                        <span class="btn-text">
-                            <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
-                        </span>
-                        <span class="spinner spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    </button>
-
-                    <div class="forgot-password">
-                        <a href="#" id="forgotPasswordLink">
-                            <i class="bi bi-question-circle me-1"></i>Forgot your password?
-                        </a>
-                    </div>
-                </form>
-            </div>
-
-            <div class="login-footer">
-                <div class="security-features">
-                    <div class="security-feature">
-                        <i class="bi bi-shield-check"></i>
-                        <span>256-bit Encryption</span>
-                    </div>
-                    <div class="security-feature">
-                        <i class="bi bi-patch-check-fill"></i>
-                        <span>2FA Enabled</span>
-                    </div>
-                    <div class="security-feature">
-                        <i class="bi bi-lock-fill"></i>
-                        <span>Secure Access</span>
-                    </div>
-                </div>
-                <small class="d-block text-muted mt-2">
-                    <i class="bi bi-info-circle me-1"></i>
-                    This system is for authorized UN personnel only. Unauthorized access is prohibited.
-                </small>
-            </div>
-
+    <!-- Brand above card -->
+    <div class="brand">
+        <div class="brand-logo">
+            <img src="{% static 'img/un-logo.png' %}" alt="United Nations">
+            <span class="wordmark">UNPASS</span>
         </div>
+        <p class="brand-sub">Unified Platform for Seamless Access, Security &amp; Operations</p>
+    </div>
+
+    <!-- Login card -->
+    <div class="card">
+
+        <div class="card-head">
+            <div class="eyebrow">
+                <i class="bi bi-shield-lock-fill"></i>Secure Portal
+            </div>
+            <h1 class="card-title">Welcome back</h1>
+            <p class="card-subtitle">Sign in with your UN credentials to continue.</p>
+        </div>
+
+        <div class="card-body">
+
+            {% if messages %}
+            <div class="alerts">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}" role="alert">
+                    {% if 'error' in message.tags or 'danger' in message.tags %}<i class="bi bi-exclamation-circle-fill"></i>
+                    {% elif 'success' in message.tags %}<i class="bi bi-check-circle-fill"></i>
+                    {% elif 'warning' in message.tags %}<i class="bi bi-exclamation-triangle-fill"></i>
+                    {% else %}<i class="bi bi-info-circle-fill"></i>{% endif %}
+                    <span>{{ message }}</span>
+                    <button class="alert-close" aria-label="Dismiss"><i class="bi bi-x-lg" style="font-size:.75rem;"></i></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if form.non_field_errors %}
+            <div class="alerts">
+                {% for error in form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-circle-fill"></i>
+                    <span>{{ error }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="post" id="loginForm" novalidate>
+                {% csrf_token %}
+
+                <!-- Username -->
+                <div class="field">
+                    <label class="field-label" for="id_username">Username or Email</label>
+                    <div class="field-wrap">
+                        <i class="bi bi-person field-icon"></i>
+                        <input type="text"
+                               class="field-input{% if form.login.errors %} is-invalid{% endif %}"
+                               id="id_username"
+                               name="login"
+                               placeholder="Enter your username"
+                               autocomplete="username"
+                               value="{{ form.login.value|default:'' }}"
+                               required>
+                    </div>
+                    {% if form.login.errors %}
+                    <div class="field-error">{% for e in form.login.errors %}{{ e }}{% endfor %}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Password -->
+                <div class="field">
+                    <label class="field-label" for="id_password">Password</label>
+                    <div class="field-wrap">
+                        <i class="bi bi-lock field-icon"></i>
+                        <input type="password"
+                               class="field-input"
+                               id="id_password"
+                               name="password"
+                               placeholder="Enter your password"
+                               autocomplete="current-password"
+                               required>
+                        <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password">
+                            <i class="bi bi-eye" id="pwIcon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Remember + Forgot -->
+                <div class="options-row">
+                    <label class="remember">
+                        <input type="checkbox" name="remember" id="rememberMe">
+                        <span>Keep me signed in</span>
+                    </label>
+
+                    <div class="forgot-wrap">
+                        <a href="#" class="forgot-link" id="forgotBtn" aria-expanded="false">Forgot password?</a>
+                        <div class="forgot-popover" id="forgotPopover" role="tooltip">
+                            <strong>Password Recovery</strong>
+                            Contact your IT department or system administrator to reset your credentials.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit -->
+                <button type="submit" class="btn-sign" id="loginBtn">
+                    <span class="btn-inner">
+                        <i class="bi bi-box-arrow-in-right"></i>Sign In
+                    </span>
+                    <span class="btn-loader" aria-hidden="true">
+                        <span class="spinner-border text-white" role="status"></span>
+                    </span>
+                </button>
+
+                <div class="sec-note">
+                    <i class="bi bi-shield-check"></i>
+                    <span>For <strong>authorized UN personnel only</strong>. All access is monitored and logged.</span>
+                </div>
+
+            </form>
+        </div>
+
+        <div class="card-foot">
+            <span class="foot-copy">&copy; {% now "Y" %} United Nations · UNPASS</span>
+            <div class="foot-links">
+                <a href="#">Privacy</a>
+                <a href="#">Terms</a>
+                <a href="#">Support</a>
+            </div>
+        </div>
+
+    </div><!-- /card -->
+
+    <!-- Trust badges below card -->
+    <div class="trust-strip">
+        <div class="trust-item"><i class="bi bi-shield-lock-fill"></i><span>256-bit TLS</span></div>
+        <div class="trust-item"><i class="bi bi-fingerprint"></i><span>2-Factor Auth</span></div>
+        <div class="trust-item"><i class="bi bi-eye-slash-fill"></i><span>Zero Data Sharing</span></div>
     </div>
 
 </div>
 
-<!-- ===== FOOTER ===== -->
-<footer class="unpass-footer">
-    <div>
-        &copy; {% now "Y" %} United Nations • UNPASS
-    </div>
-    <div class="footer-links">
-        <a href="#">Privacy Policy</a>
-        <a href="#">Terms of Service</a>
-        <a href="#">Support</a>
-        <a href="#">Contact IT</a>
-    </div>
-</footer>
-
-</div> <!-- End main-container -->
-
-<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // Auto-focus username field
-        const usernameField = document.getElementById('id_username');
-        usernameField.focus();
+(function () {
+    'use strict';
 
-        // Form submission with loading state
-        const loginForm = document.getElementById('loginForm');
-        const loginBtn = document.getElementById('loginBtn');
+    /* Auto-focus */
+    const uField = document.getElementById('id_username');
+    const pField = document.getElementById('id_password');
+    if (uField) { uField.value ? pField?.focus() : uField.focus(); }
 
-        loginForm.addEventListener('submit', (e) => {
-            // Add loading state to button
-            loginBtn.classList.add('loading');
-            loginBtn.disabled = true;
+    /* Password toggle */
+    const pwToggle = document.getElementById('pwToggle');
+    const pwIcon   = document.getElementById('pwIcon');
+    if (pwToggle && pField) {
+        pwToggle.addEventListener('click', function () {
+            const show = pField.type === 'password';
+            pField.type = show ? 'text' : 'password';
+            pwIcon.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+            pwToggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
         });
+    }
 
-        // Input validation feedback
-        const inputs = document.querySelectorAll('.form-control');
-        inputs.forEach(input => {
-            input.addEventListener('blur', () => {
-                if (input.value.trim() !== '') {
-                    input.style.borderColor = 'var(--success-green)';
-                } else {
-                    input.style.borderColor = '#e9ecef';
-                }
-            });
-
-            input.addEventListener('input', () => {
-                if (input.style.borderColor === 'var(--error-red)') {
-                    input.style.borderColor = '#e9ecef';
-                }
-            });
+    /* Field validation states on blur */
+    document.querySelectorAll('.field-input').forEach(function (input) {
+        input.addEventListener('blur', function () {
+            if (this.value.trim()) { this.classList.add('is-valid'); this.classList.remove('is-invalid'); }
+            else { this.classList.remove('is-valid'); }
         });
+        input.addEventListener('input', function () { this.classList.remove('is-valid', 'is-invalid'); });
+    });
 
-        // Forgot password handler
-        const forgotPasswordLink = document.getElementById('forgotPasswordLink');
-        forgotPasswordLink.addEventListener('click', (e) => {
+    /* Form submit — loading state */
+    const form = document.getElementById('loginForm');
+    const btn  = document.getElementById('loginBtn');
+    form.addEventListener('submit', function (e) {
+        if (!form.checkValidity()) { e.preventDefault(); return; }
+        btn.classList.add('loading');
+        btn.disabled = true;
+    });
+
+    /* Alert dismiss */
+    document.querySelectorAll('.alert-close').forEach(function (x) {
+        x.addEventListener('click', function () {
+            const el = this.closest('.alert');
+            if (!el) return;
+            el.style.transition = 'opacity .2s, transform .2s';
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-5px)';
+            setTimeout(function () { el.remove(); }, 220);
+        });
+    });
+
+    /* Forgot password popover */
+    const forgotBtn     = document.getElementById('forgotBtn');
+    const forgotPopover = document.getElementById('forgotPopover');
+    if (forgotBtn && forgotPopover) {
+        forgotBtn.addEventListener('click', function (e) {
             e.preventDefault();
-            // You can redirect to a forgot password page or show a modal
-            alert('Password recovery will be sent to your registered email address. Please contact IT support if you need assistance.');
+            const shown = forgotPopover.classList.toggle('show');
+            this.setAttribute('aria-expanded', shown ? 'true' : 'false');
         });
-
-        // Keyboard accessibility improvements
-        document.addEventListener('keydown', (e) => {
-            // Allow form submission with Enter key
-            if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
-                loginForm.dispatchEvent(new Event('submit'));
+        document.addEventListener('click', function (e) {
+            if (!forgotBtn.contains(e.target) && !forgotPopover.contains(e.target)) {
+                forgotPopover.classList.remove('show');
+                forgotBtn.setAttribute('aria-expanded', 'false');
             }
         });
+    }
 
-        // Add smooth scroll behavior
-        document.documentElement.style.scrollBehavior = 'smooth';
-    });
+})();
 </script>
-
 </body>
 </html>

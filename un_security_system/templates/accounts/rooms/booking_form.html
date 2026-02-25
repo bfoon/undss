@@ -372,6 +372,175 @@
         animation: slideDown 0.3s ease;
     }
 
+    /* Monthly-mode sub-selector */
+    .monthly-mode-selector {
+        display: none;
+        margin-top: 1rem;
+    }
+
+    .monthly-mode-selector.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+
+    .monthly-mode-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .monthly-mode-option {
+        position: relative;
+    }
+
+    .monthly-mode-option input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+    }
+
+    .monthly-mode-option label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0.85rem 0.5rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s;
+        gap: 0.4rem;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .monthly-mode-option label i {
+        font-size: 1.3rem;
+        color: #9ca3af;
+    }
+
+    .monthly-mode-option input:checked + label {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+        color: #667eea;
+    }
+
+    .monthly-mode-option input:checked + label i {
+        color: #667eea;
+    }
+
+    .monthly-mode-option label:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+    }
+
+    .monthly-weekday-pickers {
+        display: none;
+    }
+
+    .monthly-weekday-pickers.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+
+    .week-position-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .week-position-option {
+        position: relative;
+    }
+
+    .week-position-option input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+    }
+
+    .week-position-option label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.6rem 0.25rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: #6b7280;
+        text-align: center;
+    }
+
+    .week-position-option input:checked + label {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .week-position-option label:hover {
+        border-color: #667eea;
+        transform: translateY(-1px);
+    }
+
+    .monthly-weekday-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 0.5rem;
+    }
+
+    .monthly-weekday-option {
+        position: relative;
+    }
+
+    .monthly-weekday-option input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+    }
+
+    .monthly-weekday-option label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.6rem 0.25rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: #6b7280;
+    }
+
+    .monthly-weekday-option input:checked + label {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .monthly-weekday-option label:hover {
+        border-color: #667eea;
+        transform: translateY(-1px);
+    }
+
+    .monthly-preview-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 20px;
+        padding: 0.3rem 0.9rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-top: 0.75rem;
+    }
+
     .weekdays-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
@@ -745,6 +914,102 @@
                             {% endif %}
                         </div>
 
+                        <!-- Monthly recurrence mode (only for monthly) -->
+                        <div class="monthly-mode-selector" id="monthlyModeSelector">
+                            <label class="form-label">
+                                <i class="bi bi-calendar3"></i>
+                                Monthly Repeat Pattern
+                            </label>
+                            <div class="monthly-mode-grid">
+                                <div class="monthly-mode-option">
+                                    <input type="radio" name="monthly_type" value="day" id="monthly-type-day" checked>
+                                    <label for="monthly-type-day">
+                                        <i class="bi bi-calendar-date"></i>
+                                        Same day of month
+                                        <small style="font-weight:400;color:#9ca3af">e.g. the 15th</small>
+                                    </label>
+                                </div>
+                                <div class="monthly-mode-option">
+                                    <input type="radio" name="monthly_type" value="weekday" id="monthly-type-weekday">
+                                    <label for="monthly-type-weekday">
+                                        <i class="bi bi-calendar-week"></i>
+                                        Specific weekday
+                                        <small style="font-weight:400;color:#9ca3af">e.g. last Thursday</small>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Weekday pickers — shown when "specific weekday" is selected -->
+                            <div class="monthly-weekday-pickers" id="monthlyWeekdayPickers">
+                                <div class="mb-2">
+                                    <label class="form-label mb-1" style="font-size:0.85rem;text-transform:none;color:#374151;">
+                                        Which occurrence?
+                                    </label>
+                                    <div class="week-position-grid">
+                                        <div class="week-position-option">
+                                            <input type="radio" name="monthly_week" value="1" id="mw-first">
+                                            <label for="mw-first">1st</label>
+                                        </div>
+                                        <div class="week-position-option">
+                                            <input type="radio" name="monthly_week" value="2" id="mw-second">
+                                            <label for="mw-second">2nd</label>
+                                        </div>
+                                        <div class="week-position-option">
+                                            <input type="radio" name="monthly_week" value="3" id="mw-third">
+                                            <label for="mw-third">3rd</label>
+                                        </div>
+                                        <div class="week-position-option">
+                                            <input type="radio" name="monthly_week" value="4" id="mw-fourth">
+                                            <label for="mw-fourth">4th</label>
+                                        </div>
+                                        <div class="week-position-option">
+                                            <input type="radio" name="monthly_week" value="-1" id="mw-last">
+                                            <label for="mw-last">Last</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="form-label mb-1" style="font-size:0.85rem;text-transform:none;color:#374151;">
+                                        Which day?
+                                    </label>
+                                    <div class="monthly-weekday-grid">
+                                        <div class="monthly-weekday-option">
+                                            <input type="radio" name="monthly_weekday" value="0" id="mwd-mon">
+                                            <label for="mwd-mon">Mon</label>
+                                        </div>
+                                        <div class="monthly-weekday-option">
+                                            <input type="radio" name="monthly_weekday" value="1" id="mwd-tue">
+                                            <label for="mwd-tue">Tue</label>
+                                        </div>
+                                        <div class="monthly-weekday-option">
+                                            <input type="radio" name="monthly_weekday" value="2" id="mwd-wed">
+                                            <label for="mwd-wed">Wed</label>
+                                        </div>
+                                        <div class="monthly-weekday-option">
+                                            <input type="radio" name="monthly_weekday" value="3" id="mwd-thu">
+                                            <label for="mwd-thu">Thu</label>
+                                        </div>
+                                        <div class="monthly-weekday-option">
+                                            <input type="radio" name="monthly_weekday" value="4" id="mwd-fri">
+                                            <label for="mwd-fri">Fri</label>
+                                        </div>
+                                        <div class="monthly-weekday-option">
+                                            <input type="radio" name="monthly_weekday" value="5" id="mwd-sat">
+                                            <label for="mwd-sat">Sat</label>
+                                        </div>
+                                        <div class="monthly-weekday-option">
+                                            <input type="radio" name="monthly_weekday" value="6" id="mwd-sun">
+                                            <label for="mwd-sun">Sun</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Live human-readable preview -->
+                                <div id="monthlyPatternPreview" style="margin-top:0.75rem;display:none;">
+                                    <span class="monthly-preview-badge" id="monthlyPatternBadge"></span>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- End Date -->
                         <div class="mb-3">
                             <label class="form-label">
@@ -896,10 +1161,50 @@ document.addEventListener('DOMContentLoaded', function() {
     const recurringOptions = document.getElementById('recurringOptions');
     const frequencyRadios = document.querySelectorAll('input[name="frequency"]');
     const weekdaysSelector = document.getElementById('weekdaysSelector');
+    const monthlyModeSelector = document.getElementById('monthlyModeSelector');
+    const monthlyWeekdayPickers = document.getElementById('monthlyWeekdayPickers');
     const intervalLabel = document.getElementById('intervalLabel');
     const untilInput = document.querySelector('input[name="until"]');
     const occurrencePreview = document.getElementById('occurrencePreview');
     const occurrenceCount = document.getElementById('occurrenceCount');
+
+    // ── Monthly weekday helpers ──────────────────────────────────────────
+    const WEEK_LABELS = { '1': 'first', '2': 'second', '3': 'third', '4': 'fourth', '-1': 'last' };
+    const WEEKDAY_LABELS = { '0': 'Monday', '1': 'Tuesday', '2': 'Wednesday', '3': 'Thursday',
+                              '4': 'Friday', '5': 'Saturday', '6': 'Sunday' };
+
+    function updateMonthlyPreview() {
+        const weekVal = document.querySelector('input[name="monthly_week"]:checked')?.value;
+        const wdVal   = document.querySelector('input[name="monthly_weekday"]:checked')?.value;
+        const preview = document.getElementById('monthlyPatternPreview');
+        const badge   = document.getElementById('monthlyPatternBadge');
+        if (weekVal && wdVal) {
+            badge.textContent = `Every ${WEEK_LABELS[weekVal] || weekVal} ${WEEKDAY_LABELS[wdVal] || wdVal} of the month`;
+            preview.style.display = 'block';
+        } else {
+            preview.style.display = 'none';
+        }
+        calculateOccurrences();
+    }
+
+    function toggleMonthlyWeekdayPickers() {
+        const mode = document.querySelector('input[name="monthly_type"]:checked')?.value;
+        if (mode === 'weekday') {
+            monthlyWeekdayPickers.classList.add('show');
+        } else {
+            monthlyWeekdayPickers.classList.remove('show');
+            document.getElementById('monthlyPatternPreview').style.display = 'none';
+        }
+        calculateOccurrences();
+    }
+
+    document.querySelectorAll('input[name="monthly_type"]').forEach(r => {
+        r.addEventListener('change', toggleMonthlyWeekdayPickers);
+    });
+
+    document.querySelectorAll('input[name="monthly_week"], input[name="monthly_weekday"]').forEach(r => {
+        r.addEventListener('change', updateMonthlyPreview);
+    });
 
     // Set minimum date to today
     if (dateInput) {
@@ -968,11 +1273,20 @@ document.addEventListener('DOMContentLoaded', function() {
             const frequency = this.value;
             updateIntervalLabel(frequency);
 
-            // Show/hide weekdays selector
+            // Show/hide weekdays selector (weekly only)
             if (frequency === 'weekly') {
                 weekdaysSelector.classList.add('show');
             } else {
                 weekdaysSelector.classList.remove('show');
+            }
+
+            // Show/hide monthly mode selector (monthly only)
+            if (frequency === 'monthly') {
+                monthlyModeSelector.classList.add('show');
+                toggleMonthlyWeekdayPickers();
+            } else {
+                monthlyModeSelector.classList.remove('show');
+                monthlyWeekdayPickers.classList.remove('show');
             }
 
             calculateOccurrences();
@@ -1163,7 +1477,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     r.checked = false;
                     r.disabled = true;
                 });
-                document.querySelectorAll('input[name="interval"], input[name="until"], input[name="weekdays"]').forEach(function(el) {
+                document.querySelectorAll(
+                    'input[name="interval"], input[name="until"], input[name="weekdays"],' +
+                    'input[name="monthly_type"], input[name="monthly_week"], input[name="monthly_weekday"]'
+                ).forEach(function(el) {
                     el.disabled = true;
                 });
             }

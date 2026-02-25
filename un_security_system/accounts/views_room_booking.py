@@ -139,7 +139,11 @@ def notify_requester_series_approved(series):
     if not series.requested_by.email:
         return
 
-    approver_name = series.approved_by.get_full_name() if series.approved_by else "Approver"
+    approver_name = (
+        series.approved_by.get_full_name() or series.approved_by.username
+        if series.approved_by
+        else "System (auto-approved)"
+    )
     occurrence_count = series.occurrences.count()
 
     subject = f"[Room Booking] Recurring series APPROVED: {series.room.name}"
@@ -212,7 +216,11 @@ def notify_requester_booking_approved(booking):
     if not booking.requested_by.email:
         return
 
-    approver_name = booking.approved_by.get_full_name() if booking.approved_by else "Approver"
+    approver_name = (
+        booking.approved_by.get_full_name() or booking.approved_by.username
+        if booking.approved_by
+        else "System (auto-approved)"
+    )
     subject = f"[Room Booking] Approved: {booking.room.name} on {booking.date}"
     message = (
         f"Dear {booking.requested_by.get_full_name() or booking.requested_by.username},\n\n"
@@ -372,9 +380,53 @@ def compute_initial_status(room):
     return "pending"
 
 
-def iter_recurrence_dates(start_date, end_date, frequency, interval=1, weekdays=None):
+def _nth_weekday_of_month(year, month, weekday, n):
     """
-    weekdays: list[int] for weekly, e.g. [0,2,4]
+    Return the date of the nth occurrence of `weekday` (0=Mon..6=Sun) in year/month.
+    n=1 → first, n=2 → second, n=3 → third, n=4 → fourth, n=-1 → last.
+    Returns None if that occurrence doesn't exist (e.g. 5th Monday in a short month).
+    """
+    import calendar as _cal
+    if n == -1:
+        last_day = _cal.monthrange(year, month)[1]
+        d = date_cls(year, month, last_day)
+        while d.weekday() != weekday:
+            d -= timedelta(days=1)
+        return d
+    # Find the first occurrence of weekday in the month
+    first = date_cls(year, month, 1)
+    delta = (weekday - first.weekday()) % 7
+    first_occ = first + timedelta(days=delta)
+    target = first_occ + timedelta(weeks=n - 1)
+    if target.month != month:
+        return None  # e.g. "5th Monday" doesn't exist this month
+    return target
+
+
+def _advance_months(d, interval):
+    """Advance date d by `interval` months, clamping day to last day of target month."""
+    import calendar as _cal
+    m = (d.month - 1 + interval)
+    year = d.year + (m // 12)
+    month = (m % 12) + 1
+    last = _cal.monthrange(year, month)[1]
+    return date_cls(year, month, min(d.day, last))
+
+
+def iter_recurrence_dates(
+    start_date, end_date, frequency, interval=1, weekdays=None,
+    monthly_type="day", monthly_week=None, monthly_weekday=None,
+):
+    """
+    Yield dates in the recurrence series.
+
+    Parameters
+    ----------
+    weekdays        : list[int] for weekly, e.g. [0, 2, 4]  (Mon=0 … Sun=6)
+    monthly_type    : 'day'     → fixed day-of-month (legacy behaviour)
+                      'weekday' → nth weekday of month (e.g. last Thursday)
+    monthly_week    : 1/2/3/4/-1  (used when monthly_type='weekday')
+    monthly_weekday : 0–6         (used when monthly_type='weekday')
     """
     if not frequency:
         yield start_date
@@ -411,23 +463,35 @@ def iter_recurrence_dates(start_date, end_date, frequency, interval=1, weekdays=
             cur = week_start + timedelta(days=7 * interval)
 
     elif frequency == "monthly":
-        cur = start_date
-        day = start_date.day
-        while cur <= end_date:
-            yield cur
-            # advance by N months (safe demonstrates approach; you can use dateutil if installed)
-            month = (cur.month - 1 + interval)
-            year = cur.year + (month // 12)
-            month = (month % 12) + 1
-            # clamp day
-            new_day = min(day, 28)
-            cur = date_cls(year, month, new_day)
+        if monthly_type == "weekday" and monthly_week is not None and monthly_weekday is not None:
+            # ---- nth weekday of month (e.g. "last Thursday") ----
+            cur_year, cur_month = start_date.year, start_date.month
+            while True:
+                d = _nth_weekday_of_month(cur_year, cur_month, monthly_weekday, monthly_week)
+                if d is not None and d >= start_date and d <= end_date:
+                    yield d
+                # Advance by `interval` months
+                m = (cur_month - 1 + interval)
+                cur_year = cur_year + (m // 12)
+                cur_month = (m % 12) + 1
+                # Stop if the start of the next candidate month is already past end_date
+                if date_cls(cur_year, cur_month, 1) > end_date:
+                    break
+        else:
+            # ---- fixed day-of-month (legacy) ----
+            cur = start_date
+            day = start_date.day
+            while cur <= end_date:
+                yield cur
+                cur = _advance_months(date_cls(cur.year, cur.month, day), interval)
 
     elif frequency == "yearly":
         cur = start_date
         while cur <= end_date:
             yield cur
-            cur = date_cls(cur.year + interval, cur.month, min(cur.day, 28))
+            import calendar as _cal
+            last = _cal.monthrange(cur.year + interval, cur.month)[1]
+            cur = date_cls(cur.year + interval, cur.month, min(cur.day, last))
 
 
 # ======================= VIEWS =======================
@@ -778,6 +842,13 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
             weekdays_raw = form.cleaned_data.get("weekdays", [])
             weekdays = [int(x) for x in weekdays_raw] if weekdays_raw else []
 
+            # Monthly-weekday fields
+            monthly_type = form.cleaned_data.get("monthly_type", "day") or "day"
+            monthly_week_raw = form.cleaned_data.get("monthly_week")
+            monthly_weekday_raw = form.cleaned_data.get("monthly_weekday")
+            monthly_week = int(monthly_week_raw) if monthly_week_raw not in (None, "") else None
+            monthly_weekday = int(monthly_weekday_raw) if monthly_weekday_raw not in (None, "") else None
+
             with transaction.atomic():
                 # Create series with approval status
                 series = RoomBookingSeries.objects.create(
@@ -792,11 +863,19 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                     frequency=frequency,
                     interval=interval,
                     weekdays_csv=",".join(str(x) for x in (weekdays or [])),
+                    monthly_type=monthly_type,
+                    monthly_week=monthly_week,
+                    monthly_weekday=monthly_weekday,
                     status=status,  # NEW: Set series status
                 )
 
                 created = 0
-                for d in iter_recurrence_dates(series.start_date, series.end_date, frequency, interval, weekdays):
+                for d in iter_recurrence_dates(
+                    series.start_date, series.end_date, frequency, interval, weekdays,
+                    monthly_type=monthly_type,
+                    monthly_week=monthly_week,
+                    monthly_weekday=monthly_weekday,
+                ):
                     b = RoomBooking(
                         series=series,
                         room=room,
@@ -812,10 +891,15 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                     b.save()
                     created += 1
 
-                # Send notifications
+                # Send notifications — use the right email for pending vs auto-approved
                 if status == "pending":
-                    notify_approvers_new_series(series)  # NEW: Series notification
-                notify_requester_series_submitted(series)  # NEW: Series notification
+                    notify_approvers_new_series(series)
+                    notify_requester_series_submitted(series)
+                else:
+                    # Auto-approved: optionally still notify approvers for visibility
+                    if getattr(room, "auto_approve_notify_approvers", False):
+                        notify_approvers_new_series(series)
+                    notify_requester_series_approved(series)
 
                 if status == "approved":
                     messages.success(self.request,
@@ -835,14 +919,15 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
 
         if status == "pending":
             notify_approvers_new_booking(self.object)
+            notify_requester_booking_submitted(self.object)
             messages.success(self.request, "Booking request submitted and awaiting approval.")
         else:
             self.object.approve(user=None)
             if getattr(room, "auto_approve_notify_approvers", False):
                 notify_approvers_new_booking(self.object)
+            notify_requester_booking_approved(self.object)
             messages.success(self.request, "Booking auto-approved.")
 
-        notify_requester_booking_submitted(self.object)
         return response
 
 

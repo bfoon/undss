@@ -506,6 +506,29 @@ class RoomBookingSeries(models.Model):
     # for weekly recurrence (Mon=0 ... Sun=6), store CSV: "0,2,4"
     weekdays_csv = models.CharField(max_length=50, blank=True, default="")
 
+    # for monthly recurrence: either 'day' (fixed day-of-month) or 'weekday' (nth weekday)
+    MONTHLY_TYPE_CHOICES = (
+        ("day", "On a specific day of the month"),
+        ("weekday", "On a specific weekday of the month"),
+    )
+    monthly_type = models.CharField(
+        max_length=10,
+        choices=MONTHLY_TYPE_CHOICES,
+        default="day",
+        blank=True,
+        help_text="How the monthly recurrence is determined",
+    )
+    monthly_week = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="1=first, 2=second, 3=third, 4=fourth, -1=last (used when monthly_type=weekday)",
+    )
+    monthly_weekday = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun (used when monthly_type=weekday)",
+    )
+
     # NEW: Approval fields for the series
     STATUS_CHOICES = (
         ("pending", "Pending approval"),

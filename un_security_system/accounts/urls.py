@@ -131,11 +131,11 @@ urlpatterns = [
         views_hr.idcard_request_mark_printed,
         name='idcard_request_mark_printed',
     ),
-path(
-    'hr/idcard/requests/<int:pk>/issued/',
-    views_hr.idcard_request_mark_issued,
-    name='idcard_request_mark_issued'
-),
+    path(
+        'hr/idcard/requests/<int:pk>/issued/',
+        views_hr.idcard_request_mark_issued,
+        name='idcard_request_mark_issued'
+    ),
 
     # ------------------------------------------------------------------
     # Activity Log

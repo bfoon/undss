@@ -462,6 +462,47 @@ class RoomBookingForm(forms.ModelForm):
         help_text="Select weekdays (for weekly recurrence)"
     )
 
+    # ── Monthly recurrence: nth-weekday pattern ──────────────────────────
+    # e.g. "last Thursday" = monthly_type=weekday, monthly_week=-1, monthly_weekday=3
+    MONTHLY_TYPE_CHOICES = (
+        ("day", "Same day of month"),
+        ("weekday", "Specific weekday of month"),
+    )
+    monthly_type = forms.ChoiceField(
+        choices=MONTHLY_TYPE_CHOICES,
+        required=False,
+        initial="day",
+        widget=forms.RadioSelect,
+        help_text="For monthly recurrence: repeat on the same date, or on a specific weekday?",
+    )
+
+    WEEK_POSITION_CHOICES = (
+        (1,  "1st"),
+        (2,  "2nd"),
+        (3,  "3rd"),
+        (4,  "4th"),
+        (-1, "Last"),
+    )
+    monthly_week = forms.TypedChoiceField(
+        choices=WEEK_POSITION_CHOICES,
+        coerce=int,
+        required=False,
+        widget=forms.RadioSelect,
+        help_text="Which occurrence within the month (1st, 2nd … last)",
+    )
+
+    WEEKDAY_CHOICES = (
+        (0, "Mon"), (1, "Tue"), (2, "Wed"),
+        (3, "Thu"), (4, "Fri"), (5, "Sat"), (6, "Sun"),
+    )
+    monthly_weekday = forms.TypedChoiceField(
+        choices=WEEKDAY_CHOICES,
+        coerce=int,
+        required=False,
+        widget=forms.RadioSelect,
+        help_text="Which day of the week (Mon–Sun)",
+    )
+
     class Meta:
         model = RoomBooking
         fields = [
@@ -498,6 +539,21 @@ class RoomBookingForm(forms.ModelForm):
 
         if until and cleaned.get("date") and until < cleaned.get("date"):
             raise ValidationError("End date cannot be before the start date.")
+
+        # Validate monthly-weekday mode fields
+        if frequency == "monthly":
+            monthly_type = cleaned.get("monthly_type") or "day"
+            if monthly_type == "weekday":
+                monthly_week = cleaned.get("monthly_week")
+                monthly_weekday = cleaned.get("monthly_weekday")
+                if monthly_week is None or monthly_week == "":
+                    raise ValidationError(
+                        "Please select which occurrence (1st, 2nd, 3rd, 4th, or last) for the monthly recurrence."
+                    )
+                if monthly_weekday is None or monthly_weekday == "":
+                    raise ValidationError(
+                        "Please select which day of the week for the monthly recurrence."
+                    )
 
         return cleaned
 
