@@ -1,3 +1,4 @@
+{% if is_manager %}
 <div class="mb-3">
   <h6 class="mb-0 fw-semibold">Pending Asset Change Requests</h6>
   <small class="text-muted">
@@ -28,7 +29,7 @@
               {{ cr.asset.name }}
             </a>
             <div class="small text-muted">
-              {{ cr.asset.category.name }} • {{ cr.asset.unit.name|default:"Unallocated/Core" }}
+              {{ cr.asset.category.name }} &bull; {{ cr.asset.unit.name|default:"Unallocated/Core" }}
             </div>
           </td>
 
@@ -44,7 +45,7 @@
                 {% endfor %}
               </ul>
             {% else %}
-              —
+              &mdash;
             {% endif %}
           </td>
 
@@ -79,3 +80,9 @@
     </tbody>
   </table>
 </div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-lock fs-2 d-block mb-2"></i>
+  <p class="mb-0">Access restricted. Only unit heads, operations managers, and administrators can approve asset changes.</p>
+</div>
+{% endif %}

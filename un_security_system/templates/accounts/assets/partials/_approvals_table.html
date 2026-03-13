@@ -1,7 +1,9 @@
+{% if is_manager %}
 <div class="mb-3">
   <h6 class="mb-0 fw-semibold">My Approval Queue</h6>
   <small class="text-muted">Approve requests for your unit (or core assets if you are Operations Manager).</small>
 </div>
+
 {% if is_ops %}
   <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -52,7 +54,6 @@
   </div>
 {% endif %}
 
-
 <div class="table-responsive">
   <table class="table align-middle">
     <thead>
@@ -100,3 +101,9 @@
     </tbody>
   </table>
 </div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-lock fs-2 d-block mb-2"></i>
+  <p class="mb-0">Access restricted. Only unit heads, operations managers, and administrators can approve requests.</p>
+</div>
+{% endif %}

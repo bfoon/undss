@@ -235,6 +235,7 @@ urlpatterns = [
     # Main portal (Dashboard + Tabs + Actions)
     path("assets/", view_asset_management.view_asset_management, name="asset_management"),
     path("assets/<int:asset_id>/", view_asset_management.asset_detail, name="asset_detail"),
+    path('assets/supply/<int:item_id>/', view_asset_management.consumable_item_detail, name='consumable_item_detail'),
     path("assets/report/", view_asset_management.asset_report, name="asset_report"),
     path("assets/labels.pdf", view_asset_management.asset_labels_pdf, name="asset_labels_pdf"),
     path("assets/verify/", asset_verify, name="asset_verify"),

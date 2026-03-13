@@ -1,0 +1,254 @@
+{# ---- Request Supplies modal ---- #}
+<div class="modal fade" id="modalRequestConsumable" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-un-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-cart-plus me-2"></i>Request Supplies</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="formRequestConsumable">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_consumable_request">
+        <div class="modal-body">
+          <p class="text-muted small mb-3">
+            Select the items you need and specify quantities. Your request will be reviewed by a manager.
+          </p>
+
+          {# Dynamic line items #}
+          <div id="consumableLines">
+            <div class="consumable-line row g-2 align-items-end mb-2">
+              <div class="col-7">
+                <label class="form-label form-label-sm">Item</label>
+                <select name="consumable_item_id" class="form-select form-select-sm" required>
+                  <option value="">— Select item —</option>
+                  {% regroup consumable_items by category as grouped_items %}
+                  {% for group in grouped_items %}
+                    <optgroup label="{{ group.grouper.name }}">
+                      {% for item in group.list %}
+                        <option value="{{ item.id }}"
+                                {% if item.is_out_of_stock %}disabled{% endif %}>
+                          {{ item.name }}
+                          ({{ item.stock_qty }} {{ item.unit_of_measure }} available)
+                          {% if item.is_out_of_stock %}— OUT OF STOCK{% elif item.is_low_stock %}⚠ Low{% endif %}
+                        </option>
+                      {% endfor %}
+                    </optgroup>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-3">
+                <label class="form-label form-label-sm">Quantity</label>
+                <input type="number" name="consumable_qty" value="1" min="1"
+                       class="form-control form-control-sm" required>
+              </div>
+              <div class="col-2">
+                <button type="button" class="btn btn-sm btn-outline-danger w-100 remove-consumable-line">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn btn-sm btn-outline-primary mt-1" id="addConsumableLine">
+            <i class="bi bi-plus-lg me-1"></i> Add Another Item
+          </button>
+
+          <div class="mt-3">
+            <label class="form-label form-label-sm">Notes / Justification <span class="text-muted">(optional)</span></label>
+            <textarea name="notes" class="form-control form-control-sm" rows="2"
+                      placeholder="e.g. Monthly office restocking, urgent request"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-un-primary btn-sm">
+            <i class="bi bi-send me-1"></i> Submit Request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ---- Reject Consumable modal ---- #}
+<div class="modal fade" id="modalRejectConsumable" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Reject Supply Request</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reject_consumable_request">
+        <input type="hidden" name="consumable_request_id" id="rejectConsumableId">
+        <div class="modal-body">
+          <label class="form-label">Reason for rejection <span class="text-danger">*</span></label>
+          <textarea name="reason" class="form-control" rows="3" required
+                    placeholder="Explain why this supply request is being rejected"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger btn-sm">
+            <i class="bi bi-x-lg me-1"></i> Reject Request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ---- Restock Item modal ---- #}
+<div class="modal fade" id="modalRestockItem" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Restock Item</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="restock_consumable_item">
+        <input type="hidden" name="consumable_item_id" id="restockItemId">
+        <div class="modal-body">
+          <p>Restocking: <strong id="restockItemName"></strong></p>
+          <div class="mb-3">
+            <label class="form-label">Quantity to Add <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="number" name="restock_qty" class="form-control" min="1" required placeholder="e.g. 50">
+              <span class="input-group-text" id="restockUnitLabel">units</span>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Note <span class="text-muted small">(optional)</span></label>
+            <input type="text" name="restock_note" class="form-control"
+                   placeholder="e.g. Received from warehouse, PO #1234">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="bi bi-plus-lg me-1"></i> Confirm Restock
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ---- Register Consumable Item modal ---- #}
+<div class="modal fade" id="modalRegisterConsumableItem" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-un-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Register Supply Item</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="register_consumable_item">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Category <span class="text-danger">*</span></label>
+            <select name="consumable_cat_id" class="form-select" required>
+              <option value="">— Select category —</option>
+              {% for cat in consumable_categories %}
+                <option value="{{ cat.id }}">{{ cat.name }} ({{ cat.get_category_type_display }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Item Name <span class="text-danger">*</span></label>
+            <input type="text" name="consumable_item_name" class="form-control" required
+                   placeholder="e.g. A4 Paper Ream, Hand Sanitizer, USB Mouse">
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label class="form-label">Unit of Measure <span class="text-danger">*</span></label>
+              <select name="unit_of_measure" class="form-select">
+                <option value="piece">Piece</option>
+                <option value="box">Box</option>
+                <option value="pack">Pack</option>
+                <option value="ream">Ream</option>
+                <option value="roll">Roll</option>
+                <option value="bottle">Bottle</option>
+                <option value="litre">Litre</option>
+                <option value="set">Set</option>
+                <option value="carton">Carton</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Initial Stock</label>
+              <input type="number" name="initial_stock" class="form-control" value="0" min="0">
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label class="form-label">Low Stock Threshold</label>
+              <input type="number" name="low_stock_threshold" class="form-control" value="5" min="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Max Per Request <span class="text-muted small">(blank = unlimited)</span></label>
+              <input type="number" name="max_per_request" class="form-control" min="1" placeholder="e.g. 10">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Description <span class="text-muted small">(optional)</span></label>
+            <textarea name="item_description" class="form-control form-control-sm" rows="2"
+                      placeholder="Optional: brand, specs, notes"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-un-primary btn-sm">
+            <i class="bi bi-check-lg me-1"></i> Register Item
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ---- Register Consumable Category modal ---- #}
+<div class="modal fade" id="modalRegisterConsumableCategory" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-tags me-2"></i>Add Supply Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="register_consumable_category">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Category Name <span class="text-danger">*</span></label>
+            <input type="text" name="consumable_cat_name" class="form-control" required
+                   placeholder="e.g. Cleaning Supplies, Stationery, IT Accessories">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Type</label>
+            <select name="consumable_cat_type" class="form-select">
+              <option value="office_supply">Office Supply</option>
+              <option value="toiletry">Toiletry / Hygiene</option>
+              <option value="accessory">Accessory / Peripheral</option>
+              <option value="stationery">Stationery</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Description <span class="text-muted small">(optional)</span></label>
+            <textarea name="consumable_cat_desc" class="form-control form-control-sm" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-un-primary btn-sm">
+            <i class="bi bi-check-lg me-1"></i> Add Category
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -25,7 +25,9 @@ from .models import (
     AgencyServiceConfig, AgencyAssetRoles, Unit,
     AssetCategory, Asset, AssetRequest,
     AssetHistory, AssetReturnRequest, AssetChangeRequest, ExitRequest,
-    MobileLine, CellServiceFocalPoint, User, MobileLineReactivationRequest
+    MobileLine, CellServiceFocalPoint, User, MobileLineReactivationRequest,
+    ConsumableCategory, ConsumableItem, ConsumableRequest,
+    ConsumableRequestItem, ConsumableStockLog,
 )
 from .pdf_assets import build_asset_labels_pdf, LabelSpec
 
@@ -1034,6 +1036,377 @@ def view_asset_management(request):
             return redirect("accounts:asset_management")
 
 
+        # ============ CONSUMABLE: Request supplies ============
+        if action == "create_consumable_request":
+            notes = (request.POST.get("notes") or "").strip()
+            item_ids  = request.POST.getlist("consumable_item_id")
+            quantities = request.POST.getlist("consumable_qty")
+
+            if not item_ids:
+                messages.error(request, "Please select at least one item.")
+                return redirect("accounts:asset_management")
+
+            line_data = []
+            errors    = []
+            for item_id, qty_str in zip(item_ids, quantities):
+                try:
+                    qty  = int(qty_str)
+                    item = ConsumableItem.objects.get(id=item_id, agency=agency, is_active=True)
+                except (ValueError, ConsumableItem.DoesNotExist):
+                    errors.append(f"Invalid item or quantity (id={item_id}).")
+                    continue
+                if qty <= 0:
+                    errors.append(f"Quantity for {item.name} must be positive.")
+                    continue
+                if item.max_per_request and qty > item.max_per_request:
+                    errors.append(f"{item.name}: max {item.max_per_request} per request.")
+                    continue
+                if item.is_out_of_stock:
+                    errors.append(f"{item.name} is currently out of stock.")
+                    continue
+                line_data.append((item, qty))
+
+            if errors:
+                for e in errors:
+                    messages.error(request, e)
+                return redirect("accounts:asset_management")
+
+            if not line_data:
+                messages.error(request, "No valid items in your request.")
+                return redirect("accounts:asset_management")
+
+            with transaction.atomic():
+                creq = ConsumableRequest.objects.create(
+                    agency=agency,
+                    requester=user,
+                    unit=getattr(user, "unit", None),
+                    notes=notes,
+                    status="pending",
+                )
+                for item, qty in line_data:
+                    ConsumableRequestItem.objects.create(
+                        request=creq,
+                        item=item,
+                        quantity_requested=qty,
+                    )
+
+            # Notify all approvers: ops manager + requester's unit head (if different)
+            approval_emails = []
+            if roles:
+                if roles.operations_manager and roles.operations_manager.email:
+                    approval_emails.append(roles.operations_manager.email)
+            requester_unit = getattr(user, "unit", None)
+            if requester_unit and requester_unit.unit_head and requester_unit.unit_head.email:
+                if requester_unit.unit_head.email not in approval_emails:
+                    approval_emails.append(requester_unit.unit_head.email)
+            _notify(
+                subject=f"Supply Request #{creq.id} — Pending Approval",
+                to_emails=approval_emails,
+                html_template="emails/consumables/request_submitted.html",
+                ctx={"creq": creq},
+            )
+
+            messages.success(request, f"Supply request #{creq.id} submitted for approval.")
+            return redirect("accounts:asset_management")
+
+        # ============ CONSUMABLE: Approve / reject ============
+        if action in ("approve_consumable_request", "reject_consumable_request"):
+            if not is_manager:
+                messages.error(request, "Only managers can approve supply requests.")
+                return redirect("accounts:asset_management")
+
+            creq_id = (request.POST.get("consumable_request_id") or "").strip()
+            creq    = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
+
+            if creq.status != "pending":
+                messages.info(request, "This supply request has already been processed.")
+                return redirect("accounts:asset_management")
+
+            if action == "reject_consumable_request":
+                reason = (request.POST.get("reason") or "").strip()
+                if not reason:
+                    messages.error(request, "Please provide a rejection reason.")
+                    return redirect("accounts:asset_management")
+                creq.reject(user, reason=reason)
+
+                # Notify requester
+                _notify(
+                    subject=f"Supply Request #{creq.id} — Rejected",
+                    to_emails=[getattr(creq.requester, "email", None)],
+                    html_template="emails/consumables/request_rejected.html",
+                    ctx={
+                        "creq": creq,
+                        "rejected_by": user.get_full_name() or user.username,
+                    },
+                )
+
+                messages.warning(request, f"Supply request #{creq.id} rejected.")
+            else:
+                creq.approve(user)
+
+                # Notify requester
+                _notify(
+                    subject=f"Supply Request #{creq.id} — Approved",
+                    to_emails=[getattr(creq.requester, "email", None)],
+                    html_template="emails/consumables/request_approved.html",
+                    ctx={
+                        "creq": creq,
+                        "approved_by": user.get_full_name() or user.username,
+                    },
+                )
+
+                # Notify ICT to arrange dispatch
+                ict_dispatch_emails = list(roles.ict_custodian.values_list("email", flat=True)) if roles else []
+                _notify(
+                    subject=f"Supply Request #{creq.id} — Ready for Dispatch",
+                    to_emails=ict_dispatch_emails,
+                    html_template="emails/consumables/request_submitted.html",
+                    ctx={"creq": creq},
+                )
+
+                messages.success(request, f"Supply request #{creq.id} approved — awaiting dispatch.")
+
+            return redirect("accounts:asset_management")
+
+        # ============ CONSUMABLE: Cancel (requester) ============
+        if action == "cancel_consumable_request":
+            creq_id = (request.POST.get("consumable_request_id") or "").strip()
+            creq    = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
+
+            if creq.requester_id != user.id and not user.is_superuser:
+                messages.error(request, "You can only cancel your own supply requests.")
+                return redirect("accounts:asset_management")
+
+            if creq.status not in ("pending", "approved"):
+                messages.info(request, "This request cannot be cancelled at this stage.")
+                return redirect("accounts:asset_management")
+
+            creq.status = "cancelled"
+            creq.save(update_fields=["status"])
+            messages.success(request, f"Supply request #{creq.id} cancelled.")
+            return redirect("accounts:asset_management")
+
+        # ============ CONSUMABLE: Dispatch (ICT / Ops) ============
+        if action == "dispatch_consumable":
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Operations Manager can dispatch supplies.")
+                return redirect("accounts:asset_management")
+
+            creq_id = (request.POST.get("consumable_request_id") or "").strip()
+            creq    = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
+
+            if creq.status not in ("approved", "partially_fulfilled"):
+                messages.info(request, "Only approved requests can be dispatched.")
+                return redirect("accounts:asset_management")
+
+            dispatch_note = (request.POST.get("dispatch_note") or "").strip()
+            line_item_ids = request.POST.getlist("line_item_id")
+            dispatch_qtys = request.POST.getlist("dispatch_qty")
+
+            with transaction.atomic():
+                all_fulfilled = True
+                any_dispatched = False
+
+                for li_id, qty_str in zip(line_item_ids, dispatch_qtys):
+                    try:
+                        qty  = int(qty_str)
+                        line = ConsumableRequestItem.objects.select_for_update().get(
+                            id=li_id, request=creq
+                        )
+                    except (ValueError, ConsumableRequestItem.DoesNotExist):
+                        continue
+
+                    if qty <= 0:
+                        continue
+
+                    # Cap at remaining unfulfilled
+                    qty = min(qty, line.remaining)
+                    if qty <= 0:
+                        continue
+
+                    # Check stock
+                    cons_item = ConsumableItem.objects.select_for_update().get(id=line.item_id)
+                    actual_qty = min(qty, cons_item.stock_qty)
+                    if actual_qty <= 0:
+                        continue
+
+                    before = cons_item.stock_qty
+                    cons_item.stock_qty -= actual_qty
+                    cons_item.save(update_fields=["stock_qty"])
+
+                    line.quantity_dispatched += actual_qty
+                    line.save(update_fields=["quantity_dispatched"])
+
+                    ConsumableStockLog.objects.create(
+                        agency=agency,
+                        item=cons_item,
+                        event="dispatched",
+                        quantity_before=before,
+                        quantity_change=-actual_qty,
+                        quantity_after=cons_item.stock_qty,
+                        reference_request=creq,
+                        note=dispatch_note or f"Dispatched for request #{creq.id}",
+                        actor=user,
+                    )
+                    any_dispatched = True
+
+                    if not line.is_fulfilled:
+                        all_fulfilled = False
+
+                if not any_dispatched:
+                    messages.warning(request, "Nothing was dispatched. Check stock levels.")
+                    return redirect("accounts:asset_management")
+
+                # Re-check all lines
+                lines_all = list(creq.line_items.all())
+                all_done  = all(l.is_fulfilled for l in lines_all)
+                creq.status = "fulfilled" if all_done else "partially_fulfilled"
+                creq.save(update_fields=["status"])
+
+            # Notify requester with full dispatch details
+            _notify(
+                subject=f"Your Supply Request #{creq.id} has been dispatched",
+                to_emails=[getattr(creq.requester, "email", None)],
+                html_template="emails/consumables/dispatched.html",
+                ctx={
+                    "creq": creq,
+                    "dispatched_by": user.get_full_name() or user.username,
+                    "dispatched_at": timezone.now(),
+                    "dispatch_note": dispatch_note,
+                },
+            )
+
+            # Low-stock alert to ICT / ops after stock is reduced
+            dispatched_item_ids = [li.item_id for li in creq.line_items.all()]
+            now_low = [
+                i for i in ConsumableItem.objects.filter(
+                    agency=agency, id__in=dispatched_item_ids, is_active=True,
+                )
+                if i.is_low_stock
+            ]
+            if now_low:
+                ict_alert_emails = list(roles.ict_custodian.values_list("email", flat=True)) if roles else []
+                if is_ops and user.email and user.email not in ict_alert_emails:
+                    ict_alert_emails.append(user.email)
+                _notify(
+                    subject=f"[{agency}] Low Stock Alert — {len(now_low)} item(s) need restocking",
+                    to_emails=ict_alert_emails,
+                    html_template="emails/consumables/low_stock_alert.html",
+                    ctx={"creq": creq, "low_stock_items": now_low},
+                )
+
+            messages.success(request, f"Supply request #{creq.id} dispatched successfully.")
+            return redirect("accounts:asset_management")
+
+        # ============ CONSUMABLE: Restock item ============
+        if action == "restock_consumable_item":
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Operations Manager can restock supplies.")
+                return redirect("accounts:asset_management")
+
+            item_id  = (request.POST.get("consumable_item_id") or "").strip()
+            qty_str  = (request.POST.get("restock_qty") or "0").strip()
+            note     = (request.POST.get("restock_note") or "").strip()
+
+            try:
+                qty  = int(qty_str)
+                item = ConsumableItem.objects.get(id=item_id, agency=agency)
+            except (ValueError, ConsumableItem.DoesNotExist):
+                messages.error(request, "Invalid item or quantity.")
+                return redirect("accounts:asset_management")
+
+            if qty <= 0:
+                messages.error(request, "Restock quantity must be a positive number.")
+                return redirect("accounts:asset_management")
+
+            with transaction.atomic():
+                item_locked = ConsumableItem.objects.select_for_update().get(id=item.id)
+                before = item_locked.stock_qty
+                item_locked.stock_qty += qty
+                item_locked.save(update_fields=["stock_qty"])
+
+                ConsumableStockLog.objects.create(
+                    agency=agency,
+                    item=item_locked,
+                    event="restocked",
+                    quantity_before=before,
+                    quantity_change=qty,
+                    quantity_after=item_locked.stock_qty,
+                    note=note or f"Restocked by {user.get_full_name() or user.username}",
+                    actor=user,
+                )
+
+            messages.success(request, f"Restocked {item.name}: +{qty} {item.unit_of_measure}.")
+            return redirect("accounts:asset_management")
+
+        # ============ CONSUMABLE: Register new item ============
+        if action == "register_consumable_item":
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Operations Manager can register supply items.")
+                return redirect("accounts:asset_management")
+
+            cat_id           = (request.POST.get("consumable_cat_id") or "").strip()
+            name             = (request.POST.get("consumable_item_name") or "").strip()
+            unit_of_measure  = (request.POST.get("unit_of_measure") or "piece").strip()
+            initial_stock    = int(request.POST.get("initial_stock") or 0)
+            low_threshold    = int(request.POST.get("low_stock_threshold") or 5)
+            max_per_req      = request.POST.get("max_per_request") or None
+            description      = (request.POST.get("item_description") or "").strip()
+
+            if not name or not cat_id:
+                messages.error(request, "Item name and category are required.")
+                return redirect("accounts:asset_management")
+
+            cat = get_object_or_404(ConsumableCategory, id=cat_id, agency=agency)
+
+            item = ConsumableItem.objects.create(
+                agency=agency,
+                category=cat,
+                name=name,
+                description=description,
+                unit_of_measure=unit_of_measure,
+                stock_qty=initial_stock,
+                low_stock_threshold=low_threshold,
+                max_per_request=int(max_per_req) if max_per_req else None,
+            )
+
+            if initial_stock > 0:
+                ConsumableStockLog.objects.create(
+                    agency=agency,
+                    item=item,
+                    event="restocked",
+                    quantity_before=0,
+                    quantity_change=initial_stock,
+                    quantity_after=initial_stock,
+                    note="Initial stock on registration.",
+                    actor=user,
+                )
+
+            messages.success(request, f"Supply item '{item.name}' registered with {initial_stock} in stock.")
+            return redirect("accounts:asset_management")
+
+        # ============ CONSUMABLE: Register new category ============
+        if action == "register_consumable_category":
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Operations Manager can add supply categories.")
+                return redirect("accounts:asset_management")
+
+            cat_name = (request.POST.get("consumable_cat_name") or "").strip()
+            cat_type = (request.POST.get("consumable_cat_type") or "other").strip()
+            cat_desc = (request.POST.get("consumable_cat_desc") or "").strip()
+
+            if not cat_name:
+                messages.error(request, "Category name is required.")
+                return redirect("accounts:asset_management")
+
+            ConsumableCategory.objects.get_or_create(
+                agency=agency,
+                name=cat_name,
+                defaults={"category_type": cat_type, "description": cat_desc},
+            )
+            messages.success(request, f"Category '{cat_name}' added.")
+            return redirect("accounts:asset_management")
+
         messages.error(request, "Unknown action.")
         return redirect("accounts:asset_management")
 
@@ -1063,6 +1436,41 @@ def view_asset_management(request):
         agency=agency, status="pending_ops"
     ).select_related("line", "requested_by")
 
+    # --------------------------------------------------
+    # Consumable / Supplies data
+    # --------------------------------------------------
+    consumable_categories = ConsumableCategory.objects.filter(agency=agency, is_active=True).order_by("category_type", "name")
+    consumable_items_qs   = ConsumableItem.objects.filter(agency=agency, is_active=True).select_related("category").order_by("category__name", "name")
+
+    my_consumable_requests = ConsumableRequest.objects.filter(
+        agency=agency, requester=user
+    ).prefetch_related("line_items__item").order_by("-created_at")
+
+    # Pending approval (for managers)
+    pending_consumable_approvals = []
+    if is_manager:
+        pending_consumable_approvals = list(
+            ConsumableRequest.objects.filter(agency=agency, status="pending")
+            .select_related("requester", "unit")
+            .prefetch_related("line_items__item")
+            .order_by("-created_at")
+        )
+
+    # Approved & awaiting dispatch (for ICT / ops)
+    approved_consumable_requests = []
+    if is_ict or is_ops:
+        approved_consumable_requests = list(
+            ConsumableRequest.objects.filter(agency=agency, status__in=("approved", "partially_fulfilled"))
+            .select_related("requester", "unit")
+            .prefetch_related("line_items__item")
+            .order_by("-created_at")
+        )
+
+    # Low-stock items (for ICT / ops dashboard)
+    low_stock_items = []
+    if is_ict or is_ops:
+        low_stock_items = [i for i in consumable_items_qs if i.is_low_stock]
+
     return render(request, "accounts/assets/asset_management.html", {
         "svc": svc,
         "roles": roles,
@@ -1089,6 +1497,14 @@ def view_asset_management(request):
 
         # badge support
         "returning_asset_ids": returning_asset_ids,
+
+        # Consumables / supplies
+        "consumable_categories":          consumable_categories,
+        "consumable_items":               consumable_items_qs,
+        "my_consumable_requests":         my_consumable_requests,
+        "pending_consumable_approvals":   pending_consumable_approvals,
+        "approved_consumable_requests":   approved_consumable_requests,
+        "low_stock_items":                low_stock_items,
     })
 
 @login_required
@@ -1754,3 +2170,132 @@ def exit_organization(request):
             "Please wait for the request to complete."
         )
         return redirect("accounts:asset_management")
+
+
+@login_required
+def consumable_item_detail(request, item_id: int):
+    """
+    Detail page for a single consumable item.
+    Shows item info, current stock level, and full stock history.
+    ICT / Ops can restock or correct stock directly from this page.
+    """
+    user   = request.user
+    agency = getattr(user, "agency", None)
+
+    if not agency:
+        messages.error(request, "You are not assigned to an agency.")
+        return redirect("accounts:profile")
+
+    svc, _ = AgencyServiceConfig.objects.get_or_create(agency=agency)
+    if not svc.asset_mgmt_enabled and not user.is_superuser:
+        messages.warning(request, "Asset Management is not enabled for your agency.")
+        return redirect("accounts:profile")
+
+    roles, _ = AgencyAssetRoles.objects.get_or_create(agency=agency)
+    is_ict    = _is_ict(user, agency)
+    is_ops    = _is_ops_manager(user, agency)
+    can_manage = is_ict or is_ops or user.is_superuser
+
+    item = get_object_or_404(
+        ConsumableItem.objects.select_related("category", "agency"),
+        id=item_id, agency=agency,
+    )
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+
+        if action == "restock_consumable_item":
+            if not can_manage:
+                messages.error(request, "Only ICT or Operations Manager can restock supplies.")
+                return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+            qty_str = (request.POST.get("restock_qty") or "0").strip()
+            note    = (request.POST.get("restock_note") or "").strip()
+            try:
+                qty = int(qty_str)
+            except ValueError:
+                messages.error(request, "Invalid quantity.")
+                return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+            if qty <= 0:
+                messages.error(request, "Restock quantity must be a positive number.")
+                return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+            with transaction.atomic():
+                item_locked = ConsumableItem.objects.select_for_update().get(id=item.id)
+                before = item_locked.stock_qty
+                item_locked.stock_qty += qty
+                item_locked.save(update_fields=["stock_qty"])
+                ConsumableStockLog.objects.create(
+                    agency=agency, item=item_locked, event="restocked",
+                    quantity_before=before, quantity_change=qty,
+                    quantity_after=item_locked.stock_qty,
+                    note=note or f"Restocked by {user.get_full_name() or user.username}",
+                    actor=user,
+                )
+                item.refresh_from_db()
+
+            messages.success(request, f"Restocked {item.name}: +{qty} {item.unit_of_measure}. New stock: {item.stock_qty}.")
+            return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+        if action == "correct_stock":
+            if not can_manage:
+                messages.error(request, "Only ICT or Operations Manager can correct stock.")
+                return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+            qty_str = (request.POST.get("corrected_qty") or "").strip()
+            note    = (request.POST.get("correction_note") or "").strip()
+            try:
+                new_qty = int(qty_str)
+                if new_qty < 0:
+                    raise ValueError
+            except ValueError:
+                messages.error(request, "Corrected quantity must be a non-negative number.")
+                return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+            with transaction.atomic():
+                item_locked = ConsumableItem.objects.select_for_update().get(id=item.id)
+                before = item_locked.stock_qty
+                change = new_qty - before
+                item_locked.stock_qty = new_qty
+                item_locked.save(update_fields=["stock_qty"])
+                ConsumableStockLog.objects.create(
+                    agency=agency, item=item_locked, event="corrected",
+                    quantity_before=before, quantity_change=change,
+                    quantity_after=new_qty,
+                    note=note or f"Manual correction by {user.get_full_name() or user.username}",
+                    actor=user,
+                )
+                item.refresh_from_db()
+
+            messages.success(request, f"Stock corrected. {item.name} is now {item.stock_qty} {item.unit_of_measure}.")
+            return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+        messages.error(request, "Unknown action.")
+        return redirect("accounts:consumable_item_detail", item_id=item.id)
+
+    # GET
+    stock_logs = ConsumableStockLog.objects.filter(
+        agency=agency, item=item
+    ).select_related("actor", "reference_request", "reference_request__requester").order_by("-created_at")
+
+    total_dispatched = sum(abs(l.quantity_change) for l in stock_logs if l.event == "dispatched")
+    total_restocked  = sum(l.quantity_change      for l in stock_logs if l.event == "restocked")
+
+    recent_requests = ConsumableRequestItem.objects.filter(
+        item=item
+    ).select_related(
+        "request", "request__requester", "request__unit"
+    ).order_by("-request__created_at")[:20]
+
+    return render(request, "accounts/assets/consumable_item_detail.html", {
+        "item":             item,
+        "stock_logs":       stock_logs,
+        "total_dispatched": total_dispatched,
+        "total_restocked":  total_restocked,
+        "recent_requests":  recent_requests,
+        "can_manage":       can_manage,
+        "is_ict":           is_ict,
+        "is_ops":           is_ops,
+    })
+

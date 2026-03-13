@@ -247,7 +247,55 @@
           .navbar-brand .bg-white {
               box-shadow: 0 1px 4px rgba(0,0,0,0.15);
           }
+        }
 
+        /* All screens < 1400px: collapsed nav styles correctly */
+        @media (max-width: 1399.98px) {
+            .navbar-collapse {
+                max-height: 80vh;
+                overflow-y: auto;
+            }
+            .navbar-collapse .dropdown-menu {
+                box-shadow: none;
+                background-color: rgba(255, 255, 255, 0.08);
+                border: none;
+            }
+            .navbar-collapse .dropdown-menu .dropdown-item {
+                color: rgba(255, 255, 255, 0.85);
+            }
+            .navbar-collapse .dropdown-menu .dropdown-item:hover {
+                background-color: rgba(255, 255, 255, 0.15);
+                color: #fff;
+            }
+            .navbar-collapse .dropdown-header {
+                color: rgba(255, 255, 255, 0.5);
+                font-size: 0.7rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .navbar-collapse hr.dropdown-divider {
+                border-color: rgba(255, 255, 255, 0.15);
+            }
+        }
+
+        /* 1400px+: compact nav, icon+label layout */
+        @media (min-width: 1400px) {
+            .navbar .nav-link {
+                padding-left: 0.4rem;
+                padding-right: 0.4rem;
+                font-size: 0.8rem;
+                white-space: nowrap;
+            }
+            /* Hide text labels at 1400–1599px, show only icons */
+            .navbar-nav .nav-link .nav-label {
+                display: none;
+            }
+        }
+        /* 1600px+: show full icon + label */
+        @media (min-width: 1600px) {
+            .navbar-nav .nav-link .nav-label {
+                display: inline;
+            }
         }
       /* Optional CSS Enhancements for Asset Management Tables */
 /* Add this to your main CSS file for improved aesthetics */
@@ -746,7 +794,7 @@ canvas {
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-un-primary shadow-sm" role="navigation" aria-label="Main navigation">
+    <nav class="navbar navbar-expand-xxl navbar-dark bg-un-primary shadow-sm" role="navigation" aria-label="Main navigation">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center gap-2"
                href="{% url 'dashboard:dashboard' %}"
@@ -802,7 +850,7 @@ canvas {
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
-                        <i class="bi bi-people" aria-hidden="true"></i> Visitor Management
+                        <i class="bi bi-people" aria-hidden="true"></i> <span class="nav-label">Visitor Management</span>
                       </a>
                       <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="{% url 'visitors:visitor_list' %}">
@@ -823,7 +871,7 @@ canvas {
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
-                        <i class="bi bi-car-front" aria-hidden="true"></i> Vehicles & Assets
+                        <i class="bi bi-car-front" aria-hidden="true"></i> <span class="nav-label">Vehicles & Assets</span>
                       </a>
                       <ul class="dropdown-menu">
 
@@ -916,7 +964,7 @@ canvas {
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
-                        <i class="bi bi-people" aria-hidden="true"></i> Visitors
+                        <i class="bi bi-people" aria-hidden="true"></i> <span class="nav-label">Visitors</span>
                       </a>
                       <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="{% url 'visitors:visitor_create' %}">
@@ -931,7 +979,7 @@ canvas {
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
-                        <i class="bi bi-credit-card" aria-hidden="true"></i> Cards & Assets
+                        <i class="bi bi-credit-card" aria-hidden="true"></i> <span class="nav-label">Cards & Assets</span>
                       </a>
                       <ul class="dropdown-menu">
                         <li class="dropdown-header">Parking Card Request</li>
@@ -994,7 +1042,7 @@ canvas {
                 {% if request.user.is_authenticated %}
                   <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                      <i class="bi bi-tools me-1"></i> Common Services
+                      <i class="bi bi-tools me-1"></i> <span class="nav-label">Common Services</span>
                     </a>
 
                     <ul class="dropdown-menu">
@@ -1045,7 +1093,7 @@ canvas {
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" id="commsDropdown" role="button"
                      data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-broadcast me-1"></i> Communications
+                    <i class="bi bi-broadcast me-1"></i> <span class="nav-label">Communications</span>
                   </a>
 
                   <ul class="dropdown-menu" aria-labelledby="commsDropdown">
@@ -1084,7 +1132,7 @@ canvas {
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                      aria-expanded="false">
-                    <i class="bi bi-laptop me-1"></i> ICT & Assets
+                    <i class="bi bi-laptop me-1"></i> <span class="nav-label">ICT & Assets</span>
                   </a>
                   <ul class="dropdown-menu">
 
@@ -1137,7 +1185,7 @@ canvas {
                   <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                        aria-expanded="false">
-                      <i class="bi bi-door-open me-1"></i> Rooms & Bookings
+                      <i class="bi bi-door-open me-1"></i> <span class="nav-label">Rooms & Bookings</span>
                     </a>
                     <ul class="dropdown-menu">
                       <li>
@@ -1163,7 +1211,7 @@ canvas {
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
-                        <i class="bi bi-person-badge me-1"></i> HR & ID Cards
+                        <i class="bi bi-person-badge me-1"></i> <span class="nav-label">HR & ID Cards</span>
                       </a>
                       <ul class="dropdown-menu">
                         <li class="dropdown-header">Monitoring</li>
@@ -1199,7 +1247,7 @@ canvas {
                 {% if user.is_authenticated and user.role == 'ict_focal' %}
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-                    <i class="bi bi-person-gear me-1"></i> ICT Console
+                    <i class="bi bi-person-gear me-1"></i> <span class="nav-label">ICT Console</span>
                   </a>
                   <ul class="dropdown-menu">
                     <li><a class="dropdown-item" href="{% url 'accounts:ict_user_list' %}">

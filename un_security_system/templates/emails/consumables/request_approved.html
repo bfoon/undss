@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supply Request Approved</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f6f8; font-family: Arial, Helvetica, sans-serif; color: #333; }
+    .wrapper { max-width: 620px; margin: 32px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .header { background: #198754; padding: 28px 32px; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 20px; font-weight: 700; }
+    .header p  { margin: 6px 0 0; color: rgba(255,255,255,0.85); font-size: 13px; }
+    .badge { display: inline-block; background: #d1e7dd; color: #0a3622; border-radius: 4px; padding: 3px 10px; font-size: 12px; font-weight: 700; margin-top: 10px; }
+    .body { padding: 28px 32px; }
+    .body p { margin: 0 0 14px; font-size: 14px; line-height: 1.6; }
+    .meta-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .meta-table td { padding: 9px 12px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+    .meta-table td:first-child { color: #666; width: 38%; font-weight: 600; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    .items-table th { background: #f8f9fa; padding: 9px 12px; text-align: left; font-weight: 700; color: #555; border-bottom: 2px solid #e9ecef; }
+    .items-table td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+    .info-box { background: #d1e7dd; border-left: 4px solid #198754; border-radius: 4px; padding: 14px 16px; margin: 16px 0; font-size: 13px; color: #0a3622; }
+    .cta { display: inline-block; margin: 8px 0 4px; background: #198754; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 5px; font-size: 14px; font-weight: 700; }
+    .footer { background: #f8f9fa; padding: 18px 32px; font-size: 12px; color: #999; border-top: 1px solid #e9ecef; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>{{ agency }} — Supply Request Approved</h1>
+    <p>Your supply request has been approved.</p>
+    <span class="badge">✅ Approved</span>
+  </div>
+
+  <div class="body">
+    <p>Hello {{ creq.requester.get_full_name|default:creq.requester.username }},</p>
+    <p>
+      Great news — your supply request <strong>#{{ creq.id }}</strong> has been
+      <strong>approved</strong> by {{ approved_by }}. Your items will be prepared for dispatch shortly.
+    </p>
+
+    <table class="meta-table">
+      <tr><td>Request #</td>   <td><strong>#{{ creq.id }}</strong></td></tr>
+      <tr><td>Approved By</td> <td>{{ approved_by }}</td></tr>
+      <tr><td>Approved At</td> <td>{{ creq.approved_at|date:"d M Y, H:i" }}</td></tr>
+      <tr><td>Unit</td>        <td>{{ creq.unit.name|default:"—" }}</td></tr>
+    </table>
+
+    <p><strong>Items Approved:</strong></p>
+    <table class="items-table">
+      <thead>
+        <tr><th>Item</th><th>Category</th><th>Qty</th><th>Unit</th></tr>
+      </thead>
+      <tbody>
+        {% for li in creq.line_items.all %}
+        <tr>
+          <td>{{ li.item.name }}</td>
+          <td>{{ li.item.category.name }}</td>
+          <td><strong>{{ li.quantity_requested }}</strong></td>
+          <td>{{ li.item.unit_of_measure }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="info-box">
+      <strong>What happens next?</strong><br>
+      ICT / Operations will arrange dispatch of your items. You will receive another notification once your supplies have been dispatched.
+    </div>
+
+    <a href="{{ portal_url }}" class="cta">View My Requests</a>
+  </div>
+
+  <div class="footer">
+    This is an automated notification from {{ agency }}. Do not reply to this email.
+  </div>
+</div>
+</body>
+</html>

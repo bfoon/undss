@@ -312,6 +312,12 @@ class Room(models.Model):
         help_text="If auto-approved, still email approvers for visibility (optional)."
     )
 
+    # NEW FIELD — O365 resource mailbox
+    resource_email = models.EmailField(blank=True, null=True)
+
+    # Optional toggle to enable calendar sync
+    calendar_sync_enabled = models.BooleanField(default=False)
+
     """
     A bookable room (library, conference room, meeting room, etc.)
     """
@@ -1398,3 +1404,157 @@ class CellServiceFocalPoint(models.Model):
 
 
 from .hr.models import EmployeeIDCardRequest
+
+# =========================
+# CONSUMABLES / SUPPLIES
+# =========================
+
+class ConsumableCategory(models.Model):
+    CATEGORY_TYPES = (
+        ("office_supply", "Office Supply"),
+        ("toiletry",      "Toiletry / Hygiene"),
+        ("accessory",     "Accessory / Peripheral"),
+        ("stationery",    "Stationery"),
+        ("other",         "Other"),
+    )
+
+    agency        = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="consumable_categories")
+    name          = models.CharField(max_length=100)
+    category_type = models.CharField(max_length=20, choices=CATEGORY_TYPES, default="other")
+    description   = models.TextField(blank=True)
+    is_active     = models.BooleanField(default=True)
+
+    class Meta:
+        ordering        = ["category_type", "name"]
+        unique_together = ("agency", "name")
+        verbose_name_plural = "Consumable categories"
+
+    def __str__(self):
+        return f"{self.agency.code} – {self.name}"
+
+
+class ConsumableItem(models.Model):
+    agency              = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="consumable_items")
+    category            = models.ForeignKey(ConsumableCategory, on_delete=models.PROTECT, related_name="items")
+    name                = models.CharField(max_length=150)
+    description         = models.TextField(blank=True)
+    unit_of_measure     = models.CharField(max_length=40, default="piece",
+                                           help_text="e.g. piece, box, roll, pack, litre")
+    stock_qty           = models.PositiveIntegerField(default=0)
+    low_stock_threshold = models.PositiveIntegerField(default=5,
+                                                       help_text="Alert when stock falls at or below this number")
+    max_per_request     = models.PositiveIntegerField(null=True, blank=True,
+                                                       help_text="Max qty a user can request at once (blank = no limit)")
+    is_active           = models.BooleanField(default=True)
+    created_at          = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["category__name", "name"]
+
+    @property
+    def is_low_stock(self):
+        return self.stock_qty <= self.low_stock_threshold
+
+    @property
+    def is_out_of_stock(self):
+        return self.stock_qty == 0
+
+    def __str__(self):
+        return f"{self.name} ({self.stock_qty} {self.unit_of_measure})"
+
+
+class ConsumableRequest(models.Model):
+    STATUS_CHOICES = (
+        ("pending",              "Pending Approval"),
+        ("approved",             "Approved — Awaiting Dispatch"),
+        ("partially_fulfilled",  "Partially Fulfilled"),
+        ("fulfilled",            "Fulfilled"),
+        ("rejected",             "Rejected"),
+        ("cancelled",            "Cancelled"),
+    )
+
+    agency       = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="consumable_requests")
+    requester    = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                     related_name="consumable_requests")
+    unit         = models.ForeignKey("Unit", on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="consumable_requests")
+    notes        = models.TextField(blank=True, help_text="Justification or delivery notes")
+    status       = models.CharField(max_length=25, choices=STATUS_CHOICES, default="pending")
+
+    approved_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                      null=True, blank=True, related_name="consumable_requests_approved")
+    approved_at  = models.DateTimeField(null=True, blank=True)
+    reject_reason = models.TextField(blank=True)
+
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes  = [
+            models.Index(fields=["agency", "status"]),
+            models.Index(fields=["agency", "requester"]),
+        ]
+
+    def __str__(self):
+        return f"SupplyReq#{self.id} by {self.requester}"
+
+    def approve(self, by_user):
+        self.status      = "approved"
+        self.approved_by = by_user
+        self.approved_at = timezone.now()
+        self.save(update_fields=["status", "approved_by", "approved_at"])
+
+    def reject(self, by_user, reason=""):
+        self.status       = "rejected"
+        self.approved_by  = by_user
+        self.approved_at  = timezone.now()
+        self.reject_reason = reason
+        self.save(update_fields=["status", "approved_by", "approved_at", "reject_reason"])
+
+
+class ConsumableRequestItem(models.Model):
+    """One line in a consumable request."""
+    request            = models.ForeignKey(ConsumableRequest, on_delete=models.CASCADE, related_name="line_items")
+    item               = models.ForeignKey(ConsumableItem, on_delete=models.PROTECT, related_name="request_lines")
+    quantity_requested = models.PositiveIntegerField()
+    quantity_dispatched = models.PositiveIntegerField(default=0)
+
+    @property
+    def is_fulfilled(self):
+        return self.quantity_dispatched >= self.quantity_requested
+
+    @property
+    def remaining(self):
+        return max(self.quantity_requested - self.quantity_dispatched, 0)
+
+    def __str__(self):
+        return f"{self.item.name} ×{self.quantity_requested}"
+
+
+class ConsumableStockLog(models.Model):
+    """Immutable audit log for every stock change (dispatch, restock, correction)."""
+    EVENT_CHOICES = (
+        ("dispatched",  "Dispatched to requester"),
+        ("restocked",   "Restocked / received"),
+        ("corrected",   "Manual correction"),
+        ("disposed",    "Disposed / written off"),
+    )
+
+    agency           = models.ForeignKey(Agency, on_delete=models.CASCADE, related_name="consumable_stock_logs")
+    item             = models.ForeignKey(ConsumableItem, on_delete=models.CASCADE, related_name="stock_logs")
+    event            = models.CharField(max_length=15, choices=EVENT_CHOICES)
+    quantity_before  = models.IntegerField()
+    quantity_change  = models.IntegerField(help_text="Positive = add, Negative = remove")
+    quantity_after   = models.IntegerField()
+    reference_request = models.ForeignKey(ConsumableRequest, on_delete=models.SET_NULL,
+                                           null=True, blank=True, related_name="stock_logs")
+    note             = models.TextField(blank=True)
+    actor            = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                          null=True, blank=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.item.name} {self.quantity_change:+d} [{self.event}]"

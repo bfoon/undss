@@ -15,7 +15,9 @@ from .models import (
     RoomAmenity,
     AgencyServiceConfig, AgencyAssetRoles, Unit,
     AssetCategory, Asset, AssetRequest, AssetChangeRequest,
-    ExitRequest, MobileLine, CellServiceFocalPoint
+    ExitRequest, MobileLine, CellServiceFocalPoint,
+    ConsumableCategory, ConsumableItem, ConsumableRequest,
+    ConsumableRequestItem, ConsumableStockLog,
 )
 
 import csv
@@ -787,3 +789,220 @@ admin.site.register(AssetChangeRequest)
 admin.site.register(ExitRequest)
 admin.site.register(MobileLine)
 admin.site.register(CellServiceFocalPoint)
+
+
+# -------------------------------------------------------------------
+# CONSUMABLES / SUPPLIES ADMIN
+# -------------------------------------------------------------------
+
+
+class ConsumableItemInline(admin.TabularInline):
+    """Inline items displayed inside ConsumableCategoryAdmin."""
+    model = ConsumableItem
+    extra = 0
+    fields = ("name", "unit_of_measure", "stock_qty", "low_stock_threshold",
+              "max_per_request", "is_active")
+    readonly_fields = ("stock_qty",)
+    show_change_link = True
+
+
+@admin.register(ConsumableCategory)
+class ConsumableCategoryAdmin(admin.ModelAdmin):
+    list_display  = ("name", "agency", "category_type", "item_count", "is_active")
+    list_filter   = ("agency", "category_type", "is_active")
+    search_fields = ("name", "description", "agency__code", "agency__name")
+    ordering      = ("agency", "category_type", "name")
+    inlines       = [ConsumableItemInline]
+
+    def item_count(self, obj):
+        return obj.items.filter(is_active=True).count()
+    item_count.short_description = "Active Items"
+
+
+@admin.register(ConsumableItem)
+class ConsumableItemAdmin(admin.ModelAdmin):
+    list_display  = ("name", "agency", "category", "unit_of_measure",
+                     "stock_qty", "low_stock_threshold", "stock_status", "is_active")
+    list_filter   = ("agency", "category__category_type", "is_active")
+    search_fields = ("name", "description", "agency__code", "category__name")
+    ordering      = ("agency", "category__name", "name")
+    readonly_fields = ("created_at",)
+
+    fieldsets = (
+        (None, {
+            "fields": ("agency", "category", "name", "description", "is_active"),
+        }),
+        ("Stock & Limits", {
+            "fields": ("unit_of_measure", "stock_qty", "low_stock_threshold", "max_per_request"),
+        }),
+        ("Timestamps", {
+            "fields": ("created_at",),
+            "classes": ("collapse",),
+        }),
+    )
+
+    actions = ["restock_10", "restock_50", "mark_inactive", "mark_active"]
+
+    def stock_status(self, obj):
+        if obj.is_out_of_stock:
+            return "🔴 Out of Stock"
+        if obj.is_low_stock:
+            return "🟡 Low"
+        return "🟢 OK"
+    stock_status.short_description = "Stock Status"
+
+    @admin.action(description="Add 10 units to stock (manual restock)")
+    def restock_10(self, request, queryset):
+        for item in queryset:
+            before = item.stock_qty
+            item.stock_qty += 10
+            item.save(update_fields=["stock_qty"])
+            ConsumableStockLog.objects.create(
+                agency=item.agency, item=item, event="restocked",
+                quantity_before=before, quantity_change=10,
+                quantity_after=item.stock_qty,
+                note="Manual restock (+10) via admin action.",
+                actor=request.user,
+            )
+        messages.success(request, f"Added 10 units to {queryset.count()} item(s).")
+
+    @admin.action(description="Add 50 units to stock (manual restock)")
+    def restock_50(self, request, queryset):
+        for item in queryset:
+            before = item.stock_qty
+            item.stock_qty += 50
+            item.save(update_fields=["stock_qty"])
+            ConsumableStockLog.objects.create(
+                agency=item.agency, item=item, event="restocked",
+                quantity_before=before, quantity_change=50,
+                quantity_after=item.stock_qty,
+                note="Manual restock (+50) via admin action.",
+                actor=request.user,
+            )
+        messages.success(request, f"Added 50 units to {queryset.count()} item(s).")
+
+    @admin.action(description="Mark selected items as inactive")
+    def mark_inactive(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        messages.success(request, f"Marked {updated} item(s) as inactive.")
+
+    @admin.action(description="Mark selected items as active")
+    def mark_active(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        messages.success(request, f"Marked {updated} item(s) as active.")
+
+
+class ConsumableRequestItemInline(admin.TabularInline):
+    """Line items shown inside a ConsumableRequest."""
+    model = ConsumableRequestItem
+    extra = 0
+    fields = ("item", "quantity_requested", "quantity_dispatched", "fulfilled_display")
+    readonly_fields = ("fulfilled_display",)
+    autocomplete_fields = ("item",)
+
+    def fulfilled_display(self, obj):
+        if obj.pk is None:
+            return "-"
+        return "✅ Yes" if obj.is_fulfilled else f"⏳ {obj.remaining} remaining"
+    fulfilled_display.short_description = "Fulfilled?"
+
+
+@admin.register(ConsumableRequest)
+class ConsumableRequestAdmin(admin.ModelAdmin):
+    list_display  = ("id", "requester", "agency", "unit", "status",
+                     "item_summary", "approved_by", "created_at")
+    list_filter   = ("agency", "status", "created_at")
+    search_fields = ("requester__username", "requester__first_name",
+                     "requester__last_name", "notes", "agency__code")
+    date_hierarchy = "created_at"
+    ordering      = ("-created_at",)
+    readonly_fields = ("created_at", "approved_at")
+    inlines       = [ConsumableRequestItemInline]
+    actions       = ["approve_requests", "reject_requests", "export_csv"]
+
+    fieldsets = (
+        (None, {
+            "fields": ("agency", "requester", "unit", "notes", "status"),
+        }),
+        ("Approval", {
+            "fields": ("approved_by", "approved_at", "reject_reason"),
+            "classes": ("collapse",),
+        }),
+        ("Timestamps", {
+            "fields": ("created_at",),
+            "classes": ("collapse",),
+        }),
+    )
+
+    def item_summary(self, obj):
+        lines = obj.line_items.select_related("item").all()
+        parts = [f"{li.item.name} ×{li.quantity_requested}" for li in lines[:4]]
+        suffix = "…" if lines.count() > 4 else ""
+        return ", ".join(parts) + suffix or "—"
+    item_summary.short_description = "Items"
+
+    @admin.action(description="Approve selected supply requests")
+    def approve_requests(self, request, queryset):
+        count = 0
+        for obj in queryset.filter(status="pending"):
+            obj.approve(request.user)
+            count += 1
+        messages.success(request, f"Approved {count} supply request(s).")
+
+    @admin.action(description="Reject selected supply requests (no reason recorded)")
+    def reject_requests(self, request, queryset):
+        count = 0
+        for obj in queryset.filter(status="pending"):
+            obj.reject(request.user, reason="Bulk rejected via admin.")
+            count += 1
+        messages.success(request, f"Rejected {count} supply request(s).")
+
+    @admin.action(description="Export selected requests to CSV")
+    def export_csv(self, request, queryset):
+        resp = HttpResponse(content_type="text/csv")
+        resp["Content-Disposition"] = 'attachment; filename="supply_requests.csv"'
+        writer = csv.writer(resp)
+        writer.writerow([
+            "ID", "Agency", "Requester", "Unit", "Status",
+            "Items", "Notes", "Approved By", "Created At",
+        ])
+        for obj in queryset.select_related("agency", "requester", "unit", "approved_by"):
+            lines = obj.line_items.select_related("item").all()
+            items_str = "; ".join(
+                f"{li.item.name} ×{li.quantity_requested} (sent {li.quantity_dispatched})"
+                for li in lines
+            )
+            writer.writerow([
+                obj.pk,
+                obj.agency.code if obj.agency else "",
+                obj.requester.username if obj.requester else "",
+                obj.unit.name if obj.unit else "",
+                obj.get_status_display(),
+                items_str,
+                obj.notes or "",
+                obj.approved_by.username if obj.approved_by else "",
+                obj.created_at.isoformat() if obj.created_at else "",
+            ])
+        return resp
+
+
+@admin.register(ConsumableStockLog)
+class ConsumableStockLogAdmin(admin.ModelAdmin):
+    list_display  = ("item", "agency", "event", "quantity_before",
+                     "quantity_change", "quantity_after", "actor", "created_at")
+    list_filter   = ("agency", "event", "created_at")
+    search_fields = ("item__name", "note", "agency__code",
+                     "actor__username", "actor__first_name")
+    date_hierarchy = "created_at"
+    ordering      = ("-created_at",)
+    readonly_fields = ("agency", "item", "event", "quantity_before",
+                       "quantity_change", "quantity_after",
+                       "reference_request", "actor", "created_at")
+
+    def has_add_permission(self, request):
+        # Stock logs are immutable audit records — never create manually
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deletion to preserve audit trail
+        return False

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supplies Dispatched</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f6f8; font-family: Arial, Helvetica, sans-serif; color: #333; }
+    .wrapper { max-width: 620px; margin: 32px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .header { background: #0d6efd; padding: 28px 32px; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 20px; font-weight: 700; }
+    .header p  { margin: 6px 0 0; color: rgba(255,255,255,0.85); font-size: 13px; }
+    .badge-full    { display: inline-block; background: #d1e7dd; color: #0a3622; border-radius: 4px; padding: 3px 10px; font-size: 12px; font-weight: 700; margin-top: 10px; }
+    .badge-partial { display: inline-block; background: #fff3cd; color: #664d03; border-radius: 4px; padding: 3px 10px; font-size: 12px; font-weight: 700; margin-top: 10px; }
+    .body { padding: 28px 32px; }
+    .body p { margin: 0 0 14px; font-size: 14px; line-height: 1.6; }
+    .meta-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .meta-table td { padding: 9px 12px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+    .meta-table td:first-child { color: #666; width: 38%; font-weight: 600; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    .items-table th { background: #f8f9fa; padding: 9px 12px; text-align: left; font-weight: 700; color: #555; border-bottom: 2px solid #e9ecef; }
+    .items-table td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+    .sent    { color: #198754; font-weight: 700; }
+    .pending { color: #856404; }
+    .info-box { background: #cfe2ff; border-left: 4px solid #0d6efd; border-radius: 4px; padding: 14px 16px; margin: 16px 0; font-size: 13px; color: #08285a; }
+    .cta { display: inline-block; margin: 8px 0 4px; background: #0d6efd; color: #ffffff !important; text-decoration: none; padding: 12px 28px; border-radius: 5px; font-size: 14px; font-weight: 700; }
+    .footer { background: #f8f9fa; padding: 18px 32px; font-size: 12px; color: #999; border-top: 1px solid #e9ecef; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>{{ agency }} — Supplies Dispatched</h1>
+    <p>Your supply request has been dispatched.</p>
+    {% if creq.status == "fulfilled" %}
+      <span class="badge-full">✅ Fully Fulfilled</span>
+    {% else %}
+      <span class="badge-partial">⚠ Partially Dispatched</span>
+    {% endif %}
+  </div>
+
+  <div class="body">
+    <p>Hello {{ creq.requester.get_full_name|default:creq.requester.username }},</p>
+    <p>
+      Your supply request <strong>#{{ creq.id }}</strong> has been dispatched.
+      Please see the breakdown below and collect your items from the designated supply area.
+    </p>
+
+    <table class="meta-table">
+      <tr><td>Request #</td>  <td><strong>#{{ creq.id }}</strong></td></tr>
+      <tr><td>Dispatched By</td><td>{{ dispatched_by }}</td></tr>
+      <tr><td>Dispatched At</td><td>{{ dispatched_at|date:"d M Y, H:i" }}</td></tr>
+      <tr><td>Status</td>     <td>{{ creq.get_status_display }}</td></tr>
+      {% if dispatch_note %}
+      <tr><td>Note</td>       <td><em>{{ dispatch_note }}</em></td></tr>
+      {% endif %}
+    </table>
+
+    <p><strong>Dispatch Summary:</strong></p>
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Requested</th>
+          <th>Dispatched</th>
+          <th>Remaining</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for li in creq.line_items.all %}
+        <tr>
+          <td>{{ li.item.name }}</td>
+          <td>{{ li.quantity_requested }} {{ li.item.unit_of_measure }}</td>
+          <td class="sent">{{ li.quantity_dispatched }}</td>
+          <td>
+            {% if li.is_fulfilled %}
+              <span class="sent">—</span>
+            {% else %}
+              <span class="pending">{{ li.remaining }} pending</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if creq.status == "partially_fulfilled" %}
+    <div class="info-box">
+      <strong>Partial Dispatch:</strong> Some items could not be dispatched due to limited stock.
+      The remaining items will be dispatched once stock is replenished. You will be notified.
+    </div>
+    {% endif %}
+
+    <a href="{{ portal_url }}" class="cta">View My Requests</a>
+  </div>
+
+  <div class="footer">
+    This is an automated notification from {{ agency }}. Do not reply to this email.
+  </div>
+</div>
+</body>
+</html>

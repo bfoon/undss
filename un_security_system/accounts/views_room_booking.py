@@ -15,7 +15,8 @@ import threading
 from django.shortcuts import render
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMessage, EmailMultiAlternatives
+from .utils import generate_booking_ics
 from django.core.paginator import Paginator
 from django.db.models import Q, Count, Prefetch
 from datetime import date
@@ -23,7 +24,6 @@ from django.db import transaction
 
 from .models import Room, RoomBooking, RoomApprover, RoomBookingSeries
 from .forms import RoomBookingForm, RoomBookingApprovalForm, RoomForm, RoomSeriesApprovalForm
-
 
 # ======================= EMAIL HELPERS =======================
 
@@ -362,6 +362,41 @@ def notify_approvers_occurrence_cancelled(occurrence):
     )
 
     _send_email_async(subject, message, approver_emails)
+
+
+def send_booking_calendar_invite(booking):
+    if not booking.room.calendar_sync_enabled or not booking.room.resource_email:
+        return
+
+    ics_bytes = generate_booking_ics(booking)  # returns bytes
+    ics_text = ics_bytes.decode("utf-8")
+
+    subject = f"Room Booking: {booking.title} ({booking.room.name})"
+    body_text = (
+        f"Room booking request\n\n"
+        f"Room: {booking.room.name}\n"
+        f"Date: {booking.date}\n"
+        f"Time: {booking.start_time} - {booking.end_time}\n"
+    )
+
+    to_list = [booking.room.resource_email]
+    cc_list = [booking.requested_by.email] if booking.requested_by.email else []
+
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body=body_text,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=to_list,
+        cc=cc_list,
+    )
+
+    # This is what makes O365 treat it as a meeting request
+    msg.attach_alternative(ics_text, "text/calendar; method=REQUEST; charset=UTF-8")
+
+    # Optional: keep attachment too (some clients like it)
+    msg.attach("invite.ics", ics_bytes, "text/calendar; method=REQUEST; charset=UTF-8")
+
+    msg.send(fail_silently=False)
 
 
 def room_has_active_approvers(room) -> bool:
@@ -1053,6 +1088,7 @@ def room_booking_approve_view(request, pk):
             if action == "approve":
                 booking.approve(request.user)
                 notify_requester_booking_approved(booking)
+                send_booking_calendar_invite(booking)
                 messages.success(request, "Booking approved.")
             else:
                 if not reason.strip():
@@ -1119,6 +1155,7 @@ def room_series_approve_view(request, pk):
             if action == "approve":
                 series.approve(request.user)
                 notify_requester_series_approved(series)
+                send_booking_calendar_invite(series)
                 messages.success(
                     request,
                     f"Series approved! All {series.occurrence_count} occurrences have been approved."

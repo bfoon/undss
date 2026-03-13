@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }} — Supply Item | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .sid-hero {
+    background: linear-gradient(135deg, rgba(0,158,219,.10), rgba(0,90,139,.08));
+    border: 1px solid rgba(0,158,219,.15);
+  }
+  .sid-kpi {
+    border-left: 4px solid var(--un-blue);
+    background: #fff;
+  }
+  .sid-kpi.low  { border-color: #fd7e14; }
+  .sid-kpi.out  { border-color: #dc3545; }
+  .sid-kpi.good { border-color: #198754; }
+  .log-dispatched { background: #fff5f5; }
+  .log-restocked  { background: #f0fff4; }
+  .log-corrected  { background: #fffbf0; }
+  .log-disposed   { background: #f8f8f8; }
+  .event-badge { font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; white-space: nowrap; }
+  .event-dispatched { background:#f8d7da; color:#58151c; }
+  .event-restocked  { background:#d1e7dd; color:#0a3622; }
+  .event-corrected  { background:#fff3cd; color:#664d03; }
+  .event-disposed   { background:#e2e3e5; color:#41464b; }
+  .change-positive { color: #198754; font-weight: 700; }
+  .change-negative { color: #dc3545; font-weight: 700; }
+  .stock-level-bar { height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
+  .stock-level-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% load static %}
+
+<div class="row g-4">
+  <div class="col-12">
+
+    {# ── Breadcrumb ── #}
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'accounts:asset_management' %}#supplies">Supplies</a></li>
+        <li class="breadcrumb-item active">{{ item.name }}</li>
+      </ol>
+    </nav>
+
+    {# ── Hero card ── #}
+    <div class="card sid-hero mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <h4 class="mb-1 text-un-primary fw-bold">
+              <i class="bi bi-box-seam me-2"></i>{{ item.name }}
+            </h4>
+            <div class="text-muted small">
+              <span class="me-3"><i class="bi bi-tag me-1"></i>{{ item.category.name }} &mdash; {{ item.category.get_category_type_display }}</span>
+              <span class="me-3"><i class="bi bi-rulers me-1"></i>Unit: {{ item.unit_of_measure }}</span>
+              {% if item.description %}
+              <span><i class="bi bi-info-circle me-1"></i>{{ item.description }}</span>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if can_manage %}
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-success btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#modalRestockDetail">
+              <i class="bi bi-plus-circle me-1"></i> Restock
+            </button>
+            <button class="btn btn-outline-warning btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#modalCorrectStock">
+              <i class="bi bi-pencil me-1"></i> Correct Stock
+            </button>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# ── KPI row ── #}
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card sid-kpi {% if item.is_out_of_stock %}out{% elif item.is_low_stock %}low{% else %}good{% endif %} p-3 h-100">
+          <div class="text-muted small mb-1">Current Stock</div>
+          <div class="fs-3 fw-bold
+            {% if item.is_out_of_stock %}text-danger
+            {% elif item.is_low_stock %}text-warning
+            {% else %}text-success{% endif %}">
+            {{ item.stock_qty }}
+            <small class="fs-6 fw-normal text-muted">{{ item.unit_of_measure }}</small>
+          </div>
+          {% if item.is_out_of_stock %}
+            <span class="badge bg-danger mt-1">Out of Stock</span>
+          {% elif item.is_low_stock %}
+            <span class="badge bg-warning text-dark mt-1">Low Stock</span>
+          {% else %}
+            <span class="badge bg-success mt-1">In Stock</span>
+          {% endif %}
+
+          {# Stock level bar vs threshold #}
+          {% if item.low_stock_threshold > 0 %}
+          <div class="stock-level-bar mt-2">
+            {% with pct=item.stock_qty|floatformat:0 %}
+            <div class="stock-level-fill {% if item.is_out_of_stock %}bg-danger{% elif item.is_low_stock %}bg-warning{% else %}bg-success{% endif %}"
+                 style="width: {% if item.stock_qty >= item.low_stock_threshold %}100{% else %}{{ item.stock_qty }}{% endif %}%">
+            </div>
+            {% endwith %}
+          </div>
+          <div class="text-muted" style="font-size:10px">Threshold: {{ item.low_stock_threshold }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <div class="card sid-kpi p-3 h-100">
+          <div class="text-muted small mb-1">Total Restocked</div>
+          <div class="fs-3 fw-bold text-success">+{{ total_restocked }}</div>
+          <div class="text-muted" style="font-size:11px">All time</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <div class="card sid-kpi p-3 h-100">
+          <div class="text-muted small mb-1">Total Dispatched</div>
+          <div class="fs-3 fw-bold text-danger">-{{ total_dispatched }}</div>
+          <div class="text-muted" style="font-size:11px">All time</div>
+        </div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <div class="card sid-kpi p-3 h-100">
+          <div class="text-muted small mb-1">Max Per Request</div>
+          <div class="fs-3 fw-bold">
+            {% if item.max_per_request %}{{ item.max_per_request }}{% else %}<span class="text-muted fs-5">Unlimited</span>{% endif %}
+          </div>
+          <div class="text-muted" style="font-size:11px">per request</div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Stock History ── #}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+          <i class="bi bi-clock-history me-2 text-primary"></i>Stock History
+        </span>
+        <span class="badge bg-secondary">{{ stock_logs|length }} entries</span>
+      </div>
+      <div class="card-body p-0">
+        {% if stock_logs %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Date &amp; Time</th>
+                <th>Event</th>
+                <th>Before</th>
+                <th>Change</th>
+                <th>After</th>
+                <th>Reference</th>
+                <th>Actor</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in stock_logs %}
+              <tr class="log-{{ log.event }}">
+                <td class="text-muted small text-nowrap">
+                  {{ log.created_at|date:"d M Y" }}<br>
+                  <span style="font-size:11px">{{ log.created_at|date:"H:i" }}</span>
+                </td>
+                <td>
+                  <span class="event-badge event-{{ log.event }}">
+                    {% if log.event == "dispatched" %}
+                      <i class="bi bi-box-arrow-right me-1"></i>Dispatched
+                    {% elif log.event == "restocked" %}
+                      <i class="bi bi-plus-circle me-1"></i>Restocked
+                    {% elif log.event == "corrected" %}
+                      <i class="bi bi-pencil me-1"></i>Corrected
+                    {% elif log.event == "disposed" %}
+                      <i class="bi bi-trash me-1"></i>Disposed
+                    {% endif %}
+                  </span>
+                </td>
+                <td class="text-muted">{{ log.quantity_before }}</td>
+                <td>
+                  {% if log.quantity_change > 0 %}
+                    <span class="change-positive">+{{ log.quantity_change }}</span>
+                  {% elif log.quantity_change < 0 %}
+                    <span class="change-negative">{{ log.quantity_change }}</span>
+                  {% else %}
+                    <span class="text-muted">0</span>
+                  {% endif %}
+                </td>
+                <td class="fw-semibold">{{ log.quantity_after }}</td>
+                <td class="small">
+                  {% if log.reference_request %}
+                    <a href="{% url 'accounts:asset_management' %}#supplies" class="text-decoration-none">
+                      Req #{{ log.reference_request.id }}
+                    </a>
+                    <br>
+                    <span class="text-muted">{{ log.reference_request.requester.get_full_name|default:log.reference_request.requester.username }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="small text-muted">
+                  {% if log.actor %}
+                    {{ log.actor.get_full_name|default:log.actor.username }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td class="small text-muted" style="max-width:180px">
+                  <span title="{{ log.note }}">
+                    {{ log.note|truncatechars:60 }}
+                  </span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-clock-history fs-2 d-block mb-2 opacity-25"></i>
+          No stock movements recorded yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── Recent Requests for this item ── #}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+          <i class="bi bi-list-check me-2 text-primary"></i>Recent Requests
+        </span>
+        <span class="badge bg-secondary">Last {{ recent_requests|length }}</span>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_requests %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Request #</th>
+                <th>Requester</th>
+                <th>Unit</th>
+                <th>Requested</th>
+                <th>Dispatched</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for li in recent_requests %}
+              <tr>
+                <td class="fw-semibold text-primary">
+                  <a href="{% url 'accounts:asset_management' %}#supplies" class="text-decoration-none">
+                    #{{ li.request.id }}
+                  </a>
+                </td>
+                <td class="small">{{ li.request.requester.get_full_name|default:li.request.requester.username }}</td>
+                <td class="text-muted small">{{ li.request.unit.name|default:"—" }}</td>
+                <td>{{ li.quantity_requested }} {{ item.unit_of_measure }}</td>
+                <td>
+                  {% if li.quantity_dispatched %}
+                    <span class="text-success fw-semibold">{{ li.quantity_dispatched }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% with s=li.request.status %}
+                  {% if s == "pending" %}       <span class="badge bg-warning text-dark">Pending</span>
+                  {% elif s == "approved" %}     <span class="badge bg-info text-dark">Approved</span>
+                  {% elif s == "partially_fulfilled" %}<span class="badge bg-primary">Partial</span>
+                  {% elif s == "fulfilled" %}    <span class="badge bg-success">Fulfilled</span>
+                  {% elif s == "rejected" %}     <span class="badge bg-danger">Rejected</span>
+                  {% elif s == "cancelled" %}    <span class="badge bg-secondary">Cancelled</span>
+                  {% else %}                     <span class="badge bg-light text-dark">{{ s }}</span>
+                  {% endif %}
+                  {% endwith %}
+                </td>
+                <td class="text-muted small">{{ li.request.created_at|date:"d M Y" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+          <i class="bi bi-inbox fs-2 d-block mb-2 opacity-25"></i>
+          No requests have been made for this item yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ── Modals ── #}
+
+{# Restock #}
+{% if can_manage %}
+<div class="modal fade" id="modalRestockDetail" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Restock — {{ item.name }}</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="restock_consumable_item">
+        <div class="modal-body">
+          <div class="alert alert-info py-2 mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Current stock: <strong>{{ item.stock_qty }} {{ item.unit_of_measure }}</strong>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Quantity to Add <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="number" name="restock_qty" class="form-control" min="1" required
+                     placeholder="e.g. 50">
+              <span class="input-group-text">{{ item.unit_of_measure }}</span>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Note <span class="text-muted small">(optional)</span></label>
+            <input type="text" name="restock_note" class="form-control"
+                   placeholder="e.g. Received from warehouse, PO #1234">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="bi bi-plus-lg me-1"></i> Confirm Restock
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# Correct Stock #}
+<div class="modal fade" id="modalCorrectStock" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title fw-bold"><i class="bi bi-pencil me-2"></i>Correct Stock — {{ item.name }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="correct_stock">
+        <div class="modal-body">
+          <div class="alert alert-warning py-2 mb-3">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            This will record a manual correction and log the change.
+            Current stock: <strong>{{ item.stock_qty }} {{ item.unit_of_measure }}</strong>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Corrected Stock Quantity <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="number" name="corrected_qty" class="form-control" min="0" required
+                     value="{{ item.stock_qty }}" placeholder="Enter correct total quantity">
+              <span class="input-group-text">{{ item.unit_of_measure }}</span>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Reason <span class="text-danger">*</span></label>
+            <input type="text" name="correction_note" class="form-control" required
+                   placeholder="e.g. Physical count discrepancy, damaged items removed">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm fw-bold">
+            <i class="bi bi-check-lg me-1"></i> Apply Correction
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Animate stock level bar width on load
+  document.addEventListener("DOMContentLoaded", () => {
+    const fill  = document.querySelector(".stock-level-fill");
+    const stock = {{ item.stock_qty }};
+    const threshold = {{ item.low_stock_threshold|default:1 }};
+    if (fill) {
+      const pct = threshold > 0 ? Math.min((stock / (threshold * 3)) * 100, 100) : 100;
+      fill.style.width = pct + "%";
+    }
+  });
+</script>
+{% endblock %}

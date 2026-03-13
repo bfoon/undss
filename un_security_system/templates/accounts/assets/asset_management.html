@@ -215,6 +215,7 @@
               {% endif %}
             </button>
           </li>
+          {% if is_manager %}
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-change-approvals" data-bs-toggle="pill" data-bs-target="#pane-change-approvals"
                     type="button" role="tab">
@@ -224,6 +225,8 @@
               {% endif %}
             </button>
           </li>
+          {% endif %}
+          {% if is_manager %}
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-approvals" data-bs-toggle="pill" data-bs-target="#pane-approvals"
                     type="button" role="tab">
@@ -233,7 +236,9 @@
               {% endif %}
             </button>
           </li>
+          {% endif %}
 
+          {% if is_ict %}
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-ict" data-bs-toggle="pill" data-bs-target="#pane-ict"
                     type="button" role="tab">
@@ -243,6 +248,7 @@
               {% endif %}
             </button>
           </li>
+          {% endif %}
 
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-assets" data-bs-toggle="pill" data-bs-target="#pane-assets"
@@ -255,6 +261,19 @@
             <button class="nav-link" id="tab-lines" data-bs-toggle="tab" data-bs-target="#pane-lines" type="button" role="tab">
             <i class="bi bi-sim me-1"></i> Mobile Lines
           </button>
+          </li>
+
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-supplies" data-bs-toggle="pill" data-bs-target="#pane-supplies"
+                    type="button" role="tab">
+              <i class="bi bi-box-seam me-1"></i> Supplies
+              {% if pending_consumable_approvals|length > 0 and is_manager %}
+                <span class="badge bg-warning text-dark ms-2">{{ pending_consumable_approvals|length }}</span>
+              {% endif %}
+              {% if approved_consumable_requests|length > 0 and is_ict or approved_consumable_requests|length > 0 and is_ops %}
+                <span class="badge bg-primary ms-1">{{ approved_consumable_requests|length }}</span>
+              {% endif %}
+            </button>
           </li>
 
         </ul>
@@ -292,6 +311,10 @@
           {% include "accounts/assets/partials/_mobile_lines_table.html" %}
         </div>
 
+          <div class="tab-pane fade am-anchor" id="pane-supplies" role="tabpanel" aria-labelledby="tab-supplies">
+            <div id="supplies"></div>
+            {% include "accounts/assets/partials/_consumables_table.html" %}
+          </div>
 
         </div>
 
@@ -312,6 +335,7 @@
 {% include "accounts/assets/modals/_modal_verify_return.html" %}
 {% include "accounts/assets/modals/_modal_reject_change.html" %}
 {% include "accounts/assets/modals/_modal_exit_organization.html" %}
+{% include "accounts/assets/modals/_modal_consumables.html" %}
 
 
 {% endblock %}
@@ -342,6 +366,7 @@
     if (hash === "#returns") toTab("#tab-returns");
     if (hash === "#ict-queue") toTab("#tab-ict");
     if (hash === "#register") toTab("#tab-assets");
+    if (hash === "#supplies")  toTab("#tab-supplies");
   });
 
   // Attach request id into Reject modal
@@ -392,6 +417,57 @@
 
     if (idInput) idInput.value = returnId || "";
     if (nameSpan) nameSpan.textContent = assetName || "";
+  });
+</script>
+<script>
+  // Reject Consumable modal: populate hidden request id
+  const rejectConsumableModal = document.getElementById("modalRejectConsumable");
+  rejectConsumableModal?.addEventListener("show.bs.modal", (e) => {
+    const btn = e.relatedTarget;
+    const id  = btn?.getAttribute("data-creq-id");
+    const inp = rejectConsumableModal.querySelector("#rejectConsumableId");
+    if (inp) inp.value = id || "";
+  });
+
+  // Restock modal: populate item id, name, unit label
+  const restockModal = document.getElementById("modalRestockItem");
+  restockModal?.addEventListener("show.bs.modal", (e) => {
+    const btn  = e.relatedTarget;
+    const id   = btn?.getAttribute("data-item-id");
+    const name = btn?.getAttribute("data-item-name");
+    const unit = btn?.getAttribute("data-item-unit");
+    const idInp   = restockModal.querySelector("#restockItemId");
+    const nameEl  = restockModal.querySelector("#restockItemName");
+    const unitEl  = restockModal.querySelector("#restockUnitLabel");
+    if (idInp)  idInp.value       = id   || "";
+    if (nameEl) nameEl.textContent = name || "";
+    if (unitEl) unitEl.textContent = unit || "units";
+  });
+
+  // Dynamic add/remove item lines in Request Supplies modal
+  document.addEventListener("DOMContentLoaded", () => {
+    const container = document.getElementById("consumableLines");
+    const addBtn    = document.getElementById("addConsumableLine");
+    if (!container || !addBtn) return;
+
+    // Template: clone the first line
+    addBtn.addEventListener("click", () => {
+      const first  = container.querySelector(".consumable-line");
+      const clone  = first.cloneNode(true);
+      // reset cloned values
+      clone.querySelectorAll("select").forEach(s => s.selectedIndex = 0);
+      clone.querySelectorAll("input[type=number]").forEach(i => i.value = 1);
+      container.appendChild(clone);
+    });
+
+    container.addEventListener("click", (e) => {
+      if (e.target.closest(".remove-consumable-line")) {
+        const lines = container.querySelectorAll(".consumable-line");
+        if (lines.length > 1) {
+          e.target.closest(".consumable-line").remove();
+        }
+      }
+    });
   });
 </script>
 {% endblock %}

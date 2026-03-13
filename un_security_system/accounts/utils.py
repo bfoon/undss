@@ -6,6 +6,8 @@ from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
+from icalendar import Calendar, Event
+from datetime import datetime
 
 from .models import OneTimeCode, TrustedDevice
 
@@ -106,3 +108,61 @@ def remember_device(user, device_id, user_agent="", ip_address=""):
 def is_ict_focal_point(user):
     # Adjust to your real logic
     return user.is_authenticated and getattr(user, "role", "") == "ict_focal"
+
+
+def generate_booking_ics(booking):
+    """
+    Generate ICS file for a room booking
+    """
+    cal = Calendar()
+    cal.add("prodid", "-//UNPASS//Room Booking//EN")
+    cal.add("version", "2.0")
+    cal.add("method", "REQUEST")
+
+    event = Event()
+    if booking.series:
+        event.add("rrule", {
+            "freq": booking.series.frequency.upper(),
+            "interval": booking.series.interval,
+        })
+    # Unique identifier
+    uid = f"{booking.id}-{uuid.uuid4()}@unpass"
+    event.add("uid", uid)
+
+    # Title
+    event.add("summary", f"{booking.title} - {booking.room.name}")
+
+    # Description
+    event.add(
+        "description",
+            f"""
+    Room: {booking.room.name}
+    Requested By: {booking.requested_by.get_full_name()}
+    Purpose: {booking.description}
+    """,
+        )
+
+    # Start & End datetime
+    start_dt = datetime.combine(booking.date, booking.start_time)
+    end_dt = datetime.combine(booking.date, booking.end_time)
+
+    event.add("dtstart", timezone.make_aware(start_dt))
+    event.add("dtend", timezone.make_aware(end_dt))
+
+    # Location
+    event.add("location", booking.room.location or booking.room.name)
+
+    # Organizer (service email)
+    event.add("organizer", f"MAILTO:{settings.DEFAULT_FROM_EMAIL}")
+
+    # Attendees
+    if booking.room.resource_email:
+        event.add("attendee", f"MAILTO:{booking.room.resource_email}")
+
+    event.add("attendee", f"MAILTO:{booking.requested_by.email}")
+
+    cal.add_component(event)
+
+
+
+    return cal.to_ical()

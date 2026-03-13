@@ -1,3 +1,4 @@
+{% if is_ict %}
 <div class="mb-3">
   <h6 class="mb-0 fw-semibold">ICT Assignment Queue</h6>
   <small class="text-muted">Assign available assets to approved requests (custodian action).</small>
@@ -39,3 +40,9 @@
     </tbody>
   </table>
 </div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-lock fs-2 d-block mb-2"></i>
+  <p class="mb-0">Access restricted. Only ICT custodians can view the assignment queue.</p>
+</div>
+{% endif %}
