@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Package Flow Configuration{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width:1200px;">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="fw-bold mb-1"><i class="bi bi-diagram-3 text-primary me-2"></i>Package Flow Configuration</h2>
+      <p class="text-muted mb-0 small">Define reusable workflow templates that govern how packages are processed, verified, and delivered.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'vehicles:package_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back
+      </a>
+      <a href="{% url 'vehicles:package_flow_template_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>New Template
+      </a>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="alert alert-{{ m.tags }} alert-dismissible fade show" role="alert">
+        {{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if not templates %}
+    <div class="card border-0 shadow-sm text-center py-5">
+      <i class="bi bi-diagram-3 text-muted fs-1 mb-3"></i>
+      <h5 class="text-muted">No flow templates yet</h5>
+      <p class="text-muted mb-4">Create your first template to define how packages move through your organisation.</p>
+      <a href="{% url 'vehicles:package_flow_template_create' %}" class="btn btn-primary mx-auto" style="width:fit-content;">
+        <i class="bi bi-plus-lg me-1"></i>Create First Template
+      </a>
+    </div>
+  {% endif %}
+
+  {% for tmpl in templates %}
+  <div class="card border-0 shadow-sm mb-4">
+    <!-- Template header -->
+    <div class="card-header d-flex justify-content-between align-items-center py-3 {% if tmpl.is_active %}bg-white{% else %}bg-light{% endif %}">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary fw-bold"
+             style="width:40px;height:40px;font-size:1rem;">
+          {{ tmpl.step_count }}
+        </div>
+        <div>
+          <h5 class="mb-0 fw-semibold">{{ tmpl.name }}</h5>
+          {% if tmpl.description %}
+            <small class="text-muted">{{ tmpl.description }}</small>
+          {% endif %}
+        </div>
+        {% if not tmpl.is_active %}
+          <span class="badge bg-secondary">Inactive</span>
+        {% else %}
+          <span class="badge bg-success">Active</span>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{% url 'vehicles:package_flow_step_create' tmpl.pk %}"
+           class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-plus-lg me-1"></i>Add Step
+        </a>
+        <a href="{% url 'vehicles:package_flow_template_edit' tmpl.pk %}"
+           class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-pencil"></i>
+        </a>
+      </div>
+    </div>
+
+    <!-- Steps -->
+    <div class="card-body p-0">
+      {% if tmpl.steps_ordered %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:50px">#</th>
+              <th>Step Name</th>
+              <th>Type</th>
+              <th>Status Code</th>
+              <th>Allowed Roles</th>
+              <th>Required Actions</th>
+              <th>Notifications</th>
+              <th class="text-center">Terminal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for step in tmpl.steps_ordered %}
+            <tr {% if step.is_terminal %}class="table-warning"{% endif %}>
+              <td>
+                <span class="badge bg-primary rounded-pill">{{ step.order }}</span>
+              </td>
+              <td>
+                <strong>{{ step.name }}</strong>
+                {% if step.description %}
+                  <br><small class="text-muted">{{ step.description }}</small>
+                {% endif %}
+              </td>
+              <td><span class="badge bg-light text-dark border">{{ step.get_step_type_display }}</span></td>
+              <td><code class="small">{{ step.status_code }}</code></td>
+              <td>
+                {% if step.allowed_roles %}
+                  {% for r in step.allowed_roles_list %}
+                    <span class="badge bg-info text-dark">{{ r }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">Any user</span>
+                {% endif %}
+              </td>
+              <td>
+                {% for action in step.required_actions_display %}
+                  {% if action != "No special requirements" %}
+                    <span class="badge bg-warning text-dark me-1">{{ action }}</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                {% endfor %}
+              </td>
+              <td>
+                <div class="d-flex flex-wrap gap-1">
+                  {% if step.notify_requester %}
+                    <span class="badge bg-light text-dark border" title="Notify logger">Logger</span>
+                  {% endif %}
+                  {% if step.notify_focal_email %}
+                    <span class="badge bg-light text-dark border" title="Email focal point">Focal Email</span>
+                  {% endif %}
+                  {% if step.notify_recipient %}
+                    <span class="badge bg-light text-dark border" title="Email recipient">Recipient</span>
+                  {% endif %}
+                  {% if step.notify_next_handler_roles %}
+                    <span class="badge bg-light text-dark border" title="{{ step.notify_next_handler_roles }}">Next: {{ step.notify_next_handler_roles }}</span>
+                  {% endif %}
+                  {% if not step.notify_requester and not step.notify_focal_email and not step.notify_recipient and not step.notify_next_handler_roles %}
+                    <span class="text-muted small">None</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="text-center">
+                {% if step.is_terminal %}
+                  <i class="bi bi-flag-fill text-warning" title="Terminal step"></i>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="d-flex gap-1 justify-content-end">
+                  <a href="{% url 'vehicles:package_flow_step_edit' step.pk %}"
+                     class="btn btn-sm btn-outline-secondary" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <form method="post" action="{% url 'vehicles:package_flow_step_delete' step.pk %}"
+                        onsubmit="return confirm('Delete step \'{{ step.name }}\'?');">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-danger" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="text-center text-muted py-4">
+          <i class="bi bi-list-ol fs-3 mb-2 d-block"></i>
+          No steps defined yet.
+          <a href="{% url 'vehicles:package_flow_step_create' tmpl.pk %}">Add the first step.</a>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Visual flow diagram -->
+    {% if tmpl.steps_ordered %}
+    <div class="card-footer bg-light border-top py-3 px-4">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <small class="text-muted fw-semibold me-2">Flow:</small>
+        {% for step in tmpl.steps_ordered %}
+          <span class="badge {% if step.is_terminal %}bg-warning text-dark{% else %}bg-primary{% endif %} px-3 py-2">
+            {{ step.order }}. {{ step.name }}
+          </span>
+          {% if not forloop.last %}
+            <i class="bi bi-arrow-right text-muted"></i>
+          {% endif %}
+        {% endfor %}
+        <i class="bi bi-arrow-right text-muted"></i>
+        <span class="badge bg-success px-3 py-2">Complete</span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+</div>
+
+<style>
+  .card { border-radius: 0.75rem; overflow: hidden; }
+  code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: #7c3aed; }
+</style>
+{% endblock %}

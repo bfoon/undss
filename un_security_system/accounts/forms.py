@@ -503,11 +503,29 @@ class RoomBookingForm(forms.ModelForm):
         help_text="Which day of the week (Mon–Sun)",
     )
 
+    ICT_SUPPORT_CHOICES = (
+        ("none",   "No ICT support needed"),
+        ("setup",  "Before meeting — Setup / AV configuration"),
+        ("during", "During meeting — Live technical support"),
+    )
+    ict_support = forms.ChoiceField(
+        choices=ICT_SUPPORT_CHOICES,
+        required=False,
+        initial="none",
+        widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
+        label="ICT Support",
+        help_text=(
+            "Select whether you need ICT assistance. "
+            "The ICT team will be notified by email as soon as you submit."
+        ),
+    )
+
     class Meta:
         model = RoomBooking
         fields = [
             "room", "title", "description",
-            "date", "start_time", "end_time"
+            "date", "start_time", "end_time",
+            "ict_support",
         ]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),

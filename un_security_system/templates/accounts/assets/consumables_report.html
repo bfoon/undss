@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Consumables Report — {{ agency.code }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #222; background: #fff; }
+    .page { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid #003087; padding-bottom: 16px; }
+    header h1 { font-size: 18px; color: #003087; }
+    header .meta { text-align: right; color: #666; font-size: 11px; }
+    .kpi-row { display: flex; gap: 16px; margin-bottom: 24px; }
+    .kpi { flex: 1; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 16px; }
+    .kpi .val { font-size: 22px; font-weight: 700; }
+    .kpi .lbl { font-size: 10px; text-transform: uppercase; color: #888; letter-spacing: .5px; }
+    .kpi.red  { border-color: #dc3545; background: #fff5f5; }
+    .kpi.red .val { color: #dc3545; }
+    .kpi.amber{ border-color: #ffc107; background: #fffceb; }
+    .kpi.amber .val { color: #b45309; }
+    .kpi.green{ border-color: #198754; background: #f0faf4; }
+    .kpi.green .val { color: #198754; }
+    h2 { font-size: 13px; font-weight: 700; color: #003087; text-transform: uppercase;
+         letter-spacing: .6px; margin: 24px 0 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { background: #f1f5f9; font-weight: 600; text-align: left; padding: 6px 8px; border-bottom: 1px solid #dde; }
+    td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .badge-danger  { background: #dc3545; color: #fff; }
+    .badge-warning { background: #ffc107; color: #333; }
+    .badge-success { background: #198754; color: #fff; }
+    .badge-info    { background: #0dcaf0; color: #333; }
+    .badge-secondary { background: #6c757d; color: #fff; }
+    .text-muted { color: #888; }
+    footer { margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 12px;
+             font-size: 10px; color: #aaa; display: flex; justify-content: space-between; }
+    @media print {
+      body { font-size: 11px; }
+      .page { padding: 16px; max-width: 100%; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  {# ── Print / back buttons ── #}
+  <div class="no-print" style="margin-bottom:16px; display:flex; gap:10px;">
+    <button onclick="window.print()"
+            style="padding:6px 16px; background:#003087; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">
+      🖨 Print / Save as PDF
+    </button>
+    <button onclick="window.history.back()"
+            style="padding:6px 16px; background:#f1f5f9; border:1px solid #dde; border-radius:4px; cursor:pointer; font-size:12px;">
+      ← Back
+    </button>
+  </div>
+
+  {# ── Header ── #}
+  <header>
+    <div>
+      <h1>Consumables & Supplies Report</h1>
+      <div style="font-size:11px; color:#666; margin-top:4px;">{{ agency.name }} ({{ agency.code }})</div>
+    </div>
+    <div class="meta">
+      Generated: {{ generated_at|date:"d M Y H:i" }}<br>
+      Period: Last 90 days
+    </div>
+  </header>
+
+  {# ── KPIs ── #}
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="val">{{ total_items }}</div>
+      <div class="lbl">Total Items</div>
+    </div>
+    <div class="kpi red">
+      <div class="val">{{ out_stock_count }}</div>
+      <div class="lbl">Out of Stock</div>
+    </div>
+    <div class="kpi amber">
+      <div class="val">{{ low_stock_count }}</div>
+      <div class="lbl">Low Stock</div>
+    </div>
+    <div class="kpi">
+      <div class="val">{{ total_requests }}</div>
+      <div class="lbl">Requests (90d)</div>
+    </div>
+    <div class="kpi green">
+      <div class="val">{{ fulfilled_reqs }}</div>
+      <div class="lbl">Fulfilled</div>
+    </div>
+  </div>
+
+  {# ── Stock inventory ── #}
+  {% if scope in "items,all" %}
+  <h2>Stock Inventory</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th><th>Category</th><th>Unit</th>
+        <th>In Stock</th><th>Threshold</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for item in items %}
+      <tr>
+        <td style="font-weight:600">{{ item.name }}</td>
+        <td class="text-muted">{{ item.category.name }}</td>
+        <td class="text-muted">{{ item.unit_of_measure }}</td>
+        <td style="font-weight:600; {% if item.is_out_of_stock %}color:#dc3545{% elif item.is_low_stock %}color:#b45309{% endif %}">
+          {{ item.stock_qty }}
+        </td>
+        <td class="text-muted">{{ item.low_stock_threshold }}</td>
+        <td>
+          {% if item.is_out_of_stock %}
+            <span class="badge badge-danger">Out of Stock</span>
+          {% elif item.is_low_stock %}
+            <span class="badge badge-warning">Low Stock</span>
+          {% else %}
+            <span class="badge badge-success">OK</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {# ── Supply requests ── #}
+  {% if scope in "requests,all" %}
+  <h2>Supply Requests (Last 90 Days)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Requester</th><th>Unit</th><th>Items</th>
+        <th>Linked Asset</th><th>Status</th><th>Approved By</th><th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for creq in requests %}
+      <tr>
+        <td style="font-weight:600; color:#003087">#{{ creq.id }}</td>
+        <td>{{ creq.requester.get_full_name|default:creq.requester.username }}</td>
+        <td class="text-muted">{{ creq.unit.name|default:"—" }}</td>
+        <td>
+          {% for li in creq.line_items.all %}
+            {{ li.item.name }} ×{{ li.quantity_requested }}{% if not forloop.last %}, {% endif %}
+          {% endfor %}
+        </td>
+        <td class="text-muted">
+          {% if creq.linked_asset %}{{ creq.linked_asset.name }}{% else %}—{% endif %}
+        </td>
+        <td>
+          {% if creq.status == "fulfilled" %}
+            <span class="badge badge-success">Fulfilled</span>
+          {% elif creq.status == "approved" or creq.status == "partially_fulfilled" %}
+            <span class="badge badge-info">{{ creq.get_status_display }}</span>
+          {% elif creq.status == "rejected" %}
+            <span class="badge badge-danger">Rejected</span>
+          {% elif creq.status == "pending" %}
+            <span class="badge badge-warning">Pending</span>
+          {% else %}
+            <span class="badge badge-secondary">{{ creq.get_status_display }}</span>
+          {% endif %}
+        </td>
+        <td class="text-muted">
+          {% if creq.approved_by %}
+            {{ creq.approved_by.get_full_name|default:creq.approved_by.username }}
+            {% if creq.approved_at %}<br><span style="font-size:10px">{{ creq.approved_at|date:"d M Y" }}</span>{% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td class="text-muted" style="white-space:nowrap">{{ creq.created_at|date:"d M Y" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <footer>
+    <span>UN PASS — Consumables Module</span>
+    <span>{{ agency.code }} · {{ generated_at|date:"d M Y H:i" }}</span>
+  </footer>
+</div>
+</body>
+</html>

@@ -7,7 +7,8 @@ from django.contrib.auth import get_user_model
 
 from .models import (
     Vehicle, VehicleMovement, ParkingCard, AssetExit,
-    AssetExitItem, ParkingCardRequest, Key, KeyLog, Package
+    AssetExitItem, ParkingCardRequest, Key, KeyLog, Package,
+    PackageFlowTemplate, PackageFlowStep
 )
 from accounts.models import Agency
 
@@ -367,112 +368,170 @@ class KeyReturnForm(forms.ModelForm):
 # PACKAGE LOGGING
 # ---------------------------------------------------------
 
+# ── Bootstrap helper ──────────────────────────────────────────────────────────
+def _bc(extra=''):
+    return f'form-control {extra}'.strip()
+
 
 class PackageLogForm(forms.ModelForm):
-    """
-    Guard logs package at the gate.
-    - item_type is rendered as a hard-coded select in the template
-    - destination_agency, dest_focal_email, for_recipient are populated
-      from Agency and User models but stored as plain strings on Package.
-    """
-
-    # Override model fields so we can provide dynamic choices
-    destination_agency = forms.ChoiceField(
-        label="Destination Agency",
-        required=False,
-        choices=[],
-        widget=forms.Select(attrs={"class": "form-select select2-agency"}),
-    )
-
-    dest_focal_email = forms.ChoiceField(
-        label="Destination Focal Point",
-        required=False,
-        choices=[],
-        widget=forms.Select(attrs={"class": "form-select select2-user"}),
-    )
-
-    for_recipient = forms.ChoiceField(
-        label="For (Recipient)",
-        required=False,
-        choices=[],
-        widget=forms.Select(attrs={"class": "form-select select2-user"}),
-    )
+    """Used when logging a new incoming package at the gate."""
 
     class Meta:
         model = Package
         fields = [
-            "sender_name", "sender_type", "sender_org", "sender_contact",
-            "item_type", "description",
-            "destination_agency", "dest_focal_email", "for_recipient",
-            "notes",
+            'sender_name', 'sender_type', 'sender_org', 'sender_contact',
+            'item_type', 'description',
+            'destination_agency', 'dest_focal_email', 'for_recipient',
+            'notes',
         ]
         widgets = {
-            # item_type will be overridden in the template (hard-coded list),
-            # but we keep this as a default widget:
-            "item_type": forms.Select(attrs={"class": "form-select"}),
-
-            "description": forms.Textarea(attrs={"rows": 2, "class": "form-control"}),
-            "notes": forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+            'sender_name': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'Full name or organisation'}),
+            'sender_type': forms.Select(attrs={'class': 'form-select'}),
+            'sender_org': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'Organisation (if applicable)'}),
+            'sender_contact': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'Phone or email'}),
+            'item_type': forms.TextInput(
+                attrs={'class': _bc(), 'placeholder': 'Package / Envelope / Box / Diplomatic Pouch …'}),
+            'description': forms.Textarea(
+                attrs={'class': _bc(), 'rows': 3, 'placeholder': 'Brief description of contents'}),
+            'destination_agency': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'e.g. UNDP, WHO, UNICEF'}),
+            'dest_focal_email': forms.EmailInput(attrs={'class': _bc(), 'placeholder': 'focal@agency.un.org'}),
+            'for_recipient': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'Recipient name (if known)'}),
+            'notes': forms.Textarea(attrs={'class': _bc(), 'rows': 2, 'placeholder': 'Any gate-level observations'}),
         }
 
-    def __init__(self, *args, **kwargs):
+
+class PackageFlowTemplateForm(forms.ModelForm):
+    """Create or edit a flow template."""
+
+    class Meta:
+        model = PackageFlowTemplate
+        fields = ['name', 'description', 'is_active']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'e.g. Standard Mail Flow'}),
+            'description': forms.Textarea(attrs={'class': _bc(), 'rows': 3}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class PackageFlowStepForm(forms.ModelForm):
+    """Create or edit a single step within a flow template."""
+
+    class Meta:
+        model = PackageFlowStep
+        fields = [
+            # Identity
+            'order', 'name', 'step_type', 'status_code', 'description',
+            # Access
+            'allowed_roles',
+            # Required actions
+            'requires_note', 'requires_scan', 'requires_stamp',
+            'requires_routing', 'requires_recipient_signature',
+            # Notifications
+            'notify_requester', 'notify_focal_email', 'notify_recipient',
+            'notify_next_handler_roles',
+            # Flow control
+            'is_terminal',
+        ]
+        widgets = {
+            'order': forms.NumberInput(attrs={'class': _bc(), 'min': 1}),
+            'name': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'e.g. Reception Check'}),
+            'step_type': forms.Select(attrs={'class': 'form-select'}),
+            'status_code': forms.TextInput(
+                attrs={'class': _bc(), 'placeholder': 'e.g. at_reception (slug, no spaces)'}),
+            'description': forms.TextInput(attrs={'class': _bc(), 'placeholder': 'Short description shown to handler'}),
+            'allowed_roles': forms.TextInput(attrs={
+                'class': _bc(),
+                'placeholder': 'e.g. reception,lsa  (leave blank = any user)'
+            }),
+            'notify_next_handler_roles': forms.TextInput(attrs={
+                'class': _bc(),
+                'placeholder': 'e.g. registry,agency_fp'
+            }),
+            # Checkboxes
+            'requires_note': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'requires_scan': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'requires_stamp': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'requires_routing': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'requires_recipient_signature': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notify_requester': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notify_focal_email': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notify_recipient': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_terminal': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def clean_status_code(self):
+        code = self.cleaned_data.get('status_code', '').strip()
+        if ' ' in code:
+            raise forms.ValidationError("Status code must be a slug (no spaces). Use hyphens or underscores.")
+        return code
+
+
+class PackageStepActionForm(forms.Form):
+    """
+    Dynamically-built form whose fields depend on what a PackageFlowStep requires.
+    Pass `step=<PackageFlowStep instance>` when constructing the form.
+    """
+
+    def __init__(self, *args, step=None, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # ---------- Agencies (for destination_agency) ----------
-        agencies = Agency.objects.all().order_by("code", "name")
-        agency_choices = [("", "Select destination agency…")]
-        for a in agencies:
-            label = f"{a.code} – {a.name}" if a.code else a.name
-            # store agency code in the CharField (or adjust to name if you prefer)
-            agency_choices.append((a.code, label))
-        self.fields["destination_agency"].choices = agency_choices
+        if step is None:
+            return
 
-        # ---------- Users (for focal point & recipient) ----------
-        users = (
-            User.objects.filter(is_active=True)
-            .select_related("agency")
-            .order_by("agency__code", "last_name", "first_name")
+        # ── Note (always shown; required only if step demands it) ─────────────
+        self.fields['note'] = forms.CharField(
+            label='Note / Remarks',
+            widget=forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Enter any relevant observations or remarks …',
+            }),
+            required=step.requires_note,
+            help_text='Required for this step.' if step.requires_note else 'Optional.',
         )
 
-        def user_label(u: User) -> str:
-            full_name = (u.get_full_name() or "").strip()
-            if not full_name:
-                full_name = f"{u.first_name} {u.last_name}".strip() or u.username
-            agency_code = getattr(getattr(u, "agency", None), "code", "") or ""
-            if agency_code:
-                return f"{agency_code} – {full_name} ({u.username})"
-            return f"{full_name} ({u.username})"
+        # ── Scan / Photo upload ───────────────────────────────────────────────
+        if step.requires_scan:
+            self.fields['scan_file'] = forms.FileField(
+                label='Upload Scan / Photo',
+                required=True,
+                help_text='Upload a scan or clear photograph of the item or its contents.',
+                widget=forms.ClearableFileInput(attrs={
+                    'class': 'form-control',
+                    'accept': 'image/*,.pdf',
+                }),
+            )
 
-        # Focal point: store email, show full name + agency
-        focal_choices = [("", "Select destination focal point…")]
-        for u in users:
-            email_value = u.email or u.username  # in case some users have no email
-            focal_choices.append((email_value, user_label(u)))
-        self.fields["dest_focal_email"].choices = focal_choices
+        # ── Stamp / Signature confirmation ────────────────────────────────────
+        if step.requires_stamp:
+            self.fields['stamped'] = forms.BooleanField(
+                label='I confirm this item has been stamped / signed',
+                required=True,
+                widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            )
 
-        # Recipient: store username, show full name + agency
-        recipient_choices = [("", "Select package recipient…")]
-        for u in users:
-            recipient_choices.append((u.username, user_label(u)))
-        self.fields["for_recipient"].choices = recipient_choices
+        # ── Routing destination ───────────────────────────────────────────────
+        if step.requires_routing:
+            self.fields['routed_to'] = forms.CharField(
+                label='Route To (Unit / Project)',
+                max_length=200,
+                required=True,
+                widget=forms.TextInput(attrs={
+                    'class': 'form-control',
+                    'placeholder': 'e.g. Finance Unit, Project XYZ, Registry',
+                }),
+                help_text='Specify the exact unit or project this item is being routed to.',
+            )
 
-class PackageReceptionForm(forms.Form):
-    note = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={'rows': 2})
-    )
-
-
-class PackageAgencyReceiveForm(forms.Form):
-    note = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={'rows': 2})
-    )
-
-
-class PackageDeliverForm(forms.Form):
-    delivered_to = forms.CharField(max_length=120)
-    note = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={'rows': 2})
-    )
+        # ── Recipient name / signature ────────────────────────────────────────
+        if step.requires_recipient_signature:
+            self.fields['recipient_name'] = forms.CharField(
+                label='Recipient Name',
+                max_length=120,
+                required=True,
+                widget=forms.TextInput(attrs={
+                    'class': 'form-control',
+                    'placeholder': 'Full name of person receiving and signing',
+                }),
+                help_text='Name of the person who physically receives and signs for this item.',
+            )

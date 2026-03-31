@@ -1,217 +1,256 @@
 {% extends "base.html" %}
-
 {% block title %}Package {{ package.tracking_code }}{% endblock %}
 
 {% block content %}
-<div class="container py-4" style="max-width: 1100px;">
-  <!-- Page Header -->
+<div class="container py-4" style="max-width:1100px;">
+
+  <!-- Header -->
   <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
-      <div class="d-flex align-items-center gap-2 mb-2">
+      <div class="d-flex align-items-center gap-2 mb-1">
         <i class="bi bi-box-seam fs-4 text-primary"></i>
         <h2 class="fw-bold mb-0">{{ package.tracking_code }}</h2>
+        {% if package.is_complete %}
+          <span class="badge bg-success px-3 py-2">Complete</span>
+        {% else %}
+          <span class="badge bg-primary px-3 py-2">In Progress</span>
+        {% endif %}
       </div>
-      <p class="text-muted mb-0">
-        <i class="bi bi-clock-history me-1"></i>
-        Logged {{ package.logged_at|date:"M d, Y \a\t H:i" }}
+      <p class="text-muted mb-0 small">
+        <i class="bi bi-clock me-1"></i>Logged {{ package.logged_at|date:"M d, Y H:i" }}
+        by {{ package.logged_by.get_full_name|default:package.logged_by.username }}
+        {% if package.flow_template %}
+          &nbsp;·&nbsp;<i class="bi bi-diagram-3 me-1"></i>{{ package.flow_template.name }}
+        {% endif %}
       </p>
     </div>
-    <a class="btn btn-outline-secondary" href="{% url 'vehicles:package_list' %}">
-      <i class="bi bi-arrow-left me-2"></i>Back to List
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'vehicles:package_list' %}">
+      <i class="bi bi-arrow-left me-1"></i>Back to List
     </a>
   </div>
 
-  <!-- Status Banner -->
-  <div class="alert alert-info border-0 shadow-sm mb-4" role="alert">
-    <div class="d-flex align-items-center">
-      <i class="bi bi-info-circle-fill fs-5 me-3"></i>
-      <div class="flex-grow-1">
-        <strong>Current Status:</strong>
-        <span class="badge bg-primary ms-2 px-3 py-2">{{ package.get_status_display }}</span>
+  <!-- ── Flow Progress Bar ──────────────────────────────────────────────────── -->
+  {% if all_steps %}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h6 class="fw-semibold text-muted text-uppercase small mb-3">
+        <i class="bi bi-diagram-3 me-2"></i>Workflow Progress — {{ package.flow_template.name }}
+      </h6>
+      <div class="d-flex align-items-start gap-0 flex-wrap">
+        {% for step in all_steps %}
+          <div class="text-center" style="min-width:100px; max-width:140px;">
+            <!-- Circle indicator -->
+            <div class="d-flex align-items-center">
+              {% if not forloop.first %}
+                {% if step.order in completed_orders %}
+                  <div class="flex-grow-1 border-top mt-3" style="border-color:#198754!important;border-width:2px!important;"></div>
+                {% else %}
+                  <div class="flex-grow-1 border-top mt-3" style="border-color:#dee2e6!important;border-width:2px!important;"></div>
+                {% endif %}
+              {% endif %}
+
+              <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto
+                          {% if step.order in completed_orders %}bg-success text-white
+                          {% elif step.pk == package.current_step.pk %}bg-primary text-white
+                          {% else %}bg-white border text-muted{% endif %}"
+                   style="width:36px;height:36px;border:2px solid {% if step.order in completed_orders %}#198754{% elif step.pk == package.current_step.pk %}#0d6efd{% else %}#dee2e6{% endif %};flex-shrink:0;">
+                {% if step.order in completed_orders %}
+                  <i class="bi bi-check-lg"></i>
+                {% elif step.pk == package.current_step.pk %}
+                  <i class="bi bi-arrow-right-short fs-5"></i>
+                {% else %}
+                  <span class="small fw-bold">{{ step.order }}</span>
+                {% endif %}
+              </div>
+
+              {% if not forloop.last %}
+                {% if step.order in completed_orders %}
+                  <div class="flex-grow-1 border-top mt-3" style="border-color:#198754!important;border-width:2px!important;"></div>
+                {% else %}
+                  <div class="flex-grow-1 border-top mt-3" style="border-color:#dee2e6!important;border-width:2px!important;"></div>
+                {% endif %}
+              {% endif %}
+            </div>
+            <!-- Label -->
+            <div class="mt-2 px-1">
+              <div class="small fw-semibold
+                {% if step.order in completed_orders %}text-success
+                {% elif step.pk == package.current_step.pk %}text-primary
+                {% else %}text-muted{% endif %}">
+                {{ step.name }}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
       </div>
     </div>
   </div>
+  {% endif %}
+
+  <!-- ── Current Action ─────────────────────────────────────────────────────── -->
+  {% if can_advance and package.current_step %}
+  <div class="alert border-0 shadow-sm mb-4 d-flex align-items-center gap-3"
+       style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;">
+    <i class="bi bi-play-circle-fill fs-3 flex-shrink-0"></i>
+    <div class="flex-grow-1">
+      <div class="fw-bold">Action Required: {{ package.current_step.name }}</div>
+      {% if package.current_step.description %}
+        <div class="small opacity-75">{{ package.current_step.description }}</div>
+      {% endif %}
+    </div>
+    <a href="{% url 'vehicles:package_advance_step' package.pk %}"
+       class="btn btn-light fw-semibold px-4 flex-shrink-0">
+      <i class="bi bi-arrow-right-circle me-1"></i>Perform Step
+    </a>
+  </div>
+  {% elif package.current_step and not can_advance %}
+  <div class="alert alert-info border-0 mb-4 small">
+    <i class="bi bi-hourglass-split me-2"></i>
+    <strong>Waiting on:</strong> {{ package.current_step.name }}
+    {% if package.current_step.allowed_roles %}
+      · Role required: <strong>{{ package.current_step.allowed_roles }}</strong>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <div class="row g-4">
-    <!-- Left Column - Package Details -->
+    <!-- Left column -->
     <div class="col-lg-7">
-      <!-- Main Details Card -->
+
+      <!-- Package Details -->
       <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-gradient text-white py-3">
-          <h5 class="mb-0">
-            <i class="bi bi-info-circle me-2"></i>Package Details
-          </h5>
+        <div class="card-header py-3" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+          <h5 class="mb-0 text-white"><i class="bi bi-info-circle me-2"></i>Package Details</h5>
         </div>
         <div class="card-body p-4">
           <dl class="row g-3 mb-0">
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Status</dt>
-              <dd class="mb-0">
-                <span class="badge bg-secondary px-3 py-2">
-                  {{ package.get_status_display }}
-                </span>
-              </dd>
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">Item Type</dt>
+              <dd class="fw-semibold">{{ package.item_type }}</dd>
             </div>
-
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Item Type</dt>
-              <dd class="mb-0 fw-semibold">{{ package.item_type }}</dd>
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">Current Status</dt>
+              <dd><span class="badge bg-secondary px-3 py-2">{{ package.status }}</span></dd>
             </div>
-
+            {% if package.description %}
             <div class="col-12">
-              <dt class="text-muted small text-uppercase mb-1">Description</dt>
-              <dd class="mb-0">{{ package.description|default:"—" }}</dd>
+              <dt class="text-muted small text-uppercase">Description</dt>
+              <dd>{{ package.description }}</dd>
             </div>
-
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Destination Agency</dt>
-              <dd class="mb-0 fw-semibold">{{ package.destination_agency }}</dd>
+            {% endif %}
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">Destination Agency</dt>
+              <dd class="fw-semibold">{{ package.destination_agency }}</dd>
             </div>
-
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Recipient</dt>
-              <dd class="mb-0">{{ package.for_recipient|default:"—" }}</dd>
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">For Recipient</dt>
+              <dd>{{ package.for_recipient|default:"—" }}</dd>
             </div>
-
+            {% if package.dest_focal_email %}
             <div class="col-12">
-              <dt class="text-muted small text-uppercase mb-1">Logged Information</dt>
-              <dd class="mb-0">
-                <i class="bi bi-calendar-event text-primary me-2"></i>
-                {{ package.logged_at|date:"M d, Y H:i" }}
-                <span class="mx-2">•</span>
-                <i class="bi bi-person text-primary me-2"></i>
-                {{ package.logged_by.username }}
-              </dd>
+              <dt class="text-muted small text-uppercase">Focal Point Email</dt>
+              <dd><a href="mailto:{{ package.dest_focal_email }}">{{ package.dest_focal_email }}</a></dd>
             </div>
+            {% endif %}
           </dl>
         </div>
       </div>
 
-      <!-- Sender Details Card -->
+      <!-- Sender Information -->
       <div class="card shadow-sm border-0">
-        <div class="card-header bg-light border-bottom py-3">
-          <h5 class="mb-0 text-dark">
-            <i class="bi bi-person-circle me-2"></i>Sender Information
-          </h5>
+        <div class="card-header bg-light py-3">
+          <h5 class="mb-0 text-dark"><i class="bi bi-person-circle me-2"></i>Sender</h5>
         </div>
         <div class="card-body p-4">
           <dl class="row g-3 mb-0">
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Name</dt>
-              <dd class="mb-0 fw-semibold">{{ package.sender_name }}</dd>
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">Name</dt>
+              <dd class="fw-semibold">{{ package.sender_name }}</dd>
             </div>
-
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Type</dt>
-              <dd class="mb-0">
-                <span class="badge bg-light text-dark border">
-                  {{ package.get_sender_type_display }}
-                </span>
-              </dd>
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">Type</dt>
+              <dd><span class="badge bg-light text-dark border">{{ package.get_sender_type_display }}</span></dd>
             </div>
-
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Organization</dt>
-              <dd class="mb-0">{{ package.sender_org|default:"—" }}</dd>
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">Organisation</dt>
+              <dd>{{ package.sender_org|default:"—" }}</dd>
             </div>
-
-            <div class="col-12 col-md-6">
-              <dt class="text-muted small text-uppercase mb-1">Contact</dt>
-              <dd class="mb-0">
-                {% if package.sender_contact %}
-                  <i class="bi bi-telephone me-1"></i>{{ package.sender_contact }}
-                {% else %}
-                  —
-                {% endif %}
-              </dd>
+            <div class="col-md-6">
+              <dt class="text-muted small text-uppercase">Contact</dt>
+              <dd>{{ package.sender_contact|default:"—" }}</dd>
             </div>
           </dl>
         </div>
       </div>
     </div>
 
-    <!-- Right Column - Actions & Timeline -->
+    <!-- Right column: Full History -->
     <div class="col-lg-5">
-      <!-- Actions Card -->
-      <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-gradient text-white py-3">
-          <h5 class="mb-0">
-            <i class="bi bi-lightning-charge me-2"></i>Quick Actions
-          </h5>
-        </div>
-        <div class="card-body p-4">
-          {% if user.role == 'reception' or user.role == 'lsa' or user.role == 'soc' %}
-            {% if package.status in 'to_reception,logged' %}
-              <a class="btn btn-primary w-100 mb-2 py-3" href="{% url 'vehicles:package_reception_receive' package.pk %}">
-                <i class="bi bi-check-circle me-2"></i>Receive at Reception
-              </a>
-            {% endif %}
-            {% if package.status == 'at_reception' %}
-              <a class="btn btn-outline-primary w-100 py-3" href="{% url 'vehicles:package_send_to_agency' package.pk %}">
-                <i class="bi bi-send me-2"></i>Send to Agency/Registry
-              </a>
-            {% endif %}
-          {% endif %}
-
-          {% if user.role in 'registry agency_fp lsa soc' %}
-            {% if package.status == 'to_agency' %}
-              <a class="btn btn-success w-100 mb-2 py-3" href="{% url 'vehicles:package_agency_receive' package.pk %}">
-                <i class="bi bi-check-circle-fill me-2"></i>Mark Received by Agency/Registry
-              </a>
-            {% endif %}
-          {% endif %}
-
-          {% if user.role in 'registry agency_fp lsa soc' %}
-            {% if package.status == 'with_agency' %}
-              <a class="btn btn-dark w-100 py-3" href="{% url 'vehicles:package_deliver' package.pk %}">
-                <i class="bi bi-truck me-2"></i>Mark Delivered
-              </a>
-            {% endif %}
-          {% endif %}
-
-          {% if not user.role or package.status == 'delivered' %}
-            <div class="text-center text-muted py-3">
-              <i class="bi bi-check-all fs-3 mb-2 d-block"></i>
-              <p class="mb-0">No actions available</p>
-            </div>
-          {% endif %}
-        </div>
-      </div>
-
-      <!-- Tracking Events Card -->
       <div class="card shadow-sm border-0">
-        <div class="card-header bg-light border-bottom py-3">
-          <h5 class="mb-0 text-dark">
-            <i class="bi bi-clock-history me-2"></i>Tracking Timeline
-          </h5>
+        <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
+          <h5 class="mb-0 text-dark"><i class="bi bi-clock-history me-2"></i>Full History</h5>
+          <span class="badge bg-primary rounded-pill">{{ step_logs.count }} event{{ step_logs.count|pluralize }}</span>
         </div>
         <div class="card-body p-0">
-          {% if package.events.all %}
+          {% if step_logs %}
             <div class="timeline-container">
-              {% for e in package.events.all %}
-                <div class="timeline-item {% if forloop.last %}timeline-item-last{% endif %}">
-                  <div class="timeline-marker"></div>
-                  <div class="timeline-content">
-                    <div class="d-flex justify-content-between align-items-start mb-1">
-                      <span class="badge bg-primary">{{ e.get_status_display }}</span>
-                      <small class="text-muted">{{ e.at|date:"M d, H:i" }}</small>
-                    </div>
-                    {% if e.note %}
-                      <p class="mb-1 small">{{ e.note }}</p>
+              {% for log in step_logs %}
+              <div class="timeline-item {% if forloop.last %}timeline-item-last{% endif %}">
+                <div class="timeline-marker {% if log.step.is_terminal %}marker-terminal{% endif %}"></div>
+                <div class="timeline-content">
+                  <!-- Step header -->
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="badge bg-primary px-2 py-1">{{ log.step_name }}</span>
+                    <small class="text-muted flex-shrink-0 ms-2">{{ log.performed_at|date:"M d, H:i" }}</small>
+                  </div>
+
+                  <!-- Who -->
+                  <div class="small text-muted mb-2">
+                    <i class="bi bi-person-fill me-1"></i>
+                    {{ log.performed_by.get_full_name|default:log.performed_by.username }}
+                    {% if log.performed_by.role %}
+                      <span class="badge bg-light text-dark border ms-1">{{ log.performed_by.role }}</span>
                     {% endif %}
-                    {% if e.who %}
-                      <div class="small text-muted">
-                        <i class="bi bi-person-fill me-1"></i>{{ e.who.username }}
-                      </div>
+                  </div>
+
+                  <!-- Note -->
+                  {% if log.note %}
+                  <div class="small bg-white border rounded p-2 mb-2">
+                    <i class="bi bi-chat-left-text text-muted me-1"></i>{{ log.note }}
+                  </div>
+                  {% endif %}
+
+                  <!-- Actions taken -->
+                  <div class="d-flex flex-wrap gap-1">
+                    {% if log.stamped %}
+                      <span class="badge bg-warning text-dark">
+                        <i class="bi bi-patch-check me-1"></i>Stamped
+                      </span>
+                    {% endif %}
+                    {% if log.routed_to %}
+                      <span class="badge bg-info text-dark">
+                        <i class="bi bi-send me-1"></i>→ {{ log.routed_to }}
+                      </span>
+                    {% endif %}
+                    {% if log.recipient_name %}
+                      <span class="badge bg-success">
+                        <i class="bi bi-pen me-1"></i>Signed: {{ log.recipient_name }}
+                      </span>
+                    {% endif %}
+                    {% if log.scan_file %}
+                      <a href="{{ log.scan_file.url }}" target="_blank" class="badge bg-light text-dark border text-decoration-none">
+                        <i class="bi bi-file-earmark-image me-1"></i>View Scan
+                      </a>
                     {% endif %}
                   </div>
                 </div>
+              </div>
               {% endfor %}
             </div>
           {% else %}
             <div class="text-center text-muted py-5">
-              <i class="bi bi-inbox fs-3 mb-2 d-block"></i>
-              <p class="mb-0">No tracking events yet</p>
+              <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+              <p class="mb-0 small">No steps recorded yet.</p>
             </div>
           {% endif %}
         </div>
@@ -220,151 +259,41 @@
   </div>
 </div>
 
-<!-- Custom Styles -->
 <style>
-  /* Gradient Background */
-  .bg-gradient {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
+  .card { border-radius:.75rem; overflow:hidden; }
 
-  /* Card Styling */
-  .card {
-    border-radius: 0.75rem;
-    overflow: hidden;
-  }
-
-  .card-header {
-    border-bottom: none;
-  }
-
-  /* Definition List Styling */
-  dt {
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
-
-  dd {
-    color: #2d3748;
-  }
-
-  /* Badge Styling */
-  .badge {
-    font-weight: 500;
-    font-size: 0.85rem;
-    letter-spacing: 0.3px;
-  }
-
-  /* Button Styling */
-  .btn {
-    font-weight: 500;
-    border-radius: 0.5rem;
-    transition: all 0.2s ease;
-  }
-
-  .btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-  }
-
-  .btn-outline-primary {
-    color: #667eea;
-    border-color: #667eea;
-  }
-
-  .btn-outline-primary:hover {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: transparent;
-    color: white;
-  }
-
-  /* Alert Styling */
-  .alert-info {
-    background-color: #e6f2ff;
-    border-left: 4px solid #4299e1;
-  }
-
-  /* Timeline Styling */
-  .timeline-container {
-    padding: 1.5rem;
-  }
-
+  /* ── Timeline ── */
+  .timeline-container { padding:1.5rem 1.25rem; }
   .timeline-item {
-    position: relative;
-    padding-left: 2.5rem;
-    padding-bottom: 1.5rem;
+    position:relative;
+    padding-left:2.25rem;
+    padding-bottom:1.5rem;
   }
-
-  .timeline-item-last {
-    padding-bottom: 0;
-  }
-
+  .timeline-item-last { padding-bottom:0; }
   .timeline-item::before {
-    content: '';
-    position: absolute;
-    left: 0.625rem;
-    top: 2rem;
-    bottom: -0.5rem;
-    width: 2px;
-    background: linear-gradient(180deg, #e2e8f0 0%, transparent 100%);
+    content:'';
+    position:absolute;
+    left:.55rem; top:1.4rem; bottom:-.5rem;
+    width:2px;
+    background:linear-gradient(180deg,#e2e8f0 0%,transparent 100%);
   }
-
-  .timeline-item-last::before {
-    display: none;
-  }
-
+  .timeline-item-last::before { display:none; }
   .timeline-marker {
-    position: absolute;
-    left: 0;
-    top: 0.25rem;
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: 3px solid white;
-    box-shadow: 0 0 0 2px #e2e8f0;
+    position:absolute; left:0; top:.25rem;
+    width:1.1rem; height:1.1rem;
+    border-radius:50%;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+    border:3px solid #fff;
+    box-shadow:0 0 0 2px #e2e8f0;
   }
-
+  .timeline-marker.marker-terminal {
+    background:linear-gradient(135deg,#38a169,#2f855a);
+  }
   .timeline-content {
-    background-color: #f8fafc;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border-left: 3px solid #e2e8f0;
+    background:#f8fafc; padding:.875rem; border-radius:.5rem;
+    border-left:3px solid #e2e8f0;
+    transition:border-color .2s;
   }
-
-  .timeline-item:hover .timeline-content {
-    background-color: #f1f5f9;
-    border-left-color: #667eea;
-  }
-
-  /* Responsive */
-  @media (max-width: 992px) {
-    .col-lg-7, .col-lg-5 {
-      width: 100%;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .container {
-      padding-left: 1rem;
-      padding-right: 1rem;
-    }
-
-    .card-body {
-      padding: 1.5rem !important;
-    }
-
-    .timeline-container {
-      padding: 1rem;
-    }
-
-    .btn {
-      font-size: 0.9rem;
-    }
-  }
+  .timeline-item:hover .timeline-content { border-left-color:#667eea; }
 </style>
 {% endblock %}

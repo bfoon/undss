@@ -570,6 +570,18 @@ class RoomBookingSeries(models.Model):
         help_text="Reason for rejection (if applicable)"
     )
 
+    ICT_SUPPORT_CHOICES = (
+        ("none",   "No ICT support needed"),
+        ("setup",  "Before meeting — Setup / AV configuration"),
+        ("during", "During meeting — Live technical support"),
+    )
+    ict_support = models.CharField(
+        max_length=10,
+        choices=ICT_SUPPORT_CHOICES,
+        default="none",
+        help_text="Whether ICT support is needed and when",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_recurring(self):
@@ -667,6 +679,18 @@ class RoomBooking(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    ICT_SUPPORT_CHOICES = (
+        ("none",   "No ICT support needed"),
+        ("setup",  "Before meeting — Setup / AV configuration"),
+        ("during", "During meeting — Live technical support"),
+    )
+    ict_support = models.CharField(
+        max_length=10,
+        choices=ICT_SUPPORT_CHOICES,
+        default="none",
+        help_text="Whether ICT support is needed and when",
+    )
 
     class Meta:
         ordering = ["-date", "start_time"]
@@ -1481,6 +1505,15 @@ class ConsumableRequest(models.Model):
     notes        = models.TextField(blank=True, help_text="Justification or delivery notes")
     status       = models.CharField(max_length=25, choices=STATUS_CHOICES, default="pending")
 
+    linked_asset = models.ForeignKey(
+        "Asset",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="consumable_requests",
+        help_text="Optional: the physical asset this supply is intended for "
+                  "(e.g. the laptop a keyboard is requested for)",
+    )
+
     approved_by  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                       null=True, blank=True, related_name="consumable_requests_approved")
     approved_at  = models.DateTimeField(null=True, blank=True)
@@ -1558,3 +1591,80 @@ class ConsumableStockLog(models.Model):
 
     def __str__(self):
         return f"{self.item.name} {self.quantity_change:+d} [{self.event}]"
+
+
+class ConsumableAssetLink(models.Model):
+    """
+    Catalogue-level pairing: declares that a ConsumableItem is a compatible
+    peripheral / consumable for a specific Asset (or a whole AssetCategory).
+
+    Examples
+    --------
+    • Wireless Keyboard  ↔  Dell Latitude (asset tag AST-001042)
+    • HP 305 Cartridge   ↔  HP DeskJet 2710 (asset tag AST-000889)
+    • USB-C Hub          ↔  MacBook Air (asset tag AST-001005)
+
+    Use `asset_category` alone for a class-level link (e.g. all printers use
+    this cartridge), or `asset` alone for a 1-to-1 pairing, or both.
+    """
+
+    agency = models.ForeignKey(
+        "Agency",
+        on_delete=models.CASCADE,
+        related_name="consumable_asset_links",
+    )
+
+    # The consumable side
+    consumable_item = models.ForeignKey(
+        "ConsumableItem",
+        on_delete=models.CASCADE,
+        related_name="asset_links",
+        help_text="The peripheral / supply item",
+    )
+
+    # The asset side — at least one of these must be set
+    asset = models.ForeignKey(
+        "Asset",
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name="consumable_links",
+        help_text="Specific asset (1-to-1 pairing)",
+    )
+    asset_category = models.ForeignKey(
+        "AssetCategory",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="consumable_links",
+        help_text="Asset category (class-level pairing; all assets in this category share this consumable)",
+    )
+
+    note = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Optional label, e.g. 'Primary keyboard', 'Black ink only'",
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="consumable_asset_links_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["consumable_item__name", "asset__name"]
+        unique_together = ("consumable_item", "asset")  # one entry per pairing
+        verbose_name = "Consumable–Asset link"
+        verbose_name_plural = "Consumable–Asset links"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if not self.asset and not self.asset_category:
+            raise ValidationError(
+                "At least one of 'asset' or 'asset_category' must be set."
+            )
+
+    def __str__(self):
+        target = self.asset or self.asset_category
+        return f"{self.consumable_item.name} ↔ {target}"

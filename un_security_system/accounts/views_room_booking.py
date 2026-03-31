@@ -25,6 +25,13 @@ from django.db import transaction
 from .models import Room, RoomBooking, RoomApprover, RoomBookingSeries
 from .forms import RoomBookingForm, RoomBookingApprovalForm, RoomForm, RoomSeriesApprovalForm
 
+# ICT focal lookup — graceful so the file works if AgencyAssetRoles isn't present.
+try:
+    from .models import AgencyAssetRoles, User as _User
+    _HAS_AGENCY_ROLES = True
+except ImportError:
+    _HAS_AGENCY_ROLES = False
+
 # ======================= EMAIL HELPERS =======================
 
 def _send_email_async(subject, message, recipients):
@@ -397,6 +404,115 @@ def send_booking_calendar_invite(booking):
     msg.attach("invite.ics", ics_bytes, "text/calendar; method=REQUEST; charset=UTF-8")
 
     msg.send(fail_silently=False)
+
+
+def _get_ict_emails_for_booking(booking):
+    """
+    Collect ICT focal-point emails for a booking.
+    Priority order:
+      1. Any RoomApprover for this room whose User has role=ict_focal
+      2. AgencyAssetRoles.ict_custodian for the requester agency
+      3. Any User with role=ict_focal in the same agency (fallback)
+    """
+    emails = []
+    room = booking.room
+
+    # 1. Room-level approvers who are ICT focal
+    emails.extend(list(
+        RoomApprover.objects.filter(
+            room=room,
+            is_active=True,
+            user__role="ict_focal",
+        ).select_related("user").values_list("user__email", flat=True)
+    ))
+
+    # 2 & 3. Agency-level ICT roles
+    if _HAS_AGENCY_ROLES:
+        agency = getattr(booking.requested_by, "agency", None)
+        if agency:
+            try:
+                roles = AgencyAssetRoles.objects.get(agency=agency)
+                emails.extend(list(roles.ict_custodian.values_list("email", flat=True)))
+            except AgencyAssetRoles.DoesNotExist:
+                pass
+            emails.extend(list(
+                _User.objects.filter(
+                    agency=agency, role="ict_focal", is_active=True,
+                ).exclude(email="").values_list("email", flat=True)
+            ))
+
+    return list(dict.fromkeys(e for e in emails if e))
+
+
+def notify_ict_support_requested(booking):
+    """
+    Email ICT focal points when a booking requests ICT support.
+    Fires at submission time so ICT can plan ahead.
+    """
+    ict_emails = _get_ict_emails_for_booking(booking)
+    if not ict_emails:
+        return
+
+    requester_name = booking.requested_by.get_full_name() or booking.requested_by.username
+    support_label = {
+        "setup":  "Before meeting — Setup / AV configuration",
+        "during": "During meeting — Live technical support",
+    }.get(getattr(booking, "ict_support", ""), "ICT support requested")
+
+    subject = f"[ICT Support Requested] {booking.room.name} — {booking.date}"
+    message = (
+        "Dear ICT Team,\n\n"
+        "A room booking has been submitted that requires ICT support.\n\n"
+        f"  Room:         {booking.room.name} ({booking.room.code})\n"
+        f"  Date:         {booking.date}\n"
+        f"  Time:         {booking.start_time} – {booking.end_time}\n"
+        f"  Title:        {booking.title}\n"
+        f"  Requested by: {requester_name}\n"
+        f"  ICT Support:  {support_label}\n\n"
+        "The booking is currently pending approval. "
+        "You may want to reach out to the requester in advance "
+        "to clarify any technical requirements.\n\n"
+        "Thank you."
+    )
+    _send_email_async(subject, message, ict_emails)
+
+
+def notify_ict_support_requested_series(series):
+    """Same as notify_ict_support_requested but for a recurring series."""
+    class _FakeBooking:
+        pass
+    fake = _FakeBooking()
+    fake.room = series.room
+    fake.requested_by = series.requested_by
+
+    ict_emails = _get_ict_emails_for_booking(fake)
+    if not ict_emails:
+        return
+
+    requester_name = series.requested_by.get_full_name() or series.requested_by.username
+    freq_display = series.get_frequency_display() if series.frequency else "One-time"
+    support_label = {
+        "setup":  "Before meeting — Setup / AV configuration",
+        "during": "During meeting — Live technical support",
+    }.get(getattr(series, "ict_support", ""), "ICT support requested")
+
+    subject = f"[ICT Support Requested] Recurring — {series.room.name}"
+    message = (
+        "Dear ICT Team,\n\n"
+        "A RECURRING room booking series has been submitted that requires ICT support.\n\n"
+        f"  Room:          {series.room.name} ({series.room.code})\n"
+        f"  Title:         {series.title}\n"
+        f"  Frequency:     {freq_display}\n"
+        f"  Start Date:    {series.start_date}\n"
+        f"  End Date:      {series.end_date or 'No end date'}\n"
+        f"  Time:          {series.start_time} – {series.end_time}\n"
+        f"  Requested by:  {requester_name}\n"
+        f"  ICT Support:   {support_label}\n\n"
+        "The series is currently pending approval. "
+        "Please coordinate with the requester before the first occurrence.\n\n"
+        "Thank you."
+    )
+    _send_email_async(subject, message, ict_emails)
 
 
 def room_has_active_approvers(room) -> bool:
@@ -884,6 +1000,8 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
             monthly_week = int(monthly_week_raw) if monthly_week_raw not in (None, "") else None
             monthly_weekday = int(monthly_weekday_raw) if monthly_weekday_raw not in (None, "") else None
 
+            ict_support = form.cleaned_data.get("ict_support", "none") or "none"
+
             with transaction.atomic():
                 # Create series with approval status
                 series = RoomBookingSeries.objects.create(
@@ -901,7 +1019,8 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                     monthly_type=monthly_type,
                     monthly_week=monthly_week,
                     monthly_weekday=monthly_weekday,
-                    status=status,  # NEW: Set series status
+                    status=status,
+                    ict_support=ict_support,
                 )
 
                 created = 0
@@ -921,6 +1040,7 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                         end_time=series.end_time,
                         status=status,
                         requested_by=user,
+                        ict_support=ict_support,
                     )
                     b.full_clean()
                     b.save()
@@ -936,6 +1056,10 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                         notify_approvers_new_series(series)
                     notify_requester_series_approved(series)
 
+                # Notify ICT if support was requested
+                if ict_support and ict_support != "none":
+                    notify_ict_support_requested_series(series)
+
                 if status == "approved":
                     messages.success(self.request,
                                      f"Recurring booking created ({created} occurrences) and auto-approved.")
@@ -946,8 +1070,10 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                 return redirect("accounts:room_detail", pk=room.pk)
 
         # ---- non-recurring (single booking) ----
+        ict_support = form.cleaned_data.get("ict_support", "none") or "none"
         form.instance.requested_by = user
         form.instance.status = status
+        form.instance.ict_support = ict_support
 
         form.instance.full_clean()
         response = super().form_valid(form)
@@ -962,6 +1088,10 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                 notify_approvers_new_booking(self.object)
             notify_requester_booking_approved(self.object)
             messages.success(self.request, "Booking auto-approved.")
+
+        # Notify ICT if support was requested (fires regardless of approval status)
+        if ict_support and ict_support != "none":
+            notify_ict_support_requested(self.object)
 
         return response
 

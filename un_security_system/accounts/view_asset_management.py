@@ -1,38 +1,45 @@
 # view_asset_management.py
+import csv
+import json
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.db import transaction
-from django.db import IntegrityError
-
-import csv
+from django.views.decorators.http import require_POST
 
 from .asset_email import send_email_async
-from .utils_assets import (get_manager_emails_for_request, get_ict_custodian_emails,
-                           can_user_approve_asset_change,
-                           can_user_approve_return,
-                           generate_unique_asset_tag,
-                           build_qr_payload,
-                           generate_qr_image, save_qr_to_asset
-                           )
-
-from .models import (
-    AgencyServiceConfig, AgencyAssetRoles, Unit,
-    AssetCategory, Asset, AssetRequest,
-    AssetHistory, AssetReturnRequest, AssetChangeRequest, ExitRequest,
-    MobileLine, CellServiceFocalPoint, User, MobileLineReactivationRequest,
-    ConsumableCategory, ConsumableItem, ConsumableRequest,
-    ConsumableRequestItem, ConsumableStockLog,
+from .utils_assets import (
+    build_qr_payload,
+    can_user_approve_asset_change,
+    can_user_approve_return,
+    generate_qr_image,
+    generate_unique_asset_tag,
+    get_ict_custodian_emails,
+    get_manager_emails_for_request,
+    save_qr_to_asset,
 )
-from .pdf_assets import build_asset_labels_pdf, LabelSpec
+from .models import (
+    AgencyAssetRoles, AgencyServiceConfig, Asset, AssetCategory,
+    AssetChangeRequest, AssetHistory, AssetRequest, AssetReturnRequest,
+    CellServiceFocalPoint, ConsumableAssetLink, ConsumableCategory,
+    ConsumableItem, ConsumableRequest, ConsumableRequestItem,
+    ConsumableStockLog, ExitRequest, MobileLine,
+    MobileLineReactivationRequest, Unit, User,
+)
+from .pdf_assets import LabelSpec, build_asset_labels_pdf
 
 
-# --- helpers (keep yours if already defined elsewhere) ---
+# ─────────────────────────────────────────────────────────────────────────────
+# Role helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
 def _is_ict(user, agency):
     if user.is_superuser:
         return True
@@ -48,7 +55,6 @@ def _is_ops_manager(user, agency):
 
 
 def _managed_unit_ids(user, agency):
-    # unit head OR asset_managers
     unit_ids = set(
         Unit.objects.filter(agency=agency, unit_head=user).values_list("id", flat=True)
     )
@@ -59,8 +65,6 @@ def _managed_unit_ids(user, agency):
 
 
 def _log_event(agency, asset, actor, event, note="", meta=None):
-    # If you already have a logger, keep it.
-    # This version is safe and minimal.
     try:
         AssetHistory.objects.create(
             agency=agency,
@@ -89,52 +93,40 @@ def _notify(subject: str, to_emails: list[str], html_template: str, ctx: dict):
     except Exception:
         pass
 
+
 def _can_user_manage_asset(user, agency, asset) -> bool:
-    """Managers can see assets for units they manage; ops manages core/unallocated; ICT sees all; holder sees assigned."""
     is_ict = user.is_superuser or _is_ict(user, agency)
     is_ops = user.is_superuser or _is_ops_manager(user, agency)
     managed_units = _managed_unit_ids(user, agency)
 
     if is_ict:
         return True
-
-    # Ops manages core unit or unallocated
     if is_ops and (asset.unit_id is None or (asset.unit and getattr(asset.unit, "is_core_unit", False))):
         return True
-
-    # Unit manager manages assets in their units
     if asset.unit_id and asset.unit_id in managed_units:
         return True
-
-    # Holder can view their assigned asset
     if asset.current_holder_id == user.id:
         return True
-
     return False
 
 
 def _can_user_approve_change(user, agency, asset) -> bool:
-    """Asset Manager / Unit Head approves changes. Ops for core/unallocated. Superuser allowed."""
     if user.is_superuser:
         return True
-
     roles, _ = AgencyAssetRoles.objects.get_or_create(agency=agency)
-
-    # Ops for core/unallocated
     if roles.operations_manager_id and user.id == roles.operations_manager_id:
         if (asset.unit_id is None) or (asset.unit and getattr(asset.unit, "is_core_unit", False)):
             return True
-
-    # If assigned to a unit: unit head or asset managers
     if asset.unit_id:
         if asset.unit.unit_head_id and user.id == asset.unit.unit_head_id:
             return True
         return asset.unit.asset_managers.filter(id=user.id).exists()
-
     return False
+
 
 def _safe_email(u):
     return getattr(u, "email", None)
+
 
 def _get_exit_recipients(user, agency):
     unit = getattr(user, "unit", None)
@@ -144,7 +136,6 @@ def _get_exit_recipients(user, agency):
     ops_email = _safe_email(getattr(roles, "operations_manager", None)) if roles else None
     ict_emails = list(roles.ict_custodian.values_list("email", flat=True)) if roles else []
 
-    # NEW: cell provider focal points (not users)
     cell_focal_emails = list(
         CellServiceFocalPoint.objects.filter(agency=agency, is_active=True)
         .values_list("email", flat=True)
@@ -156,34 +147,6 @@ def _get_exit_recipients(user, agency):
 
     return base, cell_focal_emails
 
-def _get_line_suspend_recipients(agency):
-    """
-    Returns (provider_focals, ops_manager_email, registry_emails)
-    """
-    # Provider focal points (not necessarily system users)
-    provider_focals = list(
-        CellServiceFocalPoint.objects.filter(agency=agency, is_active=True)
-        .values_list("email", flat=True)
-    )
-
-    # Ops Manager (from AgencyAssetRoles)
-    roles = getattr(agency, "asset_roles", None)
-    ops_email = None
-    if roles and roles.operations_manager:
-        ops_email = roles.operations_manager.email
-
-    # Registry users in this agency
-    registry_emails = list(
-        User.objects.filter(agency=agency, role="registry", is_active=True)
-        .exclude(email__isnull=True).exclude(email__exact="")
-        .values_list("email", flat=True)
-    )
-
-    # De-dupe
-    provider_focals = list(dict.fromkeys([e for e in provider_focals if e]))
-    registry_emails = list(dict.fromkeys([e for e in registry_emails if e]))
-
-    return provider_focals, ops_email, registry_emails
 
 def _get_line_suspend_recipients(agency):
     provider_focals = list(
@@ -200,12 +163,62 @@ def _get_line_suspend_recipients(agency):
         .values_list("email", flat=True)
     )
 
-    # de-dupe
-    def _uniq(lst): return list(dict.fromkeys([e for e in lst if e]))
+    def _uniq(lst):
+        return list(dict.fromkeys([e for e in lst if e]))
+
     return _uniq(provider_focals), ops_email, _uniq(registry_emails)
 
 
-# ------------ Main Views -----------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Consumable chart helper (module-level so it can be reused)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_consumable_chart_data(items_qs):
+    """
+    Returns a JSON string ready for Chart.js.
+    Horizontal bar per item coloured green / amber / red.
+    Dashed line overlay shows the low-stock threshold.
+    """
+    labels, stock_vals, threshold_vals, colors = [], [], [], []
+    for item in items_qs:
+        labels.append(item.name)
+        stock_vals.append(item.stock_qty)
+        threshold_vals.append(item.low_stock_threshold)
+        if item.is_out_of_stock:
+            colors.append("rgba(220,53,69,0.8)")
+        elif item.is_low_stock:
+            colors.append("rgba(255,193,7,0.8)")
+        else:
+            colors.append("rgba(25,135,84,0.8)")
+
+    return json.dumps({
+        "labels": labels,
+        "datasets": [
+            {
+                "label": "Current Stock",
+                "data": stock_vals,
+                "backgroundColor": colors,
+                "borderRadius": 4,
+                "barThickness": 18,
+            },
+            {
+                "label": "Low-Stock Threshold",
+                "data": threshold_vals,
+                "type": "line",
+                "borderColor": "rgba(220,53,69,0.9)",
+                "borderWidth": 2,
+                "borderDash": [5, 5],
+                "pointRadius": 0,
+                "fill": False,
+                "tension": 0,
+            },
+        ],
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main dashboard view
+# ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
 def view_asset_management(request):
@@ -222,7 +235,6 @@ def view_asset_management(request):
         messages.error(request, "You are not assigned to an agency.")
         return redirect("accounts:profile")
 
-    # Agency service toggle
     svc, _ = AgencyServiceConfig.objects.get_or_create(agency=agency)
     if not svc.asset_mgmt_enabled and not user.is_superuser:
         messages.warning(request, "Asset Management is not enabled for your agency.")
@@ -237,19 +249,11 @@ def view_asset_management(request):
 
     portal_url = request.build_absolute_uri(reverse("accounts:asset_management"))
 
-    # ------------------------------------------
-    # Helper: safe email sending (no crashes)
-    # ------------------------------------------
-    def _notify(subject: str, to_emails: list[str], html_template: str, ctx: dict):
+    def _notify_local(subject: str, to_emails: list[str], html_template: str, ctx: dict):
         to_emails = [e for e in (to_emails or []) if e]
         if not to_emails:
             return
-        ctx = {
-            **ctx,
-            "subject": subject,
-            "agency": agency,
-            "portal_url": portal_url,
-        }
+        ctx = {**ctx, "subject": subject, "agency": agency, "portal_url": portal_url}
         try:
             send_email_async(
                 subject=subject,
@@ -260,19 +264,14 @@ def view_asset_management(request):
         except Exception:
             pass
 
-    # -----------------------------
+    # ------------------------------------------------------------------
     # Shared data
-    # -----------------------------
+    # ------------------------------------------------------------------
     units = Unit.objects.filter(agency=agency).select_related("unit_head").prefetch_related("asset_managers")
     categories = AssetCategory.objects.filter(agency=agency).order_by("name")
 
     assets_all = Asset.objects.filter(agency=agency).select_related("category", "unit", "current_holder")
 
-    # Assets visibility:
-    # - ICT: all
-    # - Ops manager: core/unallocated
-    # - Unit managers: assets for managed units
-    # - Requesters: only assets assigned to them
     if is_ict:
         assets_visible = assets_all
     elif is_ops:
@@ -284,12 +283,10 @@ def view_asset_management(request):
 
     assets_visible = assets_visible.order_by("-created_at")
 
-    # Requests visibility (requester)
     my_requests = AssetRequest.objects.filter(
         agency=agency, requester=user
     ).select_related("unit", "category", "assigned_asset").order_by("-created_at")
 
-    # approvals pending for me (manager)
     pending_approvals = []
     if is_manager:
         pending_qs = AssetRequest.objects.filter(
@@ -297,12 +294,10 @@ def view_asset_management(request):
         ).select_related("unit", "requester", "category")
         pending_approvals = [r for r in pending_qs if (user.is_superuser or r.can_user_approve_as_manager(user))]
 
-    # ICT queue
     pending_ict = AssetRequest.objects.filter(
         agency=agency, status="pending_ict"
     ).select_related("unit", "requester", "category")
 
-    # Returns
     my_returns = AssetReturnRequest.objects.filter(
         agency=agency, requested_by=user
     ).select_related("asset").order_by("-created_at")
@@ -311,34 +306,28 @@ def view_asset_management(request):
         agency=agency, status="pending_ict"
     ).select_related("asset", "requested_by").order_by("-created_at")
 
-    # Quick: assets currently in return pipeline (for badges)
     returning_asset_ids = set(pending_returns.values_list("asset_id", flat=True))
 
-    # EOL list (for ICT / managers)
     eol_assets = []
     if is_ict or is_manager:
         eol_assets = [a for a in assets_visible if getattr(a, "is_eol_due", False) and a.status != "retired"]
 
-    # -----------------------------
-    # Mobile Lines visibility
-    # -----------------------------
     if is_ict:
         mobile_lines_visible = MobileLine.objects.filter(agency=agency).select_related(
             "custodian", "assigned_to"
         ).order_by("-created_at")
     else:
-        # Normal users: only see their own assigned lines
         mobile_lines_visible = MobileLine.objects.filter(
             agency=agency, assigned_to=user
         ).select_related("custodian", "assigned_to").order_by("-created_at")
 
-    # -----------------------------
+    # ------------------------------------------------------------------
     # POST actions
-    # -----------------------------
+    # ------------------------------------------------------------------
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip()
 
-        # ============ A) Cancel request (before approval/assignment) ============
+        # ── Cancel asset request ──────────────────────────────────────
         if action == "cancel_request":
             req_id = request.POST.get("request_id")
             req_obj = get_object_or_404(AssetRequest, id=req_id, agency=agency)
@@ -347,19 +336,17 @@ def view_asset_management(request):
                 messages.error(request, "You can only cancel your own request.")
                 return redirect("accounts:asset_management")
 
-            # Can cancel only if not approved/assigned/received/rejected
             cancellable_statuses = {"draft", "pending_manager", "pending_ict"}
             if req_obj.status not in cancellable_statuses:
-                messages.info(request, "This request can’t be cancelled at this stage.")
+                messages.info(request, "This request can't be cancelled at this stage.")
                 return redirect("accounts:asset_management")
 
             req_obj.status = "cancelled"
             req_obj.save(update_fields=["status"])
-
             messages.success(request, f"Request #{req_obj.id} cancelled.")
             return redirect("accounts:asset_management")
 
-        # ============ 1) Create asset request ============
+        # ── Create asset request ──────────────────────────────────────
         if action == "create_request":
             category_id = request.POST.get("category_id")
             unit_id = request.POST.get("unit_id")
@@ -383,7 +370,7 @@ def view_asset_management(request):
             )
 
             manager_emails = get_manager_emails_for_request(req)
-            _notify(
+            _notify_local(
                 subject=f"Asset Request #{req.id} — Approval Required",
                 to_emails=manager_emails,
                 html_template="emails/assets/request_submitted.html",
@@ -392,7 +379,7 @@ def view_asset_management(request):
 
             if req.status == "pending_ict":
                 ict_emails = get_ict_custodian_emails(req)
-                _notify(
+                _notify_local(
                     subject=f"Asset Request #{req.id} — Pending ICT Assignment",
                     to_emails=ict_emails,
                     html_template="emails/assets/request_approved.html",
@@ -402,7 +389,7 @@ def view_asset_management(request):
             messages.success(request, f"Asset request #{req.id} submitted.")
             return redirect("accounts:asset_management")
 
-        # ============ 2) Manager approve/reject ============
+        # ── Manager approve / reject asset request ────────────────────
         if action in ("approve_request", "reject_request"):
             req_id = request.POST.get("request_id")
             req_obj = get_object_or_404(AssetRequest, id=req_id, agency=agency)
@@ -417,42 +404,37 @@ def view_asset_management(request):
 
             if action == "approve_request":
                 req_obj.approve(user)
-
-                _notify(
+                _notify_local(
                     subject=f"Asset Request #{req_obj.id} — Approved",
                     to_emails=[getattr(req_obj.requester, "email", None)],
                     html_template="emails/assets/request_approved.html",
                     ctx={"req": req_obj, "approved_by": user.get_full_name() or user.username},
                 )
-                _notify(
+                _notify_local(
                     subject=f"Asset Request #{req_obj.id} — Pending ICT Assignment",
                     to_emails=get_ict_custodian_emails(req_obj),
                     html_template="emails/assets/request_approved.html",
                     ctx={"req": req_obj, "approved_by": user.get_full_name() or user.username},
                 )
-
                 messages.success(request, f"Request #{req_obj.id} approved.")
                 return redirect("accounts:asset_management")
 
-            # reject
             reason = (request.POST.get("reason") or "").strip()
             if not reason:
                 messages.error(request, "Please provide a rejection reason.")
                 return redirect("accounts:asset_management")
 
             req_obj.reject(user, reason=reason)
-
-            _notify(
+            _notify_local(
                 subject=f"Asset Request #{req_obj.id} — Rejected",
                 to_emails=[getattr(req_obj.requester, "email", None)],
                 html_template="emails/assets/request_rejected.html",
                 ctx={"req": req_obj, "rejected_by": user.get_full_name() or user.username},
             )
-
             messages.warning(request, f"Request #{req_obj.id} rejected.")
             return redirect("accounts:asset_management")
 
-        # ============ 3) ICT register asset ============
+        # ── ICT register asset ────────────────────────────────────────
         if action == "register_asset":
             if not is_ict:
                 messages.error(request, "Only ICT custodian can register assets.")
@@ -462,7 +444,6 @@ def view_asset_management(request):
             serial_number = (request.POST.get("serial_number") or "").strip() or None
             asset_tag = (request.POST.get("asset_tag") or "").strip() or None
             auto_tag = (request.POST.get("auto_tag") or "").strip() == "1"
-
             category_id = request.POST.get("category_id")
             unit_id = request.POST.get("unit_id")
             acquired_at = request.POST.get("acquired_at") or None
@@ -474,10 +455,8 @@ def view_asset_management(request):
             category = get_object_or_404(AssetCategory, id=category_id, agency=agency)
             unit = get_object_or_404(Unit, id=unit_id, agency=agency) if unit_id else None
 
-            # service settings
             svc, _ = AgencyServiceConfig.objects.get_or_create(agency=agency)
 
-            # auto-generate tag if enabled and user asked OR blank tag
             if (not asset_tag and svc.asset_tag_auto_generate) or (auto_tag and svc.asset_tag_auto_generate):
                 asset_tag = generate_unique_asset_tag(
                     agency=agency,
@@ -501,7 +480,6 @@ def view_asset_management(request):
                 acquired_at=acquired_at,
             )
 
-            # generate QR code
             payload = build_qr_payload(request, asset, include_url=svc.asset_qr_include_url)
             logo_path = getattr(getattr(agency, "logo", None), "path", None) if getattr(agency, "logo", None) else None
             qr_img = generate_qr_image(payload, agency_logo_path=logo_path)
@@ -510,13 +488,11 @@ def view_asset_management(request):
             asset.save(update_fields=["qr_code", "qr_payload"])
 
             _log_event(agency, asset, user, "registered", note="Asset registered into pool (tag + QR created).")
-
             messages.success(request, "Asset registered successfully (tag + QR generated).")
             return redirect("accounts:asset_management")
 
-        # ============ 3B) Register Mobile Line (SIM/Data) ============
+        # ── Register Mobile Line ──────────────────────────────────────
         if action == "register_mobile_line":
-            # Only ICT can register lines (custodian)
             if not is_ict:
                 messages.error(request, "Only ICT custodian can register mobile lines.")
                 return redirect("accounts:asset_management")
@@ -536,10 +512,8 @@ def view_asset_management(request):
                 messages.error(request, "Phone number (MSISDN) is required.")
                 return redirect("accounts:asset_management")
 
-            # Optional: normalize MSISDN a bit (remove spaces)
             msisdn = msisdn.replace(" ", "")
 
-            # Prevent duplicates nicely (msisdn is unique in model)
             if MobileLine.objects.filter(msisdn=msisdn).exists():
                 messages.warning(request, f"This line ({msisdn}) is already registered in the system.")
                 return redirect("accounts:asset_management")
@@ -551,24 +525,22 @@ def view_asset_management(request):
                     provider=provider,
                     msisdn=msisdn,
                     sim_serial=sim_serial,
-                    custodian=user,  # who registered it
-                    status="available",  # newly registered lines are available
+                    custodian=user,
+                    status="available",
                     notes=notes,
                 )
             except IntegrityError:
-                # Safety net for race conditions / double submit
                 messages.warning(request, f"This line ({msisdn}) is already registered in the system.")
                 return redirect("accounts:asset_management")
 
             messages.success(request, f"Mobile line registered: {msisdn}")
             return redirect("accounts:asset_management")
 
-        # ============ Reactivate Mobile Line ============
+        # ── Request mobile line reactivation ──────────────────────────
         if action == "request_reactivate_line":
             line_id = request.POST.get("line_id")
             reason = (request.POST.get("reason") or "").strip()
 
-            # who can request? (you decide)
             if not (is_ict or is_ops or getattr(user, "role", "") == "registry"):
                 messages.error(request, "You are not allowed to request reactivation.")
                 return redirect("accounts:asset_management")
@@ -579,7 +551,6 @@ def view_asset_management(request):
                 messages.info(request, "Only suspended lines can be reactivated.")
                 return redirect("accounts:asset_management")
 
-            # prevent duplicate pending requests
             if MobileLineReactivationRequest.objects.filter(
                     agency=agency, line=line, status="pending_ops"
             ).exists():
@@ -594,9 +565,8 @@ def view_asset_management(request):
                 status="pending_ops",
             )
 
-            # notify ops manager
-            roles = getattr(agency, "asset_roles", None)
-            ops = roles.operations_manager if roles and roles.operations_manager else None
+            roles_obj = getattr(agency, "asset_roles", None)
+            ops = roles_obj.operations_manager if roles_obj and roles_obj.operations_manager else None
             if ops and ops.email:
                 send_email_async(
                     subject=f"Approval Needed: Reactivate Mobile Line {line.msisdn}",
@@ -608,52 +578,41 @@ def view_asset_management(request):
             messages.success(request, f"Reactivation request submitted for {line.msisdn} (pending Ops approval).")
             return redirect("accounts:asset_management")
 
-        # ============ Assign Mobile Line ============
+        # ── Assign mobile line ────────────────────────────────────────
         if action == "assign_mobile_line":
             line_id = request.POST.get("line_id")
             assignee_id = request.POST.get("assignee_id")
 
-            # Permission: ICT or Ops/Asset Manager
             if not (is_ict or is_ops):
                 messages.error(request, "Only ICT or Asset Manager can assign mobile lines.")
                 return redirect("accounts:asset_management")
 
             line = get_object_or_404(MobileLine, agency=agency, id=line_id)
 
-            # Only allow assigning available lines (you can relax this if needed)
             if line.status != "available":
                 messages.warning(request, "This line is not available for assignment.")
                 return redirect("accounts:asset_management")
 
-            # Assignee must be a user in same agency
             assignee = get_object_or_404(User, id=assignee_id)
             if getattr(assignee, "agency_id", None) != agency.id:
                 messages.error(request, "You can only assign lines to users in your agency.")
                 return redirect("accounts:asset_management")
 
-            # Prevent user from holding duplicate active lines if you want
-            # (optional business rule)
-            # if MobileLine.objects.filter(agency=agency, assigned_to=assignee, status="assigned").exists():
-            #     messages.warning(request, "This user already has an assigned line.")
-            #     return redirect("accounts:asset_management")
-
-            # Assign
             line.assigned_to = assignee
             line.status = "assigned"
             line.issued_at = timezone.now()
             line.save(update_fields=["assigned_to", "status", "issued_at"])
 
-            messages.success(request,
-                             f"Line {line.msisdn} assigned to {assignee.get_full_name() or assignee.username}.")
+            messages.success(request, f"Line {line.msisdn} assigned to {assignee.get_full_name() or assignee.username}.")
             return redirect("accounts:asset_management")
 
-        # ============ C) Reject reactivation (Ops Manager) ============
+        # ── Ops approve reactivation ──────────────────────────────────
         if action == "approve_reactivate_line":
             req_id = request.POST.get("reactivation_request_id")
             note = (request.POST.get("manager_note") or "").strip()
 
-            roles = getattr(agency, "asset_roles", None)
-            ops_id = roles.operations_manager_id if roles else None
+            roles_obj = getattr(agency, "asset_roles", None)
+            ops_id = roles_obj.operations_manager_id if roles_obj else None
             if not (user.is_superuser or (ops_id and user.id == ops_id)):
                 messages.error(request, "Only the Operations Manager can approve reactivations.")
                 return redirect("accounts:asset_management")
@@ -671,18 +630,15 @@ def view_asset_management(request):
                 rr.save(update_fields=["status"])
                 return redirect("accounts:asset_management")
 
-            # approve + reactivate
             rr.approve(user, note=note)
             line.reactivate()
 
-            # notify provider focal + registry + requester
             provider_focals, ops_email, registry_emails = _get_line_suspend_recipients(agency)
-            to_emails = []
-            to_emails += provider_focals
-            to_emails += registry_emails
-            if rr.requested_by and rr.requested_by.email:
-                to_emails.append(rr.requested_by.email)
-            to_emails = list(dict.fromkeys([e for e in to_emails if e]))
+            to_emails = list(dict.fromkeys(
+                [e for e in provider_focals + registry_emails +
+                 ([rr.requested_by.email] if rr.requested_by and rr.requested_by.email else [])
+                 if e]
+            ))
 
             if to_emails:
                 send_email_async(
@@ -695,7 +651,7 @@ def view_asset_management(request):
             messages.success(request, f"Approved and reactivated: {line.msisdn}")
             return redirect("accounts:asset_management")
 
-        # ============ 4) ICT assign asset ============
+        # ── ICT assign asset to request ───────────────────────────────
         if action == "assign_asset":
             req_id = request.POST.get("request_id")
             asset_id = request.POST.get("asset_id")
@@ -722,7 +678,7 @@ def view_asset_management(request):
             req_obj.assign_asset(user, asset)
             _log_event(agency, asset, user, "assigned", note=f"Assigned to {req_obj.requester}", meta={"request_id": req_obj.id})
 
-            _notify(
+            _notify_local(
                 subject=f"Asset Request #{req_obj.id} — Asset Assigned",
                 to_emails=[getattr(req_obj.requester, "email", None)],
                 html_template="emails/assets/asset_assigned.html",
@@ -732,12 +688,11 @@ def view_asset_management(request):
             messages.success(request, f"Asset assigned for request #{req_obj.id}.")
             return redirect("accounts:asset_management")
 
-        # ============ Suspend Mobile Line ============
+        # ── Suspend mobile line ───────────────────────────────────────
         if action == "suspend_mobile_line":
             line_id = request.POST.get("line_id")
             reason = (request.POST.get("reason") or "").strip()
 
-            # Permission: ICT or Ops Manager (you can tighten/relax this)
             if not (is_ict or is_ops):
                 messages.error(request, "Only ICT or Operations Manager can suspend mobile lines.")
                 return redirect("accounts:asset_management")
@@ -752,47 +707,34 @@ def view_asset_management(request):
                 messages.warning(request, "Retired lines cannot be suspended.")
                 return redirect("accounts:asset_management")
 
-            # Suspend it (uses your model method)
-            line.suspend()  # sets status + suspended_at :contentReference[oaicite:4]{index=4}
+            line.suspend()
 
-            # Optional: log in notes (keeps history)
             if reason:
                 line.notes = (line.notes or "").strip()
                 stamp = f"\n\n[SUSPENDED {timezone.now():%Y-%m-%d %H:%M}] by {user.get_full_name() or user.username}: {reason}"
                 line.notes = (line.notes + stamp).strip()
                 line.save(update_fields=["notes"])
 
-            # Build recipients
             provider_focals, ops_email, registry_emails = _get_line_suspend_recipients(agency)
+            to_emails = list(dict.fromkeys(
+                [e for e in provider_focals + ([ops_email] if ops_email else []) + registry_emails if e]
+            ))
 
-            # Email list (provider focals + ops + registry)
-            to_emails = []
-            to_emails += provider_focals
-            if ops_email:
-                to_emails.append(ops_email)
-            to_emails += registry_emails
-            to_emails = list(dict.fromkeys([e for e in to_emails if e]))
-
-            # Send notification email
             if to_emails:
                 send_email_async(
                     subject=f"Mobile Line Suspended: {line.msisdn}",
                     to_emails=to_emails,
                     html_template="emails/mobile_lines/line_suspended.html",
                     context={
-                        "agency": agency,
-                        "line": line,
-                        "reason": reason,
-                        "suspended_by": user,
-                        "portal_url": portal_url,
-                        "when": timezone.now(),
+                        "agency": agency, "line": line, "reason": reason,
+                        "suspended_by": user, "portal_url": portal_url, "when": timezone.now(),
                     },
                 )
 
             messages.success(request, f"Line suspended: {line.msisdn}")
             return redirect("accounts:asset_management")
 
-        # ============ 5) Requester verifies receipt ============
+        # ── Requester verifies receipt ─────────────────────────────────
         if action == "verify_receipt":
             req_id = request.POST.get("request_id")
             req_obj = get_object_or_404(AssetRequest, id=req_id, agency=agency)
@@ -808,9 +750,10 @@ def view_asset_management(request):
             req_obj.verify_receipt(user)
 
             if req_obj.assigned_asset:
-                _log_event(agency, req_obj.assigned_asset, user, "receipt_verified", note="Requester verified receipt.", meta={"request_id": req_obj.id})
+                _log_event(agency, req_obj.assigned_asset, user, "receipt_verified",
+                           note="Requester verified receipt.", meta={"request_id": req_obj.id})
 
-            _notify(
+            _notify_local(
                 subject=f"Asset Request #{req_obj.id} — Receipt Verified",
                 to_emails=get_ict_custodian_emails(req_obj),
                 html_template="emails/assets/receipt_verified.html",
@@ -820,7 +763,7 @@ def view_asset_management(request):
             messages.success(request, f"Receipt verified for request #{req_obj.id}.")
             return redirect("accounts:asset_management")
 
-        # ============ B) Initiate return ============
+        # ── Initiate asset return ─────────────────────────────────────
         if action == "initiate_return":
             asset_id = request.POST.get("asset_id")
             reason = (request.POST.get("reason") or "").strip()
@@ -834,25 +777,22 @@ def view_asset_management(request):
                 messages.error(request, "Only assigned assets can be returned.")
                 return redirect("accounts:asset_management")
 
-            # prevent duplicate pending return for same asset
             if AssetReturnRequest.objects.filter(agency=agency, asset=asset, status="pending_ict").exists():
                 messages.info(request, "Return already submitted and pending ICT verification.")
                 return redirect("accounts:asset_management")
 
             rr = AssetReturnRequest.objects.create(
-                agency=agency,
-                asset=asset,
-                requested_by=user,
-                reason=reason,
-                status="pending_ict",
+                agency=agency, asset=asset, requested_by=user,
+                reason=reason, status="pending_ict",
             )
-            _log_event(agency, asset, user, "return_initiated", note=reason or "Return initiated.", meta={"return_id": rr.id})
+            _log_event(agency, asset, user, "return_initiated",
+                       note=reason or "Return initiated.", meta={"return_id": rr.id})
 
             ict_emails = get_ict_custodian_emails(None)
             if not ict_emails:
                 ict_emails = list(roles.ict_custodian.values_list("email", flat=True))
 
-            _notify(
+            _notify_local(
                 subject=f"Asset Return #{rr.id} — Pending ICT Verification",
                 to_emails=ict_emails,
                 html_template="emails/assets/return_initiated.html",
@@ -862,7 +802,7 @@ def view_asset_management(request):
             messages.success(request, f"Return request #{rr.id} submitted to ICT.")
             return redirect("accounts:asset_management")
 
-        # ============ C) Cancel return (before ICT verifies) ============
+        # ── Cancel return ─────────────────────────────────────────────
         if action == "cancel_return":
             rr_id = request.POST.get("return_id")
             rr = get_object_or_404(AssetReturnRequest, id=rr_id, agency=agency)
@@ -872,19 +812,19 @@ def view_asset_management(request):
                 return redirect("accounts:asset_management")
 
             if rr.status != "pending_ict":
-                messages.info(request, "This return request can’t be cancelled anymore.")
+                messages.info(request, "This return request can't be cancelled anymore.")
                 return redirect("accounts:asset_management")
 
-            # Use whatever status you have in choices; 'cancelled' is common
             rr.status = "cancelled"
             rr.save(update_fields=["status"])
 
-            _log_event(agency, rr.asset, user, "return_cancelled", note="Return request cancelled.", meta={"return_id": rr.id})
+            _log_event(agency, rr.asset, user, "return_cancelled",
+                       note="Return request cancelled.", meta={"return_id": rr.id})
 
             messages.success(request, f"Return request #{rr.id} cancelled.")
             return redirect("accounts:asset_management")
 
-        # ============ 7) ICT verifies return received ============
+        # ── ICT verifies return received ──────────────────────────────
         if action == "verify_return_received":
             rr_id = request.POST.get("return_id")
             rr = get_object_or_404(AssetReturnRequest, id=rr_id, agency=agency)
@@ -897,49 +837,32 @@ def view_asset_management(request):
                 messages.info(request, "This return request is already processed.")
                 return redirect("accounts:asset_management")
 
-            # The exiting user (the person who requested the return)
             exit_user = rr.requested_by
-
-            # 1) Put asset back to pool
             asset = rr.asset
             asset.status = "available"
             asset.current_holder = None
             asset.save(update_fields=["status", "current_holder"])
 
-            # 2) Mark return request received
             rr.status = "received"
             rr.verified_by = user
             rr.verified_at = timezone.now()
             rr.save(update_fields=["status", "verified_by", "verified_at"])
 
-            # 3) ✅ Clear exit request ONLY if there are no more pending returns for this user
             still_pending = AssetReturnRequest.objects.filter(
-                agency=agency,
-                requested_by=exit_user,
-                status="pending_ict",
+                agency=agency, requested_by=exit_user, status="pending_ict",
             ).exists()
 
             if not still_pending:
                 ExitRequest.objects.filter(
-                    agency=agency,
-                    user=exit_user,
+                    agency=agency, user=exit_user,
                     status__in=["pending_returns", "pending_ict_confirmation", "submitted"]
-                ).update(
-                    status="cleared",
-                    cleared_at=timezone.now()
-                )
+                ).update(status="cleared", cleared_at=timezone.now())
 
-            _log_event(
-                agency,
-                asset,
-                user,
-                "return_received",
-                note="ICT verified return and placed asset back to pool.",
-                meta={"return_id": rr.id},
-            )
+            _log_event(agency, asset, user, "return_received",
+                       note="ICT verified return and placed asset back to pool.",
+                       meta={"return_id": rr.id})
 
-            # Notify the exiting user
-            _notify(
+            _notify_local(
                 subject=f"Asset Return #{rr.id} — Received by ICT",
                 to_emails=[getattr(exit_user, "email", None)],
                 html_template="emails/assets/return_received.html",
@@ -950,10 +873,9 @@ def view_asset_management(request):
                 messages.success(request, "Return verified. All pending returns completed — exit request cleared.")
             else:
                 messages.success(request, "Return verified. Asset is now back in the pool.")
-
             return redirect("accounts:asset_management")
 
-        # ============ 8) ICT mark retired/disposed ============
+        # ── ICT retire asset ──────────────────────────────────────────
         if action == "retire_asset":
             if not is_ict:
                 messages.error(request, "Only ICT can retire/dispose assets.")
@@ -968,11 +890,10 @@ def view_asset_management(request):
             asset.save(update_fields=["status", "current_holder"])
 
             _log_event(agency, asset, user, "retired", note=note or "Asset retired/disposed.")
-
             messages.success(request, "Asset marked as retired/disposed.")
             return redirect("accounts:asset_management")
 
-        # ============ D) Manager approves/rejects CHANGE REQUEST (from dashboard tab) ============
+        # ── Manager approve / reject change request ───────────────────
         if action in ("approve_change_request", "reject_change_request"):
             cr_id = (request.POST.get("change_request_id") or "").strip()
             cr = get_object_or_404(AssetChangeRequest, id=cr_id, agency=agency)
@@ -982,7 +903,6 @@ def view_asset_management(request):
                 messages.info(request, "This change request is already processed.")
                 return redirect("accounts:asset_management")
 
-            # permission check using your shared helper
             if not (user.is_superuser or can_user_approve_asset_change(user, asset, roles)):
                 messages.error(request, "You are not allowed to approve changes for this asset.")
                 return redirect("accounts:asset_management")
@@ -991,17 +911,13 @@ def view_asset_management(request):
 
             if action == "reject_change_request":
                 cr.reject(user, note=manager_note)
-                _log_event(
-                    agency, asset, user, "status_change",
-                    note=f"Change request #{cr.id} rejected.",
-                    meta={"change_request_id": cr.id}
-                )
+                _log_event(agency, asset, user, "status_change",
+                           note=f"Change request #{cr.id} rejected.",
+                           meta={"change_request_id": cr.id})
                 messages.warning(request, f"Change request #{cr.id} rejected.")
                 return redirect("accounts:asset_management")
 
-            # approve -> apply proposed changes
             proposed = cr.proposed_changes or {}
-
             with transaction.atomic():
                 if "category_id" in proposed:
                     asset.category_id = int(proposed["category_id"])
@@ -1022,24 +938,28 @@ def view_asset_management(request):
                         ).date()
                     except Exception:
                         pass
-
                 asset.save()
                 cr.approve(user, note=manager_note)
-
-                _log_event(
-                    agency, asset, user, "status_change",
-                    note=f"Change request #{cr.id} approved and applied.",
-                    meta={"change_request_id": cr.id, "applied": proposed}
-                )
+                _log_event(agency, asset, user, "status_change",
+                           note=f"Change request #{cr.id} approved and applied.",
+                           meta={"change_request_id": cr.id, "applied": proposed})
 
             messages.success(request, f"Change request #{cr.id} approved and applied.")
             return redirect("accounts:asset_management")
 
-
-        # ============ CONSUMABLE: Request supplies ============
+        # ── Consumable: Request supplies ──────────────────────────────
         if action == "create_consumable_request":
             notes = (request.POST.get("notes") or "").strip()
-            item_ids  = request.POST.getlist("consumable_item_id")
+
+            linked_asset_id = (request.POST.get("linked_asset_id") or "").strip()
+            linked_asset = None
+            if linked_asset_id:
+                try:
+                    linked_asset = Asset.objects.get(id=linked_asset_id, agency=agency)
+                except (ValueError, Asset.DoesNotExist):
+                    linked_asset = None
+
+            item_ids = request.POST.getlist("consumable_item_id")
             quantities = request.POST.getlist("consumable_qty")
 
             if not item_ids:
@@ -1047,10 +967,10 @@ def view_asset_management(request):
                 return redirect("accounts:asset_management")
 
             line_data = []
-            errors    = []
+            errors = []
             for item_id, qty_str in zip(item_ids, quantities):
                 try:
-                    qty  = int(qty_str)
+                    qty = int(qty_str)
                     item = ConsumableItem.objects.get(id=item_id, agency=agency, is_active=True)
                 except (ValueError, ConsumableItem.DoesNotExist):
                     errors.append(f"Invalid item or quantity (id={item_id}).")
@@ -1081,6 +1001,7 @@ def view_asset_management(request):
                     requester=user,
                     unit=getattr(user, "unit", None),
                     notes=notes,
+                    linked_asset=linked_asset,
                     status="pending",
                 )
                 for item, qty in line_data:
@@ -1090,7 +1011,6 @@ def view_asset_management(request):
                         quantity_requested=qty,
                     )
 
-            # Notify all approvers: ops manager + requester's unit head (if different)
             approval_emails = []
             if roles:
                 if roles.operations_manager and roles.operations_manager.email:
@@ -1099,7 +1019,8 @@ def view_asset_management(request):
             if requester_unit and requester_unit.unit_head and requester_unit.unit_head.email:
                 if requester_unit.unit_head.email not in approval_emails:
                     approval_emails.append(requester_unit.unit_head.email)
-            _notify(
+
+            _notify_local(
                 subject=f"Supply Request #{creq.id} — Pending Approval",
                 to_emails=approval_emails,
                 html_template="emails/consumables/request_submitted.html",
@@ -1109,14 +1030,14 @@ def view_asset_management(request):
             messages.success(request, f"Supply request #{creq.id} submitted for approval.")
             return redirect("accounts:asset_management")
 
-        # ============ CONSUMABLE: Approve / reject ============
+        # ── Consumable: Approve / reject ──────────────────────────────
         if action in ("approve_consumable_request", "reject_consumable_request"):
             if not is_manager:
                 messages.error(request, "Only managers can approve supply requests.")
                 return redirect("accounts:asset_management")
 
             creq_id = (request.POST.get("consumable_request_id") or "").strip()
-            creq    = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
+            creq = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
 
             if creq.status != "pending":
                 messages.info(request, "This supply request has already been processed.")
@@ -1128,50 +1049,36 @@ def view_asset_management(request):
                     messages.error(request, "Please provide a rejection reason.")
                     return redirect("accounts:asset_management")
                 creq.reject(user, reason=reason)
-
-                # Notify requester
-                _notify(
+                _notify_local(
                     subject=f"Supply Request #{creq.id} — Rejected",
                     to_emails=[getattr(creq.requester, "email", None)],
                     html_template="emails/consumables/request_rejected.html",
-                    ctx={
-                        "creq": creq,
-                        "rejected_by": user.get_full_name() or user.username,
-                    },
+                    ctx={"creq": creq, "rejected_by": user.get_full_name() or user.username},
                 )
-
                 messages.warning(request, f"Supply request #{creq.id} rejected.")
             else:
                 creq.approve(user)
-
-                # Notify requester
-                _notify(
+                _notify_local(
                     subject=f"Supply Request #{creq.id} — Approved",
                     to_emails=[getattr(creq.requester, "email", None)],
                     html_template="emails/consumables/request_approved.html",
-                    ctx={
-                        "creq": creq,
-                        "approved_by": user.get_full_name() or user.username,
-                    },
+                    ctx={"creq": creq, "approved_by": user.get_full_name() or user.username},
                 )
-
-                # Notify ICT to arrange dispatch
                 ict_dispatch_emails = list(roles.ict_custodian.values_list("email", flat=True)) if roles else []
-                _notify(
+                _notify_local(
                     subject=f"Supply Request #{creq.id} — Ready for Dispatch",
                     to_emails=ict_dispatch_emails,
                     html_template="emails/consumables/request_submitted.html",
                     ctx={"creq": creq},
                 )
-
                 messages.success(request, f"Supply request #{creq.id} approved — awaiting dispatch.")
 
             return redirect("accounts:asset_management")
 
-        # ============ CONSUMABLE: Cancel (requester) ============
+        # ── Consumable: Cancel ────────────────────────────────────────
         if action == "cancel_consumable_request":
             creq_id = (request.POST.get("consumable_request_id") or "").strip()
-            creq    = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
+            creq = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
 
             if creq.requester_id != user.id and not user.is_superuser:
                 messages.error(request, "You can only cancel your own supply requests.")
@@ -1186,14 +1093,14 @@ def view_asset_management(request):
             messages.success(request, f"Supply request #{creq.id} cancelled.")
             return redirect("accounts:asset_management")
 
-        # ============ CONSUMABLE: Dispatch (ICT / Ops) ============
+        # ── Consumable: Dispatch ──────────────────────────────────────
         if action == "dispatch_consumable":
             if not (is_ict or is_ops):
                 messages.error(request, "Only ICT or Operations Manager can dispatch supplies.")
                 return redirect("accounts:asset_management")
 
             creq_id = (request.POST.get("consumable_request_id") or "").strip()
-            creq    = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
+            creq = get_object_or_404(ConsumableRequest, id=creq_id, agency=agency)
 
             if creq.status not in ("approved", "partially_fulfilled"):
                 messages.info(request, "Only approved requests can be dispatched.")
@@ -1209,32 +1116,35 @@ def view_asset_management(request):
 
                 for li_id, qty_str in zip(line_item_ids, dispatch_qtys):
                     try:
-                        qty  = int(qty_str)
+                        qty = int(qty_str)
                         line = ConsumableRequestItem.objects.select_for_update().get(
                             id=li_id, request=creq
                         )
                     except (ValueError, ConsumableRequestItem.DoesNotExist):
                         continue
 
-                    if qty <= 0:
+                    if qty <= 0 or line.is_fulfilled:
+                        if not line.is_fulfilled:
+                            all_fulfilled = False
                         continue
 
-                    # Cap at remaining unfulfilled
                     qty = min(qty, line.remaining)
-                    if qty <= 0:
-                        continue
 
-                    # Check stock
                     cons_item = ConsumableItem.objects.select_for_update().get(id=line.item_id)
-                    actual_qty = min(qty, cons_item.stock_qty)
-                    if actual_qty <= 0:
+
+                    if cons_item.stock_qty < qty:
+                        messages.warning(request, f"Not enough stock for {cons_item.name}. Available: {cons_item.stock_qty}")
+                        qty = cons_item.stock_qty
+
+                    if qty <= 0:
+                        all_fulfilled = False
                         continue
 
                     before = cons_item.stock_qty
-                    cons_item.stock_qty -= actual_qty
+                    cons_item.stock_qty -= qty
                     cons_item.save(update_fields=["stock_qty"])
 
-                    line.quantity_dispatched += actual_qty
+                    line.quantity_dispatched += qty
                     line.save(update_fields=["quantity_dispatched"])
 
                     ConsumableStockLog.objects.create(
@@ -1242,12 +1152,13 @@ def view_asset_management(request):
                         item=cons_item,
                         event="dispatched",
                         quantity_before=before,
-                        quantity_change=-actual_qty,
+                        quantity_change=-qty,
                         quantity_after=cons_item.stock_qty,
                         reference_request=creq,
                         note=dispatch_note or f"Dispatched for request #{creq.id}",
                         actor=user,
                     )
+
                     any_dispatched = True
 
                     if not line.is_fulfilled:
@@ -1257,14 +1168,12 @@ def view_asset_management(request):
                     messages.warning(request, "Nothing was dispatched. Check stock levels.")
                     return redirect("accounts:asset_management")
 
-                # Re-check all lines
                 lines_all = list(creq.line_items.all())
-                all_done  = all(l.is_fulfilled for l in lines_all)
+                all_done = all(l.is_fulfilled for l in lines_all)
                 creq.status = "fulfilled" if all_done else "partially_fulfilled"
                 creq.save(update_fields=["status"])
 
-            # Notify requester with full dispatch details
-            _notify(
+            _notify_local(
                 subject=f"Your Supply Request #{creq.id} has been dispatched",
                 to_emails=[getattr(creq.requester, "email", None)],
                 html_template="emails/consumables/dispatched.html",
@@ -1276,7 +1185,6 @@ def view_asset_management(request):
                 },
             )
 
-            # Low-stock alert to ICT / ops after stock is reduced
             dispatched_item_ids = [li.item_id for li in creq.line_items.all()]
             now_low = [
                 i for i in ConsumableItem.objects.filter(
@@ -1288,7 +1196,7 @@ def view_asset_management(request):
                 ict_alert_emails = list(roles.ict_custodian.values_list("email", flat=True)) if roles else []
                 if is_ops and user.email and user.email not in ict_alert_emails:
                     ict_alert_emails.append(user.email)
-                _notify(
+                _notify_local(
                     subject=f"[{agency}] Low Stock Alert — {len(now_low)} item(s) need restocking",
                     to_emails=ict_alert_emails,
                     html_template="emails/consumables/low_stock_alert.html",
@@ -1298,18 +1206,18 @@ def view_asset_management(request):
             messages.success(request, f"Supply request #{creq.id} dispatched successfully.")
             return redirect("accounts:asset_management")
 
-        # ============ CONSUMABLE: Restock item ============
+        # ── Consumable: Restock item ──────────────────────────────────
         if action == "restock_consumable_item":
             if not (is_ict or is_ops):
                 messages.error(request, "Only ICT or Operations Manager can restock supplies.")
                 return redirect("accounts:asset_management")
 
-            item_id  = (request.POST.get("consumable_item_id") or "").strip()
-            qty_str  = (request.POST.get("restock_qty") or "0").strip()
-            note     = (request.POST.get("restock_note") or "").strip()
+            item_id = (request.POST.get("consumable_item_id") or "").strip()
+            qty_str = (request.POST.get("restock_qty") or "0").strip()
+            note = (request.POST.get("restock_note") or "").strip()
 
             try:
-                qty  = int(qty_str)
+                qty = int(qty_str)
                 item = ConsumableItem.objects.get(id=item_id, agency=agency)
             except (ValueError, ConsumableItem.DoesNotExist):
                 messages.error(request, "Invalid item or quantity.")
@@ -1326,11 +1234,8 @@ def view_asset_management(request):
                 item_locked.save(update_fields=["stock_qty"])
 
                 ConsumableStockLog.objects.create(
-                    agency=agency,
-                    item=item_locked,
-                    event="restocked",
-                    quantity_before=before,
-                    quantity_change=qty,
+                    agency=agency, item=item_locked, event="restocked",
+                    quantity_before=before, quantity_change=qty,
                     quantity_after=item_locked.stock_qty,
                     note=note or f"Restocked by {user.get_full_name() or user.username}",
                     actor=user,
@@ -1339,19 +1244,19 @@ def view_asset_management(request):
             messages.success(request, f"Restocked {item.name}: +{qty} {item.unit_of_measure}.")
             return redirect("accounts:asset_management")
 
-        # ============ CONSUMABLE: Register new item ============
+        # ── Consumable: Register new item ─────────────────────────────
         if action == "register_consumable_item":
             if not (is_ict or is_ops):
                 messages.error(request, "Only ICT or Operations Manager can register supply items.")
                 return redirect("accounts:asset_management")
 
-            cat_id           = (request.POST.get("consumable_cat_id") or "").strip()
-            name             = (request.POST.get("consumable_item_name") or "").strip()
-            unit_of_measure  = (request.POST.get("unit_of_measure") or "piece").strip()
-            initial_stock    = int(request.POST.get("initial_stock") or 0)
-            low_threshold    = int(request.POST.get("low_stock_threshold") or 5)
-            max_per_req      = request.POST.get("max_per_request") or None
-            description      = (request.POST.get("item_description") or "").strip()
+            cat_id = (request.POST.get("consumable_cat_id") or "").strip()
+            name = (request.POST.get("consumable_item_name") or "").strip()
+            unit_of_measure = (request.POST.get("unit_of_measure") or "piece").strip()
+            initial_stock = int(request.POST.get("initial_stock") or 0)
+            low_threshold = int(request.POST.get("low_stock_threshold") or 5)
+            max_per_req = request.POST.get("max_per_request") or None
+            description = (request.POST.get("item_description") or "").strip()
 
             if not name or not cat_id:
                 messages.error(request, "Item name and category are required.")
@@ -1372,20 +1277,16 @@ def view_asset_management(request):
 
             if initial_stock > 0:
                 ConsumableStockLog.objects.create(
-                    agency=agency,
-                    item=item,
-                    event="restocked",
-                    quantity_before=0,
-                    quantity_change=initial_stock,
+                    agency=agency, item=item, event="restocked",
+                    quantity_before=0, quantity_change=initial_stock,
                     quantity_after=initial_stock,
-                    note="Initial stock on registration.",
-                    actor=user,
+                    note="Initial stock on registration.", actor=user,
                 )
 
             messages.success(request, f"Supply item '{item.name}' registered with {initial_stock} in stock.")
             return redirect("accounts:asset_management")
 
-        # ============ CONSUMABLE: Register new category ============
+        # ── Consumable: Register new category ─────────────────────────
         if action == "register_consumable_category":
             if not (is_ict or is_ops):
                 messages.error(request, "Only ICT or Operations Manager can add supply categories.")
@@ -1407,69 +1308,151 @@ def view_asset_management(request):
             messages.success(request, f"Category '{cat_name}' added.")
             return redirect("accounts:asset_management")
 
+        # ── Consumable: Link item to asset ────────────────────────────
+        if action == "link_consumable_to_asset":
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Operations Manager can manage asset links.")
+                return redirect("accounts:asset_management")
+
+            item_id = (request.POST.get("consumable_item_id") or "").strip()
+            asset_id = (request.POST.get("asset_id") or "").strip()
+            cat_id = (request.POST.get("asset_category_id") or "").strip()
+            note = (request.POST.get("link_note") or "").strip()[:255]
+
+            try:
+                cons_item = ConsumableItem.objects.get(id=item_id, agency=agency)
+            except (ValueError, ConsumableItem.DoesNotExist):
+                messages.error(request, "Consumable item not found.")
+                return redirect("accounts:asset_management")
+
+            linked_asset_obj = None
+            linked_cat_obj = None
+
+            if asset_id:
+                try:
+                    linked_asset_obj = Asset.objects.get(id=asset_id, agency=agency)
+                except (ValueError, Asset.DoesNotExist):
+                    messages.error(request, "Asset not found.")
+                    return redirect("accounts:asset_management")
+            if cat_id:
+                try:
+                    linked_cat_obj = AssetCategory.objects.get(id=cat_id, agency=agency)
+                except (ValueError, AssetCategory.DoesNotExist):
+                    pass
+
+            if not linked_asset_obj and not linked_cat_obj:
+                messages.error(request, "Select an asset or an asset category to link.")
+                return redirect("accounts:asset_management")
+
+            obj, created = ConsumableAssetLink.objects.get_or_create(
+                consumable_item=cons_item,
+                asset=linked_asset_obj,
+                defaults={
+                    "agency": agency,
+                    "asset_category": linked_cat_obj,
+                    "note": note,
+                    "created_by": user,
+                },
+            )
+            if not created:
+                obj.note = note
+                obj.save(update_fields=["note"])
+
+            messages.success(
+                request,
+                f"{'Linked' if created else 'Updated:'} {cons_item.name} ↔ {linked_asset_obj or linked_cat_obj}."
+            )
+            return redirect("accounts:asset_management")
+
+        # ── Consumable: Unlink from asset ─────────────────────────────
+        if action == "unlink_consumable_from_asset":
+            if not (is_ict or is_ops):
+                messages.error(request, "Only ICT or Operations Manager can manage asset links.")
+                return redirect("accounts:asset_management")
+
+            link_id = (request.POST.get("link_id") or "").strip()
+            try:
+                link = ConsumableAssetLink.objects.get(id=link_id, agency=agency)
+                name = str(link)
+                link.delete()
+                messages.success(request, f"Removed link: {name}.")
+            except (ValueError, ConsumableAssetLink.DoesNotExist):
+                messages.error(request, "Link not found.")
+            return redirect("accounts:asset_management")
+
         messages.error(request, "Unknown action.")
         return redirect("accounts:asset_management")
 
-    # -----------------------------
-    # Change Requests pending approvals (Manager / Ops / Superuser)
-    # -----------------------------
+    # ------------------------------------------------------------------
+    # GET — assemble context
+    # ------------------------------------------------------------------
     pending_change_approvals = []
     if is_manager:
         cr_qs = AssetChangeRequest.objects.filter(
-            agency=agency,
-            status="pending_manager",
-        ).select_related(
-            "asset", "requested_by",
-            "asset__unit", "asset__category"
-        ).order_by("-created_at")
-
-        # Only show those the current user is allowed to approve
+            agency=agency, status="pending_manager",
+        ).select_related("asset", "requested_by", "asset__unit", "asset__category").order_by("-created_at")
         pending_change_approvals = [
             cr for cr in cr_qs if can_user_approve_asset_change(user, cr.asset, roles)
         ]
 
     agency_users = User.objects.filter(
-            agency=agency, is_active=True
-        ).order_by("first_name", "last_name", "username")
+        agency=agency, is_active=True
+    ).order_by("first_name", "last_name", "username")
 
     pending_line_reactivations = MobileLineReactivationRequest.objects.filter(
         agency=agency, status="pending_ops"
     ).select_related("line", "requested_by")
 
-    # --------------------------------------------------
-    # Consumable / Supplies data
-    # --------------------------------------------------
-    consumable_categories = ConsumableCategory.objects.filter(agency=agency, is_active=True).order_by("category_type", "name")
-    consumable_items_qs   = ConsumableItem.objects.filter(agency=agency, is_active=True).select_related("category").order_by("category__name", "name")
+    # ── Consumables / Supplies data ───────────────────────────────────
+    consumable_categories = ConsumableCategory.objects.filter(
+        agency=agency, is_active=True
+    ).order_by("category_type", "name")
+
+    consumable_items_qs = ConsumableItem.objects.filter(
+        agency=agency, is_active=True
+    ).select_related("category").prefetch_related("asset_links__asset", "asset_links__asset_category").order_by("category__name", "name")
 
     my_consumable_requests = ConsumableRequest.objects.filter(
         agency=agency, requester=user
+    ).select_related(
+        "approved_by", "linked_asset", "unit"
     ).prefetch_related("line_items__item").order_by("-created_at")
 
-    # Pending approval (for managers)
     pending_consumable_approvals = []
     if is_manager:
         pending_consumable_approvals = list(
             ConsumableRequest.objects.filter(agency=agency, status="pending")
-            .select_related("requester", "unit")
+            .select_related("requester", "unit", "linked_asset")
             .prefetch_related("line_items__item")
             .order_by("-created_at")
         )
 
-    # Approved & awaiting dispatch (for ICT / ops)
     approved_consumable_requests = []
     if is_ict or is_ops:
         approved_consumable_requests = list(
             ConsumableRequest.objects.filter(agency=agency, status__in=("approved", "partially_fulfilled"))
-            .select_related("requester", "unit")
+            .select_related("requester", "unit", "approved_by", "linked_asset")
             .prefetch_related("line_items__item")
             .order_by("-created_at")
         )
 
-    # Low-stock items (for ICT / ops dashboard)
     low_stock_items = []
     if is_ict or is_ops:
         low_stock_items = [i for i in consumable_items_qs if i.is_low_stock]
+
+    consumable_chart_data = (
+        _build_consumable_chart_data(consumable_items_qs)
+        if (is_ict or is_ops) else "null"
+    )
+
+    # All asset-consumable links for the overview modal (ICT / Ops only)
+    consumable_asset_links = []
+    if is_ict or is_ops:
+        consumable_asset_links = list(
+            ConsumableAssetLink.objects.filter(agency=agency)
+            .select_related("consumable_item", "asset", "asset_category")
+            .order_by("consumable_item__name")
+        )
 
     return render(request, "accounts/assets/asset_management.html", {
         "svc": svc,
@@ -1494,8 +1477,6 @@ def view_asset_management(request):
 
         "my_returns": my_returns,
         "pending_returns": pending_returns,
-
-        # badge support
         "returning_asset_ids": returning_asset_ids,
 
         # Consumables / supplies
@@ -1505,7 +1486,146 @@ def view_asset_management(request):
         "pending_consumable_approvals":   pending_consumable_approvals,
         "approved_consumable_requests":   approved_consumable_requests,
         "low_stock_items":                low_stock_items,
+        "consumable_chart_data":          consumable_chart_data,
+        "consumable_asset_links":         consumable_asset_links,
+        "assets_for_link": (
+            Asset.objects.filter(agency=agency).order_by("name")
+            if (is_ict or is_ops) else []
+        ),
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Consumables export (CSV or printable HTML report)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def consumables_export(request):
+    """
+    GET /supplies/export/?format=csv|report&scope=items|requests|all
+
+    format=csv    → raw CSV download
+    format=report → printable HTML rendered server-side (open in new tab → Ctrl+P)
+    scope         → what to include (default: all)
+    """
+    user = request.user
+    agency = getattr(user, "agency", None)
+    if not agency:
+        messages.error(request, "Not assigned to an agency.")
+        return redirect("accounts:profile")
+
+    fmt = request.GET.get("format", "csv")
+    scope = request.GET.get("scope", "all")
+
+    items_qs = (
+        ConsumableItem.objects
+        .filter(agency=agency, is_active=True)
+        .select_related("category")
+        .order_by("category__name", "name")
+    )
+
+    from datetime import timedelta
+    cutoff = timezone.now() - timedelta(days=90)
+    requests_qs = (
+        ConsumableRequest.objects
+        .filter(agency=agency, created_at__gte=cutoff)
+        .select_related("requester", "approved_by", "unit", "linked_asset")
+        .prefetch_related("line_items__item")
+        .order_by("-created_at")
+    )
+
+    # ── CSV ──────────────────────────────────────────────────────────
+    if fmt == "csv":
+        response = HttpResponse(content_type="text/csv")
+        ts = timezone.now().strftime("%Y%m%d_%H%M")
+        response["Content-Disposition"] = (
+            f'attachment; filename="consumables_export_{ts}.csv"'
+        )
+        writer = csv.writer(response)
+
+        if scope in ("items", "all"):
+            writer.writerow([])
+            writer.writerow(["=== STOCK INVENTORY ==="])
+            writer.writerow([
+                "Item", "Category", "Category Type",
+                "Unit of Measure", "In Stock", "Low-Stock Threshold",
+                "Status", "Max Per Request",
+            ])
+            for it in items_qs:
+                status = (
+                    "Out of Stock" if it.is_out_of_stock else
+                    "Low Stock"    if it.is_low_stock    else
+                    "OK"
+                )
+                writer.writerow([
+                    it.name,
+                    it.category.name,
+                    it.category.get_category_type_display(),
+                    it.unit_of_measure,
+                    it.stock_qty,
+                    it.low_stock_threshold,
+                    status,
+                    it.max_per_request or "No limit",
+                ])
+
+        if scope in ("requests", "all"):
+            writer.writerow([])
+            writer.writerow(["=== SUPPLY REQUESTS (last 90 days) ==="])
+            writer.writerow([
+                "Request #", "Requester", "Unit", "Status",
+                "Linked Asset", "Approved By", "Approved At",
+                "Date", "Items",
+            ])
+            for creq in requests_qs:
+                items_summary = " | ".join(
+                    f"{li.item.name} ×{li.quantity_requested} (sent {li.quantity_dispatched})"
+                    for li in creq.line_items.all()
+                )
+                linked = str(creq.linked_asset) if getattr(creq, "linked_asset", None) else "—"
+                approver = (
+                    (creq.approved_by.get_full_name() or creq.approved_by.username)
+                    if creq.approved_by else "—"
+                )
+                writer.writerow([
+                    f"#{creq.id}",
+                    creq.requester.get_full_name() or creq.requester.username,
+                    creq.unit.name if creq.unit else "—",
+                    creq.get_status_display(),
+                    linked,
+                    approver,
+                    creq.approved_at.strftime("%d %b %Y %H:%M") if creq.approved_at else "—",
+                    creq.created_at.strftime("%d %b %Y"),
+                    items_summary,
+                ])
+
+        return response
+
+    # ── Printable HTML report ────────────────────────────────────────
+    total_items = items_qs.count()
+    low_stock_count = sum(1 for i in items_qs if i.is_low_stock)
+    out_stock_count = sum(1 for i in items_qs if i.is_out_of_stock)
+    total_requests = requests_qs.count()
+    fulfilled_reqs = requests_qs.filter(status="fulfilled").count()
+
+    ctx = {
+        "agency":          agency,
+        "generated_at":    timezone.now(),
+        "items":           items_qs,
+        "requests":        requests_qs,
+        "scope":           scope,
+        "total_items":     total_items,
+        "low_stock_count": low_stock_count,
+        "out_stock_count": out_stock_count,
+        "total_requests":  total_requests,
+        "fulfilled_reqs":  fulfilled_reqs,
+    }
+    html = render_to_string("accounts/assets/consumables_report.html", ctx, request)
+    return HttpResponse(html)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Asset detail
+# ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
 def asset_detail(request, asset_id: int):
@@ -1515,7 +1635,6 @@ def asset_detail(request, asset_id: int):
         messages.error(request, "You are not assigned to an agency.")
         return redirect("accounts:profile")
 
-    # service toggle
     svc, _ = AgencyServiceConfig.objects.get_or_create(agency=agency)
     if not svc.asset_mgmt_enabled and not user.is_superuser:
         messages.warning(request, "Asset Management is not enabled for your agency.")
@@ -1538,26 +1657,18 @@ def asset_detail(request, asset_id: int):
     units = Unit.objects.filter(agency=agency).select_related("unit_head").prefetch_related("asset_managers")
     categories = AssetCategory.objects.filter(agency=agency).order_by("name")
 
-    # active pending return (for badges + verify action)
     active_return = AssetReturnRequest.objects.filter(
         agency=agency, asset=asset, status__in=["pending_ict", "in_transit"]
     ).select_related("requested_by", "verified_by").first()
 
-    # change requests list
     change_requests = AssetChangeRequest.objects.filter(
         agency=agency, asset=asset
     ).select_related("requested_by", "decided_by").order_by("-created_at")[:30]
     pending_changes = [cr for cr in change_requests if cr.status == "pending_manager"]
 
-    # -----------------------------
-    # POST actions
-    # -----------------------------
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip()
 
-        # ==========================
-        # A) Requester initiates return
-        # ==========================
         if action == "initiate_return":
             posted_asset_id = str(request.POST.get("asset_id") or "").strip()
             if posted_asset_id != str(asset.id):
@@ -1579,25 +1690,16 @@ def asset_detail(request, asset_id: int):
             reason = (request.POST.get("reason") or "").strip()
 
             rr = AssetReturnRequest.objects.create(
-                agency=agency,
-                asset=asset,
-                requested_by=user,
-                reason=reason,
-                status="pending_ict",
+                agency=agency, asset=asset, requested_by=user,
+                reason=reason, status="pending_ict",
             )
-
-            _log_event(
-                agency, asset, user, "return_initiated",
-                note=reason or "Return initiated by requester.",
-                meta={"return_id": rr.id}
-            )
+            _log_event(agency, asset, user, "return_initiated",
+                       note=reason or "Return initiated by requester.",
+                       meta={"return_id": rr.id})
 
             messages.success(request, f"Return request #{rr.id} submitted to ICT.")
             return redirect("accounts:asset_detail", asset_id=asset.id)
 
-        # ==========================
-        # B) Requester cancels return (if not yet verified)
-        # ==========================
         if action == "cancel_return":
             return_id = str(request.POST.get("return_id") or "").strip()
             rr = get_object_or_404(AssetReturnRequest, id=return_id, agency=agency, asset=asset)
@@ -1612,19 +1714,13 @@ def asset_detail(request, asset_id: int):
 
             rr.status = "cancelled"
             rr.save(update_fields=["status"])
-
-            _log_event(
-                agency, asset, user, "status_change",
-                note=f"Return #{rr.id} cancelled by requester.",
-                meta={"return_id": rr.id}
-            )
+            _log_event(agency, asset, user, "status_change",
+                       note=f"Return #{rr.id} cancelled by requester.",
+                       meta={"return_id": rr.id})
 
             messages.success(request, f"Return #{rr.id} cancelled.")
             return redirect("accounts:asset_detail", asset_id=asset.id)
 
-        # ==========================
-        # C) ICT verifies received return (asset back to pool)
-        # ==========================
         if action == "verify_return_received":
             if not is_ict:
                 messages.error(request, "Only ICT can verify returns.")
@@ -1643,31 +1739,23 @@ def asset_detail(request, asset_id: int):
                 rr.status = "received"
                 rr.verified_by = user
                 rr.verified_at = timezone.now()
-
-                # SAFE: only set verification_note if model actually has it
                 if hasattr(rr, "verification_note"):
                     rr.verification_note = note
                     rr.save(update_fields=["status", "verified_by", "verified_at", "verification_note"])
                 else:
                     rr.save(update_fields=["status", "verified_by", "verified_at"])
 
-                # move asset back to pool
                 asset.current_holder = None
                 asset.status = "available"
                 asset.save(update_fields=["current_holder", "status"])
 
-                _log_event(
-                    agency, asset, user, "return_received",
-                    note=note or f"ICT verified receipt for Return #{rr.id}. Asset returned to pool.",
-                    meta={"return_id": rr.id}
-                )
+                _log_event(agency, asset, user, "return_received",
+                           note=note or f"ICT verified receipt for Return #{rr.id}. Asset returned to pool.",
+                           meta={"return_id": rr.id})
 
             messages.success(request, f"Return #{rr.id} verified. Asset returned to pool.")
             return redirect("accounts:asset_detail", asset_id=asset.id)
 
-        # ==========================
-        # D) ICT retires/disposes asset
-        # ==========================
         if action == "retire_asset":
             posted_asset_id = str(request.POST.get("asset_id") or "").strip()
             if posted_asset_id != str(asset.id):
@@ -1685,18 +1773,11 @@ def asset_detail(request, asset_id: int):
                 asset.retired_at = timezone.localdate()
                 asset.current_holder = None
                 asset.save(update_fields=["status", "retired_at", "current_holder"])
-
-                _log_event(
-                    agency, asset, user, "retired",
-                    note=note or "Asset retired/disposed."
-                )
+                _log_event(agency, asset, user, "retired", note=note or "Asset retired/disposed.")
 
             messages.success(request, "Asset marked as retired/disposed.")
             return redirect("accounts:asset_detail", asset_id=asset.id)
 
-        # ==========================
-        # E) ICT proposes asset edit (Change Request) -> manager approval required
-        # ==========================
         if action == "propose_asset_change":
             if not is_ict:
                 messages.error(request, "Only ICT can submit asset change requests.")
@@ -1704,7 +1785,6 @@ def asset_detail(request, asset_id: int):
 
             proposed = {}
 
-            # Only record values that actually changed
             name = (request.POST.get("name") or "").strip()
             if name and name != asset.name:
                 proposed["name"] = name
@@ -1713,13 +1793,11 @@ def asset_detail(request, asset_id: int):
             if status and status != asset.status:
                 proposed["status"] = status
 
-            serial_number = (request.POST.get("serial_number") or "").strip()
-            serial_number = serial_number or None
+            serial_number = (request.POST.get("serial_number") or "").strip() or None
             if serial_number != asset.serial_number:
                 proposed["serial_number"] = serial_number
 
-            asset_tag = (request.POST.get("asset_tag") or "").strip()
-            asset_tag = asset_tag or None
+            asset_tag = (request.POST.get("asset_tag") or "").strip() or None
             if asset_tag != asset.asset_tag:
                 proposed["asset_tag"] = asset_tag
 
@@ -1734,7 +1812,6 @@ def asset_detail(request, asset_id: int):
 
             acquired_at = (request.POST.get("acquired_at") or "").strip()
             if acquired_at:
-                # store as string; apply on approval
                 current = asset.acquired_at.strftime("%Y-%m-%d") if asset.acquired_at else ""
                 if acquired_at != current:
                     proposed["acquired_at"] = acquired_at
@@ -1746,26 +1823,16 @@ def asset_detail(request, asset_id: int):
                 return redirect("accounts:asset_detail", asset_id=asset.id)
 
             cr = AssetChangeRequest.objects.create(
-                agency=agency,
-                asset=asset,
-                requested_by=user,
-                proposed_changes=proposed,
-                reason=reason,
-                status="pending_manager",
+                agency=agency, asset=asset, requested_by=user,
+                proposed_changes=proposed, reason=reason, status="pending_manager",
             )
-
-            _log_event(
-                agency, asset, user, "status_change",
-                note=f"Change request #{cr.id} submitted for approval.",
-                meta={"change_request_id": cr.id, "proposed": proposed}
-            )
+            _log_event(agency, asset, user, "status_change",
+                       note=f"Change request #{cr.id} submitted for approval.",
+                       meta={"change_request_id": cr.id, "proposed": proposed})
 
             messages.success(request, f"Change request #{cr.id} submitted for approval.")
             return redirect("accounts:asset_detail", asset_id=asset.id)
 
-        # ==========================
-        # F) ICT cancels change request (pending only)
-        # ==========================
         if action == "cancel_change_request":
             cr_id = (request.POST.get("change_request_id") or "").strip()
             cr = get_object_or_404(AssetChangeRequest, id=cr_id, agency=agency, asset=asset)
@@ -1780,19 +1847,13 @@ def asset_detail(request, asset_id: int):
 
             cr.status = "cancelled"
             cr.save(update_fields=["status"])
-
-            _log_event(
-                agency, asset, user, "status_change",
-                note=f"Change request #{cr.id} cancelled by ICT.",
-                meta={"change_request_id": cr.id}
-            )
+            _log_event(agency, asset, user, "status_change",
+                       note=f"Change request #{cr.id} cancelled by ICT.",
+                       meta={"change_request_id": cr.id})
 
             messages.success(request, f"Change request #{cr.id} cancelled.")
             return redirect("accounts:asset_detail", asset_id=asset.id)
 
-        # ==========================
-        # G) Asset Manager approves/rejects change request
-        # ==========================
         if action in ("approve_change_request", "reject_change_request"):
             cr_id = (request.POST.get("change_request_id") or "").strip()
             cr = get_object_or_404(AssetChangeRequest, id=cr_id, agency=agency, asset=asset)
@@ -1809,18 +1870,14 @@ def asset_detail(request, asset_id: int):
 
             if action == "reject_change_request":
                 cr.reject(user, note=note)
-                _log_event(
-                    agency, asset, user, "status_change",
-                    note=f"Change request #{cr.id} rejected.",
-                    meta={"change_request_id": cr.id}
-                )
+                _log_event(agency, asset, user, "status_change",
+                           note=f"Change request #{cr.id} rejected.",
+                           meta={"change_request_id": cr.id})
                 messages.warning(request, f"Change request #{cr.id} rejected.")
                 return redirect("accounts:asset_detail", asset_id=asset.id)
 
-            # approve + apply changes
             proposed = cr.proposed_changes or {}
             with transaction.atomic():
-                # apply FK changes safely
                 if "category_id" in proposed:
                     asset.category_id = int(proposed["category_id"])
                 if "unit_id" in proposed:
@@ -1834,21 +1891,17 @@ def asset_detail(request, asset_id: int):
                 if "asset_tag" in proposed:
                     asset.asset_tag = proposed["asset_tag"]
                 if "acquired_at" in proposed:
-                    # stored as "YYYY-MM-DD"
                     try:
-                        asset.acquired_at = timezone.datetime.strptime(proposed["acquired_at"], "%Y-%m-%d").date()
+                        asset.acquired_at = timezone.datetime.strptime(
+                            proposed["acquired_at"], "%Y-%m-%d"
+                        ).date()
                     except Exception:
                         pass
-
                 asset.save()
-
                 cr.approve(user, note=note)
-
-                _log_event(
-                    agency, asset, user, "status_change",
-                    note=f"Change request #{cr.id} approved and applied.",
-                    meta={"change_request_id": cr.id, "applied": proposed}
-                )
+                _log_event(agency, asset, user, "status_change",
+                           note=f"Change request #{cr.id} approved and applied.",
+                           meta={"change_request_id": cr.id, "applied": proposed})
 
             messages.success(request, f"Change request #{cr.id} approved and applied.")
             return redirect("accounts:asset_detail", asset_id=asset.id)
@@ -1856,9 +1909,7 @@ def asset_detail(request, asset_id: int):
         messages.error(request, "Unknown action.")
         return redirect("accounts:asset_detail", asset_id=asset.id)
 
-    # -------------------------------
-    # GET context
-    # -------------------------------
+    # GET
     history = AssetHistory.objects.filter(
         agency=agency, asset=asset
     ).select_related("actor")[:80]
@@ -1869,24 +1920,20 @@ def asset_detail(request, asset_id: int):
         "is_ict": is_ict,
         "units": units,
         "categories": categories,
-
-        # change flow
         "can_approve_changes": can_approve_changes,
         "pending_changes": pending_changes,
         "change_requests": change_requests,
-
-        # return flow
         "pending_return": active_return if active_return else None,
     })
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Asset report
+# ─────────────────────────────────────────────────────────────────────────────
+
 @login_required
 def asset_report(request):
-    """
-    Report for ICT / managers:
-    - assigned/unassigned
-    - export CSV
-    """
+    """Report for ICT / managers: assigned/unassigned + CSV export."""
     user = request.user
     agency = getattr(user, "agency", None)
     if not agency:
@@ -1908,11 +1955,11 @@ def asset_report(request):
 
     qs = Asset.objects.filter(agency=agency).select_related("category", "unit", "current_holder")
 
-    status = request.GET.get("status")  # available/assigned/maintenance/retired
-    assigned_flag = request.GET.get("assigned")  # 1/0
+    status = request.GET.get("status")
+    assigned_flag = request.GET.get("assigned")
     category_id = request.GET.get("category")
     unit_id = request.GET.get("unit")
-    export = request.GET.get("export")  # csv
+    export = request.GET.get("export")
 
     if status:
         qs = qs.filter(status=status)
@@ -1924,8 +1971,6 @@ def asset_report(request):
         qs = qs.filter(category_id=category_id)
     if unit_id:
         qs = qs.filter(unit_id=unit_id)
-
-    # managers limited to their units (ICT sees all)
     if not is_ict and managed_units:
         qs = qs.filter(unit_id__in=managed_units)
 
@@ -1959,6 +2004,10 @@ def asset_report(request):
     })
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Asset labels PDF
+# ─────────────────────────────────────────────────────────────────────────────
+
 @login_required
 def asset_labels_pdf(request):
     user = request.user
@@ -1978,7 +2027,6 @@ def asset_labels_pdf(request):
     is_ops = user.is_superuser or _is_ops_manager(user, agency)
     managed_units = _managed_unit_ids(user, agency)
 
-    # permissions: ICT can print all; managers print assets they manage; users print their assigned assets
     assets_qs = Asset.objects.filter(agency=agency).select_related("category", "unit", "current_holder")
 
     if is_ict:
@@ -1990,10 +2038,9 @@ def asset_labels_pdf(request):
     else:
         visible = assets_qs.filter(current_holder=user)
 
-    # filter selection: ids=1,2,3 OR status=available/assigned/retired
     ids_str = (request.GET.get("ids") or "").strip()
     status = (request.GET.get("status") or "").strip()
-    mode = (request.GET.get("mode") or "a4").strip()   # a4 or sticker
+    mode = (request.GET.get("mode") or "a4").strip()
     include_url = (request.GET.get("include_url") or "1").strip() == "1"
 
     if ids_str:
@@ -2005,22 +2052,16 @@ def asset_labels_pdf(request):
     elif status:
         visible = visible.filter(status=status)
 
-    assets = list(visible.order_by("category__name", "name")[:500])  # safety cap
+    assets = list(visible.order_by("category__name", "name")[:500])
 
     if not assets:
         messages.info(request, "No assets found for this selection.")
         return redirect("accounts:asset_management")
 
-    # label spec can be customized here
     spec = LabelSpec(
-        w_mm=70,
-        h_mm=35,
-        cols=3,
-        rows=8,
-        margin_x_mm=8,
-        margin_y_mm=10,
-        gap_x_mm=2.5,
-        gap_y_mm=2.5,
+        w_mm=70, h_mm=35, cols=3, rows=8,
+        margin_x_mm=8, margin_y_mm=10,
+        gap_x_mm=2.5, gap_y_mm=2.5,
     )
 
     pdf_bytes = build_asset_labels_pdf(
@@ -2038,22 +2079,24 @@ def asset_labels_pdf(request):
     return resp
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Exit organization
+# ─────────────────────────────────────────────────────────────────────────────
+
 PENDING_EXIT_STATUSES = {"submitted", "pending_returns", "pending_ict_confirmation"}
 
 
 @login_required
 def exit_organization(request):
     user = request.user
-    agency = getattr(user, "agency", None)  # adjust if your app uses different field
+    agency = getattr(user, "agency", None)
     if not agency:
         messages.error(request, "No agency/organization found for your profile.")
         return redirect("accounts:profile")
 
-    # GET -> show form
     if request.method != "POST":
         return redirect("accounts:asset_management")
 
-    # POST -> process
     reason = (request.POST.get("reason") or "").strip()
     typed = (request.POST.get("typed_confirm") or "").strip()
 
@@ -2065,11 +2108,8 @@ def exit_organization(request):
         messages.error(request, "Please choose a valid reason (Resigned or Reassigned).")
         return redirect("accounts:asset_management")
 
-    # ✅ PRE-CHECK: do we already have a pending exit?
     existing = ExitRequest.objects.filter(
-        agency=agency,
-        user=user,
-        status__in=PENDING_EXIT_STATUSES
+        agency=agency, user=user, status__in=PENDING_EXIT_STATUSES
     ).first()
 
     if existing:
@@ -2080,8 +2120,9 @@ def exit_organization(request):
         )
         return redirect("accounts:asset_management")
 
+    portal_url = request.build_absolute_uri(reverse("accounts:asset_management"))
+
     try:
-        # Keep all DB changes together so we don't create a request without the related actions
         with transaction.atomic():
             exit_req = ExitRequest.objects.create(
                 agency=agency,
@@ -2089,10 +2130,8 @@ def exit_organization(request):
                 reason=reason,
                 typed_confirm=typed,
                 status="pending_returns",
-                # created_at auto
             )
 
-            # 1) Create return requests for all assets assigned to this user
             assets = list(
                 Asset.objects.filter(agency=agency, current_holder=user, status="assigned")
                 .select_related("category", "unit")
@@ -2100,61 +2139,45 @@ def exit_organization(request):
 
             created_rr = []
             for asset in assets:
-                # avoid duplicates
                 if AssetReturnRequest.objects.filter(
                     agency=agency, asset=asset, status="pending_ict"
                 ).exists():
                     continue
-
                 rr = AssetReturnRequest.objects.create(
-                    agency=agency,
-                    asset=asset,
-                    requested_by=user,
-                    reason=f"Exit Organization ({reason})",
-                    status="pending_ict",
+                    agency=agency, asset=asset, requested_by=user,
+                    reason=f"Exit Organization ({reason})", status="pending_ict",
                 )
                 created_rr.append(rr)
 
-            # 2) If user has SIM/Data lines: mark suspended
             user_lines = MobileLine.objects.filter(
                 agency=agency, assigned_to=user, status="assigned"
             )
             for line in user_lines:
                 line.suspend()
 
-        # ✅ Emails (after transaction committed successfully)
         base_recipients, cell_focal_emails = _get_exit_recipients(user, agency)
 
-        # Email unit head + ops + ict
         if base_recipients:
             send_email_async(
                 subject=f"Exit Notice: {user.get_full_name() or user.username} ({reason})",
                 to_emails=base_recipients,
                 html_template="emails/exit/exit_submitted.html",
                 context={
-                    "user": user,
-                    "agency": agency,
-                    "reason": reason,
-                    "exit_req": exit_req,
-                    "assets": assets,
-                    "return_requests": created_rr,
-                    "lines": list(user_lines),
+                    "user": user, "agency": agency, "reason": reason,
+                    "exit_req": exit_req, "assets": assets,
+                    "return_requests": created_rr, "lines": list(user_lines),
                     "submitted_at": timezone.now(),
                 },
             )
 
-        # Email cell provider focal point(s) only if there are lines
         if user_lines.exists() and cell_focal_emails:
             send_email_async(
                 subject=f"Action Required: Disable lines for {user.get_full_name() or user.username}",
                 to_emails=cell_focal_emails,
                 html_template="emails/exit/disable_lines.html",
                 context={
-                    "user": user,
-                    "agency": agency,
-                    "lines": list(user_lines),
-                    "exit_req": exit_req,
-                    "reason": reason,
+                    "user": user, "agency": agency, "lines": list(user_lines),
+                    "exit_req": exit_req, "reason": reason,
                     "submitted_at": timezone.now(),
                 },
             )
@@ -2163,7 +2186,6 @@ def exit_organization(request):
         return redirect("accounts:asset_management")
 
     except IntegrityError:
-        # ✅ SAFETY NET: in case two submits happen at the same time (double click)
         messages.warning(
             request,
             "You already have a pending exit request on the system. "
@@ -2172,6 +2194,10 @@ def exit_organization(request):
         return redirect("accounts:asset_management")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Consumable item detail page
+# ─────────────────────────────────────────────────────────────────────────────
+
 @login_required
 def consumable_item_detail(request, item_id: int):
     """
@@ -2179,7 +2205,7 @@ def consumable_item_detail(request, item_id: int):
     Shows item info, current stock level, and full stock history.
     ICT / Ops can restock or correct stock directly from this page.
     """
-    user   = request.user
+    user = request.user
     agency = getattr(user, "agency", None)
 
     if not agency:
@@ -2192,8 +2218,8 @@ def consumable_item_detail(request, item_id: int):
         return redirect("accounts:profile")
 
     roles, _ = AgencyAssetRoles.objects.get_or_create(agency=agency)
-    is_ict    = _is_ict(user, agency)
-    is_ops    = _is_ops_manager(user, agency)
+    is_ict = _is_ict(user, agency)
+    is_ops = _is_ops_manager(user, agency)
     can_manage = is_ict or is_ops or user.is_superuser
 
     item = get_object_or_404(
@@ -2210,7 +2236,7 @@ def consumable_item_detail(request, item_id: int):
                 return redirect("accounts:consumable_item_detail", item_id=item.id)
 
             qty_str = (request.POST.get("restock_qty") or "0").strip()
-            note    = (request.POST.get("restock_note") or "").strip()
+            note = (request.POST.get("restock_note") or "").strip()
             try:
                 qty = int(qty_str)
             except ValueError:
@@ -2244,7 +2270,7 @@ def consumable_item_detail(request, item_id: int):
                 return redirect("accounts:consumable_item_detail", item_id=item.id)
 
             qty_str = (request.POST.get("corrected_qty") or "").strip()
-            note    = (request.POST.get("correction_note") or "").strip()
+            note = (request.POST.get("correction_note") or "").strip()
             try:
                 new_qty = int(qty_str)
                 if new_qty < 0:
@@ -2280,7 +2306,7 @@ def consumable_item_detail(request, item_id: int):
     ).select_related("actor", "reference_request", "reference_request__requester").order_by("-created_at")
 
     total_dispatched = sum(abs(l.quantity_change) for l in stock_logs if l.event == "dispatched")
-    total_restocked  = sum(l.quantity_change      for l in stock_logs if l.event == "restocked")
+    total_restocked = sum(l.quantity_change for l in stock_logs if l.event == "restocked")
 
     recent_requests = ConsumableRequestItem.objects.filter(
         item=item
@@ -2298,4 +2324,3 @@ def consumable_item_detail(request, item_id: int):
         "is_ict":           is_ict,
         "is_ops":           is_ops,
     })
-

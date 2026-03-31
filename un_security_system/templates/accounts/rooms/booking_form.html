@@ -695,6 +695,102 @@
         font-size: 0.85rem;
         color: #6b7280;
     }
+
+    /* ICT Support Selector */
+    .ict-support-section {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border: 2px solid #0ea5e9;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .ict-option {
+        position: relative;
+        flex: 1;
+    }
+
+    .ict-option input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .ict-option label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 1rem 0.75rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: center;
+        height: 100%;
+    }
+
+    .ict-option label i {
+        font-size: 1.6rem;
+        color: #9ca3af;
+        transition: all 0.3s;
+    }
+
+    .ict-option label .ict-label-title {
+        font-weight: 700;
+        font-size: 0.875rem;
+        color: #374151;
+        transition: all 0.3s;
+    }
+
+    .ict-option label .ict-label-desc {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        line-height: 1.3;
+        transition: all 0.3s;
+    }
+
+    .ict-option input:checked + label {
+        border-color: #0ea5e9;
+        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    }
+
+    .ict-option input:checked + label i,
+    .ict-option input:checked + label .ict-label-title {
+        color: #0369a1;
+    }
+
+    .ict-option input:checked + label .ict-label-desc {
+        color: #0369a1;
+    }
+
+    .ict-option label:hover {
+        border-color: #0ea5e9;
+        transform: translateY(-2px);
+        box-shadow: 0 0.25rem 0.75rem rgba(14, 165, 233, 0.15);
+    }
+
+    .ict-notice {
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-radius: 8px;
+        padding: 0.6rem 0.9rem;
+        font-size: 0.8rem;
+        color: #92400e;
+        margin-top: 0.75rem;
+        display: none;
+    }
+
+    .ict-notice.show {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        animation: slideDown 0.3s ease;
+    }
+
 </style>
 {% endblock %}
 
@@ -784,6 +880,62 @@
                             <i class="bi bi-info-circle"></i>
                             Add any additional details about the meeting
                         </div>
+                    </div>
+                </div>
+
+
+                <!-- ICT Support -->
+                <div class="ict-support-section">
+                    <div class="form-section-title" style="color:#0369a1;">
+                        <i class="bi bi-laptop" style="color:#0369a1;"></i>
+                        ICT Support
+                    </div>
+                    <p class="text-muted small mb-3">
+                        Do you need technical assistance from the ICT team for this meeting?
+                        If requested, ICT will be notified by email as soon as you submit.
+                    </p>
+                    <div class="d-flex gap-2">
+
+                        <div class="ict-option">
+                            <input type="radio" name="ict_support" value="none"
+                                   id="ict-none" checked>
+                            <label for="ict-none">
+                                <i class="bi bi-x-circle"></i>
+                                <span class="ict-label-title">None</span>
+                                <span class="ict-label-desc">No ICT support needed</span>
+                            </label>
+                        </div>
+
+                        <div class="ict-option">
+                            <input type="radio" name="ict_support" value="setup"
+                                   id="ict-setup">
+                            <label for="ict-setup">
+                                <i class="bi bi-tools"></i>
+                                <span class="ict-label-title">Setup</span>
+                                <span class="ict-label-desc">Before meeting — AV & equipment configuration</span>
+                            </label>
+                        </div>
+
+                        <div class="ict-option">
+                            <input type="radio" name="ict_support" value="during"
+                                   id="ict-during">
+                            <label for="ict-during">
+                                <i class="bi bi-headset"></i>
+                                <span class="ict-label-title">During</span>
+                                <span class="ict-label-desc">Live technical support throughout the meeting</span>
+                            </label>
+                        </div>
+
+                    </div>
+
+                    {% if form.ict_support.errors %}
+                        <div class="text-danger small mt-2">{{ form.ict_support.errors }}</div>
+                    {% endif %}
+
+                    <!-- Notification notice (shown when setup or during is selected) -->
+                    <div class="ict-notice" id="ictNotice">
+                        <i class="bi bi-envelope-fill"></i>
+                        <span>ICT will receive an email notification as soon as you submit this booking.</span>
                     </div>
                 </div>
 
@@ -1147,6 +1299,24 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+
+    // ICT Support — show notice when setup or during is selected
+    const ictRadios = document.querySelectorAll('input[name="ict_support"]');
+    const ictNotice = document.getElementById('ictNotice');
+
+    function updateIctNotice() {
+        const selected = document.querySelector('input[name="ict_support"]:checked')?.value;
+        if (selected && selected !== 'none') {
+            ictNotice.classList.add('show');
+        } else {
+            ictNotice.classList.remove('show');
+        }
+    }
+
+    ictRadios.forEach(r => r.addEventListener('change', updateIctNotice));
+    updateIctNotice(); // run on load in case of form re-render with errors
+
+
     const roomSelect = document.querySelector('select[name="room"]');
     const dateInput = document.querySelector('input[name="date"]');
     const startTimeInput = document.querySelector('input[name="start_time"]');

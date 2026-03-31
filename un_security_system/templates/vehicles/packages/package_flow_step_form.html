@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:780px;">
+
+  <div class="mb-4">
+    <h2 class="fw-bold mb-1"><i class="bi bi-list-check text-primary me-2"></i>{{ title }}</h2>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-0">
+        <li class="breadcrumb-item"><a href="{% url 'vehicles:package_flow_config' %}">Flow Config</a></li>
+        <li class="breadcrumb-item active">{{ title }}</li>
+      </ol>
+    </nav>
+  </div>
+
+  {% if form.errors %}
+    <div class="alert alert-danger alert-dismissible fade show">
+      <strong>Please correct the following errors:</strong>
+      <ul class="mb-0 mt-2">
+        {% for field in form %}{% for error in field.errors %}<li><b>{{ field.label }}:</b> {{ error }}</li>{% endfor %}{% endfor %}
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <!-- ── Identity ─────────────────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-semibold py-3">
+        <i class="bi bi-tag text-primary me-2"></i>Step Identity
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-3">
+          <div class="col-sm-3">
+            {% with f=form.order %}
+            <label class="form-label fw-semibold">{{ f.label }} <span class="text-danger">*</span></label>
+            {{ f }}
+            <div class="form-text">{{ f.help_text }}</div>
+            {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
+            {% endwith %}
+          </div>
+          <div class="col-sm-9">
+            {% with f=form.name %}
+            <label class="form-label fw-semibold">{{ f.label }} <span class="text-danger">*</span></label>
+            {{ f }}
+            {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
+            {% endwith %}
+          </div>
+          <div class="col-sm-6">
+            {% with f=form.step_type %}
+            <label class="form-label fw-semibold">{{ f.label }}</label>
+            {{ f }}
+            {% endwith %}
+          </div>
+          <div class="col-sm-6">
+            {% with f=form.status_code %}
+            <label class="form-label fw-semibold">{{ f.label }} <span class="text-danger">*</span></label>
+            {{ f }}
+            <div class="form-text">{{ f.help_text }}</div>
+            {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
+            {% endwith %}
+          </div>
+          <div class="col-12">
+            {% with f=form.description %}
+            <label class="form-label fw-semibold">{{ f.label }}</label>
+            {{ f }}
+            {% endwith %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Access Control ───────────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-semibold py-3">
+        <i class="bi bi-shield-lock text-primary me-2"></i>Access Control
+      </div>
+      <div class="card-body p-4">
+        {% with f=form.allowed_roles %}
+        <label class="form-label fw-semibold">{{ f.label }}</label>
+        {{ f }}
+        <div class="form-text">{{ f.help_text }}</div>
+        {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
+        {% endwith %}
+        <div class="alert alert-light border mt-3 mb-0 small">
+          <i class="bi bi-info-circle text-primary me-2"></i>
+          Common roles: <code>data_entry</code>, <code>reception</code>, <code>registry</code>,
+          <code>agency_fp</code>, <code>lsa</code>, <code>soc</code>.
+          Separate multiple roles with commas.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Required Actions ─────────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-semibold py-3">
+        <i class="bi bi-ui-checks text-primary me-2"></i>Required Actions at This Step
+      </div>
+      <div class="card-body p-4">
+        <p class="text-muted small mb-3">
+          The handler performing this step must complete all checked actions before advancing.
+        </p>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <div class="form-check p-3 border rounded-3">
+              {{ form.requires_note }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.requires_note.id_for_label }}">{{ form.requires_note.label }}</label>
+              <div class="form-text ms-4">{{ form.requires_note.help_text }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-check p-3 border rounded-3">
+              {{ form.requires_scan }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.requires_scan.id_for_label }}">{{ form.requires_scan.label }}</label>
+              <div class="form-text ms-4">{{ form.requires_scan.help_text }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-check p-3 border rounded-3">
+              {{ form.requires_stamp }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.requires_stamp.id_for_label }}">{{ form.requires_stamp.label }}</label>
+              <div class="form-text ms-4">{{ form.requires_stamp.help_text }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-check p-3 border rounded-3">
+              {{ form.requires_routing }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.requires_routing.id_for_label }}">{{ form.requires_routing.label }}</label>
+              <div class="form-text ms-4">{{ form.requires_routing.help_text }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-check p-3 border rounded-3">
+              {{ form.requires_recipient_signature }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.requires_recipient_signature.id_for_label }}">{{ form.requires_recipient_signature.label }}</label>
+              <div class="form-text ms-4">{{ form.requires_recipient_signature.help_text }}</div>
+            </div>
+          </div>
+        </div>
+        <p class="text-muted small mt-3 mb-0">
+          <i class="bi bi-lightbulb text-warning me-1"></i>
+          <strong>Tip:</strong> For file items, enable <em>Scan Content</em> and <em>Stamp</em>.
+          For final delivery, enable <em>Recipient Signature</em>.
+        </p>
+      </div>
+    </div>
+
+    <!-- ── Notifications ────────────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white fw-semibold py-3">
+        <i class="bi bi-bell text-primary me-2"></i>Notifications When This Step Completes
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-3 mb-3">
+          <div class="col-sm-4">
+            <div class="form-check p-3 border rounded-3 h-100">
+              {{ form.notify_requester }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.notify_requester.id_for_label }}">{{ form.notify_requester.label }}</label>
+              <div class="form-text ms-4">{{ form.notify_requester.help_text }}</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="form-check p-3 border rounded-3 h-100">
+              {{ form.notify_focal_email }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.notify_focal_email.id_for_label }}">{{ form.notify_focal_email.label }}</label>
+              <div class="form-text ms-4">{{ form.notify_focal_email.help_text }}</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="form-check p-3 border rounded-3 h-100">
+              {{ form.notify_recipient }}
+              <label class="form-check-label ms-2 fw-semibold" for="{{ form.notify_recipient.id_for_label }}">{{ form.notify_recipient.label }}</label>
+              <div class="form-text ms-4">{{ form.notify_recipient.help_text }}</div>
+            </div>
+          </div>
+        </div>
+        {% with f=form.notify_next_handler_roles %}
+        <label class="form-label fw-semibold mt-2">{{ f.label }}</label>
+        {{ f }}
+        <div class="form-text">{{ f.help_text }}</div>
+        {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
+        {% endwith %}
+      </div>
+    </div>
+
+    <!-- ── Flow Control ──────────────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-semibold py-3">
+        <i class="bi bi-flag text-primary me-2"></i>Flow Control
+      </div>
+      <div class="card-body p-4">
+        {% with f=form.is_terminal %}
+        <div class="form-check p-3 border border-warning rounded-3">
+          {{ f }}
+          <label class="form-check-label ms-2 fw-semibold" for="{{ f.id_for_label }}">
+            <i class="bi bi-flag-fill text-warning me-1"></i>{{ f.label }}
+          </label>
+          <div class="form-text ms-4">{{ f.help_text }}</div>
+        </div>
+        {% endwith %}
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary px-4" type="submit">
+        <i class="bi bi-check-circle me-2"></i>Save Step
+      </button>
+      <a class="btn btn-outline-secondary" href="{% url 'vehicles:package_flow_config' %}">
+        <i class="bi bi-x-lg me-1"></i>Cancel
+      </a>
+    </div>
+
+  </form>
+</div>
+
+<style>
+  .card { border-radius: 0.75rem; overflow: hidden; }
+  code { background:#f1f5f9; padding:2px 6px; border-radius:4px; color:#7c3aed; }
+  .form-check.border { background: #fafafa; }
+</style>
+
+{% endblock %}

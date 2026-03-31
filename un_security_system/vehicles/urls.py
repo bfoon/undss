@@ -95,15 +95,40 @@ urlpatterns = [
     path('api/keys/lookup/', views.key_lookup_api, name='key_lookup_api'),
 
     # Packages & Mailroom
+    # ── Package list & logging ────────────────────────────────────────────────
     path('packages/', views.package_list, name='package_list'),
     path('packages/new/', views.package_log_new, name='package_log_new'),
-    path('packages/<int:pk>/', views.package_detail, name='package_detail'),
-    path('packages/<int:pk>/reception/receive/', views.package_mark_reception_received, name='package_reception_receive'),
-    path('packages/<int:pk>/reception/send-to-agency/', views.package_send_to_agency, name='package_send_to_agency'),
-    path('packages/<int:pk>/agency/receive/', views.package_mark_agency_received, name='package_agency_receive'),
-    path('packages/<int:pk>/deliver/', views.package_mark_delivered, name='package_deliver'),
-    path('api/package/track/', views.package_track_api, name='package_track_api'),
 
+    # ── Package detail & step advancement ────────────────────────────────────
+    path('packages/<int:pk>/', views.package_detail, name='package_detail'),
+    path('packages/<int:pk>/advance/', views.package_advance_step, name='package_advance_step'),
+
+    # ── Flow Configuration (LSA / admin only) ─────────────────────────────────
+    path('packages/flow/',
+         views.package_flow_config,
+         name='package_flow_config'),
+
+    path('packages/flow/template/new/',
+         views.package_flow_template_create,
+         name='package_flow_template_create'),
+
+    path('packages/flow/template/<int:pk>/edit/',
+         views.package_flow_template_edit,
+         name='package_flow_template_edit'),
+
+    path('packages/flow/step/<int:template_pk>/new/',
+         views.package_flow_step_create,
+         name='package_flow_step_create'),
+
+    path('packages/flow/step/<int:pk>/edit/',
+         views.package_flow_step_edit,
+         name='package_flow_step_edit'),
+
+    path('packages/flow/step/<int:pk>/delete/',
+         views.package_flow_step_delete,
+         name='package_flow_step_delete'),
+
+    # --------- Asset exit more ---
     path('asset-exit/<int:pk>/qr/', views.asset_exit_qr_code, name='asset_exit_qr_code'),
 
-]
+    ]

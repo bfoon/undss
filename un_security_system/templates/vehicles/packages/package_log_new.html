@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Log New Package{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:820px;">
+
+  <!-- Header -->
+  <div class="mb-4">
+    <h2 class="fw-bold mb-1"><i class="bi bi-journal-plus text-primary me-2"></i>Log Incoming Package</h2>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-0">
+        <li class="breadcrumb-item"><a href="{% url 'vehicles:package_list' %}">Packages</a></li>
+        <li class="breadcrumb-item active">Log New</li>
+      </ol>
+    </nav>
+  </div>
+
+  <form method="post" novalidate id="logForm">
+    {% csrf_token %}
+
+    <!-- ── Step 1: Select Flow Template ──────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header py-3" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+        <h5 class="mb-0 text-white">
+          <i class="bi bi-diagram-3 me-2"></i>1 · Select Workflow
+        </h5>
+      </div>
+      <div class="card-body p-4">
+        <p class="text-muted small mb-3">
+          Choose the workflow that matches this package type. The workflow defines every step,
+          who handles each step, and what notifications are sent.
+        </p>
+
+        {% if not flow_templates %}
+          <div class="alert alert-warning small mb-0">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            No active flow templates configured yet.
+            {% if user.is_superuser or user.role in 'lsa soc' %}
+              <a href="{% url 'vehicles:package_flow_config' %}">Configure workflows →</a>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="row g-3">
+            {% for tmpl in flow_templates %}
+            <div class="col-sm-6">
+              <label class="flow-card d-block cursor-pointer h-100" for="tmpl_{{ tmpl.pk }}">
+                <input type="radio" name="flow_template_id" id="tmpl_{{ tmpl.pk }}"
+                       value="{{ tmpl.pk }}" class="d-none flow-radio"
+                       {% if forloop.first %}checked{% endif %}>
+                <div class="card border h-100 p-3 flow-card-inner">
+                  <div class="d-flex align-items-start gap-3">
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0"
+                         style="width:40px;height:40px;">
+                      <i class="bi bi-diagram-3"></i>
+                    </div>
+                    <div>
+                      <div class="fw-semibold">{{ tmpl.name }}</div>
+                      {% if tmpl.description %}
+                        <div class="text-muted small">{{ tmpl.description }}</div>
+                      {% endif %}
+                      <!-- Steps preview -->
+                      <div class="d-flex flex-wrap gap-1 mt-2">
+                        {% for step in tmpl.steps_ordered %}
+                          <span class="badge bg-light text-dark border small">{{ step.order }}. {{ step.name }}</span>
+                        {% endfor %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ── Step 2: Package Details ────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-light py-3">
+        <h5 class="mb-0 text-dark"><i class="bi bi-box-seam me-2"></i>2 · Package Details</h5>
+      </div>
+      <div class="card-body p-4">
+        {% if form.errors %}
+        <div class="alert alert-danger small">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          <strong>Please fix the following:</strong>
+          <ul class="mb-0 mt-1">
+            {% for field in form %}{% for error in field.errors %}<li>{{ field.label }}: {{ error }}</li>{% endfor %}{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Item Type <span class="text-danger">*</span></label>
+            {{ form.item_type }}
+            {% if form.item_type.errors %}<div class="text-danger small">{{ form.item_type.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Sender Type <span class="text-danger">*</span></label>
+            {{ form.sender_type }}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Sender Name <span class="text-danger">*</span></label>
+            {{ form.sender_name }}
+            {% if form.sender_name.errors %}<div class="text-danger small">{{ form.sender_name.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Sender Organisation</label>
+            {{ form.sender_org }}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Sender Contact</label>
+            {{ form.sender_contact }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Description</label>
+            {{ form.description }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Step 3: Routing ────────────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-light py-3">
+        <h5 class="mb-0 text-dark"><i class="bi bi-send me-2"></i>3 · Destination & Routing</h5>
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Destination Agency <span class="text-danger">*</span></label>
+            {{ form.destination_agency }}
+            {% if form.destination_agency.errors %}<div class="text-danger small">{{ form.destination_agency.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Agency Focal Email</label>
+            {{ form.dest_focal_email }}
+            <div class="form-text">Automatic notifications will be sent here at configured steps.</div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">Named Recipient</label>
+            {{ form.for_recipient }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Gate-Level Notes</label>
+            {{ form.notes }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary px-5" type="submit" id="submitBtn">
+        <i class="bi bi-check-circle me-2"></i>Log Package & Start Workflow
+      </button>
+      <a class="btn btn-outline-secondary" href="{% url 'vehicles:package_list' %}">
+        <i class="bi bi-x-lg me-1"></i>Cancel
+      </a>
+    </div>
+
+  </form>
+</div>
+
+<style>
+  .card { border-radius:.75rem; overflow:hidden; }
+  .form-control, .form-select { border-radius:.5rem; border:1.5px solid #e2e8f0; }
+  .form-control:focus, .form-select:focus { border-color:#667eea; box-shadow:0 0 0 3px rgba(102,126,234,.15); }
+
+  .flow-card-inner {
+    border-radius:.5rem !important;
+    transition: all .2s ease;
+    cursor: pointer;
+  }
+  .flow-radio:checked + .flow-card-inner,
+  .flow-card:hover .flow-card-inner {
+    border-color:#667eea !important;
+    background:#f5f3ff;
+    box-shadow:0 0 0 3px rgba(102,126,234,.15);
+  }
+  .flow-radio:checked + .flow-card-inner { background:#ede9fe; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // Highlight selected flow card
+  document.querySelectorAll('.flow-radio').forEach(function(radio) {
+    radio.addEventListener('change', function () {
+      document.querySelectorAll('.flow-card-inner').forEach(function(c) {
+        c.classList.remove('selected');
+      });
+      this.nextElementSibling.classList.add('selected');
+    });
+  });
+
+  // Submit guard
+  const form = document.getElementById('logForm');
+  const btn  = document.getElementById('submitBtn');
+  if (form && btn) {
+    const orig = btn.innerHTML;
+    form.addEventListener('submit', function () {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Logging…';
+      setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 8000);
+    });
+  }
+});
+</script>
+{% endblock %}

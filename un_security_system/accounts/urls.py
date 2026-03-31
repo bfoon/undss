@@ -241,6 +241,8 @@ urlpatterns = [
     path("assets/verify/", asset_verify, name="asset_verify"),
     path("assets/verification-history/", asset_verification_history, name="asset_verification_history"),
     path("exit/", view_asset_management.exit_organization, name="exit_organization"),
+    path("assets/consumable/<int:item_id>/", view_asset_management.consumable_item_detail, name="consumable_item_detail"),
+    path("assets/supplies/export/",          view_asset_management.consumables_export,      name="consumables_export"),
 
     # -------- Batch upload -----------
     path("batch/template/<str:kind>/", views_batch.download_csv_template, name="batch_template"),
