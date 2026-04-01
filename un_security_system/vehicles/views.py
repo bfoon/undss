@@ -35,7 +35,7 @@ from .forms import (
     ParkingCardRequestForm, KeyForm, KeyIssueForm, KeyReturnForm,
     PackageLogForm,
     PackageFlowTemplateForm, PackageFlowStepForm,
-    PackageStepActionForm,
+    PackageStepActionForm, PackageOutgoingLogForm,
 )
 
 User = get_user_model()
@@ -203,9 +203,25 @@ def _guard_team_emails():
 
 
 # ─── Helpers For Packages ──────────────────────────────────────────────────────────────────
+# ── Permission helpers ─────────────────────────────────────────────────────────
+
+def _is_ict_focal(user) -> bool:
+    """Only ICT focal points (or superusers) may configure flows."""
+    return user.is_superuser or getattr(user, 'role', None) == 'ict_focal'
+
+
+def _user_agency(user):
+    """Return the Agency the user belongs to, or None."""
+    return getattr(user, 'agency', None)
+
+
+def _user_can_perform_step(user, step: PackageFlowStep) -> bool:
+    return step.user_can_act(user)  # delegates to the model method
+
+
+# ── Tracking code ─────────────────────────────────────────────────────────────
 
 def _generate_tracking_code():
-    """Generate a collision-safe tracking code like PKG-2025-A3F7C1."""
     year = timezone.now().year
     while True:
         code = f"PKG-{year}-{secrets.token_hex(3).upper()}"
@@ -213,101 +229,152 @@ def _generate_tracking_code():
             return code
 
 
-def _user_can_perform_step(user, step: PackageFlowStep) -> bool:
-    """True if the user is allowed to action this step."""
-    if user.is_superuser:
-        return True
-    roles = step.allowed_roles_list
-    if not roles:  # blank = any authenticated user
-        return True
-    return getattr(user, 'role', None) in roles
+# ── Notifications ─────────────────────────────────────────────────────────────
 
-
-def _require_admin(request) -> bool:
-    """True if user is a superuser or has an LSA/SOC role."""
-    return request.user.is_superuser or getattr(request.user, 'role', None) in ('lsa', 'soc')
-
-
-def _send_notifications(package: Package, completed_step: PackageFlowStep,
-                        log: PackageStepLog, actor) -> None:
-    """
-    Dispatch in-app and email notifications after a step is completed.
-    Email failures are silenced so they never break the workflow.
-    """
-    next_step = completed_step.next_step()
+def _send_notifications(package, completed_step, log, actor):
     actor_name = actor.get_full_name() or actor.username
+    next_step = completed_step.next_step()
+    is_outgoing = package.direction == 'outgoing'
 
-    # 1 ── In-app: notify the original logger
+    # 1. In-app: notify original logger
     if completed_step.notify_requester and package.logged_by_id:
         PackageNotification.objects.create(
             package=package,
             recipient=package.logged_by,
-            message=(
-                f"Package {package.tracking_code}: "
-                f"'{completed_step.name}' completed by {actor_name}."
-            ),
+            message=f"{'Outgoing' if is_outgoing else 'Package'} {package.tracking_code}: "
+                    f"'{completed_step.name}' completed by {actor_name}.",
         )
 
-    # 2 ── Email: agency focal point
-    if completed_step.notify_focal_email and package.dest_focal_email:
-        body_lines = [
-            f"Dear Focal Point,",
-            f"",
-            f"Package {package.tracking_code} ({package.item_type}) has completed",
-            f"the '{completed_step.name}' stage.",
-            f"",
-            f"Destination agency : {package.destination_agency}",
-            f"For                : {package.for_recipient or '—'}",
-            f"Action performed by: {actor_name}",
-            f"Time               : {log.performed_at:%Y-%m-%d %H:%M}",
+    # 2. Email agency focal / internal originator
+    notify_email = package.dest_focal_email if not is_outgoing else package.sender_email
+    if completed_step.notify_focal_email and notify_email:
+        lines = [
+            f"{'Outgoing item' if is_outgoing else 'Package'} {package.tracking_code} "
+            f"({package.item_type}) has completed the '{completed_step.name}' stage.",
+            "",
+            f"{'To' if is_outgoing else 'Destination'} : {package.destination_agency}",
+            f"For          : {package.for_recipient or '—'}",
+            f"Performed by : {actor_name}",
+            f"Time         : {log.performed_at:%Y-%m-%d %H:%M}",
         ]
-        if log.note:
-            body_lines += ["", f"Note: {log.note}"]
-        if log.routed_to:
-            body_lines += [f"Routed to: {log.routed_to}"]
-        if next_step:
-            body_lines += ["", f"Next step: {next_step.name}"]
-        else:
-            body_lines += ["", "The package workflow is now complete."]
-
+        if log.note:      lines += ["", f"Note: {log.note}"]
+        if log.routed_to: lines += [f"Dispatched via: {log.routed_to}"]
+        lines += ["", f"Next step: {next_step.name}"] if next_step else ["", "Workflow complete."]
         send_mail(
             subject=f"[UN PASS Mailroom] {package.tracking_code} — {completed_step.name}",
-            message="\n".join(body_lines),
-            from_email=None,  # uses settings.DEFAULT_FROM_EMAIL
-            recipient_list=[package.dest_focal_email],
+            message="\n".join(lines),
+            from_email=None,
+            recipient_list=[notify_email],
             fail_silently=True,
         )
 
-    # 3 ── In-app: notify users whose role will handle the NEXT step
-    if next_step and next_step.notify_next_roles_list:
+    # 3. In-app: next-step role + named-user notifications (agency-scoped)
+    if next_step:
+        notified_pks = set()
         for role in next_step.notify_next_roles_list:
-            for u in User.objects.filter(role=role):
+            for u in User.objects.filter(
+                    agency=completed_step.template.agency, role=role, is_active=True
+            ):
+                if u.pk not in notified_pks:
+                    PackageNotification.objects.create(
+                        package=package, recipient=u,
+                        message=f"{'Outgoing' if is_outgoing else 'Package'} "
+                                f"{package.tracking_code} is ready for: '{next_step.name}'.",
+                    )
+                    notified_pks.add(u.pk)
+        for u in next_step.notify_next_users.filter(is_active=True):
+            if u.pk not in notified_pks:
                 PackageNotification.objects.create(
-                    package=package,
-                    recipient=u,
+                    package=package, recipient=u,
+                    message=f"{'Outgoing' if is_outgoing else 'Package'} "
+                            f"{package.tracking_code} is ready for: '{next_step.name}'.",
+                )
+                notified_pks.add(u.pk)
+
+    # 4. Email internal recipient (incoming) or external recipient (outgoing) on terminal
+    if completed_step.is_terminal and completed_step.notify_recipient:
+        if is_outgoing:
+            # Email the external recipient that their item is on its way / delivered
+            ext_email = getattr(package, 'recipient_email', '') or package.dest_focal_email
+            if ext_email:
+                send_mail(
+                    subject=f"[UN PASS] Item {package.tracking_code} dispatched to you",
+                    message="\n".join([
+                        f"Dear {package.for_recipient or 'Recipient'},",
+                        "",
+                        f"An item ({package.item_type}) from {package.sender_name} "
+                        f"({package.sender_org or package.destination_agency}) "
+                        f"has been dispatched and is on its way to you.",
+                        "",
+                        f"Reference : {package.tracking_code}",
+                        f"Dispatched: {log.performed_at:%Y-%m-%d %H:%M}",
+                        f"By        : {actor_name}",
+                    ]),
+                    from_email=None,
+                    recipient_list=[ext_email],
+                    fail_silently=True,
+                )
+        else:
+            # Existing incoming: email agency focal
+            if package.dest_focal_email:
+                recipient_display = log.recipient_name or package.for_recipient or "the designated recipient"
+                send_mail(
+                    subject=f"[UN PASS] Package {package.tracking_code} Delivered",
                     message=(
-                        f"Package {package.tracking_code} is ready for your action: "
-                        f"'{next_step.name}'."
+                        f"Package {package.tracking_code} has been delivered "
+                        f"to {recipient_display}.\n"
+                        f"Delivered by: {actor_name}\n"
+                        f"Time: {log.performed_at:%Y-%m-%d %H:%M}"
                     ),
+                    from_email=None,
+                    recipient_list=[package.dest_focal_email],
+                    fail_silently=True,
                 )
 
-    # 4 ── Email recipient on terminal step
-    if (completed_step.is_terminal
-            and completed_step.notify_recipient
-            and package.dest_focal_email):
-        recipient_display = log.recipient_name or package.for_recipient or "the designated recipient"
-        send_mail(
-            subject=f"[UN PASS] Package {package.tracking_code} Delivered",
-            message=(
-                f"Your package {package.tracking_code} has been delivered "
-                f"to {recipient_display}.\n"
-                f"Delivered by: {actor_name}\n"
-                f"Time: {log.performed_at:%Y-%m-%d %H:%M}"
-            ),
-            from_email=None,
-            recipient_list=[package.dest_focal_email],
-            fail_silently=True,
-        )
+    # 5. Email original sender (incoming) / internal originator (outgoing) on delivery
+    if completed_step.notify_sender:
+        if is_outgoing:
+            # Notify internal originator that their outgoing item was dispatched
+            if package.sender_email:
+                send_mail(
+                    subject=f"[UN PASS] Your outgoing item {package.tracking_code} has been dispatched",
+                    message="\n".join([
+                        f"Dear {package.sender_name},",
+                        "",
+                        f"Your outgoing item (ref: {package.tracking_code}) addressed to "
+                        f"{package.for_recipient or package.destination_agency} "
+                        f"has been successfully dispatched.",
+                        "",
+                        f"Item type   : {package.item_type}",
+                        f"Dispatched by: {actor_name}",
+                        f"Date & time  : {log.performed_at:%Y-%m-%d %H:%M}",
+                    ]),
+                    from_email=None,
+                    recipient_list=[package.sender_email],
+                    fail_silently=True,
+                )
+        else:
+            # Existing incoming: notify external sender that their package arrived
+            if package.sender_email:
+                recipient_display = log.recipient_name or package.for_recipient or "the intended recipient"
+                send_mail(
+                    subject=f"[UN PASS] Your package {package.tracking_code} has been delivered",
+                    message="\n".join([
+                        f"Dear {package.sender_name},",
+                        "",
+                        f"Your package (ref: {package.tracking_code}) addressed to "
+                        f"{package.destination_agency} has been successfully delivered "
+                        f"to {recipient_display}.",
+                        "",
+                        f"Item type    : {package.item_type}",
+                        f"Delivered by : {actor_name}",
+                        f"Date & time  : {log.performed_at:%Y-%m-%d %H:%M}",
+                    ]),
+                    from_email=None,
+                    recipient_list=[package.sender_email],
+                    fail_silently=True,
+                )
+
 
 # --------------------------------- Vehicle CRUD -------------------------------------
 
@@ -1727,17 +1794,18 @@ def _new_tracking_code():
 # =============================================================================
 # PACKAGES – with notifications
 # =============================================================================
-# ─── Package List ─────────────────────────────────────────────────────────────
+# ── Package List ──────────────────────────────────────────────────────────────
 
 @login_required
 def package_list(request):
     qs = Package.objects.select_related(
-        'flow_template', 'current_step', 'logged_by'
+        'flow_template', 'flow_template__agency', 'current_step', 'logged_by'
     ).order_by('-logged_at')
 
     q = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', '').strip()
     template_filter = request.GET.get('template', '').strip()
+    direction_filter = request.GET.get('direction', '').strip()
 
     if q:
         qs = qs.filter(
@@ -1750,13 +1818,16 @@ def package_list(request):
         qs = qs.filter(status=status_filter)
     if template_filter:
         qs = qs.filter(flow_template_id=template_filter)
+    if direction_filter:
+        qs = qs.filter(direction=direction_filter)
 
+    user_agency = _user_agency(request.user)
     all_templates = PackageFlowTemplate.objects.filter(is_active=True)
+    if user_agency:
+        all_templates = all_templates.filter(agency=user_agency)
 
-    # Gather distinct statuses for the filter dropdown
     status_choices = (
-        Package.objects.values_list('status', flat=True)
-        .distinct().order_by('status')
+        Package.objects.values_list('status', flat=True).distinct().order_by('status')
     )
 
     return render(request, 'vehicles/packages/package_list.html', {
@@ -1764,29 +1835,38 @@ def package_list(request):
         'q': q,
         'status_filter': status_filter,
         'template_filter': template_filter,
+        'direction_filter': direction_filter,
         'all_templates': all_templates,
         'status_choices': status_choices,
     })
 
 
-# ─── Log New Package ─────────────────────────────────────────────────────────
+# ── Log New Package ───────────────────────────────────────────────────────────
 
 @login_required
 def package_log_new(request):
-    """Gate / reception: log an incoming package and assign it to a flow."""
-    flow_templates = PackageFlowTemplate.objects.filter(is_active=True).prefetch_related('steps')
+    user_agency = _user_agency(request.user)
+    flow_templates = (
+        PackageFlowTemplate.objects
+        .filter(is_active=True, agency=user_agency, direction='incoming')
+        .prefetch_related('steps')
+    ) if user_agency else PackageFlowTemplate.objects.none()
+
     form = PackageLogForm(request.POST or None)
 
     if request.method == 'POST' and form.is_valid():
         package = form.save(commit=False)
         package.logged_by = request.user
         package.tracking_code = _generate_tracking_code()
+        package.direction = 'incoming'
 
-        # Assign selected flow template
         template_id = request.POST.get('flow_template_id')
         if template_id:
             try:
-                tmpl = PackageFlowTemplate.objects.get(pk=template_id, is_active=True)
+                tmpl = PackageFlowTemplate.objects.get(
+                    pk=template_id, is_active=True,
+                    agency=user_agency, direction='incoming'
+                )
                 first_step = tmpl.first_step
                 package.flow_template = tmpl
                 if first_step:
@@ -1800,7 +1880,6 @@ def package_log_new(request):
 
         package.save()
 
-        # Write the initial step log (the logging action itself)
         if package.current_step:
             PackageStepLog.objects.create(
                 package=package,
@@ -1811,41 +1890,105 @@ def package_log_new(request):
                 note=form.cleaned_data.get('notes', ''),
             )
 
-        messages.success(
-            request,
-            f"Package {package.tracking_code} logged successfully."
-        )
+        messages.success(request, f"Package {package.tracking_code} logged.")
         return redirect('vehicles:package_detail', pk=package.pk)
 
     return render(request, 'vehicles/packages/package_log_new.html', {
         'form': form,
         'flow_templates': flow_templates,
+        'user_agency': user_agency,
+        'direction': 'incoming',
     })
 
 
-# ─── Package Detail ───────────────────────────────────────────────────────────
+# ── Log Outgoing Package ─────────────────────────────────────────────────
+
+@login_required
+def package_log_outgoing(request):
+    """Register an outgoing mail/package item."""
+    user_agency = _user_agency(request.user)
+    flow_templates = (
+        PackageFlowTemplate.objects
+        .filter(is_active=True, agency=user_agency, direction='outgoing')
+        .prefetch_related('steps')
+    ) if user_agency else PackageFlowTemplate.objects.none()
+
+    # Pre-fill originator fields from the logged-in user
+    initial = {
+        'sender_name': request.user.get_full_name() or request.user.username,
+        'sender_org': getattr(getattr(request.user, 'unit', None), 'name', ''),
+        'sender_contact': getattr(request.user, 'phone', ''),
+        'sender_email': request.user.email,
+        'sender_type': 'individual',
+    }
+
+    form = PackageOutgoingLogForm(request.POST or None, initial=initial)
+
+    if request.method == 'POST' and form.is_valid():
+        package = form.save(commit=False)
+        package.logged_by = request.user
+        package.tracking_code = _generate_tracking_code()
+        package.direction = 'outgoing'
+        package.sender_type = 'individual'  # internal sender always individual
+
+        # For outgoing: dest_focal_email = recipient_email (so notifications work)
+        if not package.dest_focal_email:
+            package.dest_focal_email = getattr(package, 'recipient_email', '')
+
+        template_id = request.POST.get('flow_template_id')
+        if template_id:
+            try:
+                tmpl = PackageFlowTemplate.objects.get(
+                    pk=template_id, is_active=True,
+                    agency=user_agency, direction='outgoing'
+                )
+                first_step = tmpl.first_step
+                package.flow_template = tmpl
+                if first_step:
+                    package.current_step = first_step
+                    package.status = first_step.status_code
+            except PackageFlowTemplate.DoesNotExist:
+                pass
+
+        if not package.status:
+            package.status = 'registered'
+
+        package.save()
+
+        if package.current_step:
+            PackageStepLog.objects.create(
+                package=package,
+                step=package.current_step,
+                step_name=package.current_step.name,
+                step_order=package.current_step.order,
+                performed_by=request.user,
+                note=form.cleaned_data.get('notes', ''),
+            )
+
+        messages.success(request, f"Outgoing item {package.tracking_code} registered.")
+        return redirect('vehicles:package_detail', pk=package.pk)
+
+    return render(request, 'vehicles/packages/package_log_outgoing.html', {
+        'form': form,
+        'flow_templates': flow_templates,
+        'user_agency': user_agency,
+        'direction': 'outgoing',
+    })
+
+# ── Package Detail ────────────────────────────────────────────────────────────
 
 @login_required
 def package_detail(request, pk):
     package = get_object_or_404(
         Package.objects.select_related(
-            'flow_template', 'current_step', 'logged_by'
+            'flow_template', 'flow_template__agency', 'current_step', 'logged_by'
         ),
         pk=pk,
     )
 
     step_logs = package.step_logs.select_related('step', 'performed_by').order_by('performed_at')
-
-    # All steps in the template for progress visualisation
-    all_steps = list(
-        package.flow_template.steps_ordered
-    ) if package.flow_template else []
-
-    # Steps already completed: those whose order < current step order (or all if complete)
-    if package.current_step:
-        completed_orders = {s.step_order for s in step_logs}
-    else:
-        completed_orders = {s.step_order for s in step_logs}
+    all_steps = list(package.flow_template.steps_ordered) if package.flow_template else []
+    completed_orders = {s.step_order for s in step_logs}
 
     can_advance = (
             package.current_step is not None
@@ -1853,11 +1996,8 @@ def package_detail(request, pk):
             and _user_can_perform_step(request.user, package.current_step)
     )
 
-    # Unread notifications for this user about this package
-    my_notifications = package.notifications.filter(
-        recipient=request.user, is_read=False
-    )
-    my_notifications.update(is_read=True)  # mark as read on view
+    # Mark in-app notifications read
+    package.notifications.filter(recipient=request.user, is_read=False).update(is_read=True)
 
     return render(request, 'vehicles/packages/package_detail.html', {
         'package': package,
@@ -1868,27 +2008,19 @@ def package_detail(request, pk):
     })
 
 
-# ─── Advance Step ─────────────────────────────────────────────────────────────
+# ── Advance Step ──────────────────────────────────────────────────────────────
 
 @login_required
 def package_advance_step(request, pk):
-    """
-    Generic view: perform the current step of a package's flow.
-    Builds a dynamic form based on the step's requirements,
-    records an immutable log, advances the flow, and sends notifications.
-    """
     package = get_object_or_404(Package, pk=pk)
     current_step = package.current_step
 
     if not current_step:
-        messages.warning(request, "This package has no pending step or is already complete.")
+        messages.warning(request, "No pending step or workflow already complete.")
         return redirect('vehicles:package_detail', pk=pk)
 
     if not _user_can_perform_step(request.user, current_step):
-        messages.error(
-            request,
-            f"Your role is not permitted to perform the '{current_step.name}' step."
-        )
+        messages.error(request, f"You are not permitted to perform '{current_step.name}'.")
         return redirect('vehicles:package_detail', pk=pk)
 
     form = PackageStepActionForm(
@@ -1912,7 +2044,6 @@ def package_advance_step(request, pk):
             recipient_name=form.cleaned_data.get('recipient_name', ''),
         )
 
-        # Backward-compat: also write a PackageEvent
         PackageEvent.objects.create(
             package=package,
             status=current_step.status_code[:20],
@@ -1920,7 +2051,6 @@ def package_advance_step(request, pk):
             note=(log.note or current_step.name)[:255],
         )
 
-        # Advance to next step
         next_step = current_step.next_step()
         if next_step:
             package.current_step = next_step
@@ -1928,14 +2058,11 @@ def package_advance_step(request, pk):
         else:
             package.current_step = None
             package.is_complete = True
-            # status stays as the just-completed terminal step code
 
         package.save(update_fields=['current_step', 'status', 'is_complete', 'last_update'])
-
-        # Notifications
         _send_notifications(package, current_step, log, request.user)
 
-        messages.success(request, f"✓ Step '{current_step.name}' completed.")
+        messages.success(request, f"✓ '{current_step.name}' completed.")
         return redirect('vehicles:package_detail', pk=pk)
 
     return render(request, 'vehicles/packages/package_step_action.html', {
@@ -1947,45 +2074,68 @@ def package_advance_step(request, pk):
     })
 
 
-# ─── Flow Configuration (Admin) ───────────────────────────────────────────────
+# ── Flow Configuration ────────────────────────────────────────────────────────
 
 @login_required
 def package_flow_config(request):
-    """List and manage all flow templates and their steps."""
-    if not _require_admin(request):
-        messages.error(request, "Only LSA or admins can manage flow configurations.")
+    """
+    ICT focal points see and manage only THEIR agency's templates.
+    Superusers see all.
+    """
+    if not _is_ict_focal(request.user):
+        messages.error(request, "Only ICT Focal Points can manage package workflows.")
         return redirect('vehicles:package_list')
 
-    templates = PackageFlowTemplate.objects.prefetch_related('steps').all()
+    user_agency = _user_agency(request.user)
+    qs = PackageFlowTemplate.objects.prefetch_related(
+        'steps', 'steps__allowed_users', 'steps__notify_next_users'
+    )
+    if not request.user.is_superuser and user_agency:
+        qs = qs.filter(agency=user_agency)
+
     return render(request, 'vehicles/packages/package_flow_config.html', {
-        'templates': templates,
+        'templates': qs,
+        'user_agency': user_agency,
     })
 
 
 @login_required
 def package_flow_template_create(request):
-    if not _require_admin(request):
+    if not _is_ict_focal(request.user):
         return redirect('vehicles:package_list')
+
+    user_agency = _user_agency(request.user)
+    if not user_agency and not request.user.is_superuser:
+        messages.error(request, "You must belong to an agency to create a flow template.")
+        return redirect('vehicles:package_flow_config')
 
     form = PackageFlowTemplateForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         tmpl = form.save(commit=False)
+        tmpl.agency = user_agency  # always locked to requester's agency
         tmpl.created_by = request.user
         tmpl.save()
-        messages.success(request, f"Flow template '{tmpl.name}' created.")
+        messages.success(request, f"Flow template '{tmpl.name}' created for {tmpl.agency.code}.")
         return redirect('vehicles:package_flow_config')
 
     return render(request, 'vehicles/packages/package_flow_template_form.html', {
-        'form': form, 'title': 'Create Flow Template',
+        'form': form,
+        'title': 'Create Flow Template',
+        'user_agency': user_agency,
     })
 
 
 @login_required
 def package_flow_template_edit(request, pk):
-    if not _require_admin(request):
+    if not _is_ict_focal(request.user):
         return redirect('vehicles:package_list')
 
-    tmpl = get_object_or_404(PackageFlowTemplate, pk=pk)
+    user_agency = _user_agency(request.user)
+    qs = PackageFlowTemplate.objects.all()
+    if not request.user.is_superuser:
+        qs = qs.filter(agency=user_agency)  # can only edit own agency's templates
+    tmpl = get_object_or_404(qs, pk=pk)
+
     form = PackageFlowTemplateForm(request.POST or None, instance=tmpl)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -1993,27 +2143,36 @@ def package_flow_template_edit(request, pk):
         return redirect('vehicles:package_flow_config')
 
     return render(request, 'vehicles/packages/package_flow_template_form.html', {
-        'form': form, 'title': f"Edit Template: {tmpl.name}", 'template': tmpl,
+        'form': form,
+        'title': f"Edit Template: {tmpl.name}",
+        'template': tmpl,
+        'user_agency': user_agency,
     })
 
 
 @login_required
 def package_flow_step_create(request, template_pk):
-    if not _require_admin(request):
+    if not _is_ict_focal(request.user):
         return redirect('vehicles:package_list')
 
-    tmpl = get_object_or_404(PackageFlowTemplate, pk=template_pk)
-    next_order = (
-                         tmpl.steps.aggregate(m=db_models.Max('order'))['m'] or 0
-                 ) + 1
+    user_agency = _user_agency(request.user)
+    qs = PackageFlowTemplate.objects.all()
+    if not request.user.is_superuser:
+        qs = qs.filter(agency=user_agency)
+    tmpl = get_object_or_404(qs, pk=template_pk)
+
+    next_order = (tmpl.steps.aggregate(m=db_models.Max('order'))['m'] or 0) + 1
     form = PackageFlowStepForm(
         request.POST or None,
         initial={'order': next_order},
+        agency=tmpl.agency,  # scope user pickers to this agency
     )
+
     if request.method == 'POST' and form.is_valid():
         step = form.save(commit=False)
         step.template = tmpl
         step.save()
+        form.save_m2m()  # save M2M (allowed_users, notify_next_users)
         messages.success(request, f"Step '{step.name}' added to '{tmpl.name}'.")
         return redirect('vehicles:package_flow_config')
 
@@ -2021,16 +2180,27 @@ def package_flow_step_create(request, template_pk):
         'form': form,
         'title': f"Add Step to: {tmpl.name}",
         'template': tmpl,
+        'user_agency': tmpl.agency,
     })
 
 
 @login_required
 def package_flow_step_edit(request, pk):
-    if not _require_admin(request):
+    if not _is_ict_focal(request.user):
         return redirect('vehicles:package_list')
 
-    step = get_object_or_404(PackageFlowStep, pk=pk)
-    form = PackageFlowStepForm(request.POST or None, instance=step)
+    user_agency = _user_agency(request.user)
+    qs = PackageFlowStep.objects.all()
+    if not request.user.is_superuser:
+        qs = qs.filter(template__agency=user_agency)
+    step = get_object_or_404(qs, pk=pk)
+
+    form = PackageFlowStepForm(
+        request.POST or None,
+        instance=step,
+        agency=step.template.agency,
+    )
+
     if request.method == 'POST' and form.is_valid():
         form.save()
         messages.success(request, f"Step '{step.name}' updated.")
@@ -2041,20 +2211,27 @@ def package_flow_step_edit(request, pk):
         'title': f"Edit Step: {step.name}",
         'template': step.template,
         'step': step,
+        'user_agency': step.template.agency,
     })
 
 
 @login_required
 def package_flow_step_delete(request, pk):
-    if not _require_admin(request):
+    if not _is_ict_focal(request.user):
         return redirect('vehicles:package_list')
 
-    step = get_object_or_404(PackageFlowStep, pk=pk)
+    user_agency = _user_agency(request.user)
+    qs = PackageFlowStep.objects.all()
+    if not request.user.is_superuser:
+        qs = qs.filter(template__agency=user_agency)
+    step = get_object_or_404(qs, pk=pk)
+
     if request.method == 'POST':
         name = step.name
         step.delete()
         messages.success(request, f"Step '{name}' deleted.")
     return redirect('vehicles:package_flow_config')
+
 
 # --- Asset more view options ------------------------------------
 

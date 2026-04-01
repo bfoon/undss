@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Packages & Mailroom{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="fw-bold mb-1">
+        <i class="bi bi-mailbox text-primary me-2"></i>Packages & Mailroom
+      </h3>
+      <p class="text-muted small mb-0">
+        Track all incoming and outgoing packages and mail through their configured workflows.
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      {% if user.is_superuser or user.role == 'ict_focal' %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'vehicles:package_flow_config' %}"
+           title="Manage Workflows">
+          <i class="bi bi-diagram-3 me-1"></i>Workflows
+        </a>
+      {% endif %}
+      <a class="btn btn-outline-success" href="{% url 'vehicles:package_log_outgoing' %}">
+        <i class="bi bi-send me-1"></i>Register Outgoing
+      </a>
+      <a class="btn btn-primary" href="{% url 'vehicles:package_log_new' %}">
+        <i class="bi bi-journal-plus me-1"></i>Log Incoming
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <form class="row g-2 mb-3" method="get">
+    <div class="col-sm-5 col-md-4">
+      <input class="form-control" name="q" value="{{ q }}"
+             placeholder="Search tracking, sender, agency, recipient…">
+    </div>
+    <div class="col-sm-4 col-md-2">
+      <select class="form-select" name="direction">
+        <option value="">All Directions</option>
+        <option value="incoming" {% if direction_filter == 'incoming' %}selected{% endif %}>↓ Incoming</option>
+        <option value="outgoing" {% if direction_filter == 'outgoing' %}selected{% endif %}>↑ Outgoing</option>
+      </select>
+    </div>
+    <div class="col-sm-4 col-md-2">
+      <select class="form-select" name="status">
+        <option value="">All Statuses</option>
+        {% for code in status_choices %}
+          <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ code }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-4 col-md-2">
+      <select class="form-select" name="template">
+        <option value="">All Workflows</option>
+        {% for tmpl in all_templates %}
+          <option value="{{ tmpl.pk }}"
+            {% if template_filter == tmpl.pk|stringformat:"s" %}selected{% endif %}>
+            {{ tmpl.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-primary">Filter</button>
+      {% if q or status_filter or template_filter or direction_filter %}
+        <a class="btn btn-outline-secondary ms-1" href="{% url 'vehicles:package_list' %}">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <!-- Table -->
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table align-middle table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-3"></th>
+            <th>Tracking</th>
+            <th>Item / For</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Workflow</th>
+            <th>Current Step</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in packages %}
+          <tr>
+            <td class="ps-3">
+              {% if p.direction == 'outgoing' %}
+                <span class="badge bg-success" title="Outgoing">
+                  <i class="bi bi-send-fill"></i>
+                </span>
+              {% else %}
+                <span class="badge bg-primary" title="Incoming">
+                  <i class="bi bi-box-arrow-in-down"></i>
+                </span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border font-monospace">{{ p.tracking_code }}</span>
+            </td>
+            <td>
+              <div class="fw-semibold small">{{ p.item_type }}</div>
+              {% if p.for_recipient %}
+                <div class="text-muted small">For: {{ p.for_recipient }}</div>
+              {% endif %}
+            </td>
+            <td class="small">
+              {{ p.sender_name }}
+              {% if p.sender_org %}<br><span class="text-muted">{{ p.sender_org }}</span>{% endif %}
+            </td>
+            <td class="small">{{ p.destination_agency }}</td>
+            <td>
+              {% if p.flow_template %}
+                <span class="badge bg-light text-dark border small">{{ p.flow_template.name }}</span>
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if p.is_complete %}
+                <span class="badge bg-success"><i class="bi bi-check-all me-1"></i>Complete</span>
+              {% elif p.current_step %}
+                <span class="badge {% if p.direction == 'outgoing' %}bg-success{% else %}bg-primary{% endif %}">
+                  {{ p.current_step.name }}
+                </span>
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-secondary small font-monospace">{{ p.status }}</span></td>
+            <td class="small text-muted">{{ p.logged_at|date:"M d, Y" }}</td>
+            <td class="text-end pe-3">
+              <a class="btn btn-sm btn-outline-primary" href="{% url 'vehicles:package_detail' p.pk %}">
+                <i class="bi bi-eye"></i>
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="10" class="text-center text-muted py-5">
+              <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+              No packages found.
+              {% if q or status_filter or direction_filter %}
+                <a href="{% url 'vehicles:package_list' %}">Clear filters</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .card { border-radius:.75rem; overflow:hidden; }
+  .font-monospace { font-size:.8rem; letter-spacing:.5px; }
+</style>
+{% endblock %}

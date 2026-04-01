@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
 import csv
-from .models import Vehicle, VehicleMovement, ParkingCard, ParkingCardRequest, Key, KeyLog, Package, PackageEvent
+from .models import Vehicle, VehicleMovement, ParkingCard, ParkingCardRequest, Key, KeyLog, PackageFlowTemplate, PackageFlowStep, PackageStepLog, PackageNotification
 
 # Try to import optional models without crashing
 try:
@@ -196,15 +196,79 @@ class KeyLogAdmin(admin.ModelAdmin):
     search_fields = ('key__code', 'key__label', 'issued_to_name', 'issued_to_badge_id', 'purpose')
 
 
-@admin.register(Package)
-class PackageAdmin(admin.ModelAdmin):
-    list_display = ("tracking_code","item_type","destination_agency","status","logged_at","logged_by")
-    list_filter = ("status","destination_agency","sender_type")
-    search_fields = ("tracking_code","sender_name","sender_org","destination_agency","for_recipient")
+class PackageFlowStepInline(admin.TabularInline):
+    model = PackageFlowStep
+    extra = 0
+    fields = (
+        'order', 'name', 'step_type', 'status_code',
+        'allowed_roles', 'allowed_users',
+        'requires_note', 'requires_scan', 'requires_stamp',
+        'requires_routing', 'requires_recipient_signature',
+        'notify_requester', 'notify_focal_email',
+        'notify_next_handler_roles', 'notify_next_users',
+        'is_terminal',
+    )
+    filter_horizontal = ('allowed_users', 'notify_next_users')
+    ordering = ('order',)
 
-@admin.register(PackageEvent)
-class PackageEventAdmin(admin.ModelAdmin):
-    list_display = ("package","status","at","who","note")
-    list_filter = ("status",)
-    search_fields = ("package__tracking_code","note","who__username")
 
+@admin.register(PackageFlowTemplate)
+class PackageFlowTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'agency', 'step_count', 'is_active', 'created_by', 'created_at')
+    list_filter = ('agency', 'is_active')
+    search_fields = ('name', 'agency__name', 'agency__code')
+    inlines = [PackageFlowStepInline]
+    readonly_fields = ('created_at',)
+
+    def step_count(self, obj):
+        return obj.step_count
+
+    step_count.short_description = "Steps"
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Non-superusers only see their own agency's templates
+        if not request.user.is_superuser:
+            agency = getattr(request.user, 'agency', None)
+            if agency:
+                qs = qs.filter(agency=agency)
+            else:
+                qs = qs.none()
+        return qs
+
+    def save_model(self, request, obj, form, change):
+        if not obj.pk and not request.user.is_superuser:
+            obj.agency = request.user.agency
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(PackageFlowStep)
+class PackageFlowStepAdmin(admin.ModelAdmin):
+    list_display = ('template', 'order', 'name', 'step_type', 'status_code', 'is_terminal')
+    list_filter = ('template__agency', 'step_type', 'is_terminal')
+    search_fields = ('name', 'status_code', 'template__name', 'template__agency__code')
+    filter_horizontal = ('allowed_users', 'notify_next_users')
+    ordering = ('template', 'order')
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if not request.user.is_superuser:
+            agency = getattr(request.user, 'agency', None)
+            qs = qs.filter(template__agency=agency) if agency else qs.none()
+        return qs
+
+
+@admin.register(PackageStepLog)
+class PackageStepLogAdmin(admin.ModelAdmin):
+    list_display = ('package', 'step_name', 'step_order', 'performed_by', 'performed_at', 'stamped', 'routed_to')
+    list_filter = ('stamped',)
+    search_fields = ('package__tracking_code', 'step_name', 'performed_by__username', 'routed_to', 'recipient_name')
+    readonly_fields = ('performed_at',)
+
+
+@admin.register(PackageNotification)
+class PackageNotificationAdmin(admin.ModelAdmin):
+    list_display = ('package', 'recipient', 'message', 'is_read', 'created_at')
+    list_filter = ('is_read',)
+    search_fields = ('package__tracking_code', 'recipient__username', 'message')

@@ -288,10 +288,25 @@ class KeyLog(models.Model):
 
 class PackageFlowTemplate(models.Model):
     """
-    A reusable, named workflow for packages/mail.
-    e.g.  "Standard Mail Flow", "Parcel Delivery", "Diplomatic Pouch"
+    A workflow template owned by one agency.
+    Only packages destined for that agency can use this template.
+    Only users in that agency (with the ict_focal role) can configure it.
     """
-    name = models.CharField(max_length=120, unique=True)
+    DIRECTION = [
+                ('incoming', 'Incoming Mail / Package'),
+                ('outgoing', 'Outgoing Mail / Package'),
+            ]
+    direction = models.CharField(
+        max_length=10, choices=DIRECTION, default='incoming',
+        help_text="Whether this template governs incoming or outgoing items"
+    )
+    agency = models.ForeignKey(
+        'accounts.Agency',  # already in accounts/models.py
+        on_delete=models.CASCADE,
+        related_name='package_flow_templates',
+        help_text="Agency that owns and uses this workflow"
+    )
+    name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
@@ -301,10 +316,11 @@ class PackageFlowTemplate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['name']
+        ordering = ['agency__name', 'name']
+        unique_together = ('agency', 'name', 'direction')  # name unique within an agency
 
     def __str__(self):
-        return self.name
+        return f"[{self.agency.code}] {self.name}"
 
     @property
     def steps_ordered(self):
@@ -321,11 +337,15 @@ class PackageFlowTemplate(models.Model):
 
 class PackageFlowStep(models.Model):
     """
-    A single named step within a PackageFlowTemplate.
-    Each step defines:
-      - who can perform it (roles)
-      - what actions are required (scan, stamp, route, signature)
-      - who gets notified when it completes
+    One step in a PackageFlowTemplate.
+
+    Access control — ONE of two modes (or both):
+      • allowed_roles  → any user in the agency whose role matches
+      • allowed_users  → specific named users from the agency
+
+    Notifications — ONE of two modes (or both):
+      • notify_next_handler_roles → in-app to all agency users of those roles
+      • notify_next_users         → in-app to specific named agency users
     """
     STEP_TYPES = [
         ('log', 'Initial Logging'),
@@ -339,47 +359,75 @@ class PackageFlowStep(models.Model):
         ('custom', 'Custom Step'),
     ]
 
+    ROLE_CHOICES = [
+        ('requester', 'Requester (Staff)'),
+        ('data_entry', 'Data Entry (Security Guard)'),
+        ('lsa', 'Local Security Associate'),
+        ('soc', 'Security Operations Center'),
+        ('reception', 'Receptionist'),
+        ('registry', 'Registry'),
+        ('ict_focal', 'ICT Focal Point'),
+        ('csm', 'Common Services Manager'),
+        ('agency_hr', 'Agency HR'),
+    ]
+
     template = models.ForeignKey(PackageFlowTemplate, on_delete=models.CASCADE, related_name='steps')
     order = models.PositiveIntegerField(default=1, help_text="Steps execute in ascending order")
-    name = models.CharField(max_length=120, help_text="e.g. 'Reception Check', 'Content Scan'")
+    name = models.CharField(max_length=120)
     step_type = models.CharField(max_length=20, choices=STEP_TYPES, default='custom')
     status_code = models.SlugField(
         max_length=60,
-        help_text="Machine-readable status slug written to Package.status (unique within template)"
+        help_text="Machine-readable status slug written to Package.status"
     )
     description = models.CharField(max_length=255, blank=True)
 
-    # ── Access control ────────────────────────────────────────────────────────
+    # ── Access control ─────────────────────────────────────────────────────────
     allowed_roles = models.CharField(
         max_length=300, blank=True,
-        help_text="Comma-separated user role names allowed to perform this step. "
-                  "Leave blank to allow any authenticated user."
+        help_text="Comma-separated roles allowed to act (e.g. reception,registry). "
+                  "Only users in this agency with these roles will see the action."
+    )
+    allowed_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='package_steps_allowed',
+        help_text="Specific users from this agency who can perform this step. "
+                  "If set alongside roles, either match grants access."
     )
 
     # ── Required actions ──────────────────────────────────────────────────────
-    requires_note = models.BooleanField(default=False, help_text="Handler must enter a note/remark")
-    requires_scan = models.BooleanField(default=False, help_text="Handler must upload a scan or photo")
-    requires_stamp = models.BooleanField(default=False, help_text="Handler must confirm stamp/signing")
-    requires_routing = models.BooleanField(default=False, help_text="Handler must specify destination unit/project")
-    requires_recipient_signature = models.BooleanField(default=False,
-                                                       help_text="Handler must capture recipient name/signature")
+    requires_note = models.BooleanField(default=False)
+    requires_scan = models.BooleanField(default=False)
+    requires_stamp = models.BooleanField(default=False)
+    requires_routing = models.BooleanField(default=False)
+    requires_recipient_signature = models.BooleanField(default=False)
 
     # ── Notifications ─────────────────────────────────────────────────────────
-    notify_requester = models.BooleanField(default=False,
-                                           help_text="In-app notify the original logger when this step completes")
+    notify_requester = models.BooleanField(default=False, help_text="Notify the original package logger")
     notify_focal_email = models.BooleanField(default=True,
-                                             help_text="Email the agency focal point when this step completes")
-    notify_recipient = models.BooleanField(default=False,
-                                           help_text="Email the named recipient when this step completes")
+                                             help_text="Email the agency focal-point address on the package")
+    notify_recipient = models.BooleanField(default=False, help_text="Email the named recipient on delivery")
+
     notify_next_handler_roles = models.CharField(
         max_length=300, blank=True,
-        help_text="Comma-separated roles to notify (in-app) when this step is done and the NEXT step is ready"
+        help_text="Comma-separated roles in this agency to notify (in-app) when the next step is ready"
+    )
+    notify_next_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='package_steps_notify',
+        help_text="Specific agency users to notify (in-app) when the next step is ready"
+    )
+    notify_sender = models.BooleanField(
+        default=False,
+        help_text="Email the sender when this step completes to confirm their "
+                "package has been delivered / reached its destination"
     )
 
     # ── Flow control ──────────────────────────────────────────────────────────
     is_terminal = models.BooleanField(
         default=False,
-        help_text="Mark as final step. No further steps run after this."
+        help_text="Tick if this is the last step. The workflow closes when this completes."
     )
 
     class Meta:
@@ -390,9 +438,9 @@ class PackageFlowStep(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.template.name} › Step {self.order}: {self.name}"
+        return f"{self.template} › Step {self.order}: {self.name}"
 
-    # ── Helper properties ──────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────
     @property
     def allowed_roles_list(self):
         return [r.strip() for r in self.allowed_roles.split(',') if r.strip()]
@@ -404,37 +452,47 @@ class PackageFlowStep(models.Model):
     def next_step(self):
         return self.template.steps.filter(order__gt=self.order).order_by('order').first()
 
-    def prev_step(self):
-        return self.template.steps.filter(order__lt=self.order).order_by('-order').first()
-
     @property
     def required_actions_display(self):
-        actions = []
-        if self.requires_note:                actions.append("Note")
-        if self.requires_scan:                actions.append("Scan/Photo")
-        if self.requires_stamp:               actions.append("Stamp")
-        if self.requires_routing:             actions.append("Route to Unit")
-        if self.requires_recipient_signature: actions.append("Recipient Signature")
-        return actions or ["No special requirements"]
+        acts = []
+        if self.requires_note:                acts.append("Note")
+        if self.requires_scan:                acts.append("Scan/Photo")
+        if self.requires_stamp:               acts.append("Stamp")
+        if self.requires_routing:             acts.append("Route to Unit")
+        if self.requires_recipient_signature: acts.append("Recipient Signature")
+        return acts or ["No special requirements"]
+
+    def user_can_act(self, user) -> bool:
+        """Return True if `user` is allowed to perform this step."""
+        if user.is_superuser:
+            return True
+        # Must belong to same agency as the template
+        if getattr(user, 'agency_id', None) != self.template.agency_id:
+            return False
+        # Role match
+        if self.allowed_roles_list and getattr(user, 'role', None) in self.allowed_roles_list:
+            return True
+        # Named-user match
+        if self.allowed_users.filter(pk=user.pk).exists():
+            return True
+        # No restrictions set → any agency member can act
+        if not self.allowed_roles and not self.allowed_users.exists():
+            return True
+        return False
 
 
 class PackageStepLog(models.Model):
-    """
-    Immutable audit record for every step performed on a Package.
-    All participants in the flow — and the end receiver — can view these.
-    """
+    """Immutable audit record for every step performed on a Package."""
     package = models.ForeignKey('Package', on_delete=models.CASCADE, related_name='step_logs')
     step = models.ForeignKey(PackageFlowStep, on_delete=models.SET_NULL, null=True, blank=True)
-    step_name = models.CharField(max_length=120)  # snapshot; stable even if step is later renamed
+    step_name = models.CharField(max_length=120)
     step_order = models.PositiveIntegerField(default=0)
-
     performed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='package_step_logs'
     )
     performed_at = models.DateTimeField(default=timezone.now)
 
-    # ── Captured data (only populated when the step requires it) ───────────────
     note = models.TextField(blank=True)
     scan_file = models.FileField(upload_to='package_scans/%Y/%m/', blank=True, null=True)
     stamped = models.BooleanField(default=False)
@@ -445,15 +503,11 @@ class PackageStepLog(models.Model):
         ordering = ['performed_at']
 
     def __str__(self):
-        ts = self.performed_at.strftime('%Y-%m-%d %H:%M')
-        return f"{self.package.tracking_code} › {self.step_name} ({ts})"
+        return f"{self.package.tracking_code} › {self.step_name} ({self.performed_at:%Y-%m-%d %H:%M})"
 
 
 class PackageNotification(models.Model):
-    """
-    In-app notification for a package workflow event.
-    Used alongside email notifications for users without email configured.
-    """
+    """In-app notification for a package workflow event."""
     package = models.ForeignKey('Package', on_delete=models.CASCADE, related_name='notifications')
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -469,7 +523,6 @@ class PackageNotification(models.Model):
     def __str__(self):
         return f"→ {self.recipient} | {self.package.tracking_code}: {self.message[:60]}"
 
-
 class Package(models.Model):
     SENDER_TYPES = [
         ("gov", "Government / Law Enforcement"),
@@ -480,16 +533,13 @@ class Package(models.Model):
         ("other", "Other"),
     ]
 
-    # STATUS = [
-    #     ("logged", "Logged at Gate"),
-    #     ("to_reception", "Sent to Reception"),
-    #     ("at_reception", "Received by Reception"),
-    #     ("to_agency", "Sent to Agency/Registry"),
-    #     ("with_agency", "Received by Agency/Registry"),
-    #     ("delivered", "Delivered to Recipient"),
-    #     ("returned", "Returned to Sender"),
-    #     ("cancelled", "Cancelled"),
-    # ]
+    DIRECTION = [
+        ('incoming', 'Incoming'),
+        ('outgoing', 'Outgoing'),
+    ]
+    direction = models.CharField(
+        max_length=10, choices=DIRECTION, default='incoming'
+    )
 
     # basics
     tracking_code = models.CharField(max_length=32, unique=True)
@@ -497,6 +547,10 @@ class Package(models.Model):
     sender_type = models.CharField(max_length=20, choices=SENDER_TYPES)
     sender_org = models.CharField(max_length=120, blank=True)
     sender_contact = models.CharField(max_length=120, blank=True)
+    sender_email = models.EmailField(
+                blank=True,
+                help_text="Sender's email address for delivery confirmation (optional)"
+            )
 
     # content / routing
     item_type = models.CharField(max_length=60, help_text="Package / Envelope / Box / Other")
@@ -504,6 +558,10 @@ class Package(models.Model):
     destination_agency = models.CharField(max_length=120, help_text="UN Agency / Office (e.g., UNDP)")
     dest_focal_email = models.EmailField(blank=True, help_text="Agency focal point will be notified")
     for_recipient = models.CharField(max_length=120, blank=True)
+
+    recipient_org = models.CharField(max_length=120, blank=True, help_text="External recipient organisation")
+    recipient_address = models.TextField(blank=True, help_text="Delivery address for outgoing items")
+    recipient_email = models.EmailField(blank=True, help_text="Recipient email — for outgoing delivery confirmation")
 
     # custody & workflow
     status = models.CharField(max_length=60, default="logged")

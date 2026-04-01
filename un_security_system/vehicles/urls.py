@@ -98,6 +98,7 @@ urlpatterns = [
     # ── Package list & logging ────────────────────────────────────────────────
     path('packages/', views.package_list, name='package_list'),
     path('packages/new/', views.package_log_new, name='package_log_new'),
+    path('packages/outgoing/new/', views.package_log_outgoing, name='package_log_outgoing'),
 
     # ── Package detail & step advancement ────────────────────────────────────
     path('packages/<int:pk>/', views.package_detail, name='package_detail'),

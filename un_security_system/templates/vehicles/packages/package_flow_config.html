@@ -54,10 +54,13 @@
             <small class="text-muted">{{ tmpl.description }}</small>
           {% endif %}
         </div>
-        {% if not tmpl.is_active %}
-          <span class="badge bg-secondary">Inactive</span>
+        {% if tmpl.direction == 'outgoing' %}
+          <span class="badge bg-success"><i class="bi bi-send-fill me-1"></i>Outgoing</span>
         {% else %}
-          <span class="badge bg-success">Active</span>
+          <span class="badge bg-primary"><i class="bi bi-box-arrow-in-down me-1"></i>Incoming</span>
+        {% endif %}
+        {% if not tmpl.is_active %}
+          <span class="badge bg-secondary ms-1">Inactive</span>
         {% endif %}
       </div>
       <div class="d-flex gap-2">

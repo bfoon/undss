@@ -1,16 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Log New Package{% endblock %}
+{% block title %}Register Outgoing Mail{% endblock %}
 
 {% block content %}
 <div class="container py-4" style="max-width:820px;">
 
   <!-- Header -->
   <div class="mb-4">
-    <h2 class="fw-bold mb-1"><i class="bi bi-journal-plus text-primary me-2"></i>Log Incoming Package</h2>
+    <h2 class="fw-bold mb-1">
+      <i class="bi bi-send text-success me-2"></i>Register Outgoing Mail / Package
+    </h2>
     <nav aria-label="breadcrumb">
       <ol class="breadcrumb small mb-0">
         <li class="breadcrumb-item"><a href="{% url 'vehicles:package_list' %}">Packages</a></li>
-        <li class="breadcrumb-item active">Log New</li>
+        <li class="breadcrumb-item active">Outgoing — Register New</li>
       </ol>
     </nav>
   </div>
@@ -18,25 +20,25 @@
   <form method="post" novalidate id="logForm">
     {% csrf_token %}
 
-    <!-- ── 1 · Select Workflow ─────────────────────────────────────────────── -->
+    <!-- ── 1 · Select Outgoing Workflow ──────────────────────────────────── -->
     <div class="card shadow-sm border-0 mb-3">
-      <div class="card-header py-3" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+      <div class="card-header py-3" style="background:linear-gradient(135deg,#38a169,#276749);">
         <h5 class="mb-0 text-white">
-          <i class="bi bi-diagram-3 me-2"></i>1 · Select Workflow
+          <i class="bi bi-diagram-3 me-2"></i>1 · Select Outgoing Workflow
         </h5>
       </div>
       <div class="card-body p-4">
         <p class="text-muted small mb-3">
-          Choose the workflow that matches this package type. The workflow defines every step,
-          who handles each step, and what notifications are sent.
+          Choose the workflow that matches this outgoing item. The workflow defines every step —
+          packaging, dispatch, courier handover, and delivery confirmation.
         </p>
 
         {% if not flow_templates %}
           <div class="alert alert-warning small mb-0">
             <i class="bi bi-exclamation-triangle me-2"></i>
-            No active flow templates configured yet.
+            No active <strong>outgoing</strong> flow templates configured yet.
             {% if user.is_superuser or user.role == 'ict_focal' %}
-              <a href="{% url 'vehicles:package_flow_config' %}">Configure workflows →</a>
+              <a href="{% url 'vehicles:package_flow_config' %}">Configure outgoing workflows →</a>
             {% endif %}
           </div>
         {% else %}
@@ -49,9 +51,9 @@
                        {% if forloop.first %}checked{% endif %}>
                 <div class="card border h-100 p-3 flow-card-inner">
                   <div class="d-flex align-items-start gap-3">
-                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0"
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center flex-shrink-0"
                          style="width:40px;height:40px;">
-                      <i class="bi bi-diagram-3"></i>
+                      <i class="bi bi-send"></i>
                     </div>
                     <div>
                       <div class="fw-semibold">{{ tmpl.name }}</div>
@@ -74,10 +76,12 @@
       </div>
     </div>
 
-    <!-- ── 2 · Package Details ─────────────────────────────────────────────── -->
+    <!-- ── 2 · Originator (Internal Sender) ──────────────────────────────── -->
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-header bg-light py-3">
-        <h5 class="mb-0 text-dark"><i class="bi bi-box-seam me-2"></i>2 · Package Details</h5>
+        <h5 class="mb-0 text-dark">
+          <i class="bi bi-person-circle me-2"></i>2 · Originator (Internal Sender)
+        </h5>
       </div>
       <div class="card-body p-4">
 
@@ -95,53 +99,55 @@
         </div>
         {% endif %}
 
+        <div class="alert alert-light border small mb-3 py-2">
+          <i class="bi bi-info-circle text-primary me-2"></i>
+          Pre-filled from your profile. Update if you are registering on behalf of someone else.
+        </div>
+
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">{{ form.sender_name.label }} <span class="text-danger">*</span></label>
+            {{ form.sender_name }}
+            {% if form.sender_name.errors %}<div class="text-danger small">{{ form.sender_name.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">{{ form.sender_org.label }}</label>
+            {{ form.sender_org }}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">{{ form.sender_contact.label }}</label>
+            {{ form.sender_contact }}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">
+              {{ form.sender_email.label }}
+              <span class="badge bg-primary ms-1" style="font-size:.68rem;vertical-align:middle;">
+                <i class="bi bi-bell me-1"></i>Status updates
+              </span>
+            </label>
+            {{ form.sender_email }}
+            <div class="form-text">
+              <i class="bi bi-info-circle me-1"></i>
+              You will receive status updates here as your item moves through the workflow.
+            </div>
+            {% if form.sender_email.errors %}<div class="text-danger small">{{ form.sender_email.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3 · Item Details ───────────────────────────────────────────────── -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-light py-3">
+        <h5 class="mb-0 text-dark"><i class="bi bi-box-seam me-2"></i>3 · Item Details</h5>
+      </div>
+      <div class="card-body p-4">
         <div class="row g-3">
           <div class="col-sm-6">
             <label class="form-label fw-semibold">Item Type <span class="text-danger">*</span></label>
             {{ form.item_type }}
             {% if form.item_type.errors %}<div class="text-danger small">{{ form.item_type.errors.0 }}</div>{% endif %}
           </div>
-          <div class="col-sm-6">
-            <label class="form-label fw-semibold">Sender Type <span class="text-danger">*</span></label>
-            {{ form.sender_type }}
-            {% if form.sender_type.errors %}<div class="text-danger small">{{ form.sender_type.errors.0 }}</div>{% endif %}
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label fw-semibold">Sender Name <span class="text-danger">*</span></label>
-            {{ form.sender_name }}
-            {% if form.sender_name.errors %}<div class="text-danger small">{{ form.sender_name.errors.0 }}</div>{% endif %}
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label fw-semibold">Sender Organisation</label>
-            {{ form.sender_org }}
-          </div>
-
-          <!-- Sender contact + email side by side -->
-          <div class="col-sm-6">
-            <label class="form-label fw-semibold">
-              Sender Contact
-              <span class="text-muted small fw-normal">(phone / other)</span>
-            </label>
-            {{ form.sender_contact }}
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label fw-semibold">
-              Sender Email
-              <span class="badge bg-success ms-1" style="font-size:.68rem;vertical-align:middle;">
-                <i class="bi bi-send-check me-1"></i>Delivery confirmation
-              </span>
-            </label>
-            {{ form.sender_email }}
-            <div class="form-text">
-              <i class="bi bi-info-circle me-1"></i>
-              If provided, the sender will be emailed when their package is delivered —
-              only if the workflow step is configured to notify the sender.
-            </div>
-            {% if form.sender_email.errors %}
-              <div class="text-danger small">{{ form.sender_email.errors.0 }}</div>
-            {% endif %}
-          </div>
-
           <div class="col-12">
             <label class="form-label fw-semibold">Description</label>
             {{ form.description }}
@@ -150,30 +156,51 @@
       </div>
     </div>
 
-    <!-- ── 3 · Destination & Routing ──────────────────────────────────────── -->
+    <!-- ── 4 · Recipient & Delivery ───────────────────────────────────────── -->
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-header bg-light py-3">
-        <h5 class="mb-0 text-dark"><i class="bi bi-send me-2"></i>3 · Destination & Routing</h5>
+        <h5 class="mb-0 text-dark">
+          <i class="bi bi-geo-alt me-2"></i>4 · Recipient & Delivery Address
+        </h5>
       </div>
       <div class="card-body p-4">
         <div class="row g-3">
           <div class="col-sm-6">
-            <label class="form-label fw-semibold">Destination Agency <span class="text-danger">*</span></label>
+            <label class="form-label fw-semibold">{{ form.for_recipient.label }} <span class="text-danger">*</span></label>
+            {{ form.for_recipient }}
+            {% if form.for_recipient.errors %}<div class="text-danger small">{{ form.for_recipient.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold">{{ form.destination_agency.label }} <span class="text-danger">*</span></label>
             {{ form.destination_agency }}
             {% if form.destination_agency.errors %}<div class="text-danger small">{{ form.destination_agency.errors.0 }}</div>{% endif %}
           </div>
           <div class="col-sm-6">
-            <label class="form-label fw-semibold">Agency Focal Email</label>
-            {{ form.dest_focal_email }}
-            <div class="form-text">Automatic notifications will be sent here at configured steps.</div>
-            {% if form.dest_focal_email.errors %}<div class="text-danger small">{{ form.dest_focal_email.errors.0 }}</div>{% endif %}
+            <label class="form-label fw-semibold">{{ form.recipient_org.label }}</label>
+            {{ form.recipient_org }}
           </div>
           <div class="col-sm-6">
-            <label class="form-label fw-semibold">Named Recipient</label>
-            {{ form.for_recipient }}
+            <label class="form-label fw-semibold">
+              {{ form.recipient_email.label }}
+              <span class="badge bg-success ms-1" style="font-size:.68rem;vertical-align:middle;">
+                <i class="bi bi-send-check me-1"></i>Delivery confirmation
+              </span>
+            </label>
+            {{ form.recipient_email }}
+            <div class="form-text">
+              <i class="bi bi-info-circle me-1"></i>
+              If provided and the workflow step is configured to notify the recipient,
+              they will receive a dispatch/delivery confirmation.
+            </div>
+            {% if form.recipient_email.errors %}<div class="text-danger small">{{ form.recipient_email.errors.0 }}</div>{% endif %}
           </div>
           <div class="col-12">
-            <label class="form-label fw-semibold">Gate-Level Notes</label>
+            <label class="form-label fw-semibold">{{ form.recipient_address.label }}</label>
+            {{ form.recipient_address }}
+            {% if form.recipient_address.errors %}<div class="text-danger small">{{ form.recipient_address.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Special Instructions / Notes</label>
             {{ form.notes }}
           </div>
         </div>
@@ -182,8 +209,8 @@
 
     <!-- Submit -->
     <div class="d-flex gap-2">
-      <button class="btn btn-primary px-5" type="submit" id="submitBtn">
-        <i class="bi bi-check-circle me-2"></i>Log Package & Start Workflow
+      <button class="btn btn-success px-5" type="submit" id="submitBtn">
+        <i class="bi bi-send me-2"></i>Register Outgoing Item
       </button>
       <a class="btn btn-outline-secondary" href="{% url 'vehicles:package_list' %}">
         <i class="bi bi-x-lg me-1"></i>Cancel
@@ -197,8 +224,8 @@
   .card { border-radius:.75rem; overflow:hidden; }
   .form-control, .form-select { border-radius:.5rem; border:1.5px solid #e2e8f0; }
   .form-control:focus, .form-select:focus {
-    border-color:#667eea;
-    box-shadow:0 0 0 3px rgba(102,126,234,.15);
+    border-color:#38a169;
+    box-shadow:0 0 0 3px rgba(56,161,105,.15);
   }
   .flow-card-inner {
     border-radius:.5rem !important;
@@ -207,16 +234,15 @@
   }
   .flow-radio:checked + .flow-card-inner,
   .flow-card:hover .flow-card-inner {
-    border-color:#667eea !important;
-    background:#f5f3ff;
-    box-shadow:0 0 0 3px rgba(102,126,234,.15);
+    border-color:#38a169 !important;
+    background:#f0fff4;
+    box-shadow:0 0 0 3px rgba(56,161,105,.15);
   }
-  .flow-radio:checked + .flow-card-inner { background:#ede9fe; }
+  .flow-radio:checked + .flow-card-inner { background:#dcfce7; }
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  // Highlight selected flow card
   document.querySelectorAll('.flow-radio').forEach(function (radio) {
     radio.addEventListener('change', function () {
       document.querySelectorAll('.flow-card-inner').forEach(function (c) {
@@ -226,14 +252,13 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // Submit guard
   const form = document.getElementById('logForm');
   const btn  = document.getElementById('submitBtn');
   if (form && btn) {
     const orig = btn.innerHTML;
     form.addEventListener('submit', function () {
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Logging…';
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Registering…';
       setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 8000);
     });
   }
