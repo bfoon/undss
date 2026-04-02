@@ -13,12 +13,14 @@ from django.core.mail import send_mail
 from django.contrib.auth import get_user_model
 import csv
 import base64
+import hashlib, json
 from io import BytesIO
 import random, string
 import secrets
 import threading
 import logging
 from django.db import models as db_models
+from django.views.decorators.http import require_POST
 
 from .models import (
     Vehicle, VehicleMovement,
@@ -26,7 +28,9 @@ from .models import (
     AgencyApprover, ParkingCardRequest, Key, KeyLog,
     Package, PackageEvent,
     PackageFlowTemplate, PackageFlowStep,
-    PackageStepLog, PackageNotification, PackageEvent
+    PackageStepLog, PackageNotification, PackageEvent,
+    UserSignature, PackageDocument, PackageStepLog,
+    SignatureField, SignatureRecord, PackageNotification,
 )
 from .forms import (
     VehicleForm, ParkingCardForm,
@@ -36,6 +40,7 @@ from .forms import (
     PackageLogForm,
     PackageFlowTemplateForm, PackageFlowStepForm,
     PackageStepActionForm, PackageOutgoingLogForm,
+    UserSignatureForm, PackageDocumentUploadForm, SignatureFieldForm,
 )
 
 User = get_user_model()
@@ -2338,3 +2343,304 @@ class GuardApprovedAssetExitsView(LoginRequiredMixin, UserPassesTestMixin, ListV
             "date_to": (self.request.GET.get("date_to") or str(timezone.localdate())),
         }
         return ctx
+
+
+# ── Signature Profile ─────────────────────────────────────────────────────────
+
+@login_required
+def signature_profile(request):
+    """Let a user view, create, or update their signature profile."""
+    current = UserSignature.objects.filter(user=request.user, is_active=True).first()
+    all_sigs = UserSignature.objects.filter(user=request.user).order_by('-created_at')
+
+    form = UserSignatureForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST' and form.is_valid():
+        sig = form.save(commit=False)
+        sig.user = request.user
+        # Auto-fill font_text from full name if blank
+        if sig.sig_type == 'font' and not sig.font_text:
+            sig.font_text = request.user.get_full_name() or request.user.username
+        sig.save()
+        messages.success(request, "Signature saved successfully.")
+        return redirect('vehicles:signature_profile')
+
+    return render(request, 'vehicles/packages/esig/signature_profile.html', {
+        'form': form,
+        'current': current,
+        'all_sigs': all_sigs,
+    })
+
+
+@login_required
+def signature_set_active(request, pk):
+    sig = get_object_or_404(UserSignature, pk=pk, user=request.user)
+    UserSignature.objects.filter(user=request.user, is_active=True).update(is_active=False)
+    sig.is_active = True
+    sig.save(update_fields=['is_active'])
+    messages.success(request, "Signature set as active.")
+    return redirect('vehicles:signature_profile')
+
+
+@login_required
+def signature_delete(request, pk):
+    sig = get_object_or_404(UserSignature, pk=pk, user=request.user)
+    if request.method == 'POST':
+        sig.delete()
+        messages.success(request, "Signature deleted.")
+    return redirect('vehicles:signature_profile')
+
+
+# ── Document Upload & Annotation ──────────────────────────────────────────────
+
+@login_required
+def document_upload(request, step_log_pk):
+    """Upload a scanned document to a step log, compute its hash."""
+    step_log = get_object_or_404(PackageStepLog, pk=step_log_pk)
+
+    form = PackageDocumentUploadForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST' and form.is_valid():
+        doc = form.save(commit=False)
+        doc.step_log = step_log
+        doc.uploaded_by = request.user
+        doc.filename = request.FILES['file'].name
+        doc.save()
+
+        # Compute and store SHA-256
+        doc.file_hash = doc.compute_hash()
+        doc.save(update_fields=['file_hash'])
+
+        messages.success(request, f"Document '{doc.filename}' uploaded.")
+        return redirect('vehicles:document_annotate', pk=doc.pk)
+
+    return render(request, 'vehicles/packages/esig/document_upload.html', {
+        'form': form,
+        'step_log': step_log,
+        'package': step_log.package,
+    })
+
+
+@login_required
+def document_annotate(request, pk):
+    """
+    Full-page annotation view.
+    Renders the document (image or PDF first-page preview) with a drag-and-drop
+    signature field placer. Fields are saved via AJAX.
+    """
+    doc = get_object_or_404(PackageDocument, pk=pk)
+    package = doc.step_log.package
+    agency = getattr(package.flow_template, 'agency', None) if package.flow_template else None
+
+    existing_fields = doc.signature_fields.select_related('assigned_to', 'signature_record').all()
+
+    form = SignatureFieldForm(agency=agency)
+
+    if doc.status == 'uploaded':
+        doc.status = 'annotation_ready'
+        doc.save(update_fields=['status'])
+
+    return render(request, 'vehicles/packages/esig/document_annotate.html', {
+        'doc': doc,
+        'package': package,
+        'existing_fields': existing_fields,
+        'form': form,
+        'agency': agency,
+        'is_pdf': doc.filename.lower().endswith('.pdf'),
+    })
+
+
+@login_required
+@require_POST
+def signature_field_save(request, doc_pk):
+    """AJAX: save a signature field placement."""
+    doc = get_object_or_404(PackageDocument, pk=doc_pk)
+    agency = getattr(doc.step_log.package.flow_template, 'agency', None)
+    data = json.loads(request.body)
+
+    field = SignatureField.objects.create(
+        document=doc,
+        page_number=data.get('page_number', 1),
+        pos_x_pct=float(data.get('pos_x_pct', 0)),
+        pos_y_pct=float(data.get('pos_y_pct', 0)),
+        width_pct=float(data.get('width_pct', 20)),
+        height_pct=float(data.get('height_pct', 6)),
+        label=data.get('label', ''),
+        order=doc.signature_fields.count() + 1,
+        is_required=data.get('is_required', True),
+    )
+
+    assigned_id = data.get('assigned_to')
+    if assigned_id:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            field.assigned_to = User.objects.get(pk=assigned_id)
+            field.save(update_fields=['assigned_to'])
+        except User.DoesNotExist:
+            pass
+
+    return JsonResponse({'id': field.pk, 'order': field.order})
+
+
+@login_required
+@require_POST
+def signature_field_delete(request, field_pk):
+    """AJAX: remove a signature field."""
+    field = get_object_or_404(SignatureField, pk=field_pk)
+    field.delete()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def document_send_for_signing(request, pk):
+    """Mark document as sent for signing and notify assignees."""
+    doc = get_object_or_404(PackageDocument, pk=pk)
+
+    if request.method == 'POST':
+        doc.status = 'pending_signature'
+        doc.save(update_fields=['status'])
+
+        # Notify each assigned user (in field order)
+        notified = set()
+        for field in doc.signature_fields.filter(
+                assigned_to__isnull=False
+        ).order_by('order'):
+            u = field.assigned_to
+            if u.pk not in notified:
+                PackageNotification.objects.create(
+                    package=doc.step_log.package,
+                    recipient=u,
+                    message=(
+                        f"Your signature is required on document "
+                        f"'{doc.filename}' for package "
+                        f"{doc.step_log.package.tracking_code}."
+                    ),
+                )
+                if u.email:
+                    send_mail(
+                        subject=f"[UN PASS] Signature required — {doc.step_log.package.tracking_code}",
+                        message=(
+                            f"Dear {u.get_full_name() or u.username},\n\n"
+                            f"Your signature is required on:\n"
+                            f"  Document : {doc.filename}\n"
+                            f"  Package  : {doc.step_log.package.tracking_code}\n"
+                            f"  Field    : {field.label or 'Signature'}\n\n"
+                            f"Please log in to UN PASS to sign.\n"
+                        ),
+                        from_email=None,
+                        recipient_list=[u.email],
+                        fail_silently=True,
+                    )
+                notified.add(u.pk)
+
+        messages.success(request, "Document sent for signing. Assignees have been notified.")
+        return redirect('vehicles:package_detail', pk=doc.step_log.package.pk)
+
+    return render(request, 'vehicles/packages/esig/document_send_confirm.html', {
+        'doc': doc,
+        'package': doc.step_log.package,
+        'fields': doc.signature_fields.select_related('assigned_to').order_by('order'),
+    })
+
+
+# ── Signing View ──────────────────────────────────────────────────────────────
+
+@login_required
+def document_sign(request, pk):
+    """
+    The signing view for the assigned user.
+    Shows the document with the field they need to sign highlighted,
+    and lets them apply their active signature (or draw a new one inline).
+    """
+    doc = get_object_or_404(PackageDocument, pk=pk)
+
+    # Find this user's pending fields
+    my_fields = doc.signature_fields.filter(
+        assigned_to=request.user,
+    ).exclude(
+        signature_record__isnull=False
+    ).order_by('order')
+
+    if not my_fields.exists():
+        messages.info(request, "You have no pending signature fields on this document.")
+        return redirect('vehicles:package_detail', pk=doc.step_log.package.pk)
+
+    active_sig = UserSignature.objects.filter(user=request.user, is_active=True).first()
+
+    if request.method == 'POST':
+        field_id = request.POST.get('field_id')
+        sig_data = request.POST.get('sig_data')  # base64 PNG from canvas
+        field = get_object_or_404(SignatureField, pk=field_id, assigned_to=request.user)
+
+        if not sig_data:
+            messages.error(request, "No signature data received.")
+            return redirect('vehicles:document_sign', pk=pk)
+
+        now = timezone.now()
+        audit_hash = SignatureRecord.compute_audit_hash(
+            doc.file_hash,
+            field.pk,
+            request.user.pk,
+            now.isoformat(),
+        )
+
+        SignatureRecord.objects.create(
+            field=field,
+            signed_by=request.user,
+            sig_profile=active_sig,
+            rendered_image=sig_data,
+            signed_at=now,
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+            audit_hash=audit_hash,
+        )
+
+        # Check if all required fields on this document are now signed
+        unsigned_required = doc.signature_fields.filter(
+            is_required=True,
+        ).exclude(signature_record__isnull=False)
+
+        if not unsigned_required.exists():
+            doc.status = 'signed'
+            doc.save(update_fields=['status'])
+            messages.success(request, "Document fully signed.")
+            # Notify the package logger
+            pkg = doc.step_log.package
+            if pkg.logged_by:
+                PackageNotification.objects.create(
+                    package=pkg,
+                    recipient=pkg.logged_by,
+                    message=(
+                        f"Document '{doc.filename}' for package "
+                        f"{pkg.tracking_code} has been fully signed."
+                    ),
+                )
+        else:
+            messages.success(request, "Your signature has been applied.")
+
+        return redirect('vehicles:document_sign', pk=pk)
+
+    return render(request, 'vehicles/packages/esig/document_sign.html', {
+        'doc': doc,
+        'my_fields': my_fields,
+        'active_sig': active_sig,
+        'package': doc.step_log.package,
+    })
+
+
+# ── Audit / Verify ────────────────────────────────────────────────────────────
+
+@login_required
+def document_audit(request, pk):
+    """Show full audit trail of all signatures on a document."""
+    doc = get_object_or_404(PackageDocument, pk=pk)
+    records = SignatureRecord.objects.filter(
+        field__document=doc
+    ).select_related('field', 'signed_by', 'sig_profile').order_by('signed_at')
+
+    verified = [(r, r.verify()) for r in records]
+
+    return render(request, 'vehicles/packages/esig/document_audit.html', {
+        'doc': doc,
+        'verified': verified,
+        'package': doc.step_log.package,
+    })

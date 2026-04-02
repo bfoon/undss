@@ -140,6 +140,12 @@
                 {{ form.requires_scan.label }}
               </label>
               <div class="form-text ms-4">{{ form.requires_scan.help_text }}</div>
+              <div class="ms-4 mt-1 small text-primary">
+                <i class="bi bi-pen me-1"></i>
+                Enables the <strong>e-signature workflow</strong> — the handler can
+                upload a scanned document, place signature fields, and send it to
+                the agency focal point for digital signing.
+              </div>
             </div>
           </div>
           <div class="col-sm-6">
@@ -172,7 +178,9 @@
         </div>
         <p class="text-muted small mt-3 mb-0">
           <i class="bi bi-lightbulb text-warning me-1"></i>
-          <strong>Tip:</strong> For files → enable Scan + Stamp. For final delivery → enable Recipient Signature.
+          <strong>Tip:</strong> For files → enable <em>Scan Content</em> to unlock the
+          <strong>e-signature workflow</strong> (upload document → place fields → focal point signs digitally).
+          For final delivery → enable <em>Recipient Signature</em>.
         </p>
       </div>
     </div>

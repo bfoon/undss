@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% comment %}── Save as: templates/vehicles/packages/esig/document_audit.html ──{% endcomment %}
+{% block title %}Signature Audit — {{ doc.filename }}{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:860px;">
+  <div class="mb-4">
+    <h4 class="fw-bold mb-1">
+      <i class="bi bi-shield-check text-success me-2"></i>Signature Audit Trail
+    </h4>
+    <div class="text-muted small">
+      <i class="bi bi-box-seam me-1"></i>{{ package.tracking_code }}
+      &nbsp;·&nbsp;{{ doc.filename }}
+    </div>
+  </div>
+
+  <!-- Document integrity -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3">
+      <h6 class="mb-0 fw-semibold"><i class="bi bi-file-earmark-lock2 me-2 text-primary"></i>Document Integrity</h6>
+    </div>
+    <div class="card-body p-4">
+      <dl class="row g-2 mb-0">
+        <div class="col-sm-3 text-muted small fw-semibold">File Name</div>
+        <div class="col-sm-9 small">{{ doc.filename }}</div>
+        <div class="col-sm-3 text-muted small fw-semibold">Status</div>
+        <div class="col-sm-9">
+          <span class="badge {% if doc.status == 'signed' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+            {{ doc.get_status_display }}
+          </span>
+        </div>
+        <div class="col-sm-3 text-muted small fw-semibold">Uploaded</div>
+        <div class="col-sm-9 small">{{ doc.uploaded_at|date:"M d, Y H:i" }} by {{ doc.uploaded_by.get_full_name|default:doc.uploaded_by.username }}</div>
+        <div class="col-sm-3 text-muted small fw-semibold">SHA-256 Hash</div>
+        <div class="col-sm-9">
+          <code class="small" style="word-break:break-all;color:#7c3aed;">{{ doc.file_hash|default:"Not computed" }}</code>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Signature records -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3">
+      <h6 class="mb-0 fw-semibold">
+        <i class="bi bi-list-check me-2 text-primary"></i>
+        Signature Records
+        <span class="badge bg-primary ms-1">{{ verified|length }}</span>
+      </h6>
+    </div>
+    <div class="card-body p-0">
+      {% if verified %}
+        {% for record, is_valid in verified %}
+        <div class="p-4 border-bottom">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <div class="fw-semibold">
+                Field {{ record.field.order }}: {{ record.field.label|default:"Signature" }}
+              </div>
+              <div class="text-muted small">Page {{ record.field.page_number }}</div>
+            </div>
+            {% if is_valid %}
+              <span class="badge bg-success px-3 py-2">
+                <i class="bi bi-patch-check-fill me-1"></i>Verified — Untampered
+              </span>
+            {% else %}
+              <span class="badge bg-danger px-3 py-2">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>Hash Mismatch — Verify Manually
+              </span>
+            {% endif %}
+          </div>
+
+          <div class="row g-3 align-items-center">
+            <!-- Signature image -->
+            <div class="col-auto">
+              <div class="bg-white border rounded-3 p-2" style="min-width:140px;min-height:60px;text-align:center;">
+                <img src="{{ record.rendered_image }}" style="max-height:56px;max-width:130px;">
+              </div>
+            </div>
+            <!-- Details -->
+            <div class="col">
+              <dl class="row g-1 mb-0 small">
+                <div class="col-sm-4 text-muted fw-semibold">Signed by</div>
+                <div class="col-sm-8">{{ record.signed_by.get_full_name|default:record.signed_by.username }}
+                  <span class="text-muted">({{ record.signed_by.username }})</span>
+                </div>
+                <div class="col-sm-4 text-muted fw-semibold">Signed at</div>
+                <div class="col-sm-8">{{ record.signed_at|date:"M d, Y H:i:s" }} UTC</div>
+                <div class="col-sm-4 text-muted fw-semibold">IP Address</div>
+                <div class="col-sm-8">{{ record.ip_address|default:"—" }}</div>
+                <div class="col-sm-4 text-muted fw-semibold">Sig. Method</div>
+                <div class="col-sm-8">
+                  {% if record.sig_profile %}{{ record.sig_profile.get_sig_type_display }}{% else %}Inline draw{% endif %}
+                </div>
+                <div class="col-sm-4 text-muted fw-semibold">Audit Hash</div>
+                <div class="col-sm-8">
+                  <code style="font-size:.72rem;word-break:break-all;color:#7c3aed;">{{ record.audit_hash }}</code>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-pen fs-2 d-block mb-2"></i>
+          No signatures recorded yet.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between mt-3">
+    <a href="{% url 'vehicles:document_sign' doc.pk %}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-pen me-1"></i>Back to Signing
+    </a>
+    <a href="{% url 'vehicles:package_detail' package.pk %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Package Detail
+    </a>
+  </div>
+</div>
+<style>
+  .card { border-radius:.75rem; overflow:hidden; }
+  code { background:#f1f5f9; padding:2px 4px; border-radius:3px; }
+</style>
+{% endblock %}
+
+
+{% comment %}── Save as: templates/vehicles/packages/esig/document_upload.html ──{% endcomment %}

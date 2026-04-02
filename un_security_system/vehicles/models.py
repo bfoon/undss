@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 import secrets
+import hashlib, uuid
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -618,3 +619,180 @@ class PackageEvent(models.Model):
 
     class Meta:
         ordering = ["-at"]
+
+
+class UserSignature(models.Model):
+    """
+    A saved signature profile for a user.
+    One of three types: uploaded image, font-rendered text, or drawn (canvas PNG).
+    Only one signature can be active per user at a time.
+    """
+    SIG_TYPES = [
+        ('upload', 'Uploaded Image'),
+        ('font', 'Font / Typed'),
+        ('draw', 'Drawn On-Screen'),
+    ]
+    FONT_CHOICES = [
+        ('dancing', 'Dancing Script'),
+        ('pacifico', 'Pacifico'),
+        ('satisfy', 'Satisfy'),
+        ('great_vibes', 'Great Vibes'),
+        ('allura', 'Allura'),
+    ]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name='signatures')
+    sig_type = models.CharField(max_length=10, choices=SIG_TYPES)
+    is_active = models.BooleanField(default=True,
+                                    help_text="This is the user's current default signature")
+
+    # upload
+    image_file = models.ImageField(upload_to='signatures/uploads/%Y/', blank=True, null=True)
+
+    # font
+    font_name = models.CharField(max_length=20, choices=FONT_CHOICES, blank=True)
+    font_text = models.CharField(max_length=120, blank=True,
+                                 help_text="Text to render as signature (defaults to full name)")
+
+    # drawn — stored as base64 PNG data-URL in the DB (small canvas image)
+    drawn_data = models.TextField(blank=True,
+                                  help_text="Base64 PNG from signature pad canvas")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} — {self.get_sig_type_display()}"
+
+    def save(self, *args, **kwargs):
+        # Ensure only one active signature per user
+        if self.is_active:
+            UserSignature.objects.filter(
+                user=self.user, is_active=True
+            ).exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+
+
+class PackageDocument(models.Model):
+    """
+    A scanned document attached to a PackageStepLog.
+    Holds the file and tracks its signing lifecycle.
+    """
+    STATUS = [
+        ('uploaded', 'Uploaded — Awaiting Annotation'),
+        ('annotation_ready', 'Signature Fields Placed'),
+        ('pending_signature', 'Sent for Signature'),
+        ('signed', 'Fully Signed'),
+    ]
+
+    step_log = models.ForeignKey('PackageStepLog', on_delete=models.CASCADE,
+                                 related_name='documents')
+    file = models.FileField(upload_to='package_docs/%Y/%m/')
+    filename = models.CharField(max_length=255)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, related_name='package_docs_uploaded')
+    uploaded_at = models.DateTimeField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=STATUS, default='uploaded')
+
+    # SHA-256 of the original file — set on upload, used to detect tampering
+    file_hash = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.filename} ({self.get_status_display()})"
+
+    def compute_hash(self):
+        """Compute and store SHA-256 of the uploaded file."""
+        h = hashlib.sha256()
+        self.file.seek(0)
+        for chunk in iter(lambda: self.file.read(8192), b''):
+            h.update(chunk)
+        self.file.seek(0)
+        return h.hexdigest()
+
+
+class SignatureField(models.Model):
+    """
+    A signature placeholder placed on a document page by the handler.
+    Stores position as percentages of the page so it works at any render size.
+    """
+    document = models.ForeignKey(PackageDocument, on_delete=models.CASCADE,
+                                 related_name='signature_fields')
+    page_number = models.PositiveIntegerField(default=1)
+
+    # Position as % of rendered page width/height (0–100)
+    pos_x_pct = models.FloatField(help_text="Left edge % from page left")
+    pos_y_pct = models.FloatField(help_text="Top edge % from page top")
+    width_pct = models.FloatField(default=20.0)
+    height_pct = models.FloatField(default=6.0)
+
+    label = models.CharField(max_length=100, blank=True,
+                             help_text="e.g. 'Agency Focal Point', 'Authorising Officer'")
+
+    # Who should sign this field
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, blank=True,
+                                    related_name='signature_fields_assigned')
+
+    order = models.PositiveIntegerField(default=1,
+                                        help_text="Signing order if multiple signers")
+    is_required = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['page_number', 'order']
+
+    def __str__(self):
+        return f"Field {self.order} on p.{self.page_number} — {self.label}"
+
+    @property
+    def is_signed(self):
+        return hasattr(self, 'signature_record') and self.signature_record is not None
+
+
+class SignatureRecord(models.Model):
+    """
+    Immutable record of a signature being applied to a SignatureField.
+    Stores the rendered signature image + a hash chain for audit.
+    """
+    field = models.OneToOneField(SignatureField, on_delete=models.CASCADE,
+                                 related_name='signature_record')
+    signed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                                  related_name='signature_records')
+    sig_profile = models.ForeignKey(UserSignature, on_delete=models.PROTECT,
+                                    null=True, blank=True)
+
+    # Rendered signature (PNG) stored as base64 or file
+    rendered_image = models.TextField(blank=True,
+                                      help_text="Base64 PNG of the rendered signature")
+
+    signed_at = models.DateTimeField(default=timezone.now)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+
+    # Audit hash: SHA-256(document_file_hash + field_id + user_id + timestamp)
+    audit_hash = models.CharField(max_length=64, unique=True)
+
+    class Meta:
+        ordering = ['signed_at']
+
+    def __str__(self):
+        return f"Signed by {self.signed_by.username} at {self.signed_at:%Y-%m-%d %H:%M}"
+
+    @staticmethod
+    def compute_audit_hash(doc_hash, field_id, user_id, timestamp_iso):
+        raw = f"{doc_hash}|{field_id}|{user_id}|{timestamp_iso}"
+        return hashlib.sha256(raw.encode()).hexdigest()
+
+    def verify(self):
+        """Re-compute and compare the stored audit hash."""
+        expected = self.compute_audit_hash(
+            self.field.document.file_hash,
+            self.field.pk,
+            self.signed_by_id,
+            self.signed_at.isoformat(),
+        )
+        return expected == self.audit_hash

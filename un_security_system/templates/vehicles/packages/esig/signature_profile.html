@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% block title %}My Signature{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:800px;">
+  <div class="mb-4">
+    <h2 class="fw-bold mb-1"><i class="bi bi-pen text-primary me-2"></i>My Signature</h2>
+    <p class="text-muted small mb-0">
+      Set up your digital signature. It will be used when you sign documents in UN PASS.
+    </p>
+  </div>
+
+  <!-- Current active signature -->
+  {% if current %}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-success bg-opacity-10 py-3">
+      <h6 class="mb-0 text-success fw-semibold">
+        <i class="bi bi-patch-check-fill me-2"></i>Active Signature
+      </h6>
+    </div>
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center gap-4">
+        <div class="sig-preview-box bg-white border rounded-3 p-3 text-center"
+             style="min-width:220px;min-height:80px;">
+          {% if current.sig_type == 'upload' and current.image_file %}
+            <img src="{{ current.image_file.url }}" style="max-height:70px;max-width:200px;">
+          {% elif current.sig_type == 'font' %}
+            <span class="font-sig font-{{ current.font_name }}" style="font-size:2rem;">
+              {{ current.font_text }}
+            </span>
+          {% elif current.sig_type == 'draw' and current.drawn_data %}
+            <img src="{{ current.drawn_data }}" style="max-height:70px;max-width:200px;">
+          {% endif %}
+        </div>
+        <div>
+          <div class="fw-semibold">{{ current.get_sig_type_display }}</div>
+          <div class="text-muted small">Created {{ current.created_at|date:"M d, Y" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Create new signature -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3">
+      <h5 class="mb-0 fw-semibold"><i class="bi bi-plus-circle me-2 text-primary"></i>
+        {% if current %}Update{% else %}Create{% endif %} Signature
+      </h5>
+    </div>
+    <div class="card-body p-4">
+
+      <form method="post" enctype="multipart/form-data" novalidate id="sigForm">
+        {% csrf_token %}
+
+        <!-- Type selector -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Choose Signature Type</label>
+          <div class="row g-3">
+            {% for val, label in form.sig_type.field.choices %}
+            <div class="col-4">
+              <input type="radio" class="d-none sig-type-radio" name="sig_type"
+                     id="type_{{ val }}" value="{{ val }}"
+                     {% if form.sig_type.value == val or forloop.first and not form.sig_type.value %}checked{% endif %}>
+              <label for="type_{{ val }}" class="sig-type-card card border text-center p-3 h-100" style="cursor:pointer;">
+                <i class="bi {% if val == 'upload' %}bi-upload{% elif val == 'font' %}bi-fonts{% else %}bi-pen-fill{% endif %} fs-3 mb-2
+                   {% if val == 'upload' %}text-primary{% elif val == 'font' %}text-warning{% else %}text-success{% endif %}"></i>
+                <div class="fw-semibold small">{{ label }}</div>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {% if form.sig_type.errors or form.non_field_errors %}
+        <div class="alert alert-danger small">
+          {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Upload section -->
+        <div id="section-upload" class="sig-section">
+          <label class="form-label fw-semibold">Upload Signature Image</label>
+          {{ form.image_file }}
+          <div class="form-text">PNG or JPG with transparent/white background, max 2MB.</div>
+          {% if form.image_file.errors %}<div class="text-danger small">{{ form.image_file.errors.0 }}</div>{% endif %}
+          <div id="upload-preview" class="mt-3 sig-preview-box bg-light border rounded-3 p-3 text-center d-none"
+               style="min-height:80px;">
+            <img id="upload-img" src="" style="max-height:80px;">
+          </div>
+        </div>
+
+        <!-- Font section -->
+        <div id="section-font" class="sig-section d-none">
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Font Style</label>
+              {{ form.font_name }}
+              {% if form.font_name.errors %}<div class="text-danger small">{{ form.font_name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-7">
+              <label class="form-label fw-semibold">Signature Text</label>
+              {{ form.font_text }}
+              <div class="form-text">Leave blank to use your full name.</div>
+            </div>
+          </div>
+          <!-- Live font preview -->
+          <div class="mt-3 sig-preview-box bg-white border rounded-3 p-4 text-center" style="min-height:80px;">
+            <span id="font-preview" style="font-size:2.5rem;"></span>
+          </div>
+        </div>
+
+        <!-- Draw section -->
+        <div id="section-draw" class="sig-section d-none">
+          <label class="form-label fw-semibold">Draw Your Signature</label>
+          <div class="border rounded-3 bg-white p-1 position-relative" style="touch-action:none;">
+            <canvas id="sig-pad" width="680" height="160"
+                    style="width:100%;height:160px;display:block;cursor:crosshair;border-radius:.5rem;"></canvas>
+            <button type="button" class="btn btn-sm btn-outline-secondary position-absolute"
+                    style="top:8px;right:8px;" id="clearPad">
+              <i class="bi bi-arrow-counterclockwise"></i> Clear
+            </button>
+          </div>
+          {{ form.drawn_data }}
+          {% if form.drawn_data.errors %}<div class="text-danger small">{{ form.drawn_data.errors.0 }}</div>{% endif %}
+          <div class="form-text mt-1">Use mouse or touch to draw your signature above.</div>
+        </div>
+
+        <!-- Set as active -->
+        <div class="mt-4 form-check">
+          {{ form.is_active }}
+          <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+            Set as my active signature
+          </label>
+        </div>
+
+        <div class="d-flex gap-2 mt-4 pt-3 border-top">
+          <button class="btn btn-primary px-4" type="submit">
+            <i class="bi bi-check-circle me-2"></i>Save Signature
+          </button>
+          <a href="{% url 'vehicles:package_list' %}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Saved signatures list -->
+  {% if all_sigs %}
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3">
+      <h6 class="mb-0 fw-semibold"><i class="bi bi-clock-history me-2 text-primary"></i>Saved Signatures</h6>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead class="table-light">
+          <tr><th>Preview</th><th>Type</th><th>Created</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for sig in all_sigs %}
+          <tr>
+            <td style="min-width:180px;">
+              <div class="sig-thumb bg-white border rounded p-2 text-center" style="height:50px;overflow:hidden;">
+                {% if sig.sig_type == 'upload' and sig.image_file %}
+                  <img src="{{ sig.image_file.url }}" style="max-height:42px;max-width:160px;">
+                {% elif sig.sig_type == 'font' %}
+                  <span class="font-sig font-{{ sig.font_name }}" style="font-size:1.4rem;line-height:42px;">
+                    {{ sig.font_text }}
+                  </span>
+                {% elif sig.sig_type == 'draw' and sig.drawn_data %}
+                  <img src="{{ sig.drawn_data }}" style="max-height:42px;max-width:160px;">
+                {% endif %}
+              </div>
+            </td>
+            <td class="small">{{ sig.get_sig_type_display }}</td>
+            <td class="small text-muted">{{ sig.created_at|date:"M d, Y" }}</td>
+            <td>
+              {% if sig.is_active %}
+                <span class="badge bg-success">Active</span>
+              {% else %}
+                <form method="post" action="{% url 'vehicles:signature_set_active' sig.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-secondary">Set Active</button>
+                </form>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if not sig.is_active %}
+              <form method="post" action="{% url 'vehicles:signature_delete' sig.pk %}"
+                    onsubmit="return confirm('Delete this signature?')">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Google Fonts for signature fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Pacifico&family=Satisfy&family=Great+Vibes&family=Allura&display=swap" rel="stylesheet">
+
+<style>
+  .font-dancing    { font-family: 'Dancing Script', cursive; }
+  .font-pacifico   { font-family: 'Pacifico', cursive; }
+  .font-satisfy    { font-family: 'Satisfy', cursive; }
+  .font-great_vibes{ font-family: 'Great Vibes', cursive; }
+  .font-allura     { font-family: 'Allura', cursive; }
+
+  .sig-type-card { border-radius:.75rem; transition:all .2s; }
+  .sig-type-radio:checked + .sig-type-card {
+    border-color:#667eea !important;
+    background:#f5f3ff;
+    box-shadow:0 0 0 3px rgba(102,126,234,.2);
+  }
+  .sig-preview-box { border-radius:.5rem; }
+  canvas { border-radius:.5rem; background:#fff; }
+  .card { border-radius:.75rem; overflow:hidden; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script>
+const FONT_MAP = {
+  dancing:     "'Dancing Script', cursive",
+  pacifico:    "'Pacifico', cursive",
+  satisfy:     "'Satisfy', cursive",
+  great_vibes: "'Great Vibes', cursive",
+  allura:      "'Allura', cursive",
+};
+
+// ── Section toggle ────────────────────────────────────────────────────────────
+function showSection(type) {
+  document.querySelectorAll('.sig-section').forEach(s => s.classList.add('d-none'));
+  const el = document.getElementById('section-' + type);
+  if (el) el.classList.remove('d-none');
+}
+
+document.querySelectorAll('.sig-type-radio').forEach(radio => {
+  radio.addEventListener('change', () => showSection(radio.value));
+});
+
+// Init on load
+const checkedType = document.querySelector('.sig-type-radio:checked');
+if (checkedType) showSection(checkedType.value);
+
+// ── Upload preview ────────────────────────────────────────────────────────────
+document.getElementById('id_image_file')?.addEventListener('change', function () {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('upload-preview').classList.remove('d-none');
+    document.getElementById('upload-img').src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// ── Font preview ──────────────────────────────────────────────────────────────
+function updateFontPreview() {
+  const fontKey  = document.getElementById('id_font_name').value;
+  const text     = document.getElementById('id_font_text').value ||
+                   '{{ request.user.get_full_name|default:request.user.username }}';
+  const preview  = document.getElementById('font-preview');
+  preview.style.fontFamily = FONT_MAP[fontKey] || 'cursive';
+  preview.textContent = text;
+}
+document.getElementById('id_font_name')?.addEventListener('change', updateFontPreview);
+document.getElementById('id_font_text')?.addEventListener('input',  updateFontPreview);
+updateFontPreview();
+
+// ── Signature pad (draw) ──────────────────────────────────────────────────────
+const canvas = document.getElementById('sig-pad');
+const pad    = new SignaturePad(canvas, {
+  backgroundColor: 'rgba(255,255,255,0)',
+  penColor:        '#1a1a2e',
+  minWidth:        1.5,
+  maxWidth:        3,
+});
+
+// Resize canvas to match display size
+function resizePad() {
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  canvas.width  = canvas.offsetWidth  * ratio;
+  canvas.height = canvas.offsetHeight * ratio;
+  canvas.getContext('2d').scale(ratio, ratio);
+  pad.clear();
+}
+window.addEventListener('resize', resizePad);
+resizePad();
+
+document.getElementById('clearPad')?.addEventListener('click', () => pad.clear());
+
+// Before submit: export pad data to hidden input
+document.getElementById('sigForm').addEventListener('submit', function () {
+  const type = document.querySelector('.sig-type-radio:checked')?.value;
+  if (type === 'draw') {
+    if (pad.isEmpty()) {
+      alert('Please draw your signature before saving.');
+      return false;
+    }
+    document.getElementById('id_drawn_data').value = pad.toDataURL('image/png');
+  }
+});
+</script>
+{% endblock %}

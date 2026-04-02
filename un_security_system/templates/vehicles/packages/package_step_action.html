@@ -4,34 +4,42 @@
 {% block content %}
 <div class="container py-4" style="max-width:720px;">
 
-  <!-- Header -->
+  <!-- ── Breadcrumb & Header ─────────────────────────────────────────────── -->
   <div class="mb-4">
     <nav aria-label="breadcrumb">
       <ol class="breadcrumb small mb-2">
-        <li class="breadcrumb-item"><a href="{% url 'vehicles:package_list' %}">Packages</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'vehicles:package_detail' package.pk %}">{{ package.tracking_code }}</a></li>
+        <li class="breadcrumb-item">
+          <a href="{% url 'vehicles:package_list' %}">Packages</a>
+        </li>
+        <li class="breadcrumb-item">
+          <a href="{% url 'vehicles:package_detail' package.pk %}">{{ package.tracking_code }}</a>
+        </li>
         <li class="breadcrumb-item active">{{ step.name }}</li>
       </ol>
     </nav>
     <h2 class="fw-bold mb-1">{{ step.name }}</h2>
     <p class="text-muted mb-0 small">
       Step {{ step.order }} of {{ step.template.name }}
-      {% if step.description %} · {{ step.description }}{% endif %}
+      {% if step.description %}&nbsp;·&nbsp;{{ step.description }}{% endif %}
     </p>
   </div>
 
-  <!-- Package summary card -->
-  <div class="card border-0 mb-4" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+  <!-- ── Package Summary ────────────────────────────────────────────────── -->
+  <div class="card border-0 mb-4"
+       style="background:linear-gradient(135deg,#667eea,#764ba2);">
     <div class="card-body p-3 text-white">
       <div class="row g-2 align-items-center">
         <div class="col-auto">
-          <i class="bi bi-box-seam fs-2"></i>
+          <i class="bi bi-box-seam fs-2 opacity-75"></i>
         </div>
         <div class="col">
           <div class="fw-bold fs-5">{{ package.tracking_code }}</div>
           <div class="small opacity-75">
-            {{ package.item_type }} · {{ package.destination_agency }}
-            {% if package.for_recipient %} · For: {{ package.for_recipient }}{% endif %}
+            {{ package.item_type }}
+            &nbsp;·&nbsp;{{ package.destination_agency }}
+            {% if package.for_recipient %}
+              &nbsp;·&nbsp;For: {{ package.for_recipient }}
+            {% endif %}
           </div>
         </div>
         <div class="col-auto">
@@ -41,31 +49,61 @@
     </div>
   </div>
 
-  <!-- Required actions hint -->
-  {% if step.required_actions_display.0 != "No special requirements" %}
-  <div class="alert alert-info border-0 mb-4 small">
-    <i class="bi bi-info-circle-fill me-2"></i>
-    <strong>This step requires:</strong>
-    {% for a in step.required_actions_display %}
-      <span class="badge bg-primary ms-1">{{ a }}</span>
-    {% endfor %}
+  <!-- ── Required Actions Banner ────────────────────────────────────────── -->
+  {% with actions=step.required_actions_display %}
+  {% if actions.0 != "No special requirements" %}
+  <div class="alert alert-info border-0 mb-4 small d-flex align-items-center gap-2">
+    <i class="bi bi-info-circle-fill flex-shrink-0"></i>
+    <div>
+      <strong>This step requires:</strong>
+      {% for a in actions %}
+        <span class="badge bg-primary ms-1">{{ a }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <!-- ── E-Signature Flow Banner (scan steps only) ──────────────────────── -->
+  {% if step.requires_scan %}
+  <div class="alert border-0 mb-4 py-3 px-4 d-flex align-items-start gap-3"
+       style="background:#ede9fe;border-left:4px solid #667eea!important;">
+    <i class="bi bi-pen-fill text-primary fs-4 flex-shrink-0 mt-1"></i>
+    <div>
+      <div class="fw-semibold mb-1">E-Signature workflow enabled</div>
+      <div class="small text-muted">
+        Upload the scanned document below. Once you submit, you'll be taken
+        directly to the <strong>signature annotation page</strong> to place
+        signature fields and send the document for digital signing.
+      </div>
+    </div>
   </div>
   {% endif %}
 
-  <!-- Form card -->
+  <!-- ── Main Form Card ─────────────────────────────────────────────────── -->
   <div class="card shadow-sm border-0">
     <div class="card-header bg-white border-bottom py-3">
-      <h5 class="mb-0 text-secondary"><i class="bi bi-pencil-square me-2"></i>Complete This Step</h5>
+      <h5 class="mb-0 fw-semibold">
+        <i class="bi bi-pencil-square text-primary me-2"></i>Complete This Step
+      </h5>
     </div>
+
     <div class="card-body p-4">
 
+      <!-- Errors -->
       {% if form.errors %}
       <div class="alert alert-danger alert-dismissible fade show small">
         <i class="bi bi-exclamation-triangle-fill me-2"></i>
         <strong>Please correct the following:</strong>
         <ul class="mb-0 mt-2">
-          {% for field in form %}{% for error in field.errors %}<li>{{ field.label }}: {{ error }}</li>{% endfor %}{% endfor %}
-          {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+          {% for field in form %}
+            {% for error in field.errors %}
+              <li><b>{{ field.label }}:</b> {{ error }}</li>
+            {% endfor %}
+          {% endfor %}
+          {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
         </ul>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       </div>
@@ -76,105 +114,216 @@
 
         {% for field in form %}
         <div class="mb-4">
+
+          {# ── Checkbox (stamp / confirmation) ────────────────────────────── #}
           {% if field.field.widget.input_type == 'checkbox' %}
-            <!-- Stamp / confirmation checkbox -->
-            <div class="p-3 border border-warning rounded-3 bg-warning bg-opacity-10">
-              <div class="form-check">
-                {{ field }}
-                <label class="form-check-label fw-semibold ms-1" for="{{ field.id_for_label }}">
-                  <i class="bi bi-patch-check-fill text-warning me-1"></i>{{ field.label }}
-                </label>
-              </div>
-              {% if field.errors %}
-                <div class="text-danger small mt-1">{{ field.errors.0 }}</div>
-              {% endif %}
-            </div>
-
-          {% elif field.field.widget.input_type == 'file' %}
-            <!-- File upload -->
-            <label class="form-label fw-semibold" for="{{ field.id_for_label }}">
-              <i class="bi bi-upload text-primary me-1"></i>{{ field.label }}
-              {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
-            </label>
-            <div class="border rounded-3 p-3 bg-light">
+          <div class="p-3 border border-warning rounded-3 bg-warning bg-opacity-10">
+            <div class="form-check mb-0">
               {{ field }}
+              <label class="form-check-label fw-semibold ms-1"
+                     for="{{ field.id_for_label }}">
+                <i class="bi bi-patch-check-fill text-warning me-1"></i>
+                {{ field.label }}
+              </label>
             </div>
             {% if field.help_text %}
-              <div class="form-text"><i class="bi bi-info-circle me-1"></i>{{ field.help_text }}</div>
+              <div class="form-text ms-4 mt-1">{{ field.help_text }}</div>
             {% endif %}
             {% if field.errors %}
               <div class="text-danger small mt-1">{{ field.errors.0 }}</div>
             {% endif %}
+          </div>
 
-          {% else %}
-            <!-- Text / textarea / select -->
-            <label class="form-label fw-semibold" for="{{ field.id_for_label }}">
-              {{ field.label }}
-              {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
-            </label>
-            {{ field }}
-            {% if field.help_text %}
-              <div class="form-text"><i class="bi bi-info-circle me-1"></i>{{ field.help_text }}</div>
+          {# ── File upload (scan → e-signature) ───────────────────────────── #}
+          {% elif field.field.widget.input_type == 'file' %}
+          <label class="form-label fw-semibold" for="{{ field.id_for_label }}">
+            <i class="bi bi-file-earmark-arrow-up text-primary me-1"></i>
+            {{ field.label }}
+            {% if field.field.required %}
+              <span class="text-danger">*</span>
             {% endif %}
-            {% if field.errors %}
-              <div class="text-danger small mt-1">{{ field.errors.0 }}</div>
-            {% endif %}
+          </label>
+
+          {# Drag-and-drop upload zone — label wraps the input for CSS-only click #}
+          <label for="{{ field.id_for_label }}" class="upload-zone d-block w-100"
+                 id="zone_{{ field.html_name }}">
+            <div class="zone-inner rounded-3 p-4 text-center"
+                 style="border:2px dashed #cbd5e0;background:#f8fafc;
+                        transition:border-color .2s,background .2s;">
+              <i class="bi bi-cloud-upload fs-1 text-muted d-block mb-2"></i>
+              <div class="fw-semibold mb-1">Drag & drop or click to select</div>
+              <div class="text-muted small">PNG, JPG or PDF accepted</div>
+              <div class="file-name mt-2 small text-primary fw-semibold" style="display:none;"></div>
+            </div>
+            {# Hidden — the label click triggers it #}
+            <div style="display:none;">{{ field }}</div>
+          </label>
+
+          {% if field.help_text %}
+            <div class="form-text mt-1">
+              <i class="bi bi-info-circle me-1"></i>{{ field.help_text }}
+            </div>
           {% endif %}
+          {% if field.errors %}
+            <div class="text-danger small mt-1">
+              <i class="bi bi-exclamation-circle me-1"></i>{{ field.errors.0 }}
+            </div>
+          {% endif %}
+
+          {# ── Text / Textarea / Select ─────────────────────────────────────── #}
+          {% else %}
+          <label class="form-label fw-semibold" for="{{ field.id_for_label }}">
+            {{ field.label }}
+            {% if field.field.required %}
+              <span class="text-danger">*</span>
+            {% endif %}
+          </label>
+          {{ field }}
+          {% if field.help_text %}
+            <div class="form-text mt-1">
+              <i class="bi bi-info-circle me-1"></i>{{ field.help_text }}
+            </div>
+          {% endif %}
+          {% if field.errors %}
+            <div class="text-danger small mt-1">{{ field.errors.0 }}</div>
+          {% endif %}
+          {% endif %}
+
         </div>
         {% endfor %}
 
-        <div class="d-flex gap-2 pt-3 border-top mt-2">
+        <!-- Submit row -->
+        <div class="d-flex gap-2 pt-3 border-top">
           <button class="btn btn-primary px-4" type="submit" id="submitBtn">
-            <i class="bi bi-check-circle me-2"></i>Complete Step
+            {% if step.requires_scan %}
+              <i class="bi bi-pen me-2"></i>Submit & Place Signature Fields
+            {% else %}
+              <i class="bi bi-check-circle me-2"></i>Complete Step
+            {% endif %}
           </button>
-          <a class="btn btn-outline-secondary" href="{% url 'vehicles:package_detail' package.pk %}">
+          <a class="btn btn-outline-secondary"
+             href="{% url 'vehicles:package_detail' package.pk %}">
             <i class="bi bi-arrow-left me-1"></i>Cancel
           </a>
         </div>
+
       </form>
     </div>
-  </div>
 
-  <!-- What happens next -->
-  {% if step.next_step %}
-  <div class="card border-0 bg-light mt-3">
-    <div class="card-body py-2 px-3 small text-muted">
-      <i class="bi bi-arrow-right-circle text-primary me-2"></i>
-      <strong>Next step after this:</strong> {{ step.next_step.name }}
-      {% if step.next_step.allowed_roles %}
-        · Handled by: {{ step.next_step.allowed_roles }}
+    <!-- ── What Happens Next (inside card footer) ──────────────────────── -->
+    <div class="card-footer py-3 px-4
+      {% if step.next_step %}bg-light{% else %}bg-success bg-opacity-10{% endif %}">
+      {% if step.next_step %}
+        <div class="small text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-arrow-right-circle-fill text-primary flex-shrink-0"></i>
+          <div>
+            <strong>Next step:</strong> {{ step.next_step.name }}
+            {% if step.next_step.allowed_roles %}
+              &nbsp;·&nbsp;Handled by: <em>{{ step.next_step.allowed_roles }}</em>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="small text-success d-flex align-items-center gap-2">
+          <i class="bi bi-flag-fill flex-shrink-0"></i>
+          <strong>This is the final step.</strong>
+          Completing it will close the workflow.
+        </div>
       {% endif %}
     </div>
-  </div>
-  {% else %}
-  <div class="card border-0 bg-success bg-opacity-10 mt-3">
-    <div class="card-body py-2 px-3 small text-success">
-      <i class="bi bi-flag-fill me-2"></i>
-      <strong>This is the final step.</strong> Completing it will close the workflow.
-    </div>
-  </div>
-  {% endif %}
 
-</div>
+  </div><!-- /card -->
+
+</div><!-- /container -->
+
+<style>
+  .card { border-radius:.75rem; overflow:hidden; }
+
+  .form-control,
+  .form-select {
+    border-radius:.5rem;
+    border:1.5px solid #e2e8f0;
+  }
+  .form-control:focus,
+  .form-select:focus {
+    border-color:#667eea;
+    box-shadow:0 0 0 3px rgba(102,126,234,.15);
+  }
+
+  /* Upload zone */
+  .upload-zone { cursor:pointer; }
+  .upload-zone:hover .zone-inner,
+  .upload-zone.dragover .zone-inner {
+    border-color:#667eea !important;
+    background:#f5f3ff !important;
+  }
+  .upload-zone.has-file .zone-inner {
+    border-color:#38a169 !important;
+    background:#f0fff4 !important;
+  }
+</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+
+  // ── Upload zone ───────────────────────────────────────────────────────────
+  document.querySelectorAll('.upload-zone').forEach(function (zone) {
+    const input  = zone.querySelector('input[type="file"]');
+    const nameEl = zone.querySelector('.file-name');
+
+    function showFile(file) {
+      if (!file) return;
+      const kb = (file.size / 1024).toFixed(1);
+      nameEl.textContent = '📄 ' + file.name + ' (' + kb + ' KB)';
+      nameEl.style.display = 'block';
+      zone.classList.add('has-file');
+    }
+
+    input.addEventListener('change', function () {
+      showFile(this.files[0]);
+    });
+
+    zone.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      zone.classList.add('dragover');
+    });
+    zone.addEventListener('dragleave', function () {
+      zone.classList.remove('dragover');
+    });
+    zone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      // Transfer files to the hidden input
+      const dt = e.dataTransfer;
+      if (dt.files.length) {
+        // DataTransfer assignment works in all modern browsers
+        try {
+          input.files = dt.files;
+        } catch (_) {}
+        showFile(dt.files[0]);
+      }
+    });
+  });
+
+  // ── Submit guard ──────────────────────────────────────────────────────────
   const form = document.getElementById('stepForm');
   const btn  = document.getElementById('submitBtn');
   if (form && btn) {
     const orig = btn.innerHTML;
     form.addEventListener('submit', function () {
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing…';
-      setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 8000);
+      {% if step.requires_scan %}
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Uploading & preparing…';
+      {% else %}
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing…';
+      {% endif %}
+      setTimeout(function () {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }, 12000);
     });
   }
+
 });
 </script>
-
-<style>
-  .card { border-radius: .75rem; overflow: hidden; }
-  .form-control, .form-select { border-radius: .5rem; border: 1.5px solid #e2e8f0; }
-  .form-control:focus, .form-select:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,.15); }
-</style>
 {% endblock %}

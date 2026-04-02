@@ -129,7 +129,32 @@ urlpatterns = [
          views.package_flow_step_delete,
          name='package_flow_step_delete'),
 
+    # Signature profile
+    path('signature/profile/', views.signature_profile, name='signature_profile'),
+    path('signature/<int:pk>/activate/', views.signature_set_active, name='signature_set_active'),
+    path('signature/<int:pk>/delete/', views.signature_delete, name='signature_delete'),
+
+    # Document lifecycle
+    path('packages/step/<int:step_log_pk>/upload-doc/',
+         views.document_upload, name='document_upload'),
+    path('packages/doc/<int:pk>/annotate/',
+         views.document_annotate, name='document_annotate'),
+    path('packages/doc/<int:pk>/send/',
+         views.document_send_for_signing, name='document_send_for_signing'),
+    path('packages/doc/<int:pk>/sign/',
+         views.document_sign, name='document_sign'),
+    path('packages/doc/<int:pk>/audit/',
+         views.document_audit, name='document_audit'),
+
+    # AJAX
+    path('api/packages/doc/<int:doc_pk>/field/save/',
+         views.signature_field_save, name='signature_field_save'),
+    path('api/packages/field/<int:field_pk>/delete/',
+         views.signature_field_delete, name='signature_field_delete'),
+
+
     # --------- Asset exit more ---
     path('asset-exit/<int:pk>/qr/', views.asset_exit_qr_code, name='asset_exit_qr_code'),
+
 
     ]

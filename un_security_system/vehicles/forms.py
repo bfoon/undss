@@ -8,7 +8,8 @@ from django.contrib.auth import get_user_model
 from .models import (
     Vehicle, VehicleMovement, ParkingCard, AssetExit,
     AssetExitItem, ParkingCardRequest, Key, KeyLog, Package,
-    PackageFlowTemplate, PackageFlowStep
+    PackageFlowTemplate, PackageFlowStep,  UserSignature,
+    PackageDocument, SignatureField,
 )
 from accounts.models import Agency
 
@@ -646,3 +647,90 @@ class PackageStepActionForm(forms.Form):
                 widget=forms.TextInput(attrs={'class': 'form-control',
                                               'placeholder': 'Full name of person receiving and signing'}),
             )
+
+
+class UserSignatureForm(forms.ModelForm):
+    """
+    Lets a user set up their signature profile.
+    The JS on the page shows/hides sections based on sig_type selection.
+    """
+
+    class Meta:
+        model = UserSignature
+        fields = ['sig_type', 'image_file', 'font_name', 'font_text', 'drawn_data', 'is_active']
+        widgets = {
+            'sig_type': forms.RadioSelect(attrs={'class': 'sig-type-radio'}),
+            'image_file': forms.ClearableFileInput(attrs={
+                'class': 'form-control', 'accept': 'image/*'
+            }),
+            'font_name': forms.Select(attrs={'class': 'form-select'}),
+            'font_text': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Type your name as it should appear',
+            }),
+            'drawn_data': forms.HiddenInput(),  # populated by signature pad JS
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def clean(self):
+        cd = super().clean()
+        sig_type = cd.get('sig_type')
+        if sig_type == 'upload' and not cd.get('image_file'):
+            # Allow keeping existing image on edit
+            if not self.instance.pk or not self.instance.image_file:
+                self.add_error('image_file', 'Please upload a signature image.')
+        if sig_type == 'font' and not cd.get('font_name'):
+            self.add_error('font_name', 'Please choose a font.')
+        if sig_type == 'draw' and not cd.get('drawn_data'):
+            self.add_error('drawn_data', 'Please draw your signature.')
+        return cd
+
+
+class PackageDocumentUploadForm(forms.ModelForm):
+    """Attach a scanned document to a step log."""
+
+    class Meta:
+        model = PackageDocument
+        fields = ['file']
+        widgets = {
+            'file': forms.ClearableFileInput(attrs={
+                'class': 'form-control',
+                'accept': 'image/*,application/pdf',
+            }),
+        }
+
+
+class SignatureFieldForm(forms.ModelForm):
+    """
+    Created via AJAX from the annotation canvas.
+    All position fields come as hidden inputs populated by the JS drag tool.
+    """
+
+    class Meta:
+        model = SignatureField
+        fields = ['page_number', 'pos_x_pct', 'pos_y_pct',
+                  'width_pct', 'height_pct', 'label', 'assigned_to', 'order', 'is_required']
+        widgets = {
+            'page_number': forms.HiddenInput(),
+            'pos_x_pct': forms.HiddenInput(),
+            'pos_y_pct': forms.HiddenInput(),
+            'width_pct': forms.HiddenInput(),
+            'height_pct': forms.HiddenInput(),
+            'label': forms.TextInput(attrs={
+                'class': 'form-control form-control-sm',
+                'placeholder': 'e.g. Agency Focal Point',
+            }),
+            'assigned_to': forms.Select(attrs={'class': 'form-select form-select-sm'}),
+            'order': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'min': 1}),
+            'is_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def __init__(self, *args, agency=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if agency:
+            self.fields['assigned_to'].queryset = User.objects.filter(
+                agency=agency, is_active=True
+            ).order_by('first_name', 'last_name')
+        else:
+            self.fields['assigned_to'].queryset = User.objects.filter(is_active=True)
+        self.fields['assigned_to'].required = False

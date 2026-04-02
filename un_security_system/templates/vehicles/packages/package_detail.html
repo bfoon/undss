@@ -4,16 +4,23 @@
 {% block content %}
 <div class="container py-4" style="max-width:1100px;">
 
-  <!-- Header -->
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
   <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
       <div class="d-flex align-items-center gap-2 mb-1">
-        <i class="bi bi-box-seam fs-4 text-primary"></i>
+        {% if package.direction == 'outgoing' %}
+          <i class="bi bi-send fs-4 text-success"></i>
+        {% else %}
+          <i class="bi bi-box-seam fs-4 text-primary"></i>
+        {% endif %}
         <h2 class="fw-bold mb-0">{{ package.tracking_code }}</h2>
         {% if package.is_complete %}
           <span class="badge bg-success px-3 py-2">Complete</span>
         {% else %}
           <span class="badge bg-primary px-3 py-2">In Progress</span>
+        {% endif %}
+        {% if package.direction == 'outgoing' %}
+          <span class="badge bg-success bg-opacity-75">Outgoing</span>
         {% endif %}
       </div>
       <p class="text-muted mb-0 small">
@@ -29,65 +36,56 @@
     </a>
   </div>
 
-  <!-- ── Flow Progress Bar ──────────────────────────────────────────────────── -->
+  <!-- ── Workflow Progress Bar ───────────────────────────────────────────── -->
   {% if all_steps %}
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-4">
       <h6 class="fw-semibold text-muted text-uppercase small mb-3">
-        <i class="bi bi-diagram-3 me-2"></i>Workflow Progress — {{ package.flow_template.name }}
+        <i class="bi bi-diagram-3 me-2"></i>Workflow — {{ package.flow_template.name }}
       </h6>
-      <div class="d-flex align-items-start gap-0 flex-wrap">
+      <div class="d-flex align-items-start flex-wrap" style="gap:0;">
         {% for step in all_steps %}
-          <div class="text-center" style="min-width:100px; max-width:140px;">
-            <!-- Circle indicator -->
-            <div class="d-flex align-items-center">
-              {% if not forloop.first %}
-                {% if step.order in completed_orders %}
-                  <div class="flex-grow-1 border-top mt-3" style="border-color:#198754!important;border-width:2px!important;"></div>
-                {% else %}
-                  <div class="flex-grow-1 border-top mt-3" style="border-color:#dee2e6!important;border-width:2px!important;"></div>
-                {% endif %}
-              {% endif %}
-
-              <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto
-                          {% if step.order in completed_orders %}bg-success text-white
-                          {% elif step.pk == package.current_step.pk %}bg-primary text-white
-                          {% else %}bg-white border text-muted{% endif %}"
-                   style="width:36px;height:36px;border:2px solid {% if step.order in completed_orders %}#198754{% elif step.pk == package.current_step.pk %}#0d6efd{% else %}#dee2e6{% endif %};flex-shrink:0;">
-                {% if step.order in completed_orders %}
-                  <i class="bi bi-check-lg"></i>
-                {% elif step.pk == package.current_step.pk %}
-                  <i class="bi bi-arrow-right-short fs-5"></i>
-                {% else %}
-                  <span class="small fw-bold">{{ step.order }}</span>
-                {% endif %}
-              </div>
-
-              {% if not forloop.last %}
-                {% if step.order in completed_orders %}
-                  <div class="flex-grow-1 border-top mt-3" style="border-color:#198754!important;border-width:2px!important;"></div>
-                {% else %}
-                  <div class="flex-grow-1 border-top mt-3" style="border-color:#dee2e6!important;border-width:2px!important;"></div>
-                {% endif %}
+        <div class="text-center" style="min-width:90px;max-width:130px;">
+          <div class="d-flex align-items-center">
+            {% if not forloop.first %}
+              <div class="flex-grow-1 border-top mt-3"
+                   style="border-width:2px!important;border-color:{% if step.order in completed_orders %}#198754{% else %}#dee2e6{% endif %}!important;"></div>
+            {% endif %}
+            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto
+                        {% if step.order in completed_orders %}bg-success text-white
+                        {% elif step.pk == package.current_step.pk %}bg-primary text-white
+                        {% else %}bg-white text-muted{% endif %}"
+                 style="width:34px;height:34px;flex-shrink:0;
+                        border:2px solid {% if step.order in completed_orders %}#198754{% elif step.pk == package.current_step.pk %}#0d6efd{% else %}#dee2e6{% endif %};">
+              {% if step.order in completed_orders %}
+                <i class="bi bi-check-lg small"></i>
+              {% elif step.pk == package.current_step.pk %}
+                <i class="bi bi-arrow-right-short"></i>
+              {% else %}
+                <span class="small fw-bold">{{ step.order }}</span>
               {% endif %}
             </div>
-            <!-- Label -->
-            <div class="mt-2 px-1">
-              <div class="small fw-semibold
-                {% if step.order in completed_orders %}text-success
-                {% elif step.pk == package.current_step.pk %}text-primary
-                {% else %}text-muted{% endif %}">
-                {{ step.name }}
-              </div>
+            {% if not forloop.last %}
+              <div class="flex-grow-1 border-top mt-3"
+                   style="border-width:2px!important;border-color:{% if step.order in completed_orders %}#198754{% else %}#dee2e6{% endif %}!important;"></div>
+            {% endif %}
+          </div>
+          <div class="mt-2 px-1">
+            <div class="fw-semibold" style="font-size:.72rem;
+              {% if step.order in completed_orders %}color:#198754;
+              {% elif step.pk == package.current_step.pk %}color:#0d6efd;
+              {% else %}color:#6c757d;{% endif %}">
+              {{ step.name }}
             </div>
           </div>
+        </div>
         {% endfor %}
       </div>
     </div>
   </div>
   {% endif %}
 
-  <!-- ── Current Action ─────────────────────────────────────────────────────── -->
+  <!-- ── Action Banner ──────────────────────────────────────────────────── -->
   {% if can_advance and package.current_step %}
   <div class="alert border-0 shadow-sm mb-4 d-flex align-items-center gap-3"
        style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;">
@@ -108,29 +106,36 @@
     <i class="bi bi-hourglass-split me-2"></i>
     <strong>Waiting on:</strong> {{ package.current_step.name }}
     {% if package.current_step.allowed_roles %}
-      · Role required: <strong>{{ package.current_step.allowed_roles }}</strong>
+      &nbsp;·&nbsp;Role required: <strong>{{ package.current_step.allowed_roles }}</strong>
     {% endif %}
   </div>
   {% endif %}
 
-  <div class="row g-4">
-    <!-- Left column -->
-    <div class="col-lg-7">
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ROW 1 — Package Details (left) | Full History (right)
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="row g-4 mb-4">
+
+    <!-- ── Left: Package Details + Sender ─────────────────────────────── -->
+    <div class="col-lg-6">
 
       <!-- Package Details -->
-      <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header py-3" style="background:linear-gradient(135deg,#667eea,#764ba2);">
-          <h5 class="mb-0 text-white"><i class="bi bi-info-circle me-2"></i>Package Details</h5>
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header py-3"
+             style="background:linear-gradient(135deg,#667eea,#764ba2);">
+          <h5 class="mb-0 text-white">
+            <i class="bi bi-info-circle me-2"></i>Package Details
+          </h5>
         </div>
         <div class="card-body p-4">
           <dl class="row g-3 mb-0">
-            <div class="col-md-6">
+            <div class="col-6">
               <dt class="text-muted small text-uppercase">Item Type</dt>
               <dd class="fw-semibold">{{ package.item_type }}</dd>
             </div>
-            <div class="col-md-6">
-              <dt class="text-muted small text-uppercase">Current Status</dt>
-              <dd><span class="badge bg-secondary px-3 py-2">{{ package.status }}</span></dd>
+            <div class="col-6">
+              <dt class="text-muted small text-uppercase">Status</dt>
+              <dd><span class="badge bg-secondary">{{ package.status }}</span></dd>
             </div>
             {% if package.description %}
             <div class="col-12">
@@ -138,162 +143,401 @@
               <dd>{{ package.description }}</dd>
             </div>
             {% endif %}
-            <div class="col-md-6">
-              <dt class="text-muted small text-uppercase">Destination Agency</dt>
+            <div class="col-6">
+              <dt class="text-muted small text-uppercase">
+                {% if package.direction == 'outgoing' %}To{% else %}Destination Agency{% endif %}
+              </dt>
               <dd class="fw-semibold">{{ package.destination_agency }}</dd>
             </div>
-            <div class="col-md-6">
-              <dt class="text-muted small text-uppercase">For Recipient</dt>
+            <div class="col-6">
+              <dt class="text-muted small text-uppercase">Recipient</dt>
               <dd>{{ package.for_recipient|default:"—" }}</dd>
             </div>
             {% if package.dest_focal_email %}
             <div class="col-12">
-              <dt class="text-muted small text-uppercase">Focal Point Email</dt>
-              <dd><a href="mailto:{{ package.dest_focal_email }}">{{ package.dest_focal_email }}</a></dd>
+              <dt class="text-muted small text-uppercase">Focal Email</dt>
+              <dd>
+                <a href="mailto:{{ package.dest_focal_email }}" class="small">
+                  {{ package.dest_focal_email }}
+                </a>
+              </dd>
             </div>
             {% endif %}
           </dl>
         </div>
       </div>
 
-      <!-- Sender Information -->
+      <!-- Sender / Originator -->
       <div class="card shadow-sm border-0">
         <div class="card-header bg-light py-3">
-          <h5 class="mb-0 text-dark"><i class="bi bi-person-circle me-2"></i>Sender</h5>
+          <h5 class="mb-0 text-dark">
+            <i class="bi bi-person-circle me-2"></i>
+            {% if package.direction == 'outgoing' %}Originator{% else %}Sender{% endif %}
+          </h5>
         </div>
         <div class="card-body p-4">
           <dl class="row g-3 mb-0">
-            <div class="col-md-6">
+            <div class="col-6">
               <dt class="text-muted small text-uppercase">Name</dt>
               <dd class="fw-semibold">{{ package.sender_name }}</dd>
             </div>
-            <div class="col-md-6">
+            <div class="col-6">
               <dt class="text-muted small text-uppercase">Type</dt>
-              <dd><span class="badge bg-light text-dark border">{{ package.get_sender_type_display }}</span></dd>
+              <dd>
+                <span class="badge bg-light text-dark border">
+                  {{ package.get_sender_type_display }}
+                </span>
+              </dd>
             </div>
-            <div class="col-md-6">
+            <div class="col-6">
               <dt class="text-muted small text-uppercase">Organisation</dt>
               <dd>{{ package.sender_org|default:"—" }}</dd>
             </div>
-            <div class="col-md-6">
+            <div class="col-6">
               <dt class="text-muted small text-uppercase">Contact</dt>
               <dd>{{ package.sender_contact|default:"—" }}</dd>
             </div>
+            {% if package.sender_email %}
+            <div class="col-12">
+              <dt class="text-muted small text-uppercase">Email</dt>
+              <dd>
+                <a href="mailto:{{ package.sender_email }}" class="small">
+                  {{ package.sender_email }}
+                </a>
+              </dd>
+            </div>
+            {% endif %}
           </dl>
         </div>
       </div>
-    </div>
 
-    <!-- Right column: Full History -->
-    <div class="col-lg-5">
-      <div class="card shadow-sm border-0">
+    </div><!-- /col-lg-6 left -->
+
+    <!-- ── Right: Full History ─────────────────────────────────────────── -->
+    <div class="col-lg-6">
+      <div class="card shadow-sm border-0 h-100">
         <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
-          <h5 class="mb-0 text-dark"><i class="bi bi-clock-history me-2"></i>Full History</h5>
-          <span class="badge bg-primary rounded-pill">{{ step_logs.count }} event{{ step_logs.count|pluralize }}</span>
+          <h5 class="mb-0 text-dark">
+            <i class="bi bi-clock-history me-2"></i>Full History
+          </h5>
+          <span class="badge bg-primary rounded-pill">
+            {{ step_logs.count }} event{{ step_logs.count|pluralize }}
+          </span>
         </div>
-        <div class="card-body p-0">
+        <div class="card-body p-0" style="overflow-y:auto;max-height:520px;">
           {% if step_logs %}
-            <div class="timeline-container">
-              {% for log in step_logs %}
-              <div class="timeline-item {% if forloop.last %}timeline-item-last{% endif %}">
-                <div class="timeline-marker {% if log.step.is_terminal %}marker-terminal{% endif %}"></div>
-                <div class="timeline-content">
-                  <!-- Step header -->
-                  <div class="d-flex justify-content-between align-items-start mb-2">
-                    <span class="badge bg-primary px-2 py-1">{{ log.step_name }}</span>
-                    <small class="text-muted flex-shrink-0 ms-2">{{ log.performed_at|date:"M d, H:i" }}</small>
-                  </div>
+          <div class="timeline-container">
+            {% for log in step_logs %}
+            <div class="timeline-item {% if forloop.last %}timeline-item-last{% endif %}">
+              <div class="timeline-marker {% if log.step.is_terminal %}marker-terminal{% endif %}"></div>
+              <div class="timeline-content">
 
-                  <!-- Who -->
-                  <div class="small text-muted mb-2">
-                    <i class="bi bi-person-fill me-1"></i>
-                    {{ log.performed_by.get_full_name|default:log.performed_by.username }}
-                    {% if log.performed_by.role %}
-                      <span class="badge bg-light text-dark border ms-1">{{ log.performed_by.role }}</span>
-                    {% endif %}
-                  </div>
-
-                  <!-- Note -->
-                  {% if log.note %}
-                  <div class="small bg-white border rounded p-2 mb-2">
-                    <i class="bi bi-chat-left-text text-muted me-1"></i>{{ log.note }}
-                  </div>
-                  {% endif %}
-
-                  <!-- Actions taken -->
-                  <div class="d-flex flex-wrap gap-1">
-                    {% if log.stamped %}
-                      <span class="badge bg-warning text-dark">
-                        <i class="bi bi-patch-check me-1"></i>Stamped
-                      </span>
-                    {% endif %}
-                    {% if log.routed_to %}
-                      <span class="badge bg-info text-dark">
-                        <i class="bi bi-send me-1"></i>→ {{ log.routed_to }}
-                      </span>
-                    {% endif %}
-                    {% if log.recipient_name %}
-                      <span class="badge bg-success">
-                        <i class="bi bi-pen me-1"></i>Signed: {{ log.recipient_name }}
-                      </span>
-                    {% endif %}
-                    {% if log.scan_file %}
-                      <a href="{{ log.scan_file.url }}" target="_blank" class="badge bg-light text-dark border text-decoration-none">
-                        <i class="bi bi-file-earmark-image me-1"></i>View Scan
-                      </a>
-                    {% endif %}
-                  </div>
+                <!-- Header row -->
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="badge bg-primary px-2 py-1">{{ log.step_name }}</span>
+                  <small class="text-muted ms-2 flex-shrink-0">
+                    {{ log.performed_at|date:"M d, H:i" }}
+                  </small>
                 </div>
+
+                <!-- Who -->
+                <div class="small text-muted mb-2">
+                  <i class="bi bi-person-fill me-1"></i>
+                  {{ log.performed_by.get_full_name|default:log.performed_by.username }}
+                  {% if log.performed_by.role %}
+                    <span class="badge bg-light text-dark border ms-1" style="font-size:.65rem;">
+                      {{ log.performed_by.role }}
+                    </span>
+                  {% endif %}
+                </div>
+
+                <!-- Note -->
+                {% if log.note %}
+                <div class="small bg-white border rounded p-2 mb-2">
+                  <i class="bi bi-chat-left-text text-muted me-1"></i>{{ log.note }}
+                </div>
+                {% endif %}
+
+                <!-- Action badges -->
+                <div class="d-flex flex-wrap gap-1 mb-1">
+                  {% if log.stamped %}
+                    <span class="badge bg-warning text-dark">
+                      <i class="bi bi-patch-check me-1"></i>Stamped
+                    </span>
+                  {% endif %}
+                  {% if log.routed_to %}
+                    <span class="badge bg-info text-dark">
+                      <i class="bi bi-send me-1"></i>→ {{ log.routed_to }}
+                    </span>
+                  {% endif %}
+                  {% if log.recipient_name %}
+                    <span class="badge bg-success">
+                      <i class="bi bi-pen me-1"></i>{{ log.recipient_name }}
+                    </span>
+                  {% endif %}
+                  {% if log.scan_file %}
+                    <a href="{{ log.scan_file.url }}" target="_blank"
+                       class="badge bg-light text-dark border text-decoration-none">
+                      <i class="bi bi-file-earmark-image me-1"></i>View Scan
+                    </a>
+                  {% endif %}
+                </div>
+
+                <!-- Documents attached to this step log (pill links only) -->
+                {% for doc in log.documents.all %}
+                <div class="d-flex align-items-center gap-2 mt-1 pt-1 border-top">
+                  {% if doc.status == 'signed' %}
+                    <i class="bi bi-file-earmark-check-fill text-success small"></i>
+                  {% elif doc.status == 'pending_signature' %}
+                    <i class="bi bi-file-earmark-lock2-fill text-warning small"></i>
+                  {% else %}
+                    <i class="bi bi-file-earmark-fill text-muted small"></i>
+                  {% endif %}
+                  <span class="small text-truncate" style="max-width:120px;"
+                        title="{{ doc.filename }}">{{ doc.filename }}</span>
+                  <span class="badge small
+                    {% if doc.status == 'signed' %}bg-success
+                    {% elif doc.status == 'pending_signature' %}bg-warning text-dark
+                    {% elif doc.status == 'annotation_ready' %}bg-primary
+                    {% else %}bg-secondary{% endif %}"
+                    style="font-size:.6rem;">
+                    {{ doc.get_status_display }}
+                  </span>
+                </div>
+                {% endfor %}
+
               </div>
-              {% endfor %}
             </div>
+            {% endfor %}
+          </div>
           {% else %}
-            <div class="text-center text-muted py-5">
-              <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-              <p class="mb-0 small">No steps recorded yet.</p>
-            </div>
+          <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+            <p class="mb-0 small">No steps recorded yet.</p>
+          </div>
           {% endif %}
         </div>
       </div>
+    </div><!-- /col-lg-6 right -->
+
+  </div><!-- /row 1 -->
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ROW 2 — Documents & E-Signatures (full width)
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="card shadow-sm border-0">
+    <div class="card-header py-3 d-flex justify-content-between align-items-center"
+         style="background:linear-gradient(135deg,#2d3748,#4a5568);">
+      <h5 class="mb-0 text-white">
+        <i class="bi bi-file-earmark-text me-2"></i>Documents & E-Signatures
+      </h5>
+      <a href="{% url 'vehicles:signature_profile' %}" class="btn btn-sm btn-outline-light">
+        <i class="bi bi-pen me-1"></i>My Signature
+      </a>
     </div>
-  </div>
-</div>
+
+    <div class="card-body p-0">
+
+      {% for log in step_logs %}
+        {% for doc in log.documents.all %}
+
+        <!-- Document row -->
+        <div class="px-4 py-3 {% if not forloop.last or not forloop.parentloop.last %}border-bottom{% endif %}">
+          <div class="d-flex align-items-start gap-3">
+
+            <!-- File type icon -->
+            <div class="flex-shrink-0 text-center" style="width:40px;padding-top:2px;">
+              {% if doc.status == 'signed' %}
+                <i class="bi bi-file-earmark-check-fill text-success fs-3"></i>
+              {% elif doc.status == 'pending_signature' %}
+                <i class="bi bi-file-earmark-lock2-fill text-warning fs-3"></i>
+              {% elif doc.status == 'annotation_ready' %}
+                <i class="bi bi-file-earmark-richtext-fill text-primary fs-3"></i>
+              {% else %}
+                <i class="bi bi-file-earmark-fill text-secondary fs-3"></i>
+              {% endif %}
+            </div>
+
+            <!-- Info block -->
+            <div class="flex-grow-1 min-w-0">
+              <div class="fw-semibold mb-1">{{ doc.filename }}</div>
+              <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <span class="badge
+                  {% if doc.status == 'signed' %}bg-success
+                  {% elif doc.status == 'pending_signature' %}bg-warning text-dark
+                  {% elif doc.status == 'annotation_ready' %}bg-primary
+                  {% else %}bg-secondary{% endif %}">
+                  {{ doc.get_status_display }}
+                </span>
+                <span class="badge bg-light text-dark border small">
+                  Step: {{ log.step_name }}
+                </span>
+                <span class="text-muted small">
+                  Uploaded {{ doc.uploaded_at|date:"M d, Y H:i" }}
+                </span>
+              </div>
+
+              <!-- Signature fields -->
+              {% if doc.signature_fields.exists %}
+              <div class="d-flex flex-wrap gap-3">
+                {% for field in doc.signature_fields.all %}
+                <div class="d-flex align-items-center gap-1 small">
+                  {% if field.is_signed %}
+                    <i class="bi bi-patch-check-fill text-success"></i>
+                    <span class="text-success fw-semibold">Signed</span>
+                  {% else %}
+                    <i class="bi bi-hourglass text-warning"></i>
+                    <span class="text-muted">Awaiting</span>
+                  {% endif %}
+                  <span class="text-muted">—</span>
+                  <span>{{ field.label|default:"Signature" }}</span>
+                  {% if field.assigned_to %}
+                    <span class="badge bg-light text-dark border" style="font-size:.65rem;">
+                      {{ field.assigned_to.get_full_name|default:field.assigned_to.username }}
+                    </span>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+              {% else %}
+              <div class="small text-muted fst-italic">
+                No signature fields placed yet.
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex-shrink-0 d-flex flex-column gap-2 align-items-end">
+              {% if doc.status == 'uploaded' or doc.status == 'annotation_ready' %}
+                <a href="{% url 'vehicles:document_annotate' doc.pk %}"
+                   class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-cursor me-1"></i>Place Fields
+                </a>
+              {% endif %}
+
+              {% if doc.status == 'annotation_ready' %}
+                <form method="post"
+                      action="{% url 'vehicles:document_send_for_signing' doc.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-warning text-dark w-100">
+                    <i class="bi bi-send me-1"></i>Send for Signing
+                  </button>
+                </form>
+              {% endif %}
+
+              {% if doc.status == 'pending_signature' %}
+                <a href="{% url 'vehicles:document_sign' doc.pk %}"
+                   class="btn btn-sm btn-primary">
+                  <i class="bi bi-pen me-1"></i>Sign Now
+                </a>
+              {% endif %}
+
+              {% if doc.status == 'signed' %}
+                <a href="{% url 'vehicles:document_sign' doc.pk %}"
+                   class="btn btn-sm btn-outline-success">
+                  <i class="bi bi-eye me-1"></i>View Signed
+                </a>
+              {% endif %}
+
+              <a href="{% url 'vehicles:document_audit' doc.pk %}"
+                 class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-shield-check me-1"></i>Audit Trail
+              </a>
+            </div>
+
+          </div>
+        </div>
+
+        {% empty %}
+        {% endfor %}
+      {% endfor %}
+
+      {# Empty state — check if no documents exist across all logs #}
+      {% with has_any_doc=False %}
+      {% for log in step_logs %}{% for doc in log.documents.all %}
+        {% if not has_any_doc %}{% with has_any_doc=True %}{% endwith %}{% endif %}
+      {% endfor %}{% endfor %}
+      {% endwith %}
+
+      {% comment %}Simpler empty check{% endcomment %}
+      {% if not step_logs %}
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-file-earmark fs-2 d-block mb-2"></i>
+        <div class="small">No documents uploaded yet.</div>
+        <div class="small mt-1 text-muted">
+          Complete a step that requires a scan to attach documents here.
+        </div>
+      </div>
+      {% else %}
+        {# Show empty state only when all logs have no documents #}
+        {% with doc_exists=False %}
+        {% for log in step_logs %}
+          {% for doc in log.documents.all %}{% endfor %}
+        {% endfor %}
+        {% endwith %}
+      {% endif %}
+
+      <!-- Upload button for current step log -->
+      {% if package.current_step and not package.is_complete %}
+      {% for log in step_logs %}
+        {% if log.step_id == package.current_step_id and forloop.last %}
+        <div class="px-4 py-3 border-top bg-light">
+          <a href="{% url 'vehicles:document_upload' log.pk %}"
+             class="btn btn-outline-dark btn-sm">
+            <i class="bi bi-upload me-2"></i>Upload Document for Current Step
+          </a>
+          <span class="text-muted small ms-2">
+            (or upload automatically by completing a Scan step above)
+          </span>
+        </div>
+        {% endif %}
+      {% endfor %}
+      {% endif %}
+
+    </div>
+  </div><!-- /Documents card -->
+
+</div><!-- /container -->
 
 <style>
   .card { border-radius:.75rem; overflow:hidden; }
 
-  /* ── Timeline ── */
-  .timeline-container { padding:1.5rem 1.25rem; }
+  /* Timeline */
+  .timeline-container { padding:1.25rem 1rem; }
   .timeline-item {
     position:relative;
-    padding-left:2.25rem;
-    padding-bottom:1.5rem;
+    padding-left:2rem;
+    padding-bottom:1.25rem;
   }
   .timeline-item-last { padding-bottom:0; }
   .timeline-item::before {
     content:'';
     position:absolute;
-    left:.55rem; top:1.4rem; bottom:-.5rem;
+    left:.5rem; top:1.3rem; bottom:-.4rem;
     width:2px;
     background:linear-gradient(180deg,#e2e8f0 0%,transparent 100%);
   }
   .timeline-item-last::before { display:none; }
   .timeline-marker {
     position:absolute; left:0; top:.25rem;
-    width:1.1rem; height:1.1rem;
+    width:1rem; height:1rem;
     border-radius:50%;
     background:linear-gradient(135deg,#667eea,#764ba2);
-    border:3px solid #fff;
+    border:2px solid #fff;
     box-shadow:0 0 0 2px #e2e8f0;
   }
   .timeline-marker.marker-terminal {
     background:linear-gradient(135deg,#38a169,#2f855a);
   }
   .timeline-content {
-    background:#f8fafc; padding:.875rem; border-radius:.5rem;
+    background:#f8fafc;
+    padding:.75rem;
+    border-radius:.5rem;
     border-left:3px solid #e2e8f0;
-    transition:border-color .2s;
+    transition:border-color .15s;
   }
-  .timeline-item:hover .timeline-content { border-left-color:#667eea; }
+  .timeline-item:hover .timeline-content {
+    border-left-color:#667eea;
+  }
 </style>
 {% endblock %}

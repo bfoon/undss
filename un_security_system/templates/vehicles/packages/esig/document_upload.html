@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Upload Document — {{ package.tracking_code }}{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:640px;">
+  <div class="mb-4">
+    <h4 class="fw-bold mb-1">
+      <i class="bi bi-upload text-primary me-2"></i>Upload Scanned Document
+    </h4>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-0">
+        <li class="breadcrumb-item">
+          <a href="{% url 'vehicles:package_detail' package.pk %}">{{ package.tracking_code }}</a>
+        </li>
+        <li class="breadcrumb-item active">Upload Document</li>
+      </ol>
+    </nav>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3">
+      <h6 class="mb-0 fw-semibold">
+        <i class="bi bi-file-earmark-image me-2 text-primary"></i>
+        Step: {{ step_log.step_name }}
+      </h6>
+    </div>
+    <div class="card-body p-4">
+      <form method="post" enctype="multipart/form-data" novalidate id="uploadForm">
+        {% csrf_token %}
+
+        <div class="upload-zone mb-3" id="uploadZone">
+          <i class="bi bi-cloud-upload fs-1 text-muted d-block mb-2"></i>
+          <div class="fw-semibold mb-1">Drag & drop or click to select</div>
+          <div class="text-muted small mb-3">PNG, JPG, or PDF · Max 10MB</div>
+          {{ form.file }}
+        </div>
+
+        <div id="filePreview" class="d-none mb-3 text-center">
+          <img id="prevImg" src="" style="max-height:200px;max-width:100%;border-radius:.5rem;border:1px solid #e2e8f0;">
+          <div id="prevName" class="small text-muted mt-1"></div>
+        </div>
+
+        {% if form.file.errors %}
+          <div class="text-danger small">{{ form.file.errors.0 }}</div>
+        {% endif %}
+
+        <div class="alert alert-light border small mb-3">
+          <i class="bi bi-info-circle text-primary me-2"></i>
+          A <strong>SHA-256 hash</strong> of the uploaded file will be computed automatically
+          to detect any future tampering.
+        </div>
+
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary px-4" type="submit" id="submitBtn">
+            <i class="bi bi-upload me-2"></i>Upload & Place Signatures
+          </button>
+          <a href="{% url 'vehicles:package_detail' package.pk %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+  .card { border-radius:.75rem; overflow:hidden; }
+  .upload-zone {
+    border:2px dashed #cbd5e0;
+    border-radius:.75rem;
+    padding:2.5rem;
+    text-align:center;
+    cursor:pointer;
+    transition:all .2s;
+    background:#fafafa;
+  }
+  .upload-zone:hover, .upload-zone.over {
+    border-color:#667eea;
+    background:#f5f3ff;
+  }
+  #id_file { opacity:0; position:absolute; top:0;left:0;width:100%;height:100%;cursor:pointer; }
+  .upload-zone { position:relative; }
+</style>
+
+<script>
+const zone   = document.getElementById('uploadZone');
+const input  = document.getElementById('id_file');
+const prev   = document.getElementById('filePreview');
+const prevImg= document.getElementById('prevImg');
+const prevNm = document.getElementById('prevName');
+
+zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('over');
+  input.files = e.dataTransfer.files;
+  showPreview(input.files[0]);
+});
+input.addEventListener('change', () => showPreview(input.files[0]));
+
+function showPreview(file) {
+  if (!file) return;
+  prevNm.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+  if (file.type.startsWith('image/')) {
+    const r = new FileReader();
+    r.onload = e => { prevImg.src = e.target.result; prev.classList.remove('d-none'); };
+    r.readAsDataURL(file);
+  } else {
+    prevImg.src = '';
+    prevImg.alt = 'PDF document';
+    prev.classList.remove('d-none');
+  }
+}
+
+const form = document.getElementById('uploadForm');
+const btn  = document.getElementById('submitBtn');
+form.addEventListener('submit', () => {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading…';
+});
+</script>
+{% endblock %}

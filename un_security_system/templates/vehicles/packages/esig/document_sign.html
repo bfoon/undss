@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Sign Document — {{ doc.filename }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:900px;">
+  <div class="mb-4">
+    <h4 class="fw-bold mb-1"><i class="bi bi-pen text-primary me-2"></i>Sign Document</h4>
+    <div class="text-muted small">
+      <i class="bi bi-box-seam me-1"></i>{{ package.tracking_code }}
+      &nbsp;·&nbsp;{{ doc.filename }}
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for m in messages %}
+    <div class="alert alert-{{ m.tags }} alert-dismissible fade show">
+      {{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="row g-4">
+
+    <!-- Left: document preview with field highlight -->
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-2">
+          <small class="text-muted fw-semibold">Document Preview</small>
+        </div>
+        <div class="card-body p-0 position-relative" id="docWrapper">
+          {% if doc.filename|lower|slice:"-4:" == '.pdf' %}
+            <canvas id="pdfCanvas" style="width:100%;display:block;"></canvas>
+          {% else %}
+            <img src="{{ doc.file.url }}" style="width:100%;display:block;">
+          {% endif %}
+
+          <!-- Show ALL signature fields -->
+          {% for field in doc.signature_fields.all %}
+          <div class="sig-field-marker {% if field.is_signed %}signed{% elif field.assigned_to.pk == request.user.pk %}mine{% endif %}"
+               data-id="{{ field.pk }}"
+               style="left:{{ field.pos_x_pct }}%;top:{{ field.pos_y_pct }}%;
+                      width:{{ field.width_pct }}%;height:{{ field.height_pct }}%;">
+            {% if field.is_signed %}
+              <!-- Render the actual signature -->
+              <img src="{{ field.signature_record.rendered_image }}"
+                   style="max-width:100%;max-height:100%;object-fit:contain;">
+              <div class="sig-signed-stamp">
+                <i class="bi bi-patch-check-fill"></i>
+                {{ field.signature_record.signed_at|date:"M d, Y H:i" }}
+              </div>
+            {% else %}
+              <span class="sig-field-label">
+                {% if field.assigned_to.pk == request.user.pk %}
+                  <i class="bi bi-cursor me-1"></i>Your signature here
+                {% else %}
+                  {{ field.label|default:"Awaiting signature" }}
+                {% endif %}
+              </span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: signing panel -->
+    <div class="col-lg-5">
+
+      <!-- Fields to sign -->
+      {% for field in my_fields %}
+      <div class="card border-0 shadow-sm mb-3" id="signCard_{{ field.pk }}">
+        <div class="card-header py-3" style="background:linear-gradient(135deg,#667eea,#764ba2);">
+          <h6 class="mb-0 text-white">
+            <i class="bi bi-pen me-2"></i>
+            Sign: {{ field.label|default:"Signature Field" }} (Field {{ field.order }})
+          </h6>
+        </div>
+        <div class="card-body p-4">
+
+          <!-- Signature type selector -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Apply Signature As:</label>
+            <div class="btn-group w-100" role="group">
+              <input type="radio" class="btn-check sig-source" name="src_{{ field.pk }}"
+                     id="src_saved_{{ field.pk }}" value="saved" checked>
+              <label class="btn btn-outline-primary btn-sm" for="src_saved_{{ field.pk }}">
+                <i class="bi bi-person-check me-1"></i>Saved
+              </label>
+              <input type="radio" class="btn-check sig-source" name="src_{{ field.pk }}"
+                     id="src_font_{{ field.pk }}" value="font">
+              <label class="btn btn-outline-primary btn-sm" for="src_font_{{ field.pk }}">
+                <i class="bi bi-fonts me-1"></i>Font
+              </label>
+              <input type="radio" class="btn-check sig-source" name="src_{{ field.pk }}"
+                     id="src_draw_{{ field.pk }}" value="draw">
+              <label class="btn btn-outline-primary btn-sm" for="src_draw_{{ field.pk }}">
+                <i class="bi bi-pen-fill me-1"></i>Draw
+              </label>
+            </div>
+          </div>
+
+          <!-- Saved signature -->
+          <div class="sig-panel" id="panel_saved_{{ field.pk }}">
+            {% if active_sig %}
+              <div class="sig-preview-box bg-white border rounded-3 p-3 text-center mb-2"
+                   style="min-height:70px;">
+                {% if active_sig.sig_type == 'upload' and active_sig.image_file %}
+                  <img src="{{ active_sig.image_file.url }}" style="max-height:60px;">
+                {% elif active_sig.sig_type == 'font' %}
+                  <span class="font-sig font-{{ active_sig.font_name }}" style="font-size:2rem;">
+                    {{ active_sig.font_text }}
+                  </span>
+                {% elif active_sig.sig_type == 'draw' and active_sig.drawn_data %}
+                  <img src="{{ active_sig.drawn_data }}" style="max-height:60px;">
+                {% endif %}
+              </div>
+              <div class="small text-muted mb-2">
+                Using your <strong>{{ active_sig.get_sig_type_display }}</strong> signature.
+                <a href="{% url 'vehicles:signature_profile' %}">Change →</a>
+              </div>
+            {% else %}
+              <div class="alert alert-warning small">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                You have no saved signature.
+                <a href="{% url 'vehicles:signature_profile' %}">Set one up →</a>
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Font signature -->
+          <div class="sig-panel d-none" id="panel_font_{{ field.pk }}">
+            <select class="form-select form-select-sm mb-2" id="fontSel_{{ field.pk }}">
+              <option value="dancing">Dancing Script</option>
+              <option value="pacifico">Pacifico</option>
+              <option value="satisfy">Satisfy</option>
+              <option value="great_vibes">Great Vibes</option>
+              <option value="allura">Allura</option>
+            </select>
+            <input type="text" class="form-control form-control-sm mb-2"
+                   id="fontText_{{ field.pk }}"
+                   value="{{ request.user.get_full_name|default:request.user.username }}"
+                   placeholder="Type your name">
+            <div class="sig-preview-box bg-white border rounded-3 p-3 text-center" style="min-height:60px;">
+              <span id="fontPreview_{{ field.pk }}" style="font-size:2rem;"></span>
+            </div>
+          </div>
+
+          <!-- Draw pad -->
+          <div class="sig-panel d-none" id="panel_draw_{{ field.pk }}">
+            <div class="border rounded-3 bg-white position-relative" style="touch-action:none;">
+              <canvas id="drawPad_{{ field.pk }}" width="400" height="120"
+                      style="width:100%;height:120px;display:block;cursor:crosshair;border-radius:.5rem;">
+              </canvas>
+              <button type="button" class="btn btn-sm btn-outline-secondary position-absolute"
+                      style="top:6px;right:6px;" onclick="clearPad('{{ field.pk }}')">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Submit -->
+          <form method="post" id="signForm_{{ field.pk }}" class="mt-3">
+            {% csrf_token %}
+            <input type="hidden" name="field_id" value="{{ field.pk }}">
+            <input type="hidden" name="sig_data" id="sigData_{{ field.pk }}">
+            <button type="button" class="btn btn-success w-100 apply-sig-btn"
+                    data-field="{{ field.pk }}">
+              <i class="bi bi-patch-check me-2"></i>Apply My Signature
+            </button>
+          </form>
+
+          <!-- Legal notice -->
+          <div class="alert alert-light border small mt-3 mb-0 py-2">
+            <i class="bi bi-shield-lock text-primary me-1"></i>
+            By applying your signature you confirm your identity and consent to sign this document.
+            A tamper-evident hash will be recorded.
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if not my_fields %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5 text-muted">
+          <i class="bi bi-check-all fs-2 d-block mb-2 text-success"></i>
+          All your signature fields are complete.
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Audit link -->
+      <div class="text-end mt-2">
+        <a href="{% url 'vehicles:document_audit' doc.pk %}" class="small text-muted">
+          <i class="bi bi-shield-check me-1"></i>View signature audit trail
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Pacifico&family=Satisfy&family=Great+Vibes&family=Allura&display=swap" rel="stylesheet">
+
+<style>
+  .font-dancing    { font-family:'Dancing Script',cursive; }
+  .font-pacifico   { font-family:'Pacifico',cursive; }
+  .font-satisfy    { font-family:'Satisfy',cursive; }
+  .font-great_vibes{ font-family:'Great Vibes',cursive; }
+  .font-allura     { font-family:'Allura',cursive; }
+
+  .card { border-radius:.75rem; overflow:hidden; }
+
+  .sig-field-marker {
+    position:absolute;
+    border:2px dashed #cbd5e0;
+    border-radius:4px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(226,232,240,.3);
+  }
+  .sig-field-marker.mine {
+    border-color:#667eea;
+    background:rgba(102,126,234,.1);
+    animation:pulse 2s infinite;
+  }
+  .sig-field-marker.signed {
+    border:2px solid #38a169;
+    background:rgba(56,161,105,.05);
+  }
+  .sig-field-label { font-size:.72rem; color:#4a5568; font-weight:600; text-align:center; }
+  .sig-signed-stamp {
+    position:absolute; bottom:2px; right:4px;
+    font-size:.6rem; color:#38a169; font-weight:600;
+  }
+  .sig-preview-box { border-radius:.5rem; }
+  @keyframes pulse {
+    0%,100% { box-shadow:0 0 0 0 rgba(102,126,234,.4); }
+    50%      { box-shadow:0 0 0 6px rgba(102,126,234,0); }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script>
+const FONT_MAP = {
+  dancing:'\'Dancing Script\',cursive',
+  pacifico:'\'Pacifico\',cursive',
+  satisfy:'\'Satisfy\',cursive',
+  great_vibes:'\'Great Vibes\',cursive',
+  allura:'\'Allura\',cursive',
+};
+const pads = {};
+
+// Init draw pads and font previews for each field
+{% for field in my_fields %}
+(function(fid) {
+  // Section switching
+  document.querySelectorAll(`input[name="src_${fid}"]`).forEach(radio => {
+    radio.addEventListener('change', function() {
+      document.querySelectorAll(`#signCard_${fid} .sig-panel`).forEach(p => p.classList.add('d-none'));
+      document.getElementById(`panel_${this.value}_${fid}`).classList.remove('d-none');
+    });
+  });
+
+  // Font preview
+  function updateFont() {
+    const key  = document.getElementById(`fontSel_${fid}`).value;
+    const text = document.getElementById(`fontText_${fid}`).value || '{{ request.user.get_full_name|default:request.user.username }}';
+    const el   = document.getElementById(`fontPreview_${fid}`);
+    el.style.fontFamily = FONT_MAP[key];
+    el.textContent = text;
+  }
+  document.getElementById(`fontSel_${fid}`)?.addEventListener('change', updateFont);
+  document.getElementById(`fontText_${fid}`)?.addEventListener('input',  updateFont);
+  updateFont();
+
+  // Signature pad
+  const canvas = document.getElementById(`drawPad_${fid}`);
+  if (canvas) {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width  = canvas.offsetWidth  * ratio;
+    canvas.height = canvas.offsetHeight * ratio;
+    canvas.getContext('2d').scale(ratio, ratio);
+    pads[fid] = new SignaturePad(canvas, {
+      backgroundColor: 'rgba(255,255,255,0)',
+      penColor: '#1a1a2e', minWidth: 1.5, maxWidth: 3,
+    });
+  }
+}('{{ field.pk }}'));
+{% endfor %}
+
+function clearPad(fid) { pads[fid]?.clear(); }
+
+// Render font signature to canvas → base64
+function fontToBase64(fid) {
+  const key    = document.getElementById(`fontSel_${fid}`).value;
+  const text   = document.getElementById(`fontText_${fid}`).value || '{{ request.user.get_full_name|default:request.user.username }}';
+  const c      = document.createElement('canvas');
+  c.width = 400; c.height = 120;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.font      = `72px ${FONT_MAP[key]}`;
+  ctx.fillStyle = '#1a1a2e';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 200, 60);
+  return c.toDataURL('image/png');
+}
+
+// Apply signature button
+document.querySelectorAll('.apply-sig-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const fid     = this.dataset.field;
+    const source  = document.querySelector(`input[name="src_${fid}"]:checked`)?.value;
+    let sigData   = '';
+
+    if (source === 'saved') {
+      {% if active_sig %}
+        {% if active_sig.sig_type == 'draw' %}
+          sigData = '{{ active_sig.drawn_data }}';
+        {% elif active_sig.sig_type == 'upload' %}
+          // Fetch image as base64 via a hidden canvas
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.src = '{{ active_sig.image_file.url }}';
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.width; c.height = img.height;
+            c.getContext('2d').drawImage(img, 0, 0);
+            document.getElementById(`sigData_${fid}`).value = c.toDataURL('image/png');
+            document.getElementById(`signForm_${fid}`).submit();
+          };
+          return;
+        {% elif active_sig.sig_type == 'font' %}
+          // Re-render from saved font/text
+          const c = document.createElement('canvas');
+          c.width = 400; c.height = 120;
+          const ctx = c.getContext('2d');
+          ctx.font = '72px {{ active_sig.font_name }}';
+          ctx.fillStyle = '#1a1a2e';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('{{ active_sig.font_text|default:request.user.get_full_name }}', 200, 60);
+          sigData = c.toDataURL('image/png');
+        {% endif %}
+      {% else %}
+        alert('No saved signature found. Please choose Font or Draw.');
+        return;
+      {% endif %}
+    } else if (source === 'font') {
+      sigData = fontToBase64(fid);
+    } else if (source === 'draw') {
+      if (!pads[fid] || pads[fid].isEmpty()) {
+        alert('Please draw your signature first.');
+        return;
+      }
+      sigData = pads[fid].toDataURL('image/png');
+    }
+
+    if (!sigData) { alert('No signature data. Please try again.'); return; }
+    document.getElementById(`sigData_${fid}`).value = sigData;
+    document.getElementById(`signForm_${fid}`).submit();
+  });
+});
+</script>
+{% endblock %}
