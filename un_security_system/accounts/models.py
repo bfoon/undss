@@ -486,6 +486,7 @@ class Room(models.Model):
             return f"{hours}h"
         return f"{minutes}m"
 
+
 class RoomBookingSeries(models.Model):
     FREQ_CHOICES = (
         ("daily", "Daily"),
@@ -495,92 +496,48 @@ class RoomBookingSeries(models.Model):
     )
 
     room = models.ForeignKey("Room", on_delete=models.CASCADE, related_name="booking_series")
-    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="room_booking_series")
-
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                     related_name="room_booking_series")
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-
     start_date = models.DateField()
-    end_date = models.DateField(null=True, blank=True)  # optional "until"
-
+    end_date = models.DateField(null=True, blank=True)
     start_time = models.TimeField()
     end_time = models.TimeField()
-
     frequency = models.CharField(max_length=10, choices=FREQ_CHOICES, null=True, blank=True)
-    interval = models.PositiveIntegerField(default=1)  # every 1 week, every 2 weeks, etc.
-
-    # for weekly recurrence (Mon=0 ... Sun=6), store CSV: "0,2,4"
+    interval = models.PositiveIntegerField(default=1)
     weekdays_csv = models.CharField(max_length=50, blank=True, default="")
 
-    # for monthly recurrence: either 'day' (fixed day-of-month) or 'weekday' (nth weekday)
     MONTHLY_TYPE_CHOICES = (
         ("day", "On a specific day of the month"),
         ("weekday", "On a specific weekday of the month"),
     )
-    monthly_type = models.CharField(
-        max_length=10,
-        choices=MONTHLY_TYPE_CHOICES,
-        default="day",
-        blank=True,
-        help_text="How the monthly recurrence is determined",
-    )
-    monthly_week = models.IntegerField(
-        null=True,
-        blank=True,
-        help_text="1=first, 2=second, 3=third, 4=fourth, -1=last (used when monthly_type=weekday)",
-    )
-    monthly_weekday = models.IntegerField(
-        null=True,
-        blank=True,
-        help_text="0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun (used when monthly_type=weekday)",
-    )
+    monthly_type = models.CharField(max_length=10, choices=MONTHLY_TYPE_CHOICES, default="day", blank=True)
+    monthly_week = models.IntegerField(null=True, blank=True)
+    monthly_weekday = models.IntegerField(null=True, blank=True)
 
-    # NEW: Approval fields for the series
     STATUS_CHOICES = (
         ("pending", "Pending approval"),
         ("approved", "Approved"),
         ("rejected", "Rejected"),
         ("cancelled", "Cancelled"),
     )
-
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default="pending",
-        help_text="Approval status for the entire series"
-    )
-
-    approved_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        related_name="approved_room_series",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="User who approved/rejected this series"
-    )
-
-    approved_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the series was approved/rejected"
-    )
-
-    rejection_reason = models.TextField(
-        blank=True,
-        help_text="Reason for rejection (if applicable)"
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="approved_room_series",
+                                    on_delete=models.SET_NULL, null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
 
     ICT_SUPPORT_CHOICES = (
-        ("none",   "No ICT support needed"),
-        ("setup",  "Before meeting — Setup / AV configuration"),
+        ("none", "No ICT support needed"),
+        ("setup", "Before meeting — Setup / AV configuration"),
         ("during", "During meeting — Live technical support"),
     )
-    ict_support = models.CharField(
-        max_length=10,
-        choices=ICT_SUPPORT_CHOICES,
-        default="none",
-        help_text="Whether ICT support is needed and when",
-    )
+    ict_support = models.CharField(max_length=10, choices=ICT_SUPPORT_CHOICES, default="none")
+
+    attendee_emails = models.TextField(blank=True, help_text="Comma-separated list of guest emails to invite.")
+    virtual_meeting_link = models.URLField(blank=True,
+                                           help_text="Optional link for virtual attendance (e.g., Teams, Zoom).")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -628,9 +585,6 @@ class RoomBookingSeries(models.Model):
 
 
 class RoomBooking(models.Model):
-    """
-    A booking request for a room (with approval workflow).
-    """
     STATUS_CHOICES = (
         ("pending", "Pending approval"),
         ("approved", "Approved"),
@@ -638,59 +592,44 @@ class RoomBooking(models.Model):
         ("cancelled", "Cancelled"),
     )
 
-    room = models.ForeignKey(
-        Room,
-        related_name="bookings",
-        on_delete=models.CASCADE,
-    )
+    room = models.ForeignKey("Room", related_name="bookings", on_delete=models.CASCADE)
     title = models.CharField(max_length=200, help_text="Meeting title / purpose")
     description = models.TextField(blank=True)
-
     date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default="pending",
-    )
+    agenda_document = models.FileField(upload_to='meeting_agendas/', null=True, blank=True, help_text="Optional agenda for the meeting.")
+    registration_code = models.UUIDField(null=True, editable=False, help_text="Unique code for the public registration link.")
 
-    requested_by = models.ForeignKey(
-        User,
-        related_name="room_bookings",
-        on_delete=models.CASCADE,
-    )
-    approved_by = models.ForeignKey(
-        User,
-        related_name="approved_room_bookings",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
+    requested_amenities = models.ManyToManyField(RoomAmenity, related_name="requested_in_bookings", blank=True,
+                                                 help_text="Amenities the user requested.")
+    approved_amenities = models.ManyToManyField(RoomAmenity, related_name="approved_for_bookings", blank=True, help_text="Amenities confirmed by the approver.")
+
+    requested_by = models.ForeignKey(User, related_name="room_bookings", on_delete=models.CASCADE)
+    approved_by = models.ForeignKey(User, related_name="approved_room_bookings", on_delete=models.SET_NULL, null=True,
+                                    blank=True)
     approved_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True)
-    series = models.ForeignKey(
-        "RoomBookingSeries",
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name="occurrences",
-    )
+    series = models.ForeignKey("RoomBookingSeries", on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="occurrences")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     ICT_SUPPORT_CHOICES = (
-        ("none",   "No ICT support needed"),
-        ("setup",  "Before meeting — Setup / AV configuration"),
+        ("none", "No ICT support needed"),
+        ("setup", "Before meeting — Setup / AV configuration"),
         ("during", "During meeting — Live technical support"),
     )
-    ict_support = models.CharField(
-        max_length=10,
-        choices=ICT_SUPPORT_CHOICES,
-        default="none",
-        help_text="Whether ICT support is needed and when",
-    )
+    ict_support = models.CharField(max_length=10, choices=ICT_SUPPORT_CHOICES, default="none")
+
+    selected_amenities = models.ManyToManyField("RoomAmenity", blank=True, related_name="bookings")
+    attendee_emails = models.TextField(blank=True, help_text="Comma-separated list of guest emails to invite.")
+    virtual_meeting_link = models.URLField(blank=True,
+                                           help_text="Optional link for virtual attendance (e.g., Teams, Zoom).")
+    survey_sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-date", "start_time"]
@@ -747,6 +686,21 @@ class RoomBooking(models.Model):
         self.approved_at = timezone.now()
         self.save(update_fields=["status", "approved_by", "rejection_reason", "approved_at"])
 
+
+class MeetingAttendee(models.Model):
+    """ Stores information about someone who registered for a meeting. """
+    booking = models.ForeignKey(RoomBooking, on_delete=models.CASCADE, related_name="attendees")
+    name = models.CharField(max_length=200)
+    email = models.EmailField()
+    organization = models.CharField(max_length=200, blank=True)
+    registered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['registered_at']
+        unique_together = ('booking', 'email') # Prevent the same email from registering twice for one meeting
+
+    def __str__(self):
+        return f"{self.name} ({self.email}) for Booking #{self.booking.id}"
 
 class RoomApprover(models.Model):
     room = models.ForeignKey(

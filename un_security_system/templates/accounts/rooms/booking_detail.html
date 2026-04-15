@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Booking Details: {{ booking.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Main Booking Info -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">{{ booking.title }}</h4>
+                </div>
+                <div class="card-body">
+                    <p><strong>Room:</strong> {{ booking.room.name }}</p>
+                    <p><strong>Date:</strong> {{ booking.date|date:"l, F j, Y" }}</p>
+                    <p><strong>Time:</strong> {{ booking.start_time|time:"H:i" }} - {{ booking.end_time|time:"H:i" }}</p>
+                    {% if booking.description %}<p><strong>Description:</strong> {{ booking.description }}</p>{% endif %}
+                    {% if booking.virtual_meeting_link %}<p><strong>Virtual Link:</strong> <a href="{{ booking.virtual_meeting_link }}" target="_blank">{{ booking.virtual_meeting_link }}</a></p>{% endif %}
+                    {% if booking.agenda_document %}<p><strong>Agenda:</strong> <a href="{{ booking.agenda_document.url }}" target="_blank">Download Agenda</a></p>{% endif %}
+                </div>
+            </div>
+
+            <!-- Attendee List -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Registered Attendees ({{ booking.attendees.count }})</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for attendee in booking.attendees.all %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ attendee.name }}</strong> ({{ attendee.email }})
+                                {% if attendee.organization %}<br><small class="text-muted">{{ attendee.organization }}</small>{% endif %}
+                            </div>
+                            <small class="text-muted">{{ attendee.registered_at|timesince }} ago</small>
+                        </li>
+                    {% empty %}
+                        <li class="list-group-item text-muted">No attendees have registered yet.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Registration Link & QR Code -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Attendee Registration</h5>
+                </div>
+                <div class="card-body text-center">
+                    <p>Share this QR code or link with attendees.</p>
+                    <img src="{% url 'accounts:meeting_qr_code' booking.registration_code %}" alt="Meeting Registration QR Code" class="img-fluid mb-3">
+                    <div class="input-group">
+                        <input type="text" class="form-control" value="{{ registration_link }}" id="registrationLink" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="copyLink()">Copy</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyLink() {
+    var copyText = document.getElementById("registrationLink");
+    copyText.select();
+    copyText.setSelectionRange(0, 99999); // For mobile devices
+    document.execCommand("copy");
+    alert("Registration link copied to clipboard!");
+}
+</script>
+{% endblock %}
+

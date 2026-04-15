@@ -111,9 +111,6 @@ def is_ict_focal_point(user):
 
 
 def generate_booking_ics(booking):
-    """
-    Generate ICS file for a room booking
-    """
     cal = Calendar()
     cal.add("prodid", "-//UNPASS//Room Booking//EN")
     cal.add("version", "2.0")
@@ -121,48 +118,33 @@ def generate_booking_ics(booking):
 
     event = Event()
     if booking.series:
-        event.add("rrule", {
-            "freq": booking.series.frequency.upper(),
-            "interval": booking.series.interval,
-        })
-    # Unique identifier
-    uid = f"{booking.id}-{uuid.uuid4()}@unpass"
-    event.add("uid", uid)
+        event.add("rrule", {"freq": booking.series.frequency.upper(), "interval": booking.series.interval})
 
-    # Title
+    event.add("uid", f"{booking.id}-{uuid.uuid4()}@unpass")
     event.add("summary", f"{booking.title} - {booking.room.name}")
 
-    # Description
-    event.add(
-        "description",
-            f"""
-    Room: {booking.room.name}
-    Requested By: {booking.requested_by.get_full_name()}
-    Purpose: {booking.description}
-    """,
-        )
+    description = f"Room: {booking.room.name}\nRequested By: {booking.requested_by.get_full_name()}\n"
+    if booking.description:
+        description += f"Purpose: {booking.description}\n"
+    if booking.virtual_meeting_link:
+        description += f"\n--- VIRTUAL MEETING LINK ---\n{booking.virtual_meeting_link}"
+    event.add("description", description)
 
-    # Start & End datetime
-    start_dt = datetime.combine(booking.date, booking.start_time)
-    end_dt = datetime.combine(booking.date, booking.end_time)
-
-    event.add("dtstart", timezone.make_aware(start_dt))
-    event.add("dtend", timezone.make_aware(end_dt))
-
-    # Location
+    start_dt = timezone.make_aware(datetime.combine(booking.date, booking.start_time))
+    end_dt = timezone.make_aware(datetime.combine(booking.date, booking.end_time))
+    event.add("dtstart", start_dt)
+    event.add("dtend", end_dt)
     event.add("location", booking.room.location or booking.room.name)
-
-    # Organizer (service email)
     event.add("organizer", f"MAILTO:{settings.DEFAULT_FROM_EMAIL}")
 
-    # Attendees
     if booking.room.resource_email:
-        event.add("attendee", f"MAILTO:{booking.room.resource_email}")
+        event.add("attendee", f"MAILTO:{booking.room.resource_email}", parameters={"ROLE": "CHAIR"})
+    event.add("attendee", f"MAILTO:{booking.requested_by.email}", parameters={"ROLE": "REQ-PARTICIPANT"})
 
-    event.add("attendee", f"MAILTO:{booking.requested_by.email}")
+    if booking.attendee_emails:
+        guest_emails = [email.strip() for email in booking.attendee_emails.split(',') if email.strip()]
+        for email in guest_emails:
+            event.add("attendee", f"MAILTO:{email}", parameters={"ROLE": "OPT-PARTICIPANT"})
 
     cal.add_component(event)
-
-
-
     return cal.to_ical()

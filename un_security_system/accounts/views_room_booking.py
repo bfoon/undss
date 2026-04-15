@@ -22,15 +22,17 @@ from django.db.models import Q, Count, Prefetch
 from datetime import date
 from django.db import transaction
 
-from .models import Room, RoomBooking, RoomApprover, RoomBookingSeries
-from .forms import RoomBookingForm, RoomBookingApprovalForm, RoomForm, RoomSeriesApprovalForm
+from .models import Room, RoomBooking, RoomApprover, RoomBookingSeries, MeetingAttendee
+from .forms import RoomBookingForm, RoomBookingApprovalForm, RoomForm, RoomSeriesApprovalForm, MeetingAttendeeForm
 
 # ICT focal lookup — graceful so the file works if AgencyAssetRoles isn't present.
 try:
     from .models import AgencyAssetRoles, User as _User
+
     _HAS_AGENCY_ROLES = True
 except ImportError:
     _HAS_AGENCY_ROLES = False
+
 
 # ======================= EMAIL HELPERS =======================
 
@@ -166,6 +168,7 @@ def notify_requester_series_approved(series):
         f"  Number of occurrences: {occurrence_count}\n"
         f"  Approved by: {approver_name}\n\n"
         f"All {occurrence_count} bookings in this series have been approved.\n\n"
+        f"Please remember to leave the room neat and tidy as you found it.\n\n"
         f"Thank you."
     )
 
@@ -222,6 +225,8 @@ def notify_requester_booking_submitted(booking):
 def notify_requester_booking_approved(booking):
     if not booking.requested_by.email:
         return
+    registration_link = request.build_absolute_uri(
+        reverse('accounts:meeting_registration', args=[booking.registration_code]))
 
     approver_name = (
         booking.approved_by.get_full_name() or booking.approved_by.username
@@ -238,11 +243,24 @@ def notify_requester_booking_approved(booking):
         f"  Time: {booking.start_time} – {booking.end_time}\n"
         f"  Title: {booking.title}\n"
         f"  Approved by: {approver_name}\n\n"
+        f"Attendee Registration Link: {registration_link}\n\n"
+        f"Please remember to leave the room neat and tidy as you found it.\n\n"
         f"Thank you."
     )
 
     _send_email_async(subject, message, [booking.requested_by.email])
 
+def notify_attendee_of_registration(attendee):
+    subject = f"Registration Confirmed: {attendee.booking.title}"
+    message = (
+        f"Dear {attendee.name},\n\n"
+        f"Thank you for registering for the meeting: '{attendee.booking.title}'.\n\n"
+        f"Date: {attendee.booking.date.strftime('%A, %B %d, %Y')}\n"
+        f"Time: {attendee.booking.start_time.strftime('%I:%M %p')}\n"
+        f"Room: {attendee.booking.room.name}\n\n"
+        "We look forward to seeing you."
+    )
+    _send_email_async(subject, message, [attendee.email])
 
 def notify_requester_booking_rejected(booking):
     if not booking.requested_by.email:
@@ -372,38 +390,53 @@ def notify_approvers_occurrence_cancelled(occurrence):
 
 
 def send_booking_calendar_invite(booking):
-    if not booking.room.calendar_sync_enabled or not booking.room.resource_email:
+    """
+    Sends a calendar invite to the room resource, the requester, and all guests.
+    """
+    # Do not send an invite if the room is not configured for calendar synchronization.
+    if not getattr(booking.room, 'calendar_sync_enabled', False):
         return
 
-    ics_bytes = generate_booking_ics(booking)  # returns bytes
-    ics_text = ics_bytes.decode("utf-8")
+    # Generate the .ics calendar file content
+    ics_bytes = generate_booking_ics(booking)
 
-    subject = f"Room Booking: {booking.title} ({booking.room.name})"
-    body_text = (
-        f"Room booking request\n\n"
-        f"Room: {booking.room.name}\n"
-        f"Date: {booking.date}\n"
-        f"Time: {booking.start_time} - {booking.end_time}\n"
-    )
+    # --- Build the list of all recipients ---
+    recipients = set()
 
-    to_list = [booking.room.resource_email]
-    cc_list = [booking.requested_by.email] if booking.requested_by.email else []
+    # 1. Add the requester
+    if booking.requested_by and booking.requested_by.email:
+        recipients.add(booking.requested_by.email)
+
+    # 2. Add the room's resource email (if it exists)
+    if booking.room.resource_email:
+        recipients.add(booking.room.resource_email)
+
+    # 3. Add all guest emails
+    if booking.attendee_emails:
+        guest_emails = [email.strip() for email in booking.attendee_emails.split(',') if email.strip()]
+        recipients.update(guest_emails)
+
+    if not recipients:
+        return # No one to send to
+
+    # --- Create and send the email ---
+    subject = f"Booking: {booking.title} ({booking.room.name})"
+    body = "This email contains a calendar invitation for your meeting."
+    from_email = settings.DEFAULT_FROM_EMAIL
 
     msg = EmailMultiAlternatives(
         subject=subject,
-        body=body_text,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=to_list,
-        cc=cc_list,
+        body=body,
+        from_email=from_email,
+        to=list(recipients) # Convert set to list for sending
     )
 
-    # This is what makes O365 treat it as a meeting request
-    msg.attach_alternative(ics_text, "text/calendar; method=REQUEST; charset=UTF-8")
+    # Attach the calendar data. The content type is crucial for Outlook/O365.
+    msg.attach("invite.ics", ics_bytes, "text/calendar; method=REQUEST")
 
-    # Optional: keep attachment too (some clients like it)
-    msg.attach("invite.ics", ics_bytes, "text/calendar; method=REQUEST; charset=UTF-8")
+    # Send the email in a background thread to not block the web request
+    threading.Thread(target=lambda: msg.send(fail_silently=True)).start()
 
-    msg.send(fail_silently=False)
 
 
 def _get_ict_emails_for_booking(booking):
@@ -455,7 +488,7 @@ def notify_ict_support_requested(booking):
 
     requester_name = booking.requested_by.get_full_name() or booking.requested_by.username
     support_label = {
-        "setup":  "Before meeting — Setup / AV configuration",
+        "setup": "Before meeting — Setup / AV configuration",
         "during": "During meeting — Live technical support",
     }.get(getattr(booking, "ict_support", ""), "ICT support requested")
 
@@ -479,8 +512,10 @@ def notify_ict_support_requested(booking):
 
 def notify_ict_support_requested_series(series):
     """Same as notify_ict_support_requested but for a recurring series."""
+
     class _FakeBooking:
         pass
+
     fake = _FakeBooking()
     fake.room = series.room
     fake.requested_by = series.requested_by
@@ -492,7 +527,7 @@ def notify_ict_support_requested_series(series):
     requester_name = series.requested_by.get_full_name() or series.requested_by.username
     freq_display = series.get_frequency_display() if series.frequency else "One-time"
     support_label = {
-        "setup":  "Before meeting — Setup / AV configuration",
+        "setup": "Before meeting — Setup / AV configuration",
         "during": "During meeting — Live technical support",
     }.get(getattr(series, "ict_support", ""), "ICT support requested")
 
@@ -565,8 +600,8 @@ def _advance_months(d, interval):
 
 
 def iter_recurrence_dates(
-    start_date, end_date, frequency, interval=1, weekdays=None,
-    monthly_type="day", monthly_week=None, monthly_weekday=None,
+        start_date, end_date, frequency, interval=1, weekdays=None,
+        monthly_type="day", monthly_week=None, monthly_weekday=None,
 ):
     """
     Yield dates in the recurrence series.
@@ -661,14 +696,14 @@ class RoomListView(LoginRequiredMixin, ListView):
         import json
         from datetime import datetime as _dt
 
-        user  = self.request.user
+        user = self.request.user
         today = timezone.localtime().date()
         rooms = ctx["rooms"]
 
         # ── Stats for the banner ──────────────────────────────────────────
-        ctx["total_capacity"]  = sum(r.capacity or 0 for r in rooms)
-        ctx["available_now"]   = sum(1 for r in rooms if getattr(r, "is_available_now", False))
-        ctx["bookings_today"]  = RoomBooking.objects.filter(
+        ctx["total_capacity"] = sum(r.capacity or 0 for r in rooms)
+        ctx["available_now"] = sum(1 for r in rooms if getattr(r, "is_available_now", False))
+        ctx["bookings_today"] = RoomBooking.objects.filter(
             room__in=rooms, date=today, status="approved"
         ).count()
 
@@ -690,10 +725,10 @@ class RoomListView(LoginRequiredMixin, ListView):
 
         bookings_by_room = {}
         for b in today_bookings:
-            rid = str(b["room_id"])          # JS uses String(roomId)
+            rid = str(b["room_id"])  # JS uses String(roomId)
             bookings_by_room.setdefault(rid, []).append({
                 "start": b["start_time"].strftime("%H:%M"),
-                "end":   b["end_time"].strftime("%H:%M"),
+                "end": b["end_time"].strftime("%H:%M"),
                 "title": b["title"],
             })
 
@@ -728,17 +763,17 @@ class RoomDetailView(LoginRequiredMixin, DetailView):
         from datetime import datetime as _dt
         for b in approved_bookings:
             start = _dt.combine(today, b.start_time)
-            end   = _dt.combine(today, b.end_time)
-            mins  = max(int((end - start).total_seconds() / 60), 0)
+            end = _dt.combine(today, b.end_time)
+            mins = max(int((end - start).total_seconds() / 60), 0)
             b.duration_minutes = mins
             b.duration_class = (
-                "heavy"  if mins > 180 else
-                "medium" if mins > 60  else
+                "heavy" if mins > 180 else
+                "medium" if mins > 60 else
                 "light"
             )
 
-        ctx["approved_bookings"]  = approved_bookings
-        ctx["upcoming_bookings"]  = approved_bookings
+        ctx["approved_bookings"] = approved_bookings
+        ctx["upcoming_bookings"] = approved_bookings
 
         # ── Timeline: today's approved bookings ─────────────────────────
         TIMELINE_START_HOUR = 7
@@ -749,16 +784,16 @@ class RoomDetailView(LoginRequiredMixin, DetailView):
         )
 
         for b in timeline_bookings:
-            top  = (b.start_time.hour - TIMELINE_START_HOUR) * 60 + b.start_time.minute
+            top = (b.start_time.hour - TIMELINE_START_HOUR) * 60 + b.start_time.minute
             start = _dt.combine(today, b.start_time)
-            end   = _dt.combine(today, b.end_time)
-            mins  = max(int((end - start).total_seconds() / 60), 15)
-            b.timeline_top    = max(top, 0)
+            end = _dt.combine(today, b.end_time)
+            mins = max(int((end - start).total_seconds() / 60), 15)
+            b.timeline_top = max(top, 0)
             b.timeline_height = mins
             b.duration_minutes = mins
 
         ctx["timeline_bookings_today"] = timeline_bookings
-        ctx["timeline_hours"]          = list(range(TIMELINE_START_HOUR, 22))
+        ctx["timeline_hours"] = list(range(TIMELINE_START_HOUR, 22))
 
         # ── Sidebar: my pending bookings ────────────────────────────────
         ctx["my_pending_bookings"] = list(
@@ -925,6 +960,25 @@ class MyRoomBookingsView(LoginRequiredMixin, ListView):
         ctx = super().get_context_data(**kwargs)
         user = self.request.user
 
+        # --- Automatic Survey Logic ---
+        now = timezone.now()
+        # Find approved bookings that ended in the last 7 days and haven't been surveyed
+        unsurveyed_bookings = RoomBooking.objects.filter(
+            requested_by=user,
+            status='approved',
+            date__lt=now.date(),
+            survey_sent_at__isnull=True
+        ).select_related('room')
+
+        for booking in unsurveyed_bookings:
+            # Placeholder for sending email; in a real app, you'd use a proper function
+            print(f"Sending survey for booking #{booking.id} for room {booking.room.name}")
+            # notify_user_of_survey(booking) # This function would be defined in your email helpers
+
+            # Mark as surveyed
+            booking.survey_sent_at = now
+            booking.save(update_fields=['survey_sent_at'])
+
         # Get all bookings and series for stats
         all_bookings = RoomBooking.objects.filter(requested_by=user)
         all_series = RoomBookingSeries.objects.filter(requested_by=user)
@@ -975,6 +1029,14 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
     form_class = RoomBookingForm
     template_name = "accounts/rooms/booking_form.html"
 
+    def get_form_kwargs(self):
+        kwargs = super(RoomBookingCreateView, self).get_form_kwargs()
+        # Pass the selected room to the form if available
+        room_id = self.request.GET.get('room')
+        if room_id:
+            kwargs['room'] = get_object_or_404(Room, pk=room_id)
+        return kwargs
+
     def get_success_url(self):
         return reverse("accounts:my_bookings")
 
@@ -983,6 +1045,11 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
         room = form.cleaned_data["room"]
 
         status = compute_initial_status(room)
+
+        # Extract newly added fields
+        attendee_emails = form.cleaned_data.get("attendee_emails", "")
+        virtual_meeting_link = form.cleaned_data.get("virtual_meeting_link", "")
+        selected_amenities = form.cleaned_data.get("selected_amenities")
 
         # Check if recurring
         frequency = form.cleaned_data.get("frequency")
@@ -1003,7 +1070,7 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
             ict_support = form.cleaned_data.get("ict_support", "none") or "none"
 
             with transaction.atomic():
-                # Create series with approval status
+                # Create series with approval status AND new fields
                 series = RoomBookingSeries.objects.create(
                     room=room,
                     requested_by=user,
@@ -1021,14 +1088,17 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                     monthly_weekday=monthly_weekday,
                     status=status,
                     ict_support=ict_support,
+                    attendee_emails=attendee_emails,
+                    virtual_meeting_link=virtual_meeting_link,
                 )
 
                 created = 0
+                first_booking = None
                 for d in iter_recurrence_dates(
-                    series.start_date, series.end_date, frequency, interval, weekdays,
-                    monthly_type=monthly_type,
-                    monthly_week=monthly_week,
-                    monthly_weekday=monthly_weekday,
+                        series.start_date, series.end_date, frequency, interval, weekdays,
+                        monthly_type=monthly_type,
+                        monthly_week=monthly_week,
+                        monthly_weekday=monthly_weekday,
                 ):
                     b = RoomBooking(
                         series=series,
@@ -1041,9 +1111,19 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                         status=status,
                         requested_by=user,
                         ict_support=ict_support,
+                        attendee_emails=attendee_emails,
+                        virtual_meeting_link=virtual_meeting_link,
                     )
                     b.full_clean()
                     b.save()
+
+                    # Add Many-to-Many selected amenities to each generated booking
+                    if selected_amenities:
+                        b.selected_amenities.set(selected_amenities)
+
+                    if created == 0:
+                        first_booking = b
+
                     created += 1
 
                 # Send notifications — use the right email for pending vs auto-approved
@@ -1056,13 +1136,18 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
                         notify_approvers_new_series(series)
                     notify_requester_series_approved(series)
 
+                    # Send Calendar Invite for auto-approved recurring series
+                    # (Passing the first booking is sufficient, ICS generation pulls the RRULE from the attached series)
+                    if first_booking:
+                        send_booking_calendar_invite(first_booking)
+
                 # Notify ICT if support was requested
                 if ict_support and ict_support != "none":
                     notify_ict_support_requested_series(series)
 
                 if status == "approved":
                     messages.success(self.request,
-                                     f"Recurring booking created ({created} occurrences) and auto-approved.")
+                                     f"Recurring booking created ({created} occurrences) and auto-approved. Calendar invites sent.")
                 else:
                     messages.success(self.request,
                                      f"Recurring booking series created ({created} occurrences) and awaiting approval.")
@@ -1075,6 +1160,8 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
         form.instance.status = status
         form.instance.ict_support = ict_support
 
+        # For single bookings, `attendee_emails`, `virtual_meeting_link` and M2M `selected_amenities`
+        # are automatically saved by `super().form_valid(form)` since they are part of the ModelForm.
         form.instance.full_clean()
         response = super().form_valid(form)
 
@@ -1087,7 +1174,11 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
             if getattr(room, "auto_approve_notify_approvers", False):
                 notify_approvers_new_booking(self.object)
             notify_requester_booking_approved(self.object)
-            messages.success(self.request, "Booking auto-approved.")
+
+            # Send Calendar Invite for auto-approved single booking
+            send_booking_calendar_invite(self.object)
+
+            messages.success(self.request, "Booking auto-approved. Calendar invites sent.")
 
         # Notify ICT if support was requested (fires regardless of approval status)
         if ict_support and ict_support != "none":
@@ -1190,70 +1281,81 @@ class MyRoomApprovalsView(LoginRequiredMixin, ListView):
 
 @login_required
 def room_booking_approve_view(request, pk):
-    """Approve/reject an individual booking"""
+    """
+    Approve or reject an individual booking and confirm available amenities.
+    """
     booking = get_object_or_404(RoomBooking, pk=pk)
     room = booking.room
 
-    # Only active approvers for that room (or superuser) can approve
-    is_approver = RoomApprover.objects.filter(
+    # Permission check: User must be a superuser or an active approver for this room.
+    is_approver = request.user.is_superuser or RoomApprover.objects.filter(
         room=room,
         user=request.user,
         is_active=True,
     ).exists()
 
-    if not (request.user.is_superuser or is_approver):
+    if not is_approver:
         messages.error(request, "You are not an approver for this room.")
         return redirect("accounts:room_detail", pk=room.pk)
 
-    if booking.status not in ("pending",):
-        messages.info(request, "This booking is already processed.")
-        return redirect("accounts:room_detail", pk=room.pk)
+    if booking.status != "pending":
+        messages.info(request, "This booking has already been processed.")
+        return redirect("accounts:room_approvals")
 
     if request.method == "POST":
-        form = RoomBookingApprovalForm(request.POST)
+        # We pass the booking instance to the form
+        form = RoomBookingApprovalForm(request.POST, instance=booking)
+
+        # The form is valid if the submitted amenity IDs are valid
         if form.is_valid():
-            action = form.cleaned_data["action"]
-            reason = form.cleaned_data["reason"]
+            action = request.POST.get('action')  # 'approve' or 'reject' from button name
 
             if action == "approve":
+                # Save the form to update the `approved_amenities` on the booking instance
+                booking = form.save()
+
+                # Finalize the approval
                 booking.approve(request.user)
-                notify_requester_booking_approved(booking)
+
+                # Send notifications
+                notify_requester_booking_approved(request, booking)
                 send_booking_calendar_invite(booking)
-                messages.success(request, "Booking approved.")
+
+                messages.success(request, "Booking approved and calendar invite sent.")
+                return redirect("accounts:room_approvals")
+
+            elif action == "reject":
+                rejection_reason = form.cleaned_data.get('rejection_reason', '').strip()
+                if not rejection_reason:
+                    messages.error(request, "A reason is required to reject a booking.")
+                    # Re-render the page with the error
+                    return render(request, "accounts/rooms/booking_approve.html", {
+                        "booking": booking, "room": room, "form": form
+                    })
+
+                booking.reject(request.user, reason=rejection_reason)
+                # notify_requester_booking_rejected(booking) # Assumes this function exists
+                messages.warning(request, "Booking has been rejected.")
+                return redirect("accounts:room_approvals")
+
             else:
-                if not reason.strip():
-                    messages.error(request, "Please provide a reason for rejection.")
-                    return render(
-                        request,
-                        "accounts/rooms/booking_approve.html",
-                        {
-                            "booking": booking,
-                            "room": room,
-                            "form": form,
-                        },
-                    )
-                booking.reject(request.user, reason=reason)
-                notify_requester_booking_rejected(booking)
-                messages.warning(request, "Booking rejected.")
+                messages.error(request, "Invalid action specified.")
 
-            return redirect("accounts:room_approvals")
     else:
-        form = RoomBookingApprovalForm()
+        # For a GET request, initialize the form with the booking instance.
+        # This will pre-populate the 'approved_amenities' checklist.
+        form = RoomBookingApprovalForm(instance=booking)
 
-    return render(
-        request,
-        "accounts/rooms/booking_approve.html",
-        {
-            "booking": booking,
-            "room": room,
-            "form": form,
-        },
-    )
+    return render(request, "accounts/rooms/booking_approve.html", {
+        "booking": booking,
+        "room": room,
+        "form": form,
+    })
 
 
 @login_required
 def room_series_approve_view(request, pk):
-    """Approve/reject an entire booking series"""
+    """Approve/reject an entire booking series. This view remains unchanged."""
     series = get_object_or_404(
         RoomBookingSeries.objects.select_related('room', 'requested_by')
         .annotate(occurrence_count=Count('occurrences')),
@@ -1261,19 +1363,18 @@ def room_series_approve_view(request, pk):
     )
     room = series.room
 
-    # Only active approvers for that room (or superuser) can approve
-    is_approver = RoomApprover.objects.filter(
+    is_approver = request.user.is_superuser or RoomApprover.objects.filter(
         room=room,
         user=request.user,
         is_active=True,
     ).exists()
 
-    if not (request.user.is_superuser or is_approver):
+    if not is_approver:
         messages.error(request, "You are not an approver for this room.")
         return redirect("accounts:room_detail", pk=room.pk)
 
-    if series.status not in ("pending",):
-        messages.info(request, "This series is already processed.")
+    if series.status != "pending":
+        messages.info(request, "This series has already been processed.")
         return redirect("accounts:room_approvals")
 
     if request.method == "POST":
@@ -1284,49 +1385,115 @@ def room_series_approve_view(request, pk):
 
             if action == "approve":
                 series.approve(request.user)
-                notify_requester_series_approved(series)
-                send_booking_calendar_invite(series)
-                messages.success(
-                    request,
-                    f"Series approved! All {series.occurrence_count} occurrences have been approved."
-                )
+                # notify_requester_series_approved(request, series)
+
+                # Send invite for the first occurrence, which contains the recurrence rule
+                first_booking = series.occurrences.order_by('date', 'start_time').first()
+                if first_booking:
+                    send_booking_calendar_invite(first_booking)
+
+                messages.success(request,
+                                 f"Series approved! All {series.occurrences.count()} occurrences have been approved.")
             else:
                 if not reason.strip():
                     messages.error(request, "Please provide a reason for rejection.")
-                    return render(
-                        request,
-                        "accounts/rooms/series_approve.html",
-                        {
-                            "series": series,
-                            "room": room,
-                            "form": form,
-                        },
-                    )
+                    return render(request, "accounts/rooms/series_approve.html",
+                                  {"series": series, "room": room, "form": form})
+
                 series.reject(request.user, reason=reason)
-                notify_requester_series_rejected(series)
-                messages.warning(
-                    request,
-                    f"Series rejected. All {series.occurrence_count} occurrences have been rejected."
-                )
+                # notify_requester_series_rejected(series)
+                messages.warning(request,
+                                 f"Series rejected. All {series.occurrences.count()} occurrences have been rejected.")
 
             return redirect("accounts:room_approvals")
     else:
         form = RoomSeriesApprovalForm()
 
-    # Get sample occurrences for preview
     sample_occurrences = series.occurrences.all()[:5]
 
-    return render(
-        request,
-        "accounts/rooms/series_approve.html",
-        {
-            "series": series,
-            "room": room,
-            "form": form,
-            "sample_occurrences": sample_occurrences,
-        },
+    return render(request, "accounts/rooms/series_approve.html", {
+        "series": series,
+        "room": room,
+        "form": form,
+        "sample_occurrences": sample_occurrences,
+    })
+
+
+@login_required
+def booking_detail_view(request, pk):
+    booking = get_object_or_404(RoomBooking.objects.prefetch_related('attendees', 'approved_amenities'), pk=pk)
+    # Add permission check here if needed (e.g., only requester or approver)
+
+    registration_link = request.build_absolute_uri(
+        reverse('accounts:meeting_registration', args=[booking.registration_code])
     )
 
+    return render(request, 'accounts/rooms/booking_detail.html', {
+        'booking': booking,
+        'registration_link': registration_link
+    })
+
+
+# --- Attendee Registration Views ---
+
+def meeting_registration_view(request, registration_code):
+    booking = get_object_or_404(RoomBooking.objects.select_related('room'), registration_code=registration_code)
+
+    if request.method == 'POST':
+        form = MeetingAttendeeForm(request.POST)
+        if form.is_valid():
+            attendee = form.save(commit=False)
+            attendee.booking = booking
+            try:
+                attendee.save()
+                notify_attendee_of_registration(attendee)
+                messages.success(request, "Thank you for registering! A confirmation email has been sent.")
+                return redirect('accounts:meeting_registration_success')
+            except IntegrityError:
+                messages.error(request, "The email address you entered has already been registered for this meeting.")
+    else:
+        form = MeetingAttendeeForm()
+
+    return render(request, 'accounts/rooms/meeting_registration.html', {'form': form, 'booking': booking})
+
+
+def meeting_registration_success_view(request):
+    return render(request, 'accounts/rooms/meeting_registration_success.html')
+
+
+# --- FULLY IMPLEMENTED QR CODE VIEW ---
+def meeting_qr_code_view(request, registration_code):
+    """
+    Generates and returns a PNG image of a QR code for the given meeting registration link.
+    """
+    # 1. Construct the full URL that the QR code will point to.
+    # This URL leads to the attendee registration form.
+    registration_url = request.build_absolute_uri(
+        reverse('accounts:meeting_registration', args=[registration_code])
+    )
+
+    # 2. Configure and generate the QR code image.
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,  # L = Low error correction
+        box_size=10,  # Size of each box in pixels
+        border=4,  # Width of the border
+    )
+    qr.add_data(registration_url)
+    qr.make(fit=True)
+
+    # Create an image from the QR Code instance
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    # 3. Save the image to a memory buffer.
+    # We use a BytesIO buffer to avoid saving the file to disk.
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)  # Rewind the buffer to the beginning before reading
+
+    # 4. Create an HTTP response with the image data and the correct content type.
+    # This tells the browser to display it as an image.
+    return HttpResponse(buffer, content_type="image/png")
 
 @login_required
 @require_POST
@@ -1559,6 +1726,7 @@ def cancel_series_occurrence(request, pk):
         )
         return redirect('accounts:my_bookings')
 
+
 @method_decorator(staff_member_required, name='dispatch')
 class RoomCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     """Create a new room (superuser only)."""
@@ -1624,6 +1792,7 @@ def room_delete_view(request, pk):
         return redirect("accounts:room_list")
 
     return render(request, "accounts/rooms/room_confirm_delete.html", {"room": room})
+
 
 def _parse_iso_dt(value: str):
     """

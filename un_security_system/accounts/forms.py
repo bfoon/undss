@@ -8,7 +8,7 @@ from crispy_forms.layout import Layout, Fieldset, Submit, Row, Column
 
 from .models import (
     SecurityIncident, RegistrationInvite, RoomBooking, Room, RoomAmenity,
-    RoomApprover,
+    RoomApprover, RoomBookingSeries, MeetingAttendee,
 )
 
 User = get_user_model()
@@ -411,8 +411,8 @@ class RegistrationInviteForm(forms.ModelForm):
             )
         return value
 
-class RoomBookingForm(forms.ModelForm):
 
+class RoomBookingForm(forms.ModelForm):
     FREQUENCY_CHOICES = (
         ("", "Does not repeat"),
         ("daily", "Daily"),
@@ -421,117 +421,88 @@ class RoomBookingForm(forms.ModelForm):
         ("yearly", "Yearly"),
     )
 
-    # Hidden flag set by JS when the recurring toggle is ON.
-    # This is the authoritative server-side gate — never relies on
-    # whether radio/interval inputs happened to be submitted.
-    is_recurring = forms.BooleanField(
-        required=False,
-        widget=forms.HiddenInput(),
-    )
+    is_recurring = forms.BooleanField(required=False, widget=forms.HiddenInput())
+    frequency = forms.ChoiceField(choices=FREQUENCY_CHOICES, required=False,
+                                  widget=forms.Select(attrs={"class": "form-select"}))
+    interval = forms.IntegerField(required=False, min_value=1, initial=1,
+                                  widget=forms.NumberInput(attrs={"class": "form-control", "min": 1}))
+    until = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
+    weekdays = forms.MultipleChoiceField(required=False,
+                                         choices=[(0, "Mon"), (1, "Tue"), (2, "Wed"), (3, "Thu"), (4, "Fri"),
+                                                  (5, "Sat"), (6, "Sun")], widget=forms.CheckboxSelectMultiple)
 
-    frequency = forms.ChoiceField(
-        choices=FREQUENCY_CHOICES,
-        required=False,
-        widget=forms.Select(attrs={"class": "form-select"})
-    )
+    MONTHLY_TYPE_CHOICES = (("day", "Same day of month"), ("weekday", "Specific weekday of month"))
+    monthly_type = forms.ChoiceField(choices=MONTHLY_TYPE_CHOICES, required=False, initial="day",
+                                     widget=forms.RadioSelect)
 
-    interval = forms.IntegerField(
-        required=False,
-        min_value=1,
-        initial=1,
-        widget=forms.NumberInput(attrs={
-            "class": "form-control",
-            "min": 1
-        }),
-        help_text="Repeat every N units (e.g. every 2 weeks)"
-    )
+    WEEK_POSITION_CHOICES = ((1, "1st"), (2, "2nd"), (3, "3rd"), (4, "4th"), (-1, "Last"))
+    monthly_week = forms.TypedChoiceField(choices=WEEK_POSITION_CHOICES, coerce=int, required=False,
+                                          widget=forms.RadioSelect)
 
-    until = forms.DateField(
-        required=False,
-        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-        help_text="End date for recurrence"
-    )
-
-    weekdays = forms.MultipleChoiceField(
-        required=False,
-        choices=[
-            (0, "Mon"), (1, "Tue"), (2, "Wed"),
-            (3, "Thu"), (4, "Fri"), (5, "Sat"), (6, "Sun"),
-        ],
-        widget=forms.CheckboxSelectMultiple,
-        help_text="Select weekdays (for weekly recurrence)"
-    )
-
-    # ── Monthly recurrence: nth-weekday pattern ──────────────────────────
-    # e.g. "last Thursday" = monthly_type=weekday, monthly_week=-1, monthly_weekday=3
-    MONTHLY_TYPE_CHOICES = (
-        ("day", "Same day of month"),
-        ("weekday", "Specific weekday of month"),
-    )
-    monthly_type = forms.ChoiceField(
-        choices=MONTHLY_TYPE_CHOICES,
-        required=False,
-        initial="day",
-        widget=forms.RadioSelect,
-        help_text="For monthly recurrence: repeat on the same date, or on a specific weekday?",
-    )
-
-    WEEK_POSITION_CHOICES = (
-        (1,  "1st"),
-        (2,  "2nd"),
-        (3,  "3rd"),
-        (4,  "4th"),
-        (-1, "Last"),
-    )
-    monthly_week = forms.TypedChoiceField(
-        choices=WEEK_POSITION_CHOICES,
-        coerce=int,
-        required=False,
-        widget=forms.RadioSelect,
-        help_text="Which occurrence within the month (1st, 2nd … last)",
-    )
-
-    WEEKDAY_CHOICES = (
-        (0, "Mon"), (1, "Tue"), (2, "Wed"),
-        (3, "Thu"), (4, "Fri"), (5, "Sat"), (6, "Sun"),
-    )
-    monthly_weekday = forms.TypedChoiceField(
-        choices=WEEKDAY_CHOICES,
-        coerce=int,
-        required=False,
-        widget=forms.RadioSelect,
-        help_text="Which day of the week (Mon–Sun)",
-    )
+    WEEKDAY_CHOICES = ((0, "Mon"), (1, "Tue"), (2, "Wed"), (3, "Thu"), (4, "Fri"), (5, "Sat"), (6, "Sun"))
+    monthly_weekday = forms.TypedChoiceField(choices=WEEKDAY_CHOICES, coerce=int, required=False,
+                                             widget=forms.RadioSelect)
 
     ICT_SUPPORT_CHOICES = (
-        ("none",   "No ICT support needed"),
-        ("setup",  "Before meeting — Setup / AV configuration"),
+        ("none", "No ICT support needed"),
+        ("setup", "Before meeting — Setup / AV configuration"),
         ("during", "During meeting — Live technical support"),
     )
-    ict_support = forms.ChoiceField(
-        choices=ICT_SUPPORT_CHOICES,
+    ict_support = forms.ChoiceField(choices=ICT_SUPPORT_CHOICES, required=False, initial="none",
+                                    widget=forms.RadioSelect(attrs={"class": "form-check-input"}), label="ICT Support")
+
+    selected_amenities = forms.ModelMultipleChoiceField(queryset=RoomAmenity.objects.none(),
+                                                        widget=forms.CheckboxSelectMultiple, required=False,
+                                                        label="Optional Amenities")
+
+    requested_amenities = forms.ModelMultipleChoiceField(
+        queryset=RoomAmenity.objects.none(),  # Dynamically populated in __init__
+        widget=forms.CheckboxSelectMultiple,
         required=False,
-        initial="none",
-        widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
-        label="ICT Support",
-        help_text=(
-            "Select whether you need ICT assistance. "
-            "The ICT team will be notified by email as soon as you submit."
-        ),
+        label="Request Optional Amenities"
+    )
+    agenda_document = forms.FileField(
+        required=False,
+        label="Upload Agenda (PDF, DOCX, etc.)"
+    )
+
+    attendee_emails = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'e.g., colleague1@example.com, colleague2@example.com'}),
+        required=False,
+        label="Invite Guests (optional)",
+        help_text="Enter comma-separated email addresses. Each will receive a calendar invite."
+    )
+    virtual_meeting_link = forms.URLField(
+        widget=forms.URLInput(attrs={'placeholder': 'https://teams.microsoft.com/...'}),
+        required=False,
+        label="Virtual Meeting Link (optional)"
     )
 
     class Meta:
         model = RoomBooking
         fields = [
-            "room", "title", "description",
+            "room", "title", "description", "agenda_document",
             "date", "start_time", "end_time",
-            "ict_support",
+            "requested_amenities", "attendee_emails", "virtual_meeting_link",
         ]
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "start_time": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
-            "end_time": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'start_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
+            'end_time': forms.TimeInput(attrs={'type': 'time', 'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        # Dynamically filter amenities based on the selected room
+        super().__init__(*args, **kwargs)
+        room = None
+        if 'initial' in kwargs and 'room' in kwargs['initial']:
+            room = Room.objects.get(pk=kwargs['initial']['room'])
+        elif self.instance.pk:
+            room = self.instance.room
+
+        if room:
+            self.fields['requested_amenities'].queryset = room.amenities.filter(is_active=True)
 
     def clean(self):
         cleaned = super().clean()
@@ -576,22 +547,52 @@ class RoomBookingForm(forms.ModelForm):
         return cleaned
 
 
-
-class RoomBookingApprovalForm(forms.Form):
-    ACTION_CHOICES = (
-        ("approve", "Approve"),
-        ("reject", "Reject"),
-    )
-    action = forms.ChoiceField(choices=ACTION_CHOICES, widget=forms.RadioSelect)
-    reason = forms.CharField(
-        label="Reason (optional for approval, required for rejection)",
-        widget=forms.Textarea(attrs={"rows": 3}),
+class RoomBookingApprovalForm(forms.ModelForm):
+    """
+    Form for an approver to confirm which amenities are available and to
+    provide a reason if rejecting the request.
+    """
+    # This field will be populated with the amenities the user *requested*.
+    # The approver can then uncheck any that are not available.
+    approved_amenities = forms.ModelMultipleChoiceField(
+        queryset=RoomAmenity.objects.none(),  # Dynamically set in __init__
+        widget=forms.CheckboxSelectMultiple,
         required=False,
+        label="Confirm Available Amenities"
     )
+
+    # A separate field for the rejection reason, not tied to the model directly
+    # until the rejection action is confirmed in the view.
+    rejection_reason = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
+        required=False,
+        label="Reason (Required if Rejecting)"
+    )
+
+    class Meta:
+        model = RoomBooking
+        # This form's primary purpose is to save the `approved_amenities` field.
+        # The rejection reason is handled separately in the view.
+        fields = ['approved_amenities']
+
+    def __init__(self, *args, **kwargs):
+        # The booking instance is passed from the view
+        booking = kwargs.get('instance')
+        super().__init__(*args, **kwargs)
+
+        if booking:
+            # The queryset for the checklist should only contain amenities the user asked for.
+            self.fields['approved_amenities'].queryset = booking.requested_amenities.all()
+
+            # For convenience, we pre-select all the requested amenities.
+            # The approver's job is to *uncheck* any that are unavailable.
+            self.fields['approved_amenities'].initial = booking.requested_amenities.all()
+
 
 class RoomSeriesApprovalForm(forms.Form):
     """
     Form for approving/rejecting an entire recurring booking series.
+    This remains a standard Form as it doesn't directly edit a model instance.
     """
     ACTION_CHOICES = (
         ("approve", "Approve entire series"),
@@ -605,6 +606,21 @@ class RoomSeriesApprovalForm(forms.Form):
         help_text="Provide a reason for rejection. This will be sent to the requester."
     )
 
+
+class MeetingAttendeeForm(forms.ModelForm):
+    """
+    Form for external attendees to register for a meeting via the public link.
+    """
+
+    class Meta:
+        model = MeetingAttendee
+        fields = ['name', 'email', 'organization']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Your Full Name'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Your Email Address'}),
+            'organization': forms.TextInput(
+                attrs={'class': 'form-control', 'placeholder': 'Your Organization (Optional)'}),
+        }
 
 class RoomForm(forms.ModelForm):
     """

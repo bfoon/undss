@@ -7,7 +7,7 @@ from .views_room_booking import (
     MyRoomBookingsView, RoomBookingCreateView, MyRoomApprovalsView,
     room_booking_approve_view, room_delete_view, room_series_approve_view,
     cancel_booking, cancel_booking_series, cancel_series_occurrence, room_bookings_calendar,
-    room_bookings_events
+    room_bookings_events, booking_detail_view, meeting_registration_view, meeting_qr_code_view
 )
 from .views_asset_verify import asset_verify, asset_verification_history
 
@@ -247,6 +247,16 @@ urlpatterns = [
     # -------- Batch upload -----------
     path("batch/template/<str:kind>/", views_batch.download_csv_template, name="batch_template"),
     path("batch/upload/<str:kind>/", views_batch.batch_upload_csv, name="batch_upload"),
+
+    # --- NEW URLs ---
+    path('booking/<int:pk>/', booking_detail_view, name='booking_detail'),
+    path('meeting/register/<uuid:registration_code>/', meeting_registration_view,
+         name='meeting_registration'),
+    path('meeting/register/qr/<uuid:registration_code>/', meeting_qr_code_view,
+         name='meeting_qr_code'),
+    path('meeting/register/success/',
+         lambda request: render(request, 'accounts/rooms/meeting_registration_success.html'),
+         name='meeting_registration_success'),
 
     # # ----- Requests workflow -----
     # path(

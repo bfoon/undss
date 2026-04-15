@@ -51,7 +51,7 @@
 
     .form-section {
         background: #f8f9fa;
-        padding: 1rem;
+        padding: 1.5rem;
         border-radius: 12px;
         margin-bottom: 1.5rem;
     }
@@ -112,6 +112,44 @@
     textarea.form-control {
         min-height: 120px;
         resize: vertical;
+    }
+
+    /* Styles for the new Amenity checklist */
+    .amenity-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .amenity-checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: white;
+        padding: 0.75rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .amenity-checkbox-item:hover {
+        border-color: #667eea;
+        transform: translateY(-1px);
+    }
+
+    .amenity-checkbox-item input[type="checkbox"] {
+        width: 1.25rem;
+        height: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .amenity-checkbox-item label {
+        font-weight: 600;
+        cursor: pointer;
+        flex: 1;
+        margin-bottom: 0;
+        line-height: 1.2;
     }
 
     .time-estimate {
@@ -799,87 +837,56 @@
     <div class="booking-form-container">
         <form method="post" class="booking-form-card" id="bookingForm">
             {% csrf_token %}
-            {# Authoritative recurring flag — set by JS when the toggle is on #}
             <input type="hidden" name="is_recurring" id="isRecurringInput" value="">
 
-            <!-- Header -->
             <div class="form-header">
-                <h3>
-                    <i class="bi bi-calendar-check me-2"></i>
-                    Book a Room
-                </h3>
+                <h3><i class="bi bi-calendar-check me-2"></i>Book a Room</h3>
                 <p>Reserve a meeting room for your upcoming session</p>
             </div>
 
-            <!-- Form Body -->
             <div class="p-4">
-
-                <!-- Room Selection -->
                 <div class="form-section">
-                    <div class="form-section-title">
-                        <i class="bi bi-door-open"></i>
-                        Room Selection
-                    </div>
-
-                    <label class="form-label">
-                        <i class="bi bi-geo-alt"></i>
-                        Select Room
-                        <span class="required">*</span>
-                    </label>
+                    <div class="form-section-title"><i class="bi bi-door-open"></i>Room Selection</div>
+                    <label class="form-label"><i class="bi bi-geo-alt"></i>Select Room<span class="required">*</span></label>
                     {{ form.room }}
-                    {% if form.room.errors %}
-                        <div class="text-danger small mt-1">{{ form.room.errors }}</div>
-                    {% endif %}
+                    {% if form.room.errors %}<div class="text-danger small mt-1">{{ form.room.errors }}</div>{% endif %}
+                </div>
 
-                    <!-- Room Preview -->
-                    <div class="room-preview" id="roomPreview">
-                        <div class="room-preview-icon">
-                            <i class="bi bi-door-open"></i>
-                        </div>
-                        <div class="room-preview-details">
-                            <div class="room-preview-name" id="roomPreviewName">—</div>
-                            <div class="room-preview-meta" id="roomPreviewDetails">—</div>
-                        </div>
+                <div class="form-section">
+                    <div class="form-section-title"><i class="bi bi-pencil-square"></i>Meeting Details</div>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="bi bi-card-heading"></i>Meeting Title<span class="required">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="text-danger small mt-1">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="bi bi-text-paragraph"></i>Description<span class="text-muted small">(Optional)</span></label>
+                        {{ form.description }}
                     </div>
                 </div>
 
-                <!-- Meeting Details -->
                 <div class="form-section">
-                    <div class="form-section-title">
-                        <i class="bi bi-pencil-square"></i>
-                        Meeting Details
-                    </div>
-
+                    <div class="form-section-title"><i class="bi bi-people"></i>Guests & Virtual Meeting</div>
                     <div class="mb-3">
-                        <label class="form-label">
-                            <i class="bi bi-card-heading"></i>
-                            Meeting Title
-                            <span class="required">*</span>
-                        </label>
-                        {{ form.title }}
-                        {% if form.title.errors %}
-                            <div class="text-danger small mt-1">{{ form.title.errors }}</div>
-                        {% endif %}
-                        <div class="help-text">
-                            <i class="bi bi-info-circle"></i>
-                            Provide a clear, descriptive title for your meeting
-                        </div>
+                        <label class="form-label"><i class="bi bi-envelope-plus"></i>Invite Guests</label>
+                        {{ form.attendee_emails }}
+                        <div class="help-text"><i class="bi bi-info-circle"></i>Enter comma-separated emails. Guests will receive a calendar invite.</div>
                     </div>
-
                     <div>
-                        <label class="form-label">
-                            <i class="bi bi-text-paragraph"></i>
-                            Description
-                            <span class="text-muted small">(Optional)</span>
-                        </label>
-                        {{ form.description }}
-                        {% if form.description.errors %}
-                            <div class="text-danger small mt-1">{{ form.description.errors }}</div>
-                        {% endif %}
-                        <div class="help-text">
-                            <i class="bi bi-info-circle"></i>
-                            Add any additional details about the meeting
-                        </div>
+                        <label class="form-label"><i class="bi bi-camera-video"></i>Virtual Meeting Link</label>
+                        {{ form.virtual_meeting_link }}
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="form-section-title"><i class="bi bi-gem"></i>Optional Amenities</div>
+                    <div class="amenity-grid">
+                        {% for choice in form.selected_amenities %}
+                            <div class="amenity-checkbox-item">
+                                {{ choice.tag }}
+                                <label for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+                            </div>
+                        {% endfor %}
                     </div>
                 </div>
 
