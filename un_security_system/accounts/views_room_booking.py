@@ -222,34 +222,23 @@ def notify_requester_booking_submitted(booking):
     _send_email_async(subject, message, [booking.requested_by.email])
 
 
-def notify_requester_booking_approved(booking):
-    if not booking.requested_by.email:
-        return
+def notify_requester_booking_approved(request, booking):  # <--- ADD `request` HERE
+    if not booking.requested_by.email: return
+
+    # This line requires the `request` object to build the full URL
     registration_link = request.build_absolute_uri(
-        reverse('accounts:meeting_registration', args=[booking.registration_code]))
-
-    approver_name = (
-        booking.approved_by.get_full_name() or booking.approved_by.username
-        if booking.approved_by
-        else "System (auto-approved)"
+        reverse('accounts:meeting_registration', args=[booking.registration_code])
     )
-    subject = f"[Room Booking] Approved: {booking.room.name} on {booking.date}"
+
     message = (
-        f"Dear {booking.requested_by.get_full_name() or booking.requested_by.username},\n\n"
-        f"Your room booking request has been APPROVED.\n\n"
-        f"Details:\n"
-        f"  Room: {booking.room.name} ({booking.room.code})\n"
-        f"  Date: {booking.date}\n"
-        f"  Time: {booking.start_time} – {booking.end_time}\n"
-        f"  Title: {booking.title}\n"
-        f"  Approved by: {approver_name}\n\n"
-        f"Attendee Registration Link: {registration_link}\n\n"
-        f"Please remember to leave the room neat and tidy as you found it.\n\n"
-        f"Thank you."
+        f"Dear {booking.requested_by.get_full_name()},\n\n"
+        f"Your booking for '{booking.title}' has been APPROVED.\n\n"
+        f"Attendee Registration Link:\n{registration_link}\n\nPlease share this link with your attendees.\n\n"
+        "A calendar invite has been sent to you and your listed guests.\n\n"
+        "Please remember to leave the room neat and tidy as you found it.\n\n"
+        "Thank you."
     )
-
-    _send_email_async(subject, message, [booking.requested_by.email])
-
+    _send_email_async(f"Approved: {booking.title}", message, [booking.requested_by.email])
 def notify_attendee_of_registration(attendee):
     subject = f"Registration Confirmed: {attendee.booking.title}"
     message = (
