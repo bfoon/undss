@@ -1,73 +1,735 @@
 {% extends "base.html" %}
-{% block title %}Booking Details: {{ booking.title }}{% endblock %}
+{% block title %}{{ booking.title }} — Booking Detail{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Breadcrumb ── */
+.eo-breadcrumb {
+    display: flex; align-items: center; gap: .45rem; flex-wrap: wrap;
+    font-size: .87rem; margin-bottom: 1rem;
+}
+.eo-breadcrumb a {
+    color: #0b74b8; text-decoration: none; font-weight: 500;
+    display: inline-flex; align-items: center; gap: .3rem;
+}
+.eo-breadcrumb a:hover { text-decoration: underline; }
+.eo-breadcrumb .sep   { color: #94a3b8; font-size: .75rem; }
+.eo-breadcrumb .curr  { color: #475569; font-weight: 600; }
+
+/* ── Hero ── */
+.booking-hero {
+    position: relative; overflow: hidden; border: 0; border-radius: 26px;
+    background: linear-gradient(135deg, #0a193d 0%, #0b74b8 55%, #009edb 100%);
+    color: white; box-shadow: 0 18px 42px rgba(10,25,61,.2); margin-bottom: 1.5rem;
+}
+.booking-hero::before {
+    content:""; position:absolute; width:270px; height:270px;
+    right:-70px; top:-70px; border-radius:50%; background:rgba(255,255,255,.07);
+}
+.booking-hero::after {
+    content:""; position:absolute; width:200px; height:200px;
+    left:-60px; bottom:-80px; border-radius:50%; background:rgba(255,255,255,.05);
+}
+.booking-hero-body { position:relative; z-index:1; padding:1.6rem 1.7rem; }
+.booking-kicker {
+    display:inline-flex; align-items:center; gap:.45rem; padding:.4rem .85rem;
+    border-radius:999px; background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.14); font-weight:700; font-size:.82rem; margin-bottom:.9rem;
+}
+.booking-title { font-size:clamp(1.5rem,3vw,2rem); font-weight:800; margin-bottom:.35rem; }
+.desc-box {
+    background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.15);
+    border-radius:14px; padding:.8rem 1rem; margin-top:.8rem;
+    font-size:.9rem; line-height:1.6; opacity:.95;
+}
+.booking-meta-row { display:flex; flex-wrap:wrap; gap:.7rem; margin-top:.9rem; }
+.booking-meta-pill {
+    display:inline-flex; align-items:center; gap:.4rem; border-radius:999px;
+    background:rgba(255,255,255,.12); padding:.45rem .85rem;
+    border:1px solid rgba(255,255,255,.13); font-size:.87rem;
+}
+.status-ribbon {
+    display:inline-flex; align-items:center; gap:.45rem; padding:.5rem .9rem;
+    border-radius:999px; font-weight:800; font-size:.88rem;
+}
+.status-open     { background:#e0f2fe; color:#075985; }
+.status-live     { background:#dcfce7; color:#166534; }
+.status-full     { background:#fef3c7; color:#92400e; }
+.status-disabled { background:#e5e7eb; color:#374151; }
+.status-ended    { background:#dbe4ee; color:#1f2937; }
+
+/* ── Section cards ── */
+.eo-card {
+    border-radius:20px; border:1px solid #dce8f1;
+    box-shadow:0 8px 22px rgba(15,23,42,.06); background:white; overflow:hidden;
+}
+.eo-card-head {
+    background:linear-gradient(135deg,#f7fbfd,#eef7fb);
+    border-bottom:1px solid #dce8f1; padding:.9rem 1.25rem;
+    display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+}
+.eo-card-head h5, .eo-card-head h6 { margin:0; font-weight:700; }
+
+/* ── Meeting Options toggles ── */
+.form-check-input.opt-toggle { width:2.8rem; height:1.5rem; cursor:pointer; }
+.form-check-input.opt-toggle:checked { background-color:#009edb; border-color:#009edb; }
+
+/* ── Agenda QR ── */
+.agenda-qr-wrap {
+    background:linear-gradient(135deg,#f0fdf4,#dcfce7);
+    border:2px solid #86efac; border-radius:18px; padding:1.2rem;
+}
+.agenda-qr-img {
+    border-radius:14px; max-width:190px; border:3px solid #34d399;
+    box-shadow:0 6px 20px rgba(16,185,129,.18);
+}
+.agenda-file-chip {
+    display:inline-flex; align-items:center; gap:.45rem;
+    background:#d1fae5; border:1.5px solid #6ee7b7; border-radius:10px;
+    padding:.3rem .75rem; font-size:.82rem; font-weight:600; color:#065f46;
+}
+
+/* ── Side QR card ── */
+.unpass-side-card {
+    border-radius:22px; border:1px solid #dce8f1;
+    box-shadow:0 10px 24px rgba(15,23,42,.07); background:white; overflow:hidden;
+}
+.unpass-side-head {
+    background:linear-gradient(135deg,#f7fbfd,#eef7fb); border-bottom:1px solid #dce8f1;
+}
+.qr-shell {
+    background:linear-gradient(180deg,#fff,#f7fbfd);
+    border:1px solid #d7e7f0; border-radius:18px; padding:.9rem;
+}
+.quick-action-btn { border-radius:13px; font-weight:700; }
+.mini-stat {
+    border-radius:16px; background:#fff; border:1px solid #e4edf3;
+    padding:.85rem; text-align:center;
+}
+.mini-stat .num { font-size:1.5rem; font-weight:800; }
+.export-tile {
+    display:flex; align-items:center; gap:.75rem; padding:.9rem 1rem;
+    border-radius:14px; border:1px solid #dfebf2; text-decoration:none;
+    color:#1f2937; background:white; transition:.2s;
+}
+.export-tile:hover { transform:translateY(-1px); background:#f8fbfd; color:#0a193d; }
+.export-icon {
+    width:40px; height:40px; border-radius:11px; display:flex; align-items:center;
+    justify-content:center; background:#eaf6fb; color:#0b74b8; font-size:1.05rem; flex-shrink:0;
+}
+
+/* ── Attendance ── */
+.headcount-badge {
+    display:inline-flex; align-items:center; gap:.4rem;
+    background:linear-gradient(135deg,#10b981,#059669);
+    color:white; padding:.32rem .8rem; border-radius:20px; font-size:.87rem; font-weight:700;
+}
+.headcount-badge.pulse { animation:cPulse .4s ease; }
+@keyframes cPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.16)} }
+.refresh-dot { width:7px;height:7px;border-radius:50%;background:#10b981;animation:blink 2s infinite;display:inline-block; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.att-mode-banner {
+    background:linear-gradient(135deg,#d1fae5,#a7f3d0);
+    border:2px solid #34d399; border-radius:12px; padding:.85rem 1.1rem;
+    display:flex; align-items:center; gap:.7rem; margin-bottom:1rem;
+}
+.att-mode-banner i { font-size:1.3rem; color:#065f46; }
+.att-mode-banner strong { color:#065f46; }
+.att-mode-banner small  { color:#047857; display:block; }
+.walkin-card {
+    border:2px solid #fcd34d; border-radius:12px; padding:.9rem; margin-bottom:.7rem;
+    background:#fffbeb; display:flex; align-items:center; gap:.9rem; flex-wrap:wrap;
+    animation:slideIn .3s ease;
+}
+@keyframes slideIn { from{opacity:0;transform:translateY(-7px)} to{opacity:1;transform:translateY(0)} }
+.walkin-avatar {
+    width:40px;height:40px;border-radius:50%;
+    background:linear-gradient(135deg,#f59e0b,#d97706);
+    display:flex;align-items:center;justify-content:center;color:white;font-weight:700;flex-shrink:0;
+}
+.walkin-name { font-weight:700; color:#1f2937; }
+.walkin-meta { font-size:.78rem; color:#6b7280; }
+.att-badge {
+    display:inline-flex;align-items:center;gap:.32rem;font-size:.76rem;font-weight:700;
+    padding:.22rem .6rem;border-radius:11px;white-space:nowrap;
+}
+.att-present   {background:#d1fae5;color:#065f46;}
+.att-approved  {background:#dbeafe;color:#1e40af;}
+.att-pending   {background:#fef3c7;color:#92400e;}
+.att-rejected  {background:#fee2e2;color:#991b1b;}
+.att-invited   {background:#ede9fe;color:#4c1d95;}
+.att-prereg    {background:#e0f2fe;color:#0369a1;}
+.amenity-pill {display:inline-flex;align-items:center;gap:.35rem;border-radius:20px;padding:.28rem .7rem;font-size:.8rem;font-weight:600;}
+.amenity-pill.confirmed{background:#d1fae5;color:#065f46;}
+.amenity-pill.denied   {background:#fee2e2;color:#991b1b;text-decoration:line-through;}
+.amenity-pill.requested{background:#ede9fe;color:#4c1d95;}
+
+@media (max-width:991.98px){.sticky-top{position:static !important;}}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container py-5">
-    <div class="row">
+<div class="container py-4">
+
+    {# ── Breadcrumbs ── #}
+    <nav class="eo-breadcrumb" aria-label="breadcrumb">
+        <a href="{% url 'accounts:room_list' %}"><i class="bi bi-house-door"></i>Rooms</a>
+        <span class="sep">›</span>
+        <a href="{% url 'accounts:room_detail' booking.room.pk %}">{{ booking.room.name }}</a>
+        <span class="sep">›</span>
+        <a href="{% url 'accounts:my_bookings' %}">My Bookings</a>
+        <span class="sep">›</span>
+        <span class="curr">{{ booking.title|truncatechars:38 }}</span>
+    </nav>
+
+    {# ── Back / navigation buttons ── #}
+    <div class="d-flex align-items-center gap-2 mb-4">
+        <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+        <a href="{% url 'accounts:my_bookings' %}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-calendar2-week me-1"></i>All My Bookings
+        </a>
+        <a href="{% url 'accounts:room_detail' booking.room.pk %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-door-open me-1"></i>{{ booking.room.name }}
+        </a>
+    </div>
+
+    <div class="row g-4">
+
+        {# ════════════ LEFT ════════════ #}
         <div class="col-lg-8">
-            <!-- Main Booking Info -->
-            <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">{{ booking.title }}</h4>
+
+            {# ── Hero banner — title + description + meta pills ── #}
+            <div class="booking-hero">
+                <div class="booking-hero-body">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                        <div style="flex:1;min-width:0;">
+                            <div class="booking-kicker">
+                                <i class="bi bi-shield-check"></i> UNPASS Meeting Detail
+                            </div>
+                            <div class="booking-title">{{ booking.title }}</div>
+
+                            {# Description moved here — inside the hero #}
+                            {% if booking.description %}
+                            <div class="desc-box">
+                                <i class="bi bi-text-paragraph me-1 opacity-75"></i>
+                                {{ booking.description }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex-shrink-0">
+                            {% if public_status %}
+                            <span class="status-ribbon status-{{ public_status.code }}">
+                                <i class="bi bi-circle-fill" style="font-size:.5rem;"></i>
+                                {{ public_status.label }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="booking-meta-row">
+                        <span class="booking-meta-pill"><i class="bi bi-door-open"></i>{{ booking.room.name }} ({{ booking.room.code }})</span>
+                        <span class="booking-meta-pill"><i class="bi bi-calendar3"></i>{{ booking.date|date:"l, F j, Y" }}</span>
+                        <span class="booking-meta-pill"><i class="bi bi-clock"></i>{{ booking.start_time|time:"H:i" }} – {{ booking.end_time|time:"H:i" }}</span>
+                        {% if booking.room.capacity %}<span class="booking-meta-pill"><i class="bi bi-people"></i>Cap: {{ booking.room.capacity }}</span>{% endif %}
+                        {% if booking.virtual_meeting_link %}
+                        <span class="booking-meta-pill"><i class="bi bi-camera-video"></i>
+                            <a href="{{ booking.virtual_meeting_link }}" target="_blank" class="text-white text-decoration-underline">Virtual link</a>
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    {% if public_status and public_status.reason %}
+                    <div class="mt-2 small opacity-80"><i class="bi bi-info-circle me-1"></i>{{ public_status.reason }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# ── Meeting Options — PRIMARY position (replaces "Meeting Information") ── #}
+            <div class="eo-card mb-4">
+                <div class="eo-card-head">
+                    <h5><i class="bi bi-toggles me-2 text-primary"></i>Meeting Options</h5>
+                    <span class="text-muted small">Live controls</span>
+                </div>
+                <div class="list-group list-group-flush">
+
+                    {# Attendance Tracking #}
+                    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+                        <div>
+                            <div class="fw-semibold"><i class="bi bi-clipboard2-check me-2 text-success"></i>Attendance Tracking</div>
+                            <small class="text-muted">Enable digital check-in and headcount for this meeting.</small>
+                        </div>
+                        {% if request.user == booking.requested_by or request.user.is_superuser %}
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input opt-toggle" type="checkbox" role="switch"
+                                   id="toggleAttendance" data-field="enable_attendance"
+                                   {% if booking.enable_attendance %}checked{% endif %}>
+                        </div>
+                        {% else %}
+                        <span class="badge {% if booking.enable_attendance %}bg-success{% else %}bg-secondary{% endif %}">
+                            {% if booking.enable_attendance %}On{% else %}Off{% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    {# Invite / Registration Link #}
+                    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+                        <div>
+                            <div class="fw-semibold"><i class="bi bi-link-45deg me-2 text-primary"></i>Invite / Registration Link</div>
+                            <small class="text-muted">Allow attendees to register or check in via a public link.</small>
+                        </div>
+                        {% if request.user == booking.requested_by or request.user.is_superuser %}
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input opt-toggle" type="checkbox" role="switch"
+                                   id="toggleInviteLink" data-field="enable_invite_link"
+                                   {% if booking.enable_invite_link %}checked{% endif %}>
+                        </div>
+                        {% else %}
+                        <span class="badge {% if booking.enable_invite_link %}bg-primary{% else %}bg-secondary{% endif %}">
+                            {% if booking.enable_invite_link %}On{% else %}Off{% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    {# ICT Support #}
+                    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+                        <div>
+                            <div class="fw-semibold"><i class="bi bi-tools me-2 text-warning"></i>ICT Support</div>
+                            <small class="text-muted">Technical support level requested for this meeting.</small>
+                        </div>
+                        <span class="badge {% if booking.ict_support != 'none' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                            {{ booking.get_ict_support_display }}
+                        </span>
+                    </div>
+
+                    {# Public Access Status #}
+                    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+                        <div>
+                            <div class="fw-semibold"><i class="bi bi-shield-check me-2 text-info"></i>Public Access Status</div>
+                            <small class="text-muted">Current state of the public meeting page.</small>
+                        </div>
+                        <span id="publicStatusBadge"
+                              class="badge {% if public_status.code == 'live' %}bg-success{% elif public_status.code == 'open' %}bg-primary{% elif public_status.code == 'full' %}bg-warning text-dark{% elif public_status.code == 'ended' %}bg-dark{% else %}bg-secondary{% endif %}">
+                            {{ public_status.label }}
+                        </span>
+                    </div>
+
+                    {# Booking Approval Status #}
+                    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+                        <div>
+                            <div class="fw-semibold"><i class="bi bi-patch-check me-2 text-secondary"></i>Booking Status</div>
+                            <small class="text-muted">Room booking approval state.</small>
+                        </div>
+                        <span class="badge {% if booking.status == 'approved' %}bg-success{% elif booking.status == 'pending' %}bg-warning text-dark{% elif booking.status == 'rejected' %}bg-danger{% else %}bg-secondary{% endif %}">
+                            {{ booking.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-footer bg-white py-2">
+                    <div id="toggleOptionMessage" class="small text-muted">Changes apply immediately.</div>
+                </div>
+            </div>
+
+            {# ── Agenda Document + shareable QR ── #}
+            {% if booking.agenda_document %}
+            <div class="eo-card mb-4">
+                <div class="eo-card-head">
+                    <h5><i class="bi bi-file-earmark-text me-2 text-success"></i>Agenda Document</h5>
                 </div>
                 <div class="card-body">
-                    <p><strong>Room:</strong> {{ booking.room.name }}</p>
-                    <p><strong>Date:</strong> {{ booking.date|date:"l, F j, Y" }}</p>
-                    <p><strong>Time:</strong> {{ booking.start_time|time:"H:i" }} - {{ booking.end_time|time:"H:i" }}</p>
-                    {% if booking.description %}<p><strong>Description:</strong> {{ booking.description }}</p>{% endif %}
-                    {% if booking.virtual_meeting_link %}<p><strong>Virtual Link:</strong> <a href="{{ booking.virtual_meeting_link }}" target="_blank">{{ booking.virtual_meeting_link }}</a></p>{% endif %}
-                    {% if booking.agenda_document %}<p><strong>Agenda:</strong> <a href="{{ booking.agenda_document.url }}" target="_blank">Download Agenda</a></p>{% endif %}
-                </div>
-            </div>
-
-            <!-- Attendee List -->
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Registered Attendees ({{ booking.attendees.count }})</h5>
-                </div>
-                <ul class="list-group list-group-flush">
-                    {% for attendee in booking.attendees.all %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ attendee.name }}</strong> ({{ attendee.email }})
-                                {% if attendee.organization %}<br><small class="text-muted">{{ attendee.organization }}</small>{% endif %}
+                    <div class="agenda-qr-wrap">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-auto text-center">
+                                {% if not meeting_ended %}
+                                {# QR code pointing to the agenda file download #}
+                                <img src="{% url 'accounts:booking_agenda_qr' booking.pk %}"
+                                     alt="Agenda QR Code"
+                                     class="agenda-qr-img d-block mb-2">
+                                <small class="text-muted" style="font-size:.74rem;">Scan to download</small>
+                                {% else %}
+                                <div class="text-center py-3 px-3">
+                                    <i class="bi bi-lock-fill fs-2 text-muted opacity-40 d-block mb-1"></i>
+                                    <small class="text-muted">QR unavailable<br>meeting ended</small>
+                                </div>
+                                {% endif %}
                             </div>
-                            <small class="text-muted">{{ attendee.registered_at|timesince }} ago</small>
-                        </li>
-                    {% empty %}
-                        <li class="list-group-item text-muted">No attendees have registered yet.</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
 
-        <div class="col-lg-4">
-            <!-- Registration Link & QR Code -->
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Attendee Registration</h5>
-                </div>
-                <div class="card-body text-center">
-                    <p>Share this QR code or link with attendees.</p>
-                    <img src="{% url 'accounts:meeting_qr_code' booking.registration_code %}" alt="Meeting Registration QR Code" class="img-fluid mb-3">
-                    <div class="input-group">
-                        <input type="text" class="form-control" value="{{ registration_link }}" id="registrationLink" readonly>
-                        <button class="btn btn-outline-secondary" type="button" onclick="copyLink()">Copy</button>
+                            <div class="col">
+                                <h6 class="fw-bold text-success mb-2">
+                                    <i class="bi bi-file-earmark-arrow-down me-1"></i>Shareable Agenda
+                                </h6>
+                                <div class="agenda-file-chip mb-3">
+                                    <i class="bi bi-paperclip"></i>
+                                    {{ booking.agenda_document.name|default:"Agenda document"|truncatechars:50 }}
+                                </div>
+                                <p class="text-muted small mb-3">
+                                    {% if not meeting_ended %}
+                                    Share the QR code or save it to distribute to attendees — scanning opens the file directly.
+                                    {% else %}
+                                    This meeting has ended. The agenda file is still available to download.
+                                    {% endif %}
+                                </p>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a href="{{ booking.agenda_document.url }}" target="_blank"
+                                       class="btn btn-sm btn-success">
+                                        <i class="bi bi-download me-1"></i>Download Agenda
+                                    </a>
+                                    {% if not meeting_ended %}
+                                    <a href="{% url 'accounts:booking_agenda_qr' booking.pk %}"
+                                       download="agenda_qr_{{ booking.pk }}.png"
+                                       class="btn btn-sm btn-outline-success">
+                                        <i class="bi bi-qr-code me-1"></i>Save QR Image
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+            {% endif %}
+
+            {# ── Amenities ── #}
+            {% with approved=booking.approved_amenities.all requested=booking.requested_amenities.all %}
+            {% if requested %}
+            <div class="eo-card mb-4">
+                <div class="eo-card-head">
+                    <h5><i class="bi bi-stars me-2 text-warning"></i>Amenities</h5>
+                </div>
+                <div class="card-body">
+                    {% if approved %}
+                        <p class="text-muted small mb-2">Confirmed available:</p>
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            {% for a in approved %}<span class="amenity-pill confirmed"><i class="{{ a.icon_class|default:'bi bi-check-circle-fill' }}"></i>{{ a.name }}</span>{% endfor %}
+                        </div>
+                        {% for a in requested %}{% if a not in approved %}<span class="amenity-pill denied"><i class="{{ a.icon_class|default:'bi bi-x-circle' }}"></i>{{ a.name }}</span>{% endif %}{% endfor %}
+                    {% else %}
+                        <p class="text-muted small mb-2">Requested (pending confirmation):</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for a in requested %}<span class="amenity-pill requested"><i class="{{ a.icon_class|default:'bi bi-hourglass-split' }}"></i>{{ a.name }}</span>{% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            {# ── Attendance / Attendees ── #}
+            <div class="eo-card">
+                <div class="eo-card-head">
+                    <h5>
+                        {% if booking.enable_attendance %}
+                            <i class="bi bi-clipboard2-check me-2 text-success"></i>Attendance
+                        {% else %}
+                            <i class="bi bi-person-lines-fill me-2"></i>Registered Attendees
+                        {% endif %}
+                    </h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="headcount-badge" id="headcountBadge">
+                            <i class="bi bi-people-fill"></i>
+                            <span id="headcountNum">{{ confirmed_count }}</span>
+                        </span>
+                        <span class="text-muted small d-flex align-items-center gap-1">
+                            <span class="refresh-dot"></span>Live
+                        </span>
+                    </div>
+                </div>
+
+                {% if booking.enable_attendance %}
+                <div class="card-body pb-0">
+                    <div class="att-mode-banner">
+                        <i class="bi bi-shield-check"></i>
+                        <div>
+                            <strong>Attendance Tracking Active</strong>
+                            <small>Invited &amp; pre-registered guests are auto-confirmed. Walk-ins need your approval.</small>
+                        </div>
+                    </div>
+                    {% if pending_walkins %}
+                    <div class="mb-3">
+                        <h6 class="text-warning fw-bold mb-2">
+                            <i class="bi bi-person-exclamation me-1"></i>Walk-ins Awaiting Approval ({{ pending_walkins|length }})
+                        </h6>
+                        {% for att in pending_walkins %}
+                        <div class="walkin-card" id="wk{{ att.pk }}">
+                            <div class="walkin-avatar">{{ att.name|slice:":1"|upper }}</div>
+                            <div style="flex:1;min-width:0;">
+                                <div class="walkin-name">{{ att.name }}</div>
+                                <div class="walkin-meta">
+                                    <i class="bi bi-envelope me-1"></i>{{ att.email }}
+                                    {% if att.organization %} · {{ att.organization }}{% endif %}
+                                    <span class="ms-2 opacity-75">{{ att.checked_in_at|timesince }} ago</span>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-success fw-bold px-3" onclick="decideWalkin({{ att.pk }},'approve')">
+                                    <i class="bi bi-check-lg me-1"></i>Accept
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger px-2" onclick="decideWalkin({{ att.pk }},'reject')">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <ul class="list-group list-group-flush" id="attendeeList">
+                    {% for att in attendance_records %}
+                    <li class="list-group-item d-flex justify-content-between align-items-start py-3" id="att{{ att.pk }}">
+                        <div class="d-flex align-items-start gap-2">
+                            <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.85rem;flex-shrink:0;">
+                                {{ att.name|slice:":1"|upper }}
+                            </div>
+                            <div>
+                                <strong>{{ att.name }}</strong>
+                                <span class="text-muted small">({{ att.email }})</span>
+                                {% if att.organization %}<br><small class="text-muted"><i class="bi bi-building me-1"></i>{{ att.organization }}</small>{% endif %}
+                                <div class="mt-1 d-flex flex-wrap gap-1">
+                                    {% if att.was_invited %}<span class="att-badge att-invited"><i class="bi bi-envelope-fill"></i>Invited</span>{% endif %}
+                                    {% if att.was_preregistered and not att.was_invited %}<span class="att-badge att-prereg"><i class="bi bi-person-check-fill"></i>Pre-reg</span>{% endif %}
+                                    {% if att.status == 'present' %}<span class="att-badge att-present" id="st{{ att.pk }}"><i class="bi bi-check-circle-fill"></i>Present</span>
+                                    {% elif att.status == 'approved' %}<span class="att-badge att-approved" id="st{{ att.pk }}"><i class="bi bi-check2-circle"></i>Approved</span>
+                                    {% elif att.status == 'pending_approval' %}<span class="att-badge att-pending" id="st{{ att.pk }}"><i class="bi bi-hourglass-split"></i>Pending</span>
+                                    {% elif att.status == 'rejected' %}<span class="att-badge att-rejected" id="st{{ att.pk }}"><i class="bi bi-x-circle-fill"></i>Rejected</span>
+                                    {% else %}<span class="att-badge att-approved" id="st{{ att.pk }}"><i class="bi bi-person-check"></i>Registered</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            {% if att.checked_in_at %}{{ att.checked_in_at|timesince }} ago
+                            {% elif att.registered_at %}{{ att.registered_at|timesince }} ago{% endif %}
+                        </small>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted py-5" id="emptyMsg">
+                        <i class="bi bi-person-x fs-3 d-block mb-2 opacity-50"></i>
+                        {% if booking.enable_attendance %}No one has checked in yet.{% else %}No attendees registered yet.{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                {% if booking.room.capacity %}
+                <div class="card-footer text-muted small">
+                    <div class="d-flex justify-content-between">
+                        <span>Capacity utilisation</span>
+                        <span><strong id="capNum">{{ confirmed_count }}</strong> / {{ booking.room.capacity }}</span>
+                    </div>
+                    <div class="progress mt-1" style="height:5px;">
+                        <div class="progress-bar bg-success" id="capBar"
+                             style="width:{% if booking.room.capacity %}{% widthratio confirmed_count booking.room.capacity 100 %}{% else %}0{% endif %}%"></div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>{# /col-lg-8 #}
+
+        {# ════════════ RIGHT ════════════ #}
+        <div class="col-lg-4">
+
+            {% if booking.enable_invite_link and booking.registration_code %}
+            <div class="unpass-side-card sticky-top mb-4" style="top:1rem;">
+                <div class="unpass-side-head p-3">
+                    <h5 class="mb-1">
+                        <i class="bi bi-qr-code me-2 text-primary"></i>
+                        {% if booking.enable_attendance %}UNPASS Attendance Access{% else %}UNPASS Registration Access{% endif %}
+                    </h5>
+                    <div class="text-muted small">Official public meeting access for attendees.</div>
+                </div>
+
+                <div class="p-3">
+                    <div class="qr-shell text-center mb-3">
+                        <img src="{% url 'accounts:meeting_qr_code' booking.registration_code %}"
+                             alt="Meeting QR" class="img-fluid mb-2"
+                             style="max-width:210px;border-radius:14px;">
+                        <div class="small text-muted">Scan to open the official UNPASS meeting page</div>
+                    </div>
+
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control form-control-sm"
+                               value="{{ registration_link }}" id="regLinkInput" readonly>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="copyLink()" title="Copy">
+                            <i class="bi bi-clipboard" id="copyIcon"></i>
+                        </button>
+                    </div>
+
+                    <div class="d-grid gap-2 mb-3">
+                        <a href="{{ registration_link }}" target="_blank"
+                           class="btn btn-primary quick-action-btn">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Open Public Page
+                        </a>
+                        {# ── Download QR only when meeting has NOT ended ── #}
+                        {% if qr_download_link and not meeting_ended %}
+                        <a href="{{ qr_download_link }}"
+                           class="btn btn-outline-primary quick-action-btn">
+                            <i class="bi bi-download me-1"></i>Download UNPASS QR
+                        </a>
+                        {% elif meeting_ended %}
+                        <button class="btn btn-outline-secondary quick-action-btn" disabled title="Meeting has ended">
+                            <i class="bi bi-lock me-1"></i>QR Download Unavailable
+                        </button>
+                        {% endif %}
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="mini-stat">
+                                <div class="num text-success" id="sidebarCount">{{ confirmed_count }}</div>
+                                <div class="small text-muted">{% if booking.enable_attendance %}Present{% else %}Registered{% endif %}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mini-stat">
+                                {% if booking.enable_attendance %}
+                                <div class="num text-warning" id="pendingSidebarCount">{{ pending_count }}</div>
+                                <div class="small text-muted">Pending</div>
+                                {% else %}
+                                <div class="num text-secondary">{{ booking.room.capacity|default:"—" }}</div>
+                                <div class="small text-muted">Capacity</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'accounts:booking_attendance_export_csv' booking.pk %}" class="export-tile">
+                            <span class="export-icon"><i class="bi bi-filetype-csv"></i></span>
+                            <span><strong>Download CSV</strong><br><small class="text-muted">Attendance list</small></span>
+                        </a>
+                        <a href="{% url 'accounts:booking_attendance_export_excel' booking.pk %}" class="export-tile">
+                            <span class="export-icon"><i class="bi bi-file-earmark-excel"></i></span>
+                            <span><strong>Download Excel</strong><br><small class="text-muted">Formatted UNPASS workbook</small></span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>{# /col-lg-4 #}
+
     </div>
 </div>
 
 <script>
-function copyLink() {
-    var copyText = document.getElementById("registrationLink");
-    copyText.select();
-    copyText.setSelectionRange(0, 99999); // For mobile devices
-    document.execCommand("copy");
-    alert("Registration link copied to clipboard!");
+(function(){
+    var BID     = {{ booking.pk }};
+    var CAP     = {{ booking.room.capacity|default:"null" }};
+    var API     = '/accounts/booking/' + BID + '/attendees/count/';
+    var WK_BASE = '/accounts/attendance/';
+    var last    = parseInt((document.getElementById('headcountNum')||{}).textContent||'0',10);
+
+    function getCsrf(){
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function updateCount(n){
+        var hNum = document.getElementById('headcountNum');
+        var hBdg = document.getElementById('headcountBadge');
+        var sc   = document.getElementById('sidebarCount');
+        var bar  = document.getElementById('capBar');
+        var capN = document.getElementById('capNum');
+        if(hNum)  hNum.textContent  = n;
+        if(sc)    sc.textContent    = n;
+        if(capN)  capN.textContent  = n;
+        if(n !== last && hBdg){ hBdg.classList.add('pulse'); setTimeout(function(){ hBdg.classList.remove('pulse'); },500); }
+        if(CAP && bar) bar.style.width = Math.min(Math.round(n/CAP*100),100)+'%';
+        last = n;
+    }
+
+    function pollCounts(){
+        fetch(API,{headers:{'X-Requested-With':'XMLHttpRequest'}})
+        .then(function(r){return r.ok?r.json():null;})
+        .then(function(d){
+            if(!d) return;
+            if(typeof d.count!=='undefined') updateCount(parseInt(d.count,10)||0);
+            if(typeof d.pending_count!=='undefined'){
+                var pc=document.getElementById('pendingSidebarCount');
+                if(pc) pc.textContent=parseInt(d.pending_count,10)||0;
+            }
+        }).catch(function(){});
+    }
+    setInterval(pollCounts, 30000);
+
+    window.decideWalkin = function(pk, action){
+        var card = document.getElementById('wk'+pk);
+        if(card){card.style.opacity='.5';card.style.pointerEvents='none';}
+        fetch(WK_BASE+pk+'/'+action+'/',{
+            method:'POST',
+            headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCsrf()}
+        })
+        .then(function(r){return r.json();})
+        .then(function(d){
+            if(d.success){
+                if(card) card.remove();
+                var st=document.getElementById('st'+pk);
+                if(st){
+                    if(action==='approve'){st.className='att-badge att-approved';st.innerHTML='<i class="bi bi-check2-circle"></i>Approved';}
+                    else{st.className='att-badge att-rejected';st.innerHTML='<i class="bi bi-x-circle-fill"></i>Rejected';}
+                }
+                pollCounts();
+            } else {
+                if(card){card.style.opacity='1';card.style.pointerEvents='';}
+                alert(d.message||'Error.');
+            }
+        }).catch(function(){if(card){card.style.opacity='1';card.style.pointerEvents='';}});
+    };
+})();
+
+function copyLink(){
+    var i=document.getElementById('regLinkInput');
+    var ic=document.getElementById('copyIcon');
+    if(!i) return;
+    navigator.clipboard.writeText(i.value).then(function(){
+        if(ic) ic.className='bi bi-clipboard-check';
+        setTimeout(function(){if(ic) ic.className='bi bi-clipboard';},2000);
+    }).catch(function(){i.select();document.execCommand('copy');});
 }
+
+/* ── Live option toggles ── */
+(function(){
+    function getCsrf(){var m=document.cookie.match(/csrftoken=([^;]+)/);return m?m[1]:'';}
+    function setMsg(txt,ok){
+        var b=document.getElementById('toggleOptionMessage');
+        if(!b) return;
+        b.textContent=txt||'';
+        b.className='small '+(ok?'text-success':'text-danger');
+    }
+    function updateStatusBadge(ps){
+        var b=document.getElementById('publicStatusBadge');
+        if(!b||!ps) return;
+        b.className='badge';
+        var map={live:'bg-success',open:'bg-primary',full:'bg-warning text-dark',ended:'bg-dark'};
+        (map[ps.code]||'bg-secondary').split(' ').forEach(function(c){b.classList.add(c);});
+        b.textContent=ps.label;
+    }
+    document.querySelectorAll('.opt-toggle').forEach(function(tog){
+        tog.addEventListener('change',function(){
+            var field=this.dataset.field, value=this.checked?'true':'false', self=this;
+            self.disabled=true; setMsg('Updating…',true);
+            fetch("{% url 'accounts:toggle_booking_option' booking.pk %}",{
+                method:'POST',
+                headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCsrf(),'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+                body:new URLSearchParams({field:field,value:value})
+            })
+            .then(function(r){return r.json();})
+            .then(function(data){
+                if(data.success){
+                    updateStatusBadge(data.public_status);
+                    setMsg(data.message||'Updated.',true);
+                    if(field==='enable_invite_link') window.location.reload();
+                } else {
+                    self.checked=!self.checked; setMsg(data.message||'Unable to update.',false);
+                }
+            })
+            .catch(function(){self.checked=!self.checked;setMsg('Something went wrong.',false);})
+            .finally(function(){self.disabled=false;});
+        });
+    });
+})();
 </script>
 {% endblock %}
-

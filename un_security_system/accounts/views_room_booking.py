@@ -5,7 +5,9 @@ from django.views.generic import ListView, DetailView, CreateView, UpdateView
 from django.urls import reverse_lazy, reverse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.utils.decorators import method_decorator
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, Http404
+import qrcode
+import io
 from django.views.decorators.http import require_POST, require_GET
 from django.contrib import messages
 from django.utils import timezone
@@ -20,11 +22,30 @@ from .utils import generate_booking_ics
 from django.core.paginator import Paginator
 from django.db.models import Q, Count, Prefetch
 from datetime import date
-from django.db import transaction
+from django.db import transaction, IntegrityError
+from datetime import datetime, time as time_cls, timedelta, date as date_cls
+from django.utils.text import slugify
+import csv
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.drawing.image import Image as XLImage
+from PIL import Image, ImageDraw, ImageFont
 
-from .models import Room, RoomBooking, RoomApprover, RoomBookingSeries, MeetingAttendee
-from .forms import RoomBookingForm, RoomBookingApprovalForm, RoomForm, RoomSeriesApprovalForm, MeetingAttendeeForm
-
+from .models import (
+    Room,
+    RoomBooking,
+    RoomApprover,
+    RoomBookingSeries,
+    MeetingAttendee,
+    AttendanceRecord,
+)
+from .forms import (
+    RoomBookingForm,
+    RoomBookingApprovalForm,
+    RoomForm,
+    RoomSeriesApprovalForm,
+    MeetingAttendeeForm,
+)
 # ICT focal lookup — graceful so the file works if AgencyAssetRoles isn't present.
 try:
     from .models import AgencyAssetRoles, User as _User
@@ -669,6 +690,203 @@ def iter_recurrence_dates(
             cur = date_cls(cur.year + interval, cur.month, min(cur.day, last))
 
 
+def find_next_available_slot(room, on_date, duration_minutes, after_time=None, search_days=7):
+    """
+    Scan from `after_time` onward (in 15-min steps) looking for a free
+    window of `duration_minutes` on `on_date`.  If none found that day,
+    tries the following days up to `search_days` ahead.
+
+    Returns a dict  { 'start': 'HH:MM', 'end': 'HH:MM', 'label': '...',
+                      'date': 'YYYY-MM-DD', 'same_day': bool }
+    or None if nothing found.
+    """
+    duration = timedelta(minutes=max(duration_minutes, 15))
+    business_start = time_cls(8, 0)
+    business_end = time_cls(20, 0)
+    step = timedelta(minutes=15)
+
+    for day_offset in range(search_days):
+        check_date = on_date + timedelta(days=day_offset)
+
+        # All approved/pending bookings on this date for the room, sorted
+        existing = list(
+            RoomBooking.objects.filter(
+                room=room,
+                date=check_date,
+                status__in=('approved', 'pending'),
+            ).order_by('start_time').values('start_time', 'end_time')
+        )
+
+        # Start scanning from business_start (or after_time on first day)
+        if day_offset == 0 and after_time:
+            # Round up to nearest 15-min slot after the conflict ends
+            candidate_start = datetime.combine(check_date, after_time)
+            # Round up to 15 min
+            minutes_past = (candidate_start.minute % 15)
+            if minutes_past:
+                candidate_start += timedelta(minutes=15 - minutes_past)
+            candidate_start = candidate_start.replace(second=0, microsecond=0)
+        else:
+            candidate_start = datetime.combine(check_date, business_start)
+
+        # Scan in 15-min steps
+        while True:
+            candidate_end = candidate_start + duration
+
+            # Outside business hours
+            if candidate_end.time() > business_end:
+                break
+
+            # Check against all bookings on this day
+            conflict = False
+            for bk in existing:
+                bk_start = datetime.combine(check_date, bk['start_time'])
+                bk_end = datetime.combine(check_date, bk['end_time'])
+                # Overlap: candidate_start < bk_end AND candidate_end > bk_start
+                if candidate_start < bk_end and candidate_end > bk_start:
+                    conflict = True
+                    # Jump past this booking
+                    candidate_start = bk_end
+                    # Round up to 15 min
+                    mp = candidate_start.minute % 15
+                    if mp:
+                        candidate_start += timedelta(minutes=15 - mp)
+                    candidate_start = candidate_start.replace(second=0, microsecond=0)
+                    break
+
+            if not conflict:
+                # Found a slot!
+                start_str = candidate_start.strftime('%H:%M')
+                end_str = candidate_end.strftime('%H:%M')
+
+                # Human label
+                if day_offset == 0:
+                    day_label = 'today'
+                elif day_offset == 1:
+                    day_label = 'tomorrow'
+                else:
+                    day_label = check_date.strftime('%A, %d %b')  # e.g. "Monday, 19 May"
+
+                label = f"{start_str} – {end_str}  ({day_label})"
+                if day_offset > 1:
+                    label = f"{check_date.strftime('%a %d %b')}  {start_str} – {end_str}"
+
+                return {
+                    'start': start_str,
+                    'end': end_str,
+                    'date': check_date.strftime('%Y-%m-%d'),
+                    'label': label,
+                    'same_day': day_offset == 0,
+                }
+            # If we jumped candidate_start, loop again without stepping
+            # (the inner loop already moved candidate_start past the conflict)
+
+        # If we get here: no slot found today → try next day
+
+    return None
+
+def _booking_has_ended(booking):
+    """
+    Return True if the booking end datetime is already in the past.
+    """
+    end_dt = datetime.combine(booking.date, booking.end_time)
+    end_dt = timezone.make_aware(end_dt, timezone.get_current_timezone())
+    return timezone.now() > end_dt
+
+
+def _booking_confirmed_attendance_count(booking):
+    """
+    Count only confirmed attendance records.
+    """
+    return booking.attendance_records.filter(
+        status__in=["present", "approved"]
+    ).count()
+
+
+def _booking_start_dt(booking):
+    dt = datetime.combine(booking.date, booking.start_time)
+    return timezone.make_aware(dt, timezone.get_current_timezone())
+
+
+def _booking_end_dt(booking):
+    dt = datetime.combine(booking.date, booking.end_time)
+    return timezone.make_aware(dt, timezone.get_current_timezone())
+
+
+def _booking_has_started(booking):
+    return timezone.now() >= _booking_start_dt(booking)
+
+
+def _booking_has_ended(booking):
+    return timezone.now() > _booking_end_dt(booking)
+
+
+def _booking_confirmed_attendance_count(booking):
+    return booking.attendance_records.filter(
+        status__in=["present", "approved"]
+    ).count()
+
+
+def _booking_registered_count(booking):
+    return booking.attendees.count()
+
+
+def _booking_public_link_status(booking):
+    """
+    Returns a machine code + human label + color class for public page state.
+    """
+    if not booking.enable_invite_link:
+        return {
+            "code": "disabled",
+            "label": "Public link disabled",
+            "badge_class": "secondary",
+            "reason": "The booking owner has disabled the public link.",
+        }
+
+    if _booking_has_ended(booking):
+        return {
+            "code": "ended",
+            "label": "Meeting ended",
+            "badge_class": "dark",
+            "reason": "The meeting has already ended.",
+        }
+
+    capacity = booking.room.capacity or 0
+    if capacity > 0:
+        current = (
+            _booking_confirmed_attendance_count(booking)
+            if booking.enable_attendance
+            else _booking_registered_count(booking)
+        )
+        if current >= capacity:
+            return {
+                "code": "full",
+                "label": "Capacity reached",
+                "badge_class": "warning",
+                "reason": "The meeting has reached its room capacity.",
+            }
+
+    if _booking_has_started(booking):
+        return {
+            "code": "live",
+            "label": "Live now",
+            "badge_class": "success",
+            "reason": "The meeting is currently in progress.",
+        }
+
+    return {
+        "code": "open",
+        "label": "Open",
+        "badge_class": "primary",
+        "reason": "The public link is active.",
+    }
+
+
+def _booking_public_link_block_reason(booking):
+    status = _booking_public_link_status(booking)
+    if status["code"] in {"disabled", "ended", "full"}:
+        return status["reason"]
+    return None
 # ======================= VIEWS =======================
 
 
@@ -1019,158 +1237,270 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
     template_name = "accounts/rooms/booking_form.html"
 
     def get_form_kwargs(self):
-        kwargs = super(RoomBookingCreateView, self).get_form_kwargs()
-        # Pass the selected room to the form if available
-        room_id = self.request.GET.get('room')
+        kwargs = super().get_form_kwargs()
+        room_id = self.request.GET.get("room")
         if room_id:
-            kwargs['room'] = get_object_or_404(Room, pk=room_id)
+            kwargs["room"] = get_object_or_404(Room, pk=room_id)
         return kwargs
 
     def get_success_url(self):
         return reverse("accounts:my_bookings")
 
-    def form_valid(self, form):
-        user = self.request.user
-        room = form.cleaned_data["room"]
+    def get_form(self, form_class=None):
+        """
+        Pass the selected room into the form when present.
+        """
+        if form_class is None:
+            form_class = self.get_form_class()
 
+        form_kwargs = self.get_form_kwargs()
+        room_id = self.request.GET.get("room")
+
+        if room_id:
+            try:
+                room = Room.objects.get(pk=room_id)
+                return form_class(room=room, **form_kwargs)
+            except (Room.DoesNotExist, ValueError, TypeError):
+                pass
+
+        return form_class(**form_kwargs)
+
+    def form_valid(self, form):
+        """
+        IMPORTANT:
+        Django calls form_valid(), not form_valid_with_conflict_guard().
+        """
+        return self.form_valid_with_conflict_guard(form)
+
+    def form_valid_with_conflict_guard(self, form):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        user = self.request.user
+        room = form.cleaned_data.get("room") or get_object_or_404(
+            Room, pk=self.request.GET.get("room")
+        )
+        frequency = form.cleaned_data.get("frequency")
         status = compute_initial_status(room)
 
-        # Extract newly added fields
-        attendee_emails = form.cleaned_data.get("attendee_emails", "")
-        virtual_meeting_link = form.cleaned_data.get("virtual_meeting_link", "")
+        attendee_emails = form.cleaned_data.get("attendee_emails", "") or ""
+        virtual_meeting_link = form.cleaned_data.get("virtual_meeting_link", "") or ""
         selected_amenities = form.cleaned_data.get("selected_amenities")
+        ict_support = form.cleaned_data.get("ict_support", "none") or "none"
 
-        # Check if recurring
-        frequency = form.cleaned_data.get("frequency")
+        def make_conflict_context(room, booking_date, start_time, end_time):
+            existing = RoomBooking.objects.filter(
+                room=room,
+                date=booking_date,
+                status__in=("approved", "pending"),
+                start_time__lt=end_time,
+                end_time__gt=start_time,
+            ).order_by("start_time")
+
+            ci = existing.first()
+
+            req_start = datetime.combine(booking_date, start_time)
+            req_end = datetime.combine(booking_date, end_time)
+            req_duration = int((req_end - req_start).total_seconds() // 60)
+
+            after = ci.end_time if ci else None
+            next_slot = find_next_available_slot(
+                room=room,
+                on_date=booking_date,
+                duration_minutes=req_duration,
+                after_time=after,
+            )
+            return ci, next_slot
+
+        # =========================
+        # RECURRING BOOKING PATH
+        # =========================
         if frequency:
-            # ---- recurring booking ----
             until = form.cleaned_data.get("until")
             interval = form.cleaned_data.get("interval", 1)
+
             weekdays_raw = form.cleaned_data.get("weekdays", [])
             weekdays = [int(x) for x in weekdays_raw] if weekdays_raw else []
 
-            # Monthly-weekday fields
             monthly_type = form.cleaned_data.get("monthly_type", "day") or "day"
             monthly_week_raw = form.cleaned_data.get("monthly_week")
             monthly_weekday_raw = form.cleaned_data.get("monthly_weekday")
-            monthly_week = int(monthly_week_raw) if monthly_week_raw not in (None, "") else None
-            monthly_weekday = int(monthly_weekday_raw) if monthly_weekday_raw not in (None, "") else None
 
-            ict_support = form.cleaned_data.get("ict_support", "none") or "none"
+            monthly_week = (
+                int(monthly_week_raw)
+                if monthly_week_raw not in (None, "")
+                else None
+            )
+            monthly_weekday = (
+                int(monthly_weekday_raw)
+                if monthly_weekday_raw not in (None, "")
+                else None
+            )
 
-            with transaction.atomic():
-                # Create series with approval status AND new fields
-                series = RoomBookingSeries.objects.create(
-                    room=room,
-                    requested_by=user,
-                    title=form.cleaned_data["title"],
-                    description=form.cleaned_data.get("description", ""),
-                    start_date=form.cleaned_data["date"],
-                    end_date=until,
-                    start_time=form.cleaned_data["start_time"],
-                    end_time=form.cleaned_data["end_time"],
-                    frequency=frequency,
-                    interval=interval,
-                    weekdays_csv=",".join(str(x) for x in (weekdays or [])),
-                    monthly_type=monthly_type,
-                    monthly_week=monthly_week,
-                    monthly_weekday=monthly_weekday,
-                    status=status,
-                    ict_support=ict_support,
-                    attendee_emails=attendee_emails,
-                    virtual_meeting_link=virtual_meeting_link,
-                )
-
-                created = 0
-                first_booking = None
-                for d in iter_recurrence_dates(
-                        series.start_date, series.end_date, frequency, interval, weekdays,
+            try:
+                with transaction.atomic():
+                    series = RoomBookingSeries.objects.create(
+                        room=room,
+                        requested_by=user,
+                        title=form.cleaned_data["title"],
+                        description=form.cleaned_data.get("description", ""),
+                        start_date=form.cleaned_data["date"],
+                        end_date=until,
+                        start_time=form.cleaned_data["start_time"],
+                        end_time=form.cleaned_data["end_time"],
+                        frequency=frequency,
+                        interval=interval,
+                        weekdays_csv=",".join(str(x) for x in (weekdays or [])),
                         monthly_type=monthly_type,
                         monthly_week=monthly_week,
                         monthly_weekday=monthly_weekday,
-                ):
-                    b = RoomBooking(
-                        series=series,
-                        room=room,
-                        title=series.title,
-                        description=series.description,
-                        date=d,
-                        start_time=series.start_time,
-                        end_time=series.end_time,
                         status=status,
-                        requested_by=user,
                         ict_support=ict_support,
                         attendee_emails=attendee_emails,
                         virtual_meeting_link=virtual_meeting_link,
                     )
-                    b.full_clean()
-                    b.save()
 
-                    # Add Many-to-Many selected amenities to each generated booking
-                    if selected_amenities:
-                        b.selected_amenities.set(selected_amenities)
+                    created = 0
+                    first_booking = None
 
-                    if created == 0:
-                        first_booking = b
+                    for d in iter_recurrence_dates(
+                        start_date=series.start_date,
+                        end_date=series.end_date,
+                        frequency=frequency,
+                        interval=interval,
+                        weekdays=weekdays,
+                        monthly_type=monthly_type,
+                        monthly_week=monthly_week,
+                        monthly_weekday=monthly_weekday,
+                    ):
+                        booking = RoomBooking(
+                            series=series,
+                            room=room,
+                            title=series.title,
+                            description=series.description,
+                            date=d,
+                            start_time=series.start_time,
+                            end_time=series.end_time,
+                            status=status,
+                            requested_by=user,
+                            ict_support=ict_support,
+                            attendee_emails=attendee_emails,
+                            virtual_meeting_link=virtual_meeting_link,
+                            enable_attendance=form.cleaned_data.get("enable_attendance", False),
+                            enable_invite_link=form.cleaned_data.get("enable_invite_link", False),
+                        )
 
-                    created += 1
+                        booking.full_clean()
+                        booking.save()
 
-                # Send notifications — use the right email for pending vs auto-approved
-                if status == "pending":
-                    notify_approvers_new_series(series)
-                    notify_requester_series_submitted(series)
-                else:
-                    # Auto-approved: optionally still notify approvers for visibility
-                    if getattr(room, "auto_approve_notify_approvers", False):
+                        if selected_amenities:
+                            booking.selected_amenities.set(selected_amenities)
+
+                        if booking.enable_invite_link and not booking.registration_code:
+                            import uuid
+                            booking.registration_code = uuid.uuid4()
+                            booking.save(update_fields=["registration_code"])
+
+                        if created == 0:
+                            first_booking = booking
+                        created += 1
+
+                    if status == "pending":
                         notify_approvers_new_series(series)
-                    notify_requester_series_approved(series)
+                        notify_requester_series_submitted(series)
+                    else:
+                        if getattr(room, "auto_approve_notify_approvers", False):
+                            notify_approvers_new_series(series)
+                        notify_requester_series_approved(series)
+                        if first_booking:
+                            send_booking_calendar_invite(first_booking)
 
-                    # Send Calendar Invite for auto-approved recurring series
-                    # (Passing the first booking is sufficient, ICS generation pulls the RRULE from the attached series)
-                    if first_booking:
-                        send_booking_calendar_invite(first_booking)
+                    if ict_support != "none":
+                        notify_ict_support_requested_series(series)
 
-                # Notify ICT if support was requested
-                if ict_support and ict_support != "none":
-                    notify_ict_support_requested_series(series)
+                    messages.success(
+                        self.request,
+                        f"Recurring booking created ({created} occurrences)"
+                        + (" and auto-approved." if status == "approved" else " — awaiting approval.")
+                    )
+                    return redirect("accounts:room_detail", pk=room.pk)
 
-                if status == "approved":
-                    messages.success(self.request,
-                                     f"Recurring booking created ({created} occurrences) and auto-approved. Calendar invites sent.")
-                else:
-                    messages.success(self.request,
-                                     f"Recurring booking series created ({created} occurrences) and awaiting approval.")
+            except DjangoValidationError as exc:
+                ci, next_slot = make_conflict_context(
+                    room,
+                    form.cleaned_data["date"],
+                    form.cleaned_data["start_time"],
+                    form.cleaned_data["end_time"],
+                )
+                form.add_error(None, str(exc))
+                return self.render_to_response(
+                    self.get_context_data(
+                        form=form,
+                        conflict_info=ci,
+                        next_available=next_slot,
+                    )
+                )
 
-                return redirect("accounts:room_detail", pk=room.pk)
-
-        # ---- non-recurring (single booking) ----
-        ict_support = form.cleaned_data.get("ict_support", "none") or "none"
+        # =========================
+        # SINGLE BOOKING PATH
+        # =========================
         form.instance.requested_by = user
-        form.instance.status = status
+        form.instance.room = room
         form.instance.ict_support = ict_support
+        form.instance.status = status
 
-        # For single bookings, `attendee_emails`, `virtual_meeting_link` and M2M `selected_amenities`
-        # are automatically saved by `super().form_valid(form)` since they are part of the ModelForm.
-        form.instance.full_clean()
+        try:
+            form.instance.full_clean()
+        except DjangoValidationError as exc:
+            ci, next_slot = make_conflict_context(
+                room,
+                form.cleaned_data["date"],
+                form.cleaned_data["start_time"],
+                form.cleaned_data["end_time"],
+            )
+            form.add_error(None, str(exc))
+            return self.render_to_response(
+                self.get_context_data(
+                    form=form,
+                    conflict_info=ci,
+                    next_available=next_slot,
+                )
+            )
+
         response = super().form_valid(form)
+
+        if selected_amenities:
+            self.object.selected_amenities.set(selected_amenities)
+
+        if self.object.enable_invite_link and not self.object.registration_code:
+            import uuid
+            self.object.registration_code = uuid.uuid4()
+            self.object.save(update_fields=["registration_code"])
 
         if status == "pending":
             notify_approvers_new_booking(self.object)
             notify_requester_booking_submitted(self.object)
-            messages.success(self.request, "Booking request submitted and awaiting approval.")
+            messages.success(
+                self.request,
+                "Booking request submitted and awaiting approval."
+            )
         else:
-            self.object.approve(user=None)
+            self.object.status = "approved"
+            self.object.approved_by = None
+            self.object.approved_at = timezone.now()
+            self.object.save(update_fields=["status", "approved_by", "approved_at"])
+
             if getattr(room, "auto_approve_notify_approvers", False):
                 notify_approvers_new_booking(self.object)
-            notify_requester_booking_approved(self.object)
 
-            # Send Calendar Invite for auto-approved single booking
+            notify_requester_booking_approved(self.request, self.object)
             send_booking_calendar_invite(self.object)
 
-            messages.success(self.request, "Booking auto-approved. Calendar invites sent.")
+            messages.success(
+                self.request,
+                "Booking auto-approved. Calendar invites sent."
+            )
 
-        # Notify ICT if support was requested (fires regardless of approval status)
-        if ict_support and ict_support != "none":
+        if ict_support != "none":
             notify_ict_support_requested(self.object)
 
         return response
@@ -1410,41 +1740,325 @@ def room_series_approve_view(request, pk):
 
 @login_required
 def booking_detail_view(request, pk):
-    booking = get_object_or_404(RoomBooking.objects.prefetch_related('attendees', 'approved_amenities'), pk=pk)
-    # Add permission check here if needed (e.g., only requester or approver)
+    booking = get_object_or_404(
+        RoomBooking.objects.select_related('room', 'requested_by', 'requested_by__agency')
+        .prefetch_related(
+            'attendees',
+            'approved_amenities',
+            'requested_amenities',
+            'attendance_records',
+        ),
+        pk=pk,
+    )
+
+    if not booking.registration_code:
+        import uuid as _uuid
+        booking.registration_code = _uuid.uuid4()
+        booking.save(update_fields=['registration_code'])
 
     registration_link = request.build_absolute_uri(
         reverse('accounts:meeting_registration', args=[booking.registration_code])
     )
 
+    qr_download_link = reverse('accounts:meeting_qr_code_download', args=[booking.registration_code])
+
+    all_records = booking.attendance_records.all()
+    pending_walkins = [r for r in all_records if r.status == 'pending_approval']
+    confirmed_count = sum(1 for r in all_records if r.status in ('present', 'approved'))
+    pending_count = len(pending_walkins)
+
+    if not booking.enable_attendance:
+        attendance_records = booking.attendees.all()
+        confirmed_count = attendance_records.count()
+    else:
+        attendance_records = all_records
+
+    public_status = _booking_public_link_status(booking)
+    meeting_started = _booking_has_started(booking)
+    meeting_ended = _booking_has_ended(booking)
+
+    # Agenda document QR URL (points to the agenda_document_qr_view)
+    agenda_qr_url = None
+    if booking.agenda_document:
+        agenda_qr_url = reverse('accounts:booking_agenda_qr', args=[booking.pk])
+
     return render(request, 'accounts/rooms/booking_detail.html', {
         'booking': booking,
-        'registration_link': registration_link
+        'registration_link': registration_link,
+        'qr_download_link': qr_download_link,
+        'attendance_records': attendance_records,
+        'pending_walkins': pending_walkins,
+        'confirmed_count': confirmed_count,
+        'pending_count': pending_count,
+        'public_status': public_status,
+        'meeting_started': meeting_started,
+        'meeting_ended': meeting_ended,
+        'agenda_qr_url': agenda_qr_url,
     })
 
 
-# --- Attendee Registration Views ---
+@login_required
+@require_GET
+def room_detail_api(request, pk):
+    """
+    Returns JSON with room approval_mode, amenities, and capacity.
+    Used by the booking form to show available amenities for manual-approval rooms.
+    """
+    room = get_object_or_404(Room, pk=pk, is_active=True)
+    amenities = [
+        {
+            'id': a.id,
+            'name': a.name,
+            'icon_class': a.icon_class or 'bi bi-check-circle',
+            'description': a.description,
+        }
+        for a in room.amenities.filter(is_active=True)
+    ]
+    return JsonResponse({
+        'id': room.pk,
+        'name': room.name,
+        'approval_mode': room.approval_mode,
+        'capacity': room.capacity,
+        'amenities': amenities,
+    })
+
+
+@require_GET
+def attendance_checkin_lookup(request, registration_code):
+    booking = get_object_or_404(RoomBooking, registration_code=registration_code)
+
+    block_reason = _public_link_block_reason(booking)
+    if block_reason:
+        return JsonResponse({
+            'closed': True,
+            'message': block_reason,
+        }, status=410)
+
+    email = (request.GET.get('email') or '').strip().lower()
+
+    if not email:
+        return JsonResponse({'error': 'Email required'}, status=400)
+
+    already = AttendanceRecord.objects.filter(
+        booking=booking,
+        email__iexact=email
+    ).exists()
+    if already:
+        return JsonResponse({'already_checked_in': True})
+
+    invited_emails = [
+        e.strip().lower()
+        for e in (booking.attendee_emails or '').split(',')
+        if e.strip()
+    ]
+    is_invited = email in invited_emails
+
+    is_registered = MeetingAttendee.objects.filter(
+        booking=booking,
+        email__iexact=email
+    ).exists()
+
+    return JsonResponse({
+        'already_checked_in': False,
+        'is_invited': is_invited,
+        'is_registered': is_registered,
+    })
+
+
+@login_required
+@require_GET
+def booking_attendee_count_api(request, pk):
+    """
+    JSON endpoint returning live attendee count for a booking.
+    Called every 30 seconds by the booking_detail template for auto-refresh.
+    """
+    booking = get_object_or_404(RoomBooking, pk=pk)
+
+    if booking.enable_attendance:
+        confirmed_count = booking.attendance_records.filter(
+            status__in=["present", "approved"]
+        ).count()
+
+        pending_count = booking.attendance_records.filter(
+            status="pending_approval"
+        ).count()
+
+        return JsonResponse({
+            "count": confirmed_count,
+            "pending_count": pending_count,
+            "booking_id": pk,
+            "capacity": booking.room.capacity,
+            "mode": "attendance",
+        })
+
+    registered_count = booking.attendees.count()
+
+    return JsonResponse({
+        "count": registered_count,
+        "pending_count": 0,
+        "booking_id": pk,
+        "capacity": booking.room.capacity,
+        "mode": "registration",
+    })
+
 
 def meeting_registration_view(request, registration_code):
-    booking = get_object_or_404(RoomBooking.objects.select_related('room'), registration_code=registration_code)
+    booking = get_object_or_404(
+        RoomBooking.objects.select_related('room', 'requested_by', 'requested_by__agency'),
+        registration_code=registration_code
+    )
+
+    block_reason = _booking_public_link_block_reason(booking)
+    if block_reason:
+        return render(
+            request,
+            'accounts/rooms/meeting_registration_closed.html',
+            {
+                'booking': booking,
+                'block_reason': block_reason,
+                'public_status': _booking_public_link_status(booking),
+            },
+            status=410
+        )
 
     if request.method == 'POST':
         form = MeetingAttendeeForm(request.POST)
+
         if form.is_valid():
+            # Re-check on submit in case meeting became blocked while page was open
+            block_reason = _booking_public_link_block_reason(booking)
+            if block_reason:
+                return render(
+                    request,
+                    'accounts/rooms/meeting_registration_closed.html',
+                    {
+                        'booking': booking,
+                        'block_reason': block_reason,
+                        'public_status': _booking_public_link_status(booking),
+                    },
+                    status=410
+                )
+
+            mode = request.POST.get('mode', 'register')
+            name = form.cleaned_data['name']
+            email = form.cleaned_data['email'].strip().lower()
+            organization = form.cleaned_data.get('organization', '')
+
+            if mode == 'attendance' and booking.enable_attendance:
+                if AttendanceRecord.objects.filter(booking=booking, email__iexact=email).exists():
+                    messages.warning(request, "You have already checked in to this meeting.")
+                    return render(
+                        request,
+                        'accounts/rooms/meeting_registration.html',
+                        {
+                            'form': MeetingAttendeeForm(),
+                            'booking': booking,
+                            'public_status': _booking_public_link_status(booking),
+                        }
+                    )
+
+                invited_emails = [
+                    e.strip().lower()
+                    for e in (booking.attendee_emails or '').split(',')
+                    if e.strip()
+                ]
+                is_invited = email in invited_emails
+                is_registered = MeetingAttendee.objects.filter(
+                    booking=booking,
+                    email__iexact=email
+                ).exists()
+                is_auto = is_invited or is_registered
+                status = 'present' if is_auto else 'pending_approval'
+
+                AttendanceRecord.objects.create(
+                    booking=booking,
+                    name=name,
+                    email=email,
+                    organization=organization,
+                    status=status,
+                    was_invited=is_invited,
+                    was_preregistered=is_registered,
+                )
+
+                if is_auto:
+                    messages.success(
+                        request,
+                        f"Welcome, {name}! You've been marked as present. See you inside!"
+                    )
+                else:
+                    messages.warning(
+                        request,
+                        f"Thank you, {name}. Your check-in request has been sent to the meeting host for approval."
+                    )
+
+                return redirect('accounts:meeting_registration_success')
+
             attendee = form.save(commit=False)
             attendee.booking = booking
             try:
                 attendee.save()
                 notify_attendee_of_registration(attendee)
-                messages.success(request, "Thank you for registering! A confirmation email has been sent.")
+                messages.success(
+                    request,
+                    "Thank you for registering! A confirmation email has been sent."
+                )
                 return redirect('accounts:meeting_registration_success')
-            except IntegrityError:
-                messages.error(request, "The email address you entered has already been registered for this meeting.")
+            except Exception:
+                messages.error(
+                    request,
+                    "The email address you entered has already been registered for this meeting."
+                )
     else:
         form = MeetingAttendeeForm()
 
-    return render(request, 'accounts/rooms/meeting_registration.html', {'form': form, 'booking': booking})
+    return render(
+        request,
+        'accounts/rooms/meeting_registration.html',
+        {
+            'form': form,
+            'booking': booking,
+            'public_status': _booking_public_link_status(booking),
+        }
+    )
 
+@login_required
+@require_POST
+def walkin_decision_view(request, pk, action):
+    """
+    POST /accounts/attendance/<pk>/approve/  or  /accounts/attendance/<pk>/reject/
+    Only the booking requester (or an approver) can call this.
+    """
+    record = get_object_or_404(AttendanceRecord, pk=pk)
+    booking = record.booking
+
+    # Permission: requester or room approver
+    is_owner = booking.requested_by == request.user
+    is_room_approver = RoomApprover.objects.filter(
+        room=booking.room, user=request.user, is_active=True
+    ).exists()
+
+    if not (is_owner or is_room_approver or request.user.is_superuser):
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    if record.status != 'pending_approval':
+        return JsonResponse({'success': False, 'message': 'Record is not pending.'}, status=400)
+
+    from django.utils import timezone as tz
+    if action == 'approve':
+        record.status = 'approved'
+        record.decided_by = request.user
+        record.decided_at = tz.now()
+        record.save(update_fields=['status', 'decided_by', 'decided_at'])
+        return JsonResponse({'success': True, 'status': 'approved'})
+
+    elif action == 'reject':
+        record.status = 'rejected'
+        record.decided_by = request.user
+        record.decided_at = tz.now()
+        record.save(update_fields=['status', 'decided_by', 'decided_at'])
+        return JsonResponse({'success': True, 'status': 'rejected'})
+
+    return JsonResponse({'success': False, 'message': 'Invalid action.'}, status=400)
 
 def meeting_registration_success_view(request):
     return render(request, 'accounts/rooms/meeting_registration_success.html')
@@ -1453,36 +2067,709 @@ def meeting_registration_success_view(request):
 # --- FULLY IMPLEMENTED QR CODE VIEW ---
 def meeting_qr_code_view(request, registration_code):
     """
-    Generates and returns a PNG image of a QR code for the given meeting registration link.
+    Generates a polished, professional meeting pass card image (PNG) containing:
+      - Branded UNPASS header with deep-navy background and teal accents
+      - Meeting title (wrapping), room, date, time and live status pill
+      - Agency logo (if configured) in the header, or code badge fallback
+      - High-error-correction QR code in a framed panel with corner accents
+      - Scan instruction and branded footer
     """
-    # 1. Construct the full URL that the QR code will point to.
-    # This URL leads to the attendee registration form.
+    booking = get_object_or_404(
+        RoomBooking.objects.select_related('room', 'requested_by', 'requested_by__agency'),
+        registration_code=registration_code
+    )
+
+    block_reason = _booking_public_link_block_reason(booking)
+    if block_reason:
+        raise Http404("This public meeting link is no longer available.")
+
     registration_url = request.build_absolute_uri(
         reverse('accounts:meeting_registration', args=[registration_code])
     )
 
-    # 2. Configure and generate the QR code image.
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,  # L = Low error correction
-        box_size=10,  # Size of each box in pixels
-        border=4,  # Width of the border
+    # ── Colour palette ─────────────────────────────────────────────────────
+    DEEP_NAVY = (10,  25,  61)
+    TEAL      = (0,  150, 199)
+    GOLD      = (255, 184,  28)
+    WHITE     = (255, 255, 255)
+    MID_GREY  = (148, 163, 184)
+    DARK_TEXT = (15,  23,  42)
+    SOFT_TEXT = (71,  85, 105)
+
+    STATUS_FILL = {
+        "live":     (16,  185, 129),
+        "open":     TEAL,
+        "full":     (245, 158,  11),
+        "ended":    (100, 116, 139),
+        "disabled": (100, 116, 139),
+    }
+
+    # ── Font loader (Poppins → DejaVu → default) ───────────────────────────
+    _FONT_CANDIDATES = [
+        "/usr/share/fonts/truetype/google-fonts/Poppins-{w}.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans{w}.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans{w}.ttf",
+    ]
+    _WEIGHT = {
+        "Bold":    ("Bold",    "-Bold",    "-Bold"),
+        "Medium":  ("Medium",  "-Bold",    "-Bold"),
+        "Regular": ("Regular", "",         ""),
+        "Light":   ("Light",   "",         ""),
+    }
+
+    def load_font(weight, size):
+        variants = _WEIGHT.get(weight, ("Regular", "", ""))
+        for tpl, v in zip(_FONT_CANDIDATES, variants):
+            try:
+                return ImageFont.truetype(tpl.format(w=v), size)
+            except Exception:
+                continue
+        return ImageFont.load_default()
+
+    # ── Text wrap helper ───────────────────────────────────────────────────
+    def wrap_text(d, text, font, max_w):
+        words, lines, cur = text.split(), [], ""
+        for word in words:
+            trial = (cur + " " + word).strip()
+            if d.textbbox((0, 0), trial, font=font)[2] <= max_w:
+                cur = trial
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = word
+        if cur:
+            lines.append(cur)
+        return lines or [""]
+
+    # ── Duration helper ────────────────────────────────────────────────────
+    def fmt_dur(s, e):
+        mins = (e.hour * 60 + e.minute) - (s.hour * 60 + s.minute)
+        if mins <= 0:
+            return ""
+        h, m = divmod(mins, 60)
+        if h and m:
+            return f"  ({h}h {m}m)"
+        return f"  ({h}h)" if h else f"  ({m}m)"
+
+    # ── Rounded-rect mask helper ───────────────────────────────────────────
+    def rr_mask(size, radius):
+        mask = Image.new("L", size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            [0, 0, size[0] - 1, size[1] - 1], radius=radius, fill=255
+        )
+        return mask
+
+    # ── Canvas ─────────────────────────────────────────────────────────────
+    W, H     = 900, 1320
+    RADIUS   = 40
+    MARGIN   = 54
+    HEADER_H = 270
+
+    card = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+
+    # White rounded background
+    bg = Image.new("RGBA", (W, H), (*WHITE, 255))
+    card.paste(bg, mask=rr_mask((W, H), RADIUS))
+
+    # Deep-navy header block (rounded top, flat bottom)
+    hdr = Image.new("RGBA", (W, HEADER_H + RADIUS), (*DEEP_NAVY, 255))
+    card.paste(hdr, (0, 0), rr_mask((W, HEADER_H + RADIUS), RADIUS))
+    card.paste(Image.new("RGBA", (W, RADIUS), (*DEEP_NAVY, 255)), (0, HEADER_H))
+
+    # Decorative translucent teal depth circles
+    for cx, cy, r, a in [(810, -35, 210, 16), (860, 148, 118, 10), (28, 238, 72, 14)]:
+        circ = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(circ).ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*TEAL, a))
+        card = Image.alpha_composite(card, circ)
+
+    draw = ImageDraw.Draw(card)
+
+    # ── Brand wordmark ─────────────────────────────────────────────────────
+    draw.text((MARGIN, 48),  "UNPASS",              fill=WHITE,           font=load_font("Bold",    56))
+    draw.rounded_rectangle([MARGIN, 116, MARGIN + 162, 123], radius=3,  fill=(*TEAL,  255))
+    draw.text((MARGIN, 130), "Official Meeting Pass", fill=(*TEAL, 255), font=load_font("Medium",  26))
+
+    # Gold + ghost dots
+    draw.ellipse([MARGIN, 180, MARGIN + 22, 202],          fill=GOLD)
+    draw.ellipse([MARGIN + 30, 182, MARGIN + 48, 200],     fill=(*WHITE, 85))
+
+    # ── Agency logo or code badge (top-right of header) ───────────────────
+    LX1, LY1 = W - 175, 44
+    LX2, LY2 = W - 44,  184
+    LW, LH   = LX2 - LX1, LY2 - LY1
+
+    agency     = getattr(booking.requested_by, 'agency', None)
+    logo_placed = False
+    if agency and getattr(agency, 'logo', None):
+        try:
+            logo_img = Image.open(agency.logo.path).convert("RGBA")
+            logo_img.thumbnail((LW - 16, LH - 16), Image.LANCZOS)
+            draw.rounded_rectangle([LX1, LY1, LX2, LY2], radius=18, fill=(*WHITE, 230))
+            lx = LX1 + (LW - logo_img.width)  // 2
+            ly = LY1 + (LH - logo_img.height) // 2
+            card.paste(logo_img, (lx, ly), logo_img)
+            draw = ImageDraw.Draw(card)
+            logo_placed = True
+        except Exception:
+            pass
+
+    if not logo_placed:
+        code_txt = (agency.code if agency else "UN")[:4]
+        draw.rounded_rectangle([LX1, LY1, LX2, LY2], radius=18,
+                               fill=(*WHITE, 32), outline=(*WHITE, 60), width=2)
+        bb = draw.textbbox((0, 0), code_txt, font=load_font("Bold", 36))
+        draw.text(
+            (LX1 + (LW - (bb[2] - bb[0])) // 2, LY1 + (LH - (bb[3] - bb[1])) // 2),
+            code_txt, fill=(*WHITE, 200), font=load_font("Bold", 36)
+        )
+
+    # ── Meeting title (wraps to 2 lines) ───────────────────────────────────
+    t_font  = load_font("Bold", 30)
+    t_lines = wrap_text(draw, booking.title, t_font, LX1 - MARGIN - 16)[:2]
+    ty = 205
+    for line in t_lines:
+        draw.text((MARGIN, ty), line, fill=WHITE, font=t_font)
+        ty += 36
+
+    # ── Teal divider stripe ─────────────────────────────────────────────────
+    draw.rectangle([0, HEADER_H, W, HEADER_H + 6], fill=TEAL)
+
+    # ── Info rows ───────────────────────────────────────────────────────────
+    y      = HEADER_H + 34
+    ROW_H  = 80
+    ICO_SZ = 34
+
+    def info_row(icon_ch, label_str, value_str, y_pos):
+        draw.rounded_rectangle(
+            [MARGIN, y_pos + 2, MARGIN + ICO_SZ, y_pos + 2 + ICO_SZ],
+            radius=10, fill=(*TEAL, 30)
+        )
+        draw.text((MARGIN + 5, y_pos + 7), icon_ch, fill=TEAL, font=load_font("Bold", 17))
+        draw.text((MARGIN + ICO_SZ + 14, y_pos),      label_str, fill=MID_GREY,  font=load_font("Regular", 17))
+        draw.text((MARGIN + ICO_SZ + 14, y_pos + 20), value_str, fill=DARK_TEXT, font=load_font("Bold",    24))
+
+    room_val = f"{booking.room.name}  ·  {booking.room.code}"
+    if booking.room.location:
+        room_val += f"  ·  {booking.room.location}"
+
+    date_val = booking.date.strftime("%A, %d %B %Y")
+    time_val = (
+        f"{booking.start_time.strftime('%H:%M')} – "
+        f"{booking.end_time.strftime('%H:%M')}"
+        + fmt_dur(booking.start_time, booking.end_time)
     )
-    qr.add_data(registration_url)
-    qr.make(fit=True)
 
-    # Create an image from the QR Code instance
-    img = qr.make_image(fill_color="black", back_color="white")
+    info_row("⊞", "ROOM", room_val[:60],  y); y += ROW_H
+    info_row("◈", "DATE", date_val,        y); y += ROW_H
+    info_row("◷", "TIME", time_val,        y); y += ROW_H
 
-    # 3. Save the image to a memory buffer.
-    # We use a BytesIO buffer to avoid saving the file to disk.
+    # Separator rule
+    draw.line([MARGIN, y + 4, W - MARGIN, y + 4], fill=(*MID_GREY, 55), width=1)
+    y += 22
+
+    # ── Status pill ─────────────────────────────────────────────────────────
+    pub_status   = _booking_public_link_status(booking)
+    s_color      = STATUS_FILL.get(pub_status["code"], TEAL)
+    pill_font    = load_font("Bold", 19)
+    pill_text    = f"  ●  {pub_status['label']}  "
+    pill_w       = draw.textbbox((0, 0), pill_text, font=pill_font)[2] + 24
+    draw.rounded_rectangle([MARGIN, y, MARGIN + pill_w, y + 42], radius=21, fill=(*s_color, 255))
+    draw.text((MARGIN + 12, y + 8), pill_text, fill=WHITE, font=pill_font)
+    y += 60
+
+    # ── QR code ─────────────────────────────────────────────────────────────
+    qr_obj = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=2,
+    )
+    qr_obj.add_data(registration_url)
+    qr_obj.make(fit=True)
+    qr_img = qr_obj.make_image(fill_color=DEEP_NAVY, back_color=WHITE).convert("RGBA")
+    QR_SZ  = 470
+    qr_img = qr_img.resize((QR_SZ, QR_SZ), Image.LANCZOS)
+
+    PAD     = 26
+    frame_w = QR_SZ + PAD * 2
+    qr_x    = (W - frame_w) // 2
+    qr_y    = y + 10
+
+    # Drop shadow
+    shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle(
+        [qr_x - 8, qr_y - 8, qr_x + frame_w + 8, qr_y + frame_w + 8],
+        radius=30, fill=(0, 0, 0, 36)
+    )
+    card = Image.alpha_composite(card, shadow)
+    draw = ImageDraw.Draw(card)
+
+    # White frame + teal border
+    draw.rounded_rectangle(
+        [qr_x, qr_y, qr_x + frame_w, qr_y + frame_w],
+        radius=22, fill=WHITE, outline=TEAL, width=4
+    )
+
+    # Teal corner accent squares
+    csz = 14
+    for (cx, cy) in [
+        (qr_x + 10,                qr_y + 10),
+        (qr_x + frame_w - 10 - csz, qr_y + 10),
+        (qr_x + 10,                qr_y + frame_w - 10 - csz),
+        (qr_x + frame_w - 10 - csz, qr_y + frame_w - 10 - csz),
+    ]:
+        draw.rounded_rectangle([cx, cy, cx + csz, cy + csz], radius=4, fill=TEAL)
+
+    card.paste(qr_img, (qr_x + PAD, qr_y + PAD))
+    draw = ImageDraw.Draw(card)
+    y = qr_y + frame_w + 24
+
+    # ── Scan instruction ────────────────────────────────────────────────────
+    draw.text((W // 2, y), "Scan to register or check in",
+              fill=SOFT_TEXT, font=load_font("Medium", 22), anchor="mm")
+    y += 34
+    draw.text((W // 2, y), "Do not share if attendance is restricted",
+              fill=MID_GREY, font=load_font("Regular", 17), anchor="mm")
+
+    # ── Footer bar ──────────────────────────────────────────────────────────
+    FOOTER_H = 62
+    footer_y = H - FOOTER_H
+
+    # Teal rule
+    draw.rectangle([0, footer_y - 5, W, footer_y], fill=TEAL)
+
+    # Dark footer (rounded bottom only)
+    ft = Image.new("RGBA", (W, FOOTER_H + RADIUS), (*DEEP_NAVY, 255))
+    card.paste(ft, (0, footer_y - RADIUS), rr_mask((W, FOOTER_H + RADIUS), RADIUS))
+    card.paste(Image.new("RGBA", (W, RADIUS), (*DEEP_NAVY, 255)), (0, footer_y))
+    draw = ImageDraw.Draw(card)
+    draw.text(
+        (W // 2, footer_y + FOOTER_H // 2 - 4),
+        "UNDP  ·  Powered by UNPASS",
+        fill=(*TEAL, 210), font=load_font("Regular", 18), anchor="mm"
+    )
+
+    # ── Composite to RGB and emit ───────────────────────────────────────────
+    out = Image.new("RGB", (W, H), WHITE)
+    out.paste(card, mask=card.split()[3])
+
     buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
-    buffer.seek(0)  # Rewind the buffer to the beginning before reading
+    out.save(buffer, format="PNG", dpi=(144, 144))
+    buffer.seek(0)
 
-    # 4. Create an HTTP response with the image data and the correct content type.
-    # This tells the browser to display it as an image.
-    return HttpResponse(buffer, content_type="image/png")
+    safe_name = slugify(booking.title)[:40] or "meeting"
+    response  = HttpResponse(buffer.getvalue(), content_type="image/png")
+    response["Content-Disposition"] = (
+        f'inline; filename="unpass_qr_{safe_name}_{booking.pk}.png"'
+    )
+    return response
+
+@login_required
+def meeting_qr_code_download_view(request, registration_code):
+    response = meeting_qr_code_view(request, registration_code)
+    response["Content-Disposition"] = f'attachment; filename="unpass_meeting_qr_{registration_code}.png"'
+    return response
+
+@login_required
+@require_GET
+def agenda_document_qr_view(request, pk):
+    """
+    Generates a QR code card image (PNG) that encodes the direct download URL
+    of the booking's agenda document.  Attendees scan this to download the file.
+
+    The card uses the same UNPASS design language as meeting_qr_code_view but
+    is clearly labelled as an AGENDA / FILE download QR.
+    """
+    booking = get_object_or_404(
+        RoomBooking.objects.select_related('room', 'requested_by', 'requested_by__agency'),
+        pk=pk,
+    )
+
+    if not booking.agenda_document:
+        raise Http404("No agenda document attached to this booking.")
+
+    # Build the full absolute download URL for the agenda file
+    file_url = request.build_absolute_uri(booking.agenda_document.url)
+    file_name = booking.agenda_document.name.split('/')[-1]
+
+    # ── Colour palette (same as UNPASS brand) ────────────────────────────────
+    DEEP_NAVY = (10,  25,  61)
+    TEAL      = (0,  150, 199)
+    GOLD      = (255, 184,  28)
+    WHITE     = (255, 255, 255)
+    MID_GREY  = (148, 163, 184)
+    DARK_TEXT = (15,  23,  42)
+    SOFT_TEXT = (71,  85, 105)
+    EMERALD   = (16,  185, 129)   # accent for "document" flavour
+
+    # ── Font loader ───────────────────────────────────────────────────────────
+    _FC = [
+        "/usr/share/fonts/truetype/google-fonts/Poppins-{w}.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans{w}.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans{w}.ttf",
+    ]
+    _WM = {
+        "Bold":    ("Bold",    "-Bold",    "-Bold"),
+        "Medium":  ("Medium",  "-Bold",    "-Bold"),
+        "Regular": ("Regular", "",         ""),
+    }
+
+    def lf(weight, size):
+        for tpl, v in zip(_FC, _WM.get(weight, ("Regular", "", ""))):
+            try:
+                return ImageFont.truetype(tpl.format(w=v), size)
+            except Exception:
+                continue
+        return ImageFont.load_default()
+
+    def wrap(d, text, font, max_w):
+        words, lines, cur = text.split(), [], ""
+        for w in words:
+            t = (cur + " " + w).strip()
+            if d.textbbox((0, 0), t, font=font)[2] <= max_w:
+                cur = t
+            else:
+                if cur: lines.append(cur)
+                cur = w
+        if cur: lines.append(cur)
+        return lines or [""]
+
+    def rr_mask(size, r):
+        m = Image.new("L", size, 0)
+        ImageDraw.Draw(m).rounded_rectangle([0, 0, size[0]-1, size[1]-1], radius=r, fill=255)
+        return m
+
+    # ── Canvas ────────────────────────────────────────────────────────────────
+    W, H     = 900, 1160
+    RADIUS   = 40
+    MG       = 54
+    HEADER_H = 248
+
+    card = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    card.paste(Image.new("RGBA", (W, H), (*WHITE, 255)), mask=rr_mask((W, H), RADIUS))
+
+    # Header — deep navy
+    hdr = Image.new("RGBA", (W, HEADER_H + RADIUS), (*DEEP_NAVY, 255))
+    card.paste(hdr, (0, 0), rr_mask((W, HEADER_H + RADIUS), RADIUS))
+    card.paste(Image.new("RGBA", (W, RADIUS), (*DEEP_NAVY, 255)), (0, HEADER_H))
+
+    # Decorative emerald circles (doc-flavour tint)
+    for cx, cy, r, a in [(810, -30, 200, 14), (860, 140, 110, 9), (30, 228, 68, 12)]:
+        c2 = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(c2).ellipse([cx-r, cy-r, cx+r, cy+r], fill=(*EMERALD, a))
+        card = Image.alpha_composite(card, c2)
+
+    draw = ImageDraw.Draw(card)
+
+    # Brand wordmark
+    draw.text((MG, 44), "UNPASS", fill=WHITE, font=lf("Bold", 52))
+    draw.rounded_rectangle([MG, 108, MG+148, 115], radius=3, fill=(*EMERALD, 255))
+    draw.text((MG, 122), "Agenda & File Download", fill=(*EMERALD, 255), font=lf("Medium", 24))
+
+    # Gold + ghost dots
+    draw.ellipse([MG, 170, MG+20, 190], fill=GOLD)
+    draw.ellipse([MG+28, 172, MG+44, 188], fill=(*WHITE, 80))
+
+    # Agency badge top-right
+    LX1, LY1 = W-165, 40; LX2, LY2 = W-44, 168; LW, LH = LX2-LX1, LY2-LY1
+    agency = getattr(booking.requested_by, 'agency', None)
+    logo_placed = False
+    if agency and getattr(agency, 'logo', None):
+        try:
+            logo_img = Image.open(agency.logo.path).convert("RGBA")
+            logo_img.thumbnail((LW-14, LH-14), Image.LANCZOS)
+            draw.rounded_rectangle([LX1, LY1, LX2, LY2], radius=16, fill=(*WHITE, 220))
+            lx = LX1 + (LW - logo_img.width) // 2
+            ly = LY1 + (LH - logo_img.height) // 2
+            card.paste(logo_img, (lx, ly), logo_img)
+            draw = ImageDraw.Draw(card)
+            logo_placed = True
+        except Exception:
+            pass
+    if not logo_placed:
+        code_txt = (agency.code if agency else "UN")[:4]
+        draw.rounded_rectangle([LX1, LY1, LX2, LY2], radius=16,
+                               fill=(*WHITE, 28), outline=(*WHITE, 55), width=2)
+        bb = draw.textbbox((0, 0), code_txt, font=lf("Bold", 32))
+        draw.text(
+            (LX1 + (LW-(bb[2]-bb[0]))//2, LY1 + (LH-(bb[3]-bb[1]))//2),
+            code_txt, fill=(*WHITE, 190), font=lf("Bold", 32)
+        )
+
+    # Meeting title (wraps to 2 lines)
+    t_font  = lf("Bold", 28)
+    t_lines = wrap(draw, booking.title, t_font, LX1 - MG - 14)[:2]
+    ty = 196
+    for line in t_lines:
+        draw.text((MG, ty), line, fill=WHITE, font=t_font)
+        ty += 34
+
+    # Emerald stripe divider
+    draw.rectangle([0, HEADER_H, W, HEADER_H + 6], fill=EMERALD)
+
+    # ── Info rows ─────────────────────────────────────────────────────────────
+    y = HEADER_H + 28; RSZ = 72; ICO = 32
+
+    def ir(ic, lab, val, yp):
+        draw.rounded_rectangle([MG, yp+2, MG+ICO, yp+2+ICO], radius=9, fill=(*EMERALD, 28))
+        draw.text((MG+5, yp+7), ic, fill=EMERALD, font=lf("Bold", 16))
+        draw.text((MG+ICO+12, yp),    lab, fill=MID_GREY,  font=lf("Regular", 16))
+        draw.text((MG+ICO+12, yp+18), val, fill=DARK_TEXT, font=lf("Bold",    22))
+
+    room_val = f"{booking.room.name}  ·  {booking.room.code}"
+    date_val = booking.date.strftime("%A, %d %B %Y")
+    mins = (booking.end_time.hour*60+booking.end_time.minute) - (booking.start_time.hour*60+booking.start_time.minute)
+    h, m = divmod(max(mins, 0), 60)
+    dur = f"  ({h}h {m}m)" if h and m else (f"  ({h}h)" if h else f"  ({m}m)" if m else "")
+    time_val = f"{booking.start_time.strftime('%H:%M')} – {booking.end_time.strftime('%H:%M')}{dur}"
+
+    ir("⊞", "ROOM", room_val[:58],  y); y += RSZ
+    ir("◈", "DATE", date_val,        y); y += RSZ
+
+    # Separator
+    draw.line([MG, y+4, W-MG, y+4], fill=(*MID_GREY, 50), width=1); y += 20
+
+    # File name pill
+    fn_font = lf("Bold", 18)
+    fn_text = f"  📄  {file_name[:55]}  "
+    fn_w = draw.textbbox((0, 0), fn_text, font=fn_font)[2] + 22
+    draw.rounded_rectangle([MG, y, MG+fn_w, y+40], radius=20, fill=(*EMERALD, 255))
+    draw.text((MG+11, y+8), fn_text, fill=WHITE, font=fn_font); y += 56
+
+    # ── QR code ───────────────────────────────────────────────────────────────
+    qr_obj = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H,
+                           box_size=10, border=2)
+    qr_obj.add_data(file_url)
+    qr_obj.make(fit=True)
+    qr_img = qr_obj.make_image(fill_color=DEEP_NAVY, back_color=WHITE).convert("RGBA")
+    QS = 440
+    qr_img = qr_img.resize((QS, QS), Image.LANCZOS)
+
+    PAD = 24; fw = QS + PAD*2; qx = (W-fw)//2; qy = y+8
+
+    shadow = Image.new("RGBA", (W, H), (0,0,0,0))
+    ImageDraw.Draw(shadow).rounded_rectangle([qx-6, qy-6, qx+fw+6, qy+fw+6],
+                                             radius=28, fill=(0,0,0,32))
+    card = Image.alpha_composite(card, shadow)
+    draw = ImageDraw.Draw(card)
+
+    draw.rounded_rectangle([qx, qy, qx+fw, qy+fw], radius=20, fill=WHITE,
+                           outline=EMERALD, width=4)
+    csz = 13
+    for cx2, cy2 in [(qx+9,qy+9),(qx+fw-9-csz,qy+9),(qx+9,qy+fw-9-csz),(qx+fw-9-csz,qy+fw-9-csz)]:
+        draw.rounded_rectangle([cx2,cy2,cx2+csz,cy2+csz], radius=4, fill=EMERALD)
+
+    card.paste(qr_img, (qx+PAD, qy+PAD))
+    draw = ImageDraw.Draw(card)
+    y = qy + fw + 22
+
+    # Instructions
+    draw.text((W//2, y), "Scan to download the agenda / document",
+              fill=SOFT_TEXT, font=lf("Medium", 21), anchor="mm"); y += 32
+    draw.text((W//2, y), "File download will open in your browser",
+              fill=MID_GREY, font=lf("Regular", 16), anchor="mm")
+
+    # ── Footer ────────────────────────────────────────────────────────────────
+    FH = 58; fy = H - FH
+    draw.rectangle([0, fy-4, W, fy], fill=EMERALD)
+    ft = Image.new("RGBA", (W, FH+RADIUS), (*DEEP_NAVY, 255))
+    card.paste(ft, (0, fy-RADIUS), rr_mask((W, FH+RADIUS), RADIUS))
+    card.paste(Image.new("RGBA", (W, RADIUS), (*DEEP_NAVY, 255)), (0, fy))
+    draw = ImageDraw.Draw(card)
+    draw.text((W//2, fy+FH//2-4), "EasyOffice  ·  Powered by UNPASS",
+              fill=(*EMERALD, 200), font=lf("Regular", 17), anchor="mm")
+
+    out = Image.new("RGB", (W, H), WHITE)
+    out.paste(card, mask=card.split()[3])
+
+    buf = io.BytesIO()
+    out.save(buf, format="PNG", dpi=(144, 144))
+    buf.seek(0)
+
+    safe = slugify(booking.title)[:35] or "meeting"
+    resp = HttpResponse(buf.getvalue(), content_type="image/png")
+    resp["Content-Disposition"] = f'inline; filename="agenda_qr_{safe}_{pk}.png"'
+    return resp
+
+
+
+@login_required
+def booking_attendance_export_csv(request, pk):
+    booking = get_object_or_404(
+        RoomBooking.objects.prefetch_related('attendance_records', 'attendees'),
+        pk=pk
+    )
+
+    filename = f"{slugify(booking.title)}_attendance.csv"
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'Meeting Title',
+        'Date',
+        'Room',
+        'Mode',
+        'Name',
+        'Email',
+        'Organization',
+        'Status',
+        'Invited',
+        'Pre-registered',
+        'Checked In At',
+    ])
+
+    if booking.enable_attendance:
+        rows = booking.attendance_records.all().order_by('checked_in_at')
+        for r in rows:
+            writer.writerow([
+                booking.title,
+                booking.date,
+                booking.room.name,
+                'Attendance',
+                r.name,
+                r.email,
+                r.organization,
+                r.status,
+                'Yes' if r.was_invited else 'No',
+                'Yes' if r.was_preregistered else 'No',
+                timezone.localtime(r.checked_in_at).strftime('%Y-%m-%d %H:%M:%S') if r.checked_in_at else '',
+            ])
+    else:
+        rows = booking.attendees.all().order_by('registered_at')
+        for a in rows:
+            writer.writerow([
+                booking.title,
+                booking.date,
+                booking.room.name,
+                'Registration',
+                a.name,
+                a.email,
+                a.organization,
+                'registered',
+                '',
+                '',
+                timezone.localtime(a.registered_at).strftime('%Y-%m-%d %H:%M:%S') if a.registered_at else '',
+            ])
+
+    return response
+
+
+@login_required
+def booking_attendance_export_excel(request, pk):
+    booking = get_object_or_404(
+        RoomBooking.objects.select_related('room', 'requested_by', 'requested_by__agency')
+        .prefetch_related('attendance_records', 'attendees'),
+        pk=pk
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Attendance"
+
+    # Column widths
+    widths = {
+        "A": 22, "B": 16, "C": 22, "D": 18, "E": 24,
+        "F": 30, "G": 24, "H": 18, "I": 12, "J": 15, "K": 22
+    }
+    for col, width in widths.items():
+        ws.column_dimensions[col].width = width
+
+    # Styles
+    header_fill = PatternFill("solid", fgColor="009EDB")
+    title_fill = PatternFill("solid", fgColor="133B5C")
+    white_font = Font(color="FFFFFF", bold=True)
+    bold_font = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center")
+    thin = Side(style="thin", color="D9E5EC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Header panel
+    ws.merge_cells("A1:K1")
+    ws["A1"] = "UNPASS Meeting Attendance Export"
+    ws["A1"].fill = title_fill
+    ws["A1"].font = Font(color="FFFFFF", bold=True, size=16)
+    ws["A1"].alignment = center
+
+    ws.merge_cells("A2:K2")
+    ws["A2"] = booking.title
+    ws["A2"].font = Font(bold=True, size=13)
+    ws["A2"].alignment = center
+
+    ws["A4"] = "Date"
+    ws["B4"] = str(booking.date)
+    ws["D4"] = "Room"
+    ws["E4"] = booking.room.name
+    ws["G4"] = "Mode"
+    ws["H4"] = "Attendance" if booking.enable_attendance else "Registration"
+    ws["J4"] = "Status"
+    ws["K4"] = _booking_public_link_status(booking)["label"]
+
+    for cell in ["A4", "D4", "G4", "J4"]:
+        ws[cell].font = bold_font
+
+    headers = [
+        "Name", "Email", "Organization", "Status", "Invited",
+        "Pre-registered", "Timestamp", "Meeting", "Room", "Date", "Source"
+    ]
+    row_num = 6
+    for idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=row_num, column=idx, value=header)
+        cell.fill = header_fill
+        cell.font = white_font
+        cell.alignment = center
+        cell.border = border
+
+    row_num += 1
+
+    if booking.enable_attendance:
+        rows = booking.attendance_records.all().order_by('checked_in_at')
+        for r in rows:
+            values = [
+                r.name,
+                r.email,
+                r.organization,
+                r.status,
+                "Yes" if r.was_invited else "No",
+                "Yes" if r.was_preregistered else "No",
+                timezone.localtime(r.checked_in_at).strftime("%Y-%m-%d %H:%M:%S") if r.checked_in_at else "",
+                booking.title,
+                booking.room.name,
+                str(booking.date),
+                "Attendance Record",
+            ]
+            for idx, val in enumerate(values, start=1):
+                c = ws.cell(row=row_num, column=idx, value=val)
+                c.border = border
+            row_num += 1
+    else:
+        rows = booking.attendees.all().order_by('registered_at')
+        for a in rows:
+            values = [
+                a.name,
+                a.email,
+                a.organization,
+                "registered",
+                "",
+                "",
+                timezone.localtime(a.registered_at).strftime("%Y-%m-%d %H:%M:%S") if a.registered_at else "",
+                booking.title,
+                booking.room.name,
+                str(booking.date),
+                "Meeting Registration",
+            ]
+            for idx, val in enumerate(values, start=1):
+                c = ws.cell(row=row_num, column=idx, value=val)
+                c.border = border
+            row_num += 1
+
+    filename = f"{slugify(booking.title)}_attendance.xlsx"
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
 
 @login_required
 @require_POST
@@ -1908,3 +3195,121 @@ def room_bookings_events(request):
         })
 
     return JsonResponse(events, safe=False)
+
+
+@login_required
+@require_GET
+def check_availability_api(request):
+    """
+    Returns JSON:
+      { available: true }
+      { available: false, conflict: { start, end, title } }
+      { available: false, conflict: {...}, next_slot: { start, end, date, label } }  # when find_next=1
+    """
+    room_id = request.GET.get('room', '').strip()
+    date_str = request.GET.get('date', '').strip()
+    start_str = request.GET.get('start', '').strip()
+    end_str = request.GET.get('end', '').strip()
+    find_next = request.GET.get('find_next', '0') == '1'
+    duration = int(request.GET.get('duration', 60) or 60)
+
+    # Validate inputs
+    if not all([room_id, date_str, start_str, end_str]):
+        return JsonResponse({'available': True})  # incomplete — don't block
+
+    try:
+        room = Room.objects.get(pk=room_id, is_active=True)
+        check_date = date_cls.fromisoformat(date_str)
+        start_time = time_cls.fromisoformat(start_str)
+        end_time = time_cls.fromisoformat(end_str)
+    except (Room.DoesNotExist, ValueError):
+        return JsonResponse({'available': True})
+
+    if end_time <= start_time:
+        return JsonResponse({'available': True})
+
+    # Look for overlapping bookings
+    overlap_qs = RoomBooking.objects.filter(
+        room=room,
+        date=check_date,
+        status__in=('approved', 'pending'),
+        start_time__lt=end_time,
+        end_time__gt=start_time,
+    ).order_by('start_time')
+
+    conflict_booking = overlap_qs.first()
+
+    if not conflict_booking:
+        return JsonResponse({'available': True})
+
+    # Build conflict info
+    conflict_info = {
+        'start': conflict_booking.start_time.strftime('%H:%M'),
+        'end': conflict_booking.end_time.strftime('%H:%M'),
+        'title': conflict_booking.title if not conflict_booking.requested_by == request.user
+        else None,  # hide title if it's their own booking (edge case)
+    }
+
+    response = {'available': False, 'conflict': conflict_info}
+
+    if find_next:
+        # Compute requested duration
+        req_duration = int(
+            (datetime.combine(check_date, end_time) - datetime.combine(check_date, start_time))
+            .total_seconds() / 60
+        )
+        next_slot = find_next_available_slot(
+            room=room,
+            on_date=check_date,
+            duration_minutes=req_duration,
+            after_time=conflict_booking.end_time,  # start searching after the conflict ends
+        )
+        response['next_slot'] = next_slot  # None or dict
+
+    return JsonResponse(response)
+
+@login_required
+@require_POST
+def toggle_booking_option_view(request, pk):
+    """
+    Toggle meeting options directly from booking detail page.
+    Only the booking owner or a superuser can change these options.
+    """
+    booking = get_object_or_404(RoomBooking, pk=pk)
+
+    if request.user != booking.requested_by and not request.user.is_superuser:
+        return JsonResponse({
+            "success": False,
+            "message": "You are not allowed to update this booking."
+        }, status=403)
+
+    field = (request.POST.get("field") or "").strip()
+    raw_value = (request.POST.get("value") or "").strip().lower()
+
+    allowed_boolean_fields = {"enable_attendance", "enable_invite_link"}
+
+    if field in allowed_boolean_fields:
+        value = raw_value in {"1", "true", "yes", "on"}
+        setattr(booking, field, value)
+        booking.save(update_fields=[field])
+
+        # If invite link is turned on and no code exists yet, create one
+        if field == "enable_invite_link" and value and not booking.registration_code:
+            import uuid
+            booking.registration_code = uuid.uuid4()
+            booking.save(update_fields=["registration_code"])
+
+        public_status = _booking_public_link_status(booking)
+
+        return JsonResponse({
+            "success": True,
+            "field": field,
+            "value": getattr(booking, field),
+            "public_status": public_status,
+            "message": f"{field.replace('_', ' ').title()} updated successfully."
+        })
+
+    return JsonResponse({
+        "success": False,
+        "message": "Invalid option selected."
+    }, status=400)

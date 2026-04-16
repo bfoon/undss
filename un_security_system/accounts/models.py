@@ -631,6 +631,15 @@ class RoomBooking(models.Model):
                                            help_text="Optional link for virtual attendance (e.g., Teams, Zoom).")
     survey_sent_at = models.DateTimeField(null=True, blank=True)
 
+    enable_attendance = models.BooleanField(
+         default=False,
+        help_text="Enable digital attendance tracking for this meeting."
+    )
+    enable_invite_link = models.BooleanField(
+        default=False,
+        help_text="Generate a public invitation/registration link for attendees."
+    )
+
     class Meta:
         ordering = ["-date", "start_time"]
 
@@ -686,6 +695,66 @@ class RoomBooking(models.Model):
         self.approved_at = timezone.now()
         self.save(update_fields=["status", "approved_by", "rejection_reason", "approved_at"])
 
+
+class AttendanceRecord(models.Model):
+    """
+    Tracks attendance for a booking.
+
+    Status flow:
+      - 'present'          : invited guest OR pre-registered attendee who checked in
+                             (auto-approved — no host action needed)
+      - 'pending_approval' : walk-in who was NOT in the invite list / not pre-registered
+                             (host must manually approve)
+      - 'approved'         : walk-in approved by the host
+      - 'rejected'         : walk-in rejected by the host
+    """
+
+    STATUS_CHOICES = (
+        ('present', 'Present (Auto)'),
+        ('pending_approval', 'Pending Host Approval'),
+        ('approved', 'Approved by Host'),
+        ('rejected', 'Rejected by Host'),
+    )
+
+    booking = models.ForeignKey(
+        'RoomBooking',
+        on_delete=models.CASCADE,
+        related_name='attendance_records',
+    )
+    name = models.CharField(max_length=200)
+    email = models.EmailField()
+    organization = models.CharField(max_length=200, blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_approval')
+
+    # Was this person in the original invite list?
+    was_invited = models.BooleanField(default=False)
+    # Was this person a pre-registered attendee (via registration link)?
+    was_preregistered = models.BooleanField(default=False)
+
+    checked_in_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(
+        'User',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='attendance_decisions',
+    )
+    note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['checked_in_at']
+        # One check-in per email per booking
+        unique_together = ('booking', 'email')
+        verbose_name = 'Attendance record'
+        verbose_name_plural = 'Attendance records'
+
+    def __str__(self):
+        return f"{self.name} ({self.email}) — {self.booking} [{self.status}]"
+
+    @property
+    def is_confirmed(self):
+        return self.status in ('present', 'approved')
 
 class MeetingAttendee(models.Model):
     """ Stores information about someone who registered for a meeting. """

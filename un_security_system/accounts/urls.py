@@ -7,7 +7,11 @@ from .views_room_booking import (
     MyRoomBookingsView, RoomBookingCreateView, MyRoomApprovalsView,
     room_booking_approve_view, room_delete_view, room_series_approve_view,
     cancel_booking, cancel_booking_series, cancel_series_occurrence, room_bookings_calendar,
-    room_bookings_events, booking_detail_view, meeting_registration_view, meeting_qr_code_view
+    room_bookings_events, booking_detail_view, meeting_registration_view, meeting_qr_code_view,
+    booking_attendee_count_api, meeting_registration_success_view, room_detail_api, attendance_checkin_lookup,
+    walkin_decision_view, check_availability_api, meeting_qr_code_download_view,
+    booking_attendance_export_csv, booking_attendance_export_excel, toggle_booking_option_view,
+    agenda_document_qr_view,
 )
 from .views_asset_verify import asset_verify, asset_verification_history
 
@@ -250,13 +254,21 @@ urlpatterns = [
 
     # --- NEW URLs ---
     path('booking/<int:pk>/', booking_detail_view, name='booking_detail'),
+    path('booking/<int:pk>/agenda-qr/', agenda_document_qr_view, name='booking_agenda_qr'),
+    path('booking/<int:pk>/attendees/count/', booking_attendee_count_api, name='booking_attendee_count'),
     path('meeting/register/<uuid:registration_code>/', meeting_registration_view,
          name='meeting_registration'),
     path('meeting/register/qr/<uuid:registration_code>/', meeting_qr_code_view,
          name='meeting_qr_code'),
-    path('meeting/register/success/',
-         lambda request: render(request, 'accounts/rooms/meeting_registration_success.html'),
-         name='meeting_registration_success'),
+    path('meeting/register/success/', meeting_registration_success_view, name='meeting_registration_success'),
+    path('api/room-details/<int:pk>/', room_detail_api, name='room_detail_api'),
+    path('meeting/register/<uuid:registration_code>/check/', attendance_checkin_lookup, name='attendance_checkin_lookup'),
+    path('attendance/<int:pk>/<str:action>/', walkin_decision_view, name='walkin_decision'),
+    path('api/check-availability/', check_availability_api, name='check_availability'),
+    path("meeting/<uuid:registration_code>/qr/download/", meeting_qr_code_download_view, name="meeting_qr_code_download"),
+    path("booking/<int:pk>/attendance/export/csv/", booking_attendance_export_csv, name="booking_attendance_export_csv"),
+    path("booking/<int:pk>/attendance/export/excel/", booking_attendance_export_excel, name="booking_attendance_export_excel"),
+    path("booking/<int:pk>/toggle-option/", toggle_booking_option_view, name="toggle_booking_option"),
 
     # # ----- Requests workflow -----
     # path(

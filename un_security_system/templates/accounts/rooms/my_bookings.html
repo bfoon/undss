@@ -1109,6 +1109,12 @@
                                     <i class="bi bi-eye"></i>
                                     View Room
                                 </a>
+                                {% if item.status == "approved" %}
+                                    <a href="{% url 'accounts:booking_detail' item.id %}" class="action-btn primary">
+                                        <i class="bi bi-qr-code"></i>
+                                        Attendees &amp; QR
+                                    </a>
+                                {% endif %}
                                 {% if item.status == "pending" %}
                                     <button class="action-btn" onclick="cancelBooking({{ item.id }})">
                                         <i class="bi bi-x-circle"></i>

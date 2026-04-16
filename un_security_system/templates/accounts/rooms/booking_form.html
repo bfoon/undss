@@ -734,6 +734,92 @@
         color: #6b7280;
     }
 
+
+    /* ── Room Amenities (dynamic, shown for manual-approval rooms) ── */
+    .amenity-info-section {
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        border: 2px solid #a78bfa;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+    .amenity-info-section .form-section-title { color: #5b21b6; }
+    .amenity-info-section .form-section-title i { color: #5b21b6; }
+
+    .room-amenity-pill {
+        display: inline-flex; align-items: center; gap: .4rem;
+        background: white; border: 2px solid #c4b5fd;
+        border-radius: 20px; padding: .35rem .9rem;
+        font-size: .85rem; font-weight: 600; color: #5b21b6;
+        margin: .25rem;
+    }
+    .room-amenity-pill i { font-size: 1rem; }
+    #amenityPlaceholder { color: #9ca3af; font-size: .9rem; font-style: italic; }
+
+    /* ── Attendance / Invite toggles ── */
+    .feature-toggle-card {
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 1.1rem 1.25rem;
+        margin-bottom: .9rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        transition: border-color .2s, box-shadow .2s;
+        cursor: pointer;
+    }
+    .feature-toggle-card:has(input:checked) {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102,126,234,.12);
+    }
+    .feature-toggle-icon {
+        width: 46px; height: 46px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; flex-shrink: 0;
+    }
+    .fi-attendance { background: linear-gradient(135deg,#d1fae5,#a7f3d0); color: #065f46; }
+    .fi-invite     { background: linear-gradient(135deg,#dbeafe,#bfdbfe); color: #1e40af; }
+
+    .feature-toggle-text { flex: 1; }
+    .feature-toggle-title { font-weight: 700; color: #1f2937; font-size: .95rem; }
+    .feature-toggle-desc  { font-size: .8rem; color: #6b7280; margin-top: .15rem; }
+
+    .toggle-switch {
+        width: 52px; height: 28px; position: relative; flex-shrink: 0;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+        position: absolute; inset: 0;
+        background: #cbd5e1; border-radius: 34px;
+        transition: background .3s; cursor: pointer;
+    }
+    .toggle-track::before {
+        content: ''; position: absolute;
+        width: 20px; height: 20px; left: 4px; bottom: 4px;
+        background: white; border-radius: 50%; transition: transform .3s;
+    }
+    .toggle-switch input:checked + .toggle-track {
+        background: linear-gradient(135deg,#667eea,#764ba2);
+    }
+    .toggle-switch input:checked + .toggle-track::before {
+        transform: translateX(24px);
+    }
+
+    /* Generated invite link preview */
+    .invite-link-preview {
+        display: none; margin-top: .85rem;
+        background: #f0f9ff; border: 2px solid #bae6fd;
+        border-radius: 10px; padding: .85rem;
+        animation: slideDown .25s ease;
+    }
+    .invite-link-preview.show { display: block; }
+    .invite-link-preview .link-url {
+        font-size: .8rem; word-break: break-all; color: #0369a1;
+        background: white; border-radius: 6px; padding: .4rem .7rem;
+        border: 1px solid #bae6fd; margin-top: .4rem;
+    }
+
     /* ICT Support Selector */
     .ict-support-section {
         background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
@@ -829,6 +915,98 @@
         animation: slideDown 0.3s ease;
     }
 
+
+    /* ── Availability conflict banner ── */
+    .conflict-banner {
+        display: none;
+        border-radius: 14px;
+        overflow: hidden;
+        margin-top: 1rem;
+        box-shadow: 0 4px 20px rgba(220,53,69,.15);
+        animation: conflictSlideIn .35s cubic-bezier(.175,.885,.32,1.1);
+    }
+    @keyframes conflictSlideIn {
+        from { opacity:0; transform:translateY(-12px) scale(.98); }
+        to   { opacity:1; transform:translateY(0)    scale(1); }
+    }
+    .conflict-banner.show { display: block; }
+
+    .conflict-header {
+        background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+        color: white; padding: 1rem 1.25rem;
+        display: flex; align-items: center; gap: .75rem;
+    }
+    .conflict-header-icon { font-size: 1.6rem; flex-shrink: 0; }
+    .conflict-header-text { flex: 1; }
+    .conflict-header-title { font-weight: 700; font-size: 1rem; margin-bottom: .15rem; }
+    .conflict-header-sub   { font-size: .83rem; opacity: .9; }
+
+    .conflict-body {
+        background: #fff5f5; border: 2px solid #dc3545;
+        border-top: none; padding: 1rem 1.25rem;
+    }
+
+    .existing-booking-chip {
+        display: inline-flex; align-items: center; gap: .5rem;
+        background: #fee2e2; border: 1.5px solid #fca5a5;
+        border-radius: 10px; padding: .45rem .9rem;
+        font-size: .85rem; font-weight: 600; color: #991b1b;
+        margin-bottom: .85rem;
+    }
+
+    .next-slot-section {
+        display: none;
+        background: #f0fdf4; border: 2px solid #86efac;
+        border-radius: 10px; padding: .9rem 1.1rem; margin-top: .75rem;
+        animation: conflictSlideIn .3s ease;
+    }
+    .next-slot-section.show { display: block; }
+    .next-slot-title { font-weight: 700; color: #14532d; margin-bottom: .6rem; display:flex; align-items:center; gap:.5rem; }
+    .next-slot-pill {
+        display: inline-flex; align-items: center; gap: .5rem;
+        background: white; border: 2px solid #34d399;
+        border-radius: 10px; padding: .5rem 1rem;
+        font-size: .9rem; font-weight: 700; color: #065f46;
+        cursor: pointer; transition: all .2s; margin-bottom: .5rem;
+    }
+    .next-slot-pill:hover { background: #d1fae5; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(52,211,153,.25); }
+    .next-slot-pill i { font-size: 1.1rem; }
+
+    .btn-show-next {
+        background: none; border: 2px solid #dc3545; color: #dc3545;
+        border-radius: 8px; padding: .45rem 1rem; font-size: .85rem; font-weight: 700;
+        cursor: pointer; transition: all .2s; display: inline-flex; align-items: center; gap: .4rem;
+    }
+    .btn-show-next:hover { background: #dc3545; color: white; }
+    .btn-show-next.loading { opacity: .6; pointer-events: none; }
+
+    /* Live check indicator on time fields */
+    .avail-checking {
+        font-size: .8rem; color: #6b7280;
+        display: none; align-items: center; gap: .4rem; margin-top: .35rem;
+    }
+    .avail-checking.show { display: flex; }
+    .avail-ok   { color: #059669; }
+    .avail-busy { color: #dc3545; }
+
+
+    /* ── Past date / time soft warning ── */
+    .past-date-warn {
+        display: none;
+        background: #fffbeb;
+        border: 2px solid #fcd34d;
+        border-radius: 12px;
+        padding: .75rem 1rem;
+        margin-top: .75rem;
+        font-size: .88rem;
+        color: #92400e;
+        align-items: center;
+        gap: .6rem;
+        animation: slideDown .3s ease;
+    }
+    .past-date-warn.show { display: flex; }
+    .past-date-warn i { font-size: 1.1rem; flex-shrink: 0; }
+
 </style>
 {% endblock %}
 
@@ -845,6 +1023,45 @@
             </div>
 
             <div class="p-4">
+
+                {# ── Server-side conflict error (shown after form submission) ── #}
+                {% if form.non_field_errors or conflict_info %}
+                <div class="conflict-banner show" style="margin-bottom:1.5rem;">
+                    <div class="conflict-header">
+                        <div class="conflict-header-icon"><i class="bi bi-calendar-x-fill"></i></div>
+                        <div class="conflict-header-text">
+                            <div class="conflict-header-title">Time slot no longer available</div>
+                            <div class="conflict-header-sub">
+                                Someone booked this slot while you were filling in the form. Please choose a different time.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="conflict-body">
+                        {% if conflict_info %}
+                        <div class="existing-booking-chip">
+                            <i class="bi bi-clock-fill"></i>
+                            <span>Booked: {{ conflict_info.start }} – {{ conflict_info.end }}</span>
+                        </div>
+                        {% endif %}
+                        {% if next_available %}
+                        <div class="next-slot-section show">
+                            <div class="next-slot-title">
+                                <i class="bi bi-calendar-check-fill text-success"></i>Next available slot:
+                            </div>
+                            <div class="next-slot-pill" onclick="applyNextSlot('{{ next_available.start }}','{{ next_available.end }}')">
+                                <i class="bi bi-calendar2-check-fill"></i>
+                                <span>{{ next_available.label }}</span>
+                            </div>
+                            <div class="text-muted small">Click to apply this time to your booking</div>
+                        </div>
+                        {% endif %}
+                        {% for error in form.non_field_errors %}
+                        <p class="text-danger small mt-2 mb-0"><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="form-section">
                     <div class="form-section-title"><i class="bi bi-door-open"></i>Room Selection</div>
                     <label class="form-label"><i class="bi bi-geo-alt"></i>Select Room<span class="required">*</span></label>
@@ -878,20 +1095,75 @@
                     </div>
                 </div>
 
-                <div class="form-section">
-                    <div class="form-section-title"><i class="bi bi-gem"></i>Optional Amenities</div>
-                    <div class="amenity-grid">
-                        {% for choice in form.selected_amenities %}
-                            <div class="amenity-checkbox-item">
-                                {{ choice.tag }}
-                                <label for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
-                            </div>
-                        {% endfor %}
+                {# ── Room Amenities (visible only for manual-approval rooms) ── #}
+                <div class="amenity-info-section" id="amenityInfoSection" style="display:none;">
+                    <div class="form-section-title">
+                        <i class="bi bi-stars"></i>Room Amenities Available
                     </div>
+                    <p class="text-muted small mb-2">
+                        This room requires approval. The amenities below are available — select any you need.
+                        The approver will confirm which are available for your booking.
+                    </p>
+                    <div id="amenityList">
+                        <span id="amenityPlaceholder">Select a room to see available amenities.</span>
+                    </div>
+                    {# Hidden checkboxes for form submission — populated by JS #}
+                    <div id="amenityCheckboxes" class="amenity-grid mt-3" style="display:none;"></div>
                 </div>
 
 
-                <!-- ICT Support -->
+                {# ── Attendance & Invite Link Toggles ── #}
+                <div class="form-section">
+                    <div class="form-section-title">
+                        <i class="bi bi-person-check"></i>Attendance & Registration
+                    </div>
+
+                    {# Attendance toggle #}
+                    <label class="feature-toggle-card" for="id_enable_attendance">
+                        <div class="feature-toggle-icon fi-attendance">
+                            <i class="bi bi-clipboard2-check"></i>
+                        </div>
+                        <div class="feature-toggle-text">
+                            <div class="feature-toggle-title">Enable Attendance Tracking</div>
+                            <div class="feature-toggle-desc">
+                                Attendees check in by email. Invited &amp; pre-registered guests are auto-confirmed;
+                                walk-ins require your approval.
+                            </div>
+                        </div>
+                        <label class="toggle-switch" onclick="event.stopPropagation()">
+                            {{ form.enable_attendance }}
+                            <span class="toggle-track"></span>
+                        </label>
+                    </label>
+
+                    {# Invite / registration link toggle #}
+                    <label class="feature-toggle-card" for="id_enable_invite_link">
+                        <div class="feature-toggle-icon fi-invite">
+                            <i class="bi bi-link-45deg"></i>
+                        </div>
+                        <div class="feature-toggle-text">
+                            <div class="feature-toggle-title">Generate Invitation / Registration Link</div>
+                            <div class="feature-toggle-desc">
+                                A shareable link (and QR code) will be created once the booking is approved,
+                                allowing attendees to register in advance.
+                            </div>
+                        </div>
+                        <label class="toggle-switch" onclick="event.stopPropagation()">
+                            {{ form.enable_invite_link }}
+                            <span class="toggle-track"></span>
+                        </label>
+                    </label>
+
+                    {# Live invite-link note (only shown after form is submitted & approved) #}
+                    {% if booking and booking.enable_invite_link and booking.registration_code %}
+                    <div class="invite-link-preview show">
+                        <strong><i class="bi bi-link-45deg me-1"></i>Invitation Link</strong>
+                        <div class="link-url">{{ request.scheme }}://{{ request.get_host }}{% url 'accounts:meeting_registration' booking.registration_code %}</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                                <!-- ICT Support -->
                 <div class="ict-support-section">
                     <div class="form-section-title" style="color:#0369a1;">
                         <i class="bi bi-laptop" style="color:#0369a1;"></i>
@@ -1217,6 +1489,13 @@
                             {% if form.date.errors %}
                                 <div class="text-danger small mt-1">{{ form.date.errors }}</div>
                             {% endif %}
+
+                    <!-- Past date / time soft warning (inform only, no block) -->
+                    <div class="past-date-warn" id="pastDateWarn">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <span id="pastWarnText"></span>
+                    </div>
+
                             <div class="help-text" id="dateHelp">
                                 <i class="bi bi-info-circle"></i>
                                 Select the date for your meeting
@@ -1275,9 +1554,51 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Availability status (live) -->
+                    <div class="avail-checking avail-ok" id="availOk">
+                        <i class="bi bi-check-circle-fill"></i>
+                        <span id="availOkText">This time slot is available!</span>
+                    </div>
                 </div>
 
             </div>
+                {# ── Availability conflict banner ── #}
+                <div class="conflict-banner" id="conflictBanner">
+                    <div class="conflict-header">
+                        <div class="conflict-header-icon"><i class="bi bi-calendar-x-fill"></i></div>
+                        <div class="conflict-header-text">
+                            <div class="conflict-header-title">This time slot is not available</div>
+                            <div class="conflict-header-sub" id="conflictSubText">
+                                Another booking already exists for this room and time.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="conflict-body">
+                        <div class="existing-booking-chip" id="conflictChip">
+                            <i class="bi bi-clock-fill"></i>
+                            <span id="conflictChipText">Loading…</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="text-muted small">Please choose a different time, or:</span>
+                            <button type="button" class="btn-show-next" id="btnShowNext" onclick="fetchNextSlot()">
+                                <i class="bi bi-skip-forward-fill"></i>
+                                Show next available time
+                            </button>
+                        </div>
+                        <div class="next-slot-section" id="nextSlotSection">
+                            <div class="next-slot-title">
+                                <i class="bi bi-calendar-check-fill text-success"></i>
+                                Next available slot:
+                            </div>
+                            <div id="nextSlotContent">
+                                <div class="text-muted small">Searching…</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
 
             <!-- Form Footer -->
             <div class="form-footer d-flex justify-content-between align-items-center">
@@ -1307,6 +1628,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
+
     // ICT Support — show notice when setup or during is selected
     const ictRadios = document.querySelectorAll('input[name="ict_support"]');
     const ictNotice = document.getElementById('ictNotice');
@@ -1332,6 +1654,395 @@ document.addEventListener('DOMContentLoaded', function() {
     const durationText = document.getElementById('durationText');
     const durationAdvice = document.getElementById('durationAdvice');
     const roomPreview = document.getElementById('roomPreview');
+
+    // ════════════════════════════════════════════════════════════════════════
+    // AVAILABILITY CHECK + AMENITIES + TOGGLES
+    // All declared after roomSelect, dateInput, startTimeInput, endTimeInput
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── CSS classes used by availability ────────────────────────────────────
+    // .avail-checking.avail-ok / .conflict-banner.show / .next-slot-section.show
+
+    const AVAIL_API   = '/accounts/api/check-availability/';
+    const ROOM_API    = '/accounts/api/room-details/';
+
+    let availTimer   = null;
+    let lastConflict = false;
+
+    // DOM refs
+    const conflictBanner   = document.getElementById('conflictBanner');
+    const conflictChipTxt  = document.getElementById('conflictChipText');
+    const conflictSubText  = document.getElementById('conflictSubText');
+    const availOk          = document.getElementById('availOk');
+    const availOkText      = document.getElementById('availOkText');
+    const nextSlotSection  = document.getElementById('nextSlotSection');
+    const nextSlotContent  = document.getElementById('nextSlotContent');
+    const submitBtn        = document.querySelector('button[type="submit"]');
+    const pastWarnEl       = document.getElementById('pastDateWarn');
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function getNow() { return new Date(); }
+
+    /** Returns true if the selected date+time is in the past */
+    function isInPast() {
+        if (!dateInput || !dateInput.value) return false;
+        const now       = getNow();
+        const todayStr  = now.toISOString().split('T')[0];
+        const dateVal   = dateInput.value;
+
+        if (dateVal < todayStr) return true;          // date before today
+        if (dateVal > todayStr) return false;          // future date — fine
+
+        // Same day: check start time
+        if (!startTimeInput || !startTimeInput.value) return false;
+        const [hh, mm]   = startTimeInput.value.split(':').map(Number);
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const selMinutes = hh * 60 + mm;
+        return selMinutes < nowMinutes;
+    }
+
+    function showPastWarn(msg) {
+        if (!pastWarnEl) return;
+        pastWarnEl.querySelector('#pastWarnText').textContent = msg;
+        pastWarnEl.classList.add('show');
+    }
+    function hidePastWarn() {
+        if (pastWarnEl) pastWarnEl.classList.remove('show');
+    }
+
+    function showConflict(data) {
+        lastConflict = true;
+        if (conflictBanner) conflictBanner.classList.add('show');
+        if (availOk)         availOk.classList.remove('show');
+        hidePastWarn();
+
+        if (conflictChipTxt && data.conflict) {
+            conflictChipTxt.textContent =
+                'Booked ' + data.conflict.start + ' – ' + data.conflict.end +
+                (data.conflict.title ? ' (' + data.conflict.title + ')' : '');
+        }
+        if (conflictSubText && data.conflict) {
+            conflictSubText.textContent =
+                'The room is already booked from ' + data.conflict.start +
+                ' to ' + data.conflict.end + ' on this date.';
+        }
+        if (nextSlotSection) nextSlotSection.classList.remove('show');
+        if (submitBtn) submitBtn.disabled = true;
+    }
+
+    function showAvailable(label) {
+        lastConflict = false;
+        if (conflictBanner)  conflictBanner.classList.remove('show');
+        if (nextSlotSection) nextSlotSection.classList.remove('show');
+        hidePastWarn();
+        if (availOk) {
+            availOk.className = 'avail-checking avail-ok show';
+            if (availOkText) availOkText.textContent = label || 'This time slot is available!';
+        }
+        if (submitBtn) submitBtn.disabled = false;
+    }
+
+    function clearAvailability() {
+        if (conflictBanner)  conflictBanner.classList.remove('show');
+        if (availOk)         availOk.classList.remove('show');
+        if (nextSlotSection) nextSlotSection.classList.remove('show');
+        lastConflict = false;
+        if (submitBtn) submitBtn.disabled = false;
+    }
+
+    // ── Past-date/time warning (soft — submit still allowed) ─────────────────
+    function checkPastDateTime() {
+        if (!dateInput || !dateInput.value) { hidePastWarn(); return; }
+
+        const now      = getNow();
+        const todayStr = now.toISOString().split('T')[0];
+        const dateVal  = dateInput.value;
+
+        if (dateVal < todayStr) {
+            showPastWarn(
+                'The selected date (' + dateVal + ') is in the past. ' +
+                'You can still submit, but the booking may be rejected.'
+            );
+            return;
+        }
+
+        if (dateVal === todayStr && startTimeInput && startTimeInput.value) {
+            const [hh, mm]   = startTimeInput.value.split(':').map(Number);
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            const selMinutes = hh * 60 + mm;
+            if (selMinutes < nowMinutes) {
+                const nowStr = String(now.getHours()).padStart(2,'0') + ':' +
+                               String(now.getMinutes()).padStart(2,'0');
+                showPastWarn(
+                    'Start time ' + startTimeInput.value + ' has already passed ' +
+                    '(current time is ' + nowStr + '). ' +
+                    'You can still submit, but the booking may be rejected.'
+                );
+                return;
+            }
+        }
+
+        hidePastWarn();
+    }
+
+    // ── Availability check ────────────────────────────────────────────────────
+    function checkAvailability() {
+        const roomId   = roomSelect   ? roomSelect.value   : '';
+        const dateVal  = dateInput    ? dateInput.value    : '';
+        const startVal = startTimeInput ? startTimeInput.value : '';
+        const endVal   = endTimeInput   ? endTimeInput.value   : '';
+
+        checkPastDateTime();   // always run the past-warn check
+
+        if (!roomId || !dateVal || !startVal || !endVal) {
+            clearAvailability();
+            return;
+        }
+
+        const params = new URLSearchParams({
+            room: roomId, date: dateVal, start: startVal, end: endVal
+        });
+
+        fetch(AVAIL_API + '?' + params.toString(), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) return;
+            if (data.available) {
+                const roomName = roomSelect.options[roomSelect.selectedIndex].text;
+                showAvailable('\u2713  ' + roomName + ' is free ' + startVal + ' \u2013 ' + endVal);
+            } else {
+                showConflict(data);
+            }
+        })
+        .catch(() => clearAvailability());
+    }
+
+    function scheduleCheck() {
+        clearTimeout(availTimer);
+        availTimer = setTimeout(checkAvailability, 600);
+    }
+
+    // Hook inputs
+    if (roomSelect)     roomSelect.addEventListener('change',  scheduleCheck);
+    if (dateInput)      dateInput.addEventListener('change',   scheduleCheck);
+    if (startTimeInput) startTimeInput.addEventListener('change', scheduleCheck);
+    if (endTimeInput)   endTimeInput.addEventListener('change',   scheduleCheck);
+
+    // ── "Show next available time" button ─────────────────────────────────────
+    window.fetchNextSlot = function() {
+        const roomId   = roomSelect   ? roomSelect.value   : '';
+        const dateVal  = dateInput    ? dateInput.value    : '';
+        const startVal = startTimeInput ? startTimeInput.value : '';
+        const endVal   = endTimeInput   ? endTimeInput.value   : '';
+
+        const duration = (function() {
+            if (!startVal || !endVal) return 60;
+            const [sh, sm] = startVal.split(':').map(Number);
+            const [eh, em] = endVal.split(':').map(Number);
+            return Math.max((eh * 60 + em) - (sh * 60 + sm), 30);
+        })();
+
+        const btn = document.getElementById('btnShowNext');
+        if (btn) {
+            btn.classList.add('loading');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Searching\u2026';
+        }
+
+        const params = new URLSearchParams({
+            room: roomId, date: dateVal, start: startVal, end: endVal,
+            duration: duration, find_next: '1'
+        });
+
+        fetch(AVAIL_API + '?' + params.toString(), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (btn) {
+                btn.classList.remove('loading');
+                btn.innerHTML = '<i class="bi bi-skip-forward-fill"></i> Show next available time';
+            }
+            if (!data || !data.next_slot) {
+                if (nextSlotContent) {
+                    nextSlotContent.innerHTML =
+                        '<p class="text-muted small mb-0">' +
+                        '<i class="bi bi-info-circle me-1"></i>' +
+                        'No available slots found in the next 7 days. Please try a different date.</p>';
+                }
+                if (nextSlotSection) nextSlotSection.classList.add('show');
+                return;
+            }
+            const ns = data.next_slot;
+            if (nextSlotContent) {
+                // FIX: use data attributes instead of inline onclick to avoid quote issues
+                nextSlotContent.innerHTML =
+                    '<button type="button" class="next-slot-pill" ' +
+                    'data-start="' + ns.start + '" data-end="' + ns.end + '" data-date="' + (ns.date || '') + '" ' +
+                    'onclick="applyNextSlot(this.dataset.start, this.dataset.end, this.dataset.date)">' +
+                    '<i class="bi bi-calendar2-check-fill"></i>' +
+                    '<span>' + ns.label + '</span>' +
+                    '</button>' +
+                    '<div class="text-muted small mt-1">' +
+                    '<i class="bi bi-mouse2 me-1"></i>Click to apply this time to your booking</div>';
+            }
+            if (nextSlotSection) nextSlotSection.classList.add('show');
+        })
+        .catch(() => {
+            if (btn) {
+                btn.classList.remove('loading');
+                btn.innerHTML = '<i class="bi bi-skip-forward-fill"></i> Show next available time';
+            }
+        });
+    };
+
+    // ── Apply next slot (also updates date if different day) ─────────────────
+    window.applyNextSlot = function(start, end, date) {
+        if (startTimeInput) startTimeInput.value = start;
+        if (endTimeInput)   endTimeInput.value   = end;
+
+        // FIX: update date field when next slot is on a different day
+        if (date && dateInput && dateInput.value !== date) {
+            dateInput.value = date;
+        }
+
+        if (conflictBanner)  conflictBanner.classList.remove('show');
+        if (nextSlotSection) nextSlotSection.classList.remove('show');
+        hidePastWarn();
+
+        if (availOk) {
+            availOk.className = 'avail-checking avail-ok show';
+            const dateLabel = (date && dateInput && date !== new Date().toISOString().split('T')[0])
+                ? ' on ' + new Date(date + 'T00:00:00').toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'})
+                : '';
+            if (availOkText) availOkText.textContent =
+                '\u2713  Applied: ' + start + ' \u2013 ' + end + dateLabel + ' \u2014 slot is available!';
+        }
+        if (submitBtn) submitBtn.disabled = false;
+        lastConflict = false;
+        calculateDuration();
+        if (startTimeInput) startTimeInput.scrollIntoView({behavior: 'smooth', block: 'center'});
+    };
+
+    // Block submit if conflict is still active
+    const bookingFormEl = document.getElementById('bookingForm');
+    if (bookingFormEl) {
+        bookingFormEl.addEventListener('submit', function(e) {
+            if (lastConflict) {
+                e.preventDefault();
+                if (conflictBanner) {
+                    conflictBanner.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    conflictBanner.style.animation = 'none';
+                    conflictBanner.offsetHeight;   // force reflow
+                    conflictBanner.style.animation = '';
+                }
+            }
+        }, true);
+    }
+
+    // ── Room amenities (AJAX, runs after roomSelect is in scope) ─────────────
+    function loadRoomAmenities(roomId) {
+        const amenitySection    = document.getElementById('amenityInfoSection');
+        const amenityList       = document.getElementById('amenityList');
+        const amenityCheckboxes = document.getElementById('amenityCheckboxes');
+
+        if (!roomId) {
+            if (amenitySection) amenitySection.style.display = 'none';
+            return;
+        }
+
+        fetch(ROOM_API + roomId + '/', {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) {
+                if (amenitySection) amenitySection.style.display = 'none';
+                return;
+            }
+
+            // Show for both manual AND mixed rooms (anything that isn't pure auto)
+            const showAmenities = data.approval_mode !== 'auto' && data.amenities && data.amenities.length > 0;
+
+            // ALSO show for auto rooms if they have amenities — user should still see what's available
+            const hasAmenities  = data.amenities && data.amenities.length > 0;
+
+            if (!hasAmenities) {
+                if (amenitySection) amenitySection.style.display = 'none';
+                return;
+            }
+
+            if (amenitySection) amenitySection.style.display = 'block';
+
+            // Build info pills
+            if (amenityList) {
+                let html = data.amenities.map(a =>
+                    '<span class="room-amenity-pill">' +
+                    '<i class="' + (a.icon_class || 'bi bi-check-circle') + '"></i>' +
+                    a.name +
+                    '</span>'
+                ).join('');
+
+                if (data.capacity) {
+                    html += '<div class="text-muted small mt-2">' +
+                            '<i class="bi bi-people me-1"></i>' +
+                            'Room capacity: <strong>' + data.capacity + '</strong> people</div>';
+                }
+                amenityList.innerHTML = html;
+            }
+
+            // Build selectable checkboxes (only for manual/mixed — approver will confirm)
+            if (amenityCheckboxes) {
+                if (data.approval_mode !== 'auto') {
+                    amenityCheckboxes.style.display = 'grid';
+                    amenityCheckboxes.innerHTML = data.amenities.map(a =>
+                        '<div class="amenity-checkbox-item">' +
+                        '<input type="checkbox" name="requested_amenities" ' +
+                        'value="' + a.id + '" id="am_' + a.id + '" class="form-check-input">' +
+                        '<label for="am_' + a.id + '" style="margin-bottom:0;cursor:pointer;">' +
+                        '<i class="' + (a.icon_class || 'bi bi-check-circle') + ' me-1"></i>' +
+                        a.name + '</label></div>'
+                    ).join('');
+                } else {
+                    // Auto-approve: show checkboxes as read-only info only
+                    amenityCheckboxes.style.display = 'none';
+                }
+            }
+        })
+        .catch(() => {
+            const s = document.getElementById('amenityInfoSection');
+            if (s) s.style.display = 'none';
+        });
+    }
+
+    // Attach amenity loader to room select change
+    if (roomSelect) {
+        roomSelect.addEventListener('change', function() {
+            loadRoomAmenities(this.value);
+        });
+        // Fire immediately if a room is pre-selected (e.g. ?room=3 in URL or form error re-render)
+        if (roomSelect.value) {
+            loadRoomAmenities(roomSelect.value);
+        }
+    }
+
+    // ── Attendance / Invite-link toggle card styling ──────────────────────────
+    function styleToggleCard(toggle) {
+        if (!toggle) return;
+        const card = toggle.closest('.feature-toggle-card') ||
+                     toggle.closest('label.feature-toggle-card');
+        if (card) card.classList.toggle('active', toggle.checked);
+    }
+
+    ['id_enable_attendance', 'id_enable_invite_link'].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        styleToggleCard(el);
+        el.addEventListener('change', function() { styleToggleCard(this); });
+    });
+
+
 
     // Recurring elements
     const recurringCheckbox = document.getElementById('recurringCheckbox');

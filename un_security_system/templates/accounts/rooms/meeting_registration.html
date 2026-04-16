@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+        {% if booking.enable_attendance %}
+            Meeting Attendance
+        {% else %}
+            Meeting Registration
+        {% endif %}
+    </title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <style>
+        :root{
+            --un-blue: #009edb;
+            --un-blue-dark: #0077b6;
+            --un-blue-soft: #eaf6fb;
+            --un-navy: #133b5c;
+            --un-text: #1f2937;
+            --un-muted: #6b7280;
+            --un-border: #dbe7ef;
+            --un-white: #ffffff;
+            --un-success: #0f9d58;
+            --un-warn: #b45309;
+            --un-danger: #b91c1c;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--un-text);
+            background:
+                radial-gradient(circle at top right, rgba(0, 158, 219, .14), transparent 28%),
+                radial-gradient(circle at left bottom, rgba(19, 59, 92, .10), transparent 24%),
+                linear-gradient(180deg, #f7fbfd 0%, #edf6fb 100%);
+        }
+
+        .page-shell {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 16px 40px;
+        }
+
+        .invite-card {
+            background: var(--un-white);
+            border-radius: 26px;
+            overflow: hidden;
+            box-shadow: 0 22px 60px rgba(19, 59, 92, .14);
+            border: 1px solid rgba(0, 158, 219, .08);
+        }
+
+        .invite-header {
+            position: relative;
+            background:
+                linear-gradient(135deg, rgba(19,59,92,.98) 0%, rgba(0,119,182,.96) 45%, rgba(0,158,219,.94) 100%);
+            color: white;
+            padding: 32px 28px 28px;
+            overflow: hidden;
+        }
+
+        .invite-header::before {
+            content: "";
+            position: absolute;
+            width: 320px;
+            height: 320px;
+            right: -110px;
+            top: -120px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.08);
+        }
+
+        .invite-header::after {
+            content: "";
+            position: absolute;
+            width: 220px;
+            height: 220px;
+            left: -80px;
+            bottom: -120px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.06);
+        }
+
+        .header-inner {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .agency-logo-wrap {
+            width: 84px;
+            height: 84px;
+            border-radius: 20px;
+            background: rgba(255,255,255,.14);
+            border: 1px solid rgba(255,255,255,.22);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            backdrop-filter: blur(6px);
+            flex-shrink: 0;
+        }
+
+        .agency-logo-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: white;
+            padding: 8px;
+        }
+
+        .agency-logo-fallback {
+            font-size: 1.9rem;
+            font-weight: 800;
+            letter-spacing: .5px;
+        }
+
+        .header-text {
+            flex: 1;
+            min-width: 240px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 999px;
+            padding: 8px 14px;
+            background: rgba(255,255,255,.14);
+            border: 1px solid rgba(255,255,255,.18);
+            font-size: .84rem;
+            font-weight: 700;
+            letter-spacing: .02em;
+            margin-bottom: 12px;
+        }
+
+        .meeting-title {
+            font-size: clamp(1.6rem, 3vw, 2.35rem);
+            line-height: 1.15;
+            font-weight: 800;
+            margin: 0 0 8px;
+        }
+
+        .meeting-subtitle {
+            margin: 0;
+            color: rgba(255,255,255,.92);
+            font-size: 1rem;
+            max-width: 720px;
+        }
+
+        .host-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .host-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,.12);
+            border: 1px solid rgba(255,255,255,.16);
+            padding: 9px 12px;
+            border-radius: 999px;
+            font-size: .9rem;
+            color: white;
+        }
+
+        .invite-body {
+            padding: 28px;
+        }
+
+        .top-grid {
+            display: grid;
+            grid-template-columns: 1.2fr .9fr;
+            gap: 22px;
+            margin-bottom: 24px;
+        }
+
+        .panel {
+            background: #fff;
+            border: 1px solid var(--un-border);
+            border-radius: 20px;
+            padding: 20px;
+        }
+
+        .panel-title {
+            font-size: .94rem;
+            font-weight: 800;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            color: var(--un-blue-dark);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .detail-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .detail-item {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #fbfdff 0%, #f4f9fc 100%);
+            border: 1px solid #e7f0f6;
+        }
+
+        .detail-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: var(--un-blue-soft);
+            color: var(--un-blue-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .detail-label {
+            font-size: .78rem;
+            font-weight: 700;
+            color: var(--un-muted);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            margin-bottom: 3px;
+        }
+
+        .detail-value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--un-text);
+            line-height: 1.35;
+        }
+
+        .welcome-note {
+            background: linear-gradient(135deg, #f7fbfd 0%, #eef8fc 100%);
+            border: 1px solid #dcecf4;
+            border-radius: 20px;
+            padding: 20px;
+        }
+
+        .welcome-note h3 {
+            margin: 0 0 10px;
+            font-size: 1.15rem;
+            color: var(--un-navy);
+            font-weight: 800;
+        }
+
+        .welcome-note p {
+            margin: 0 0 12px;
+            color: #425466;
+            line-height: 1.65;
+        }
+
+        .mode-box {
+            margin-top: 14px;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: .95rem;
+            line-height: 1.5;
+        }
+
+        .mode-box.attendance {
+            background: #eefaf3;
+            border: 1px solid #cdeedc;
+            color: #17603e;
+        }
+
+        .mode-box.registration {
+            background: #eef6ff;
+            border: 1px solid #cddff7;
+            color: #184a7a;
+        }
+
+        .form-panel {
+            background: white;
+            border: 1px solid var(--un-border);
+            border-radius: 22px;
+            padding: 22px;
+        }
+
+        .form-intro {
+            margin-bottom: 18px;
+        }
+
+        .form-intro h3 {
+            margin: 0 0 6px;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--un-navy);
+        }
+
+        .form-intro p {
+            margin: 0;
+            color: var(--un-muted);
+        }
+
+        .form-label {
+            font-weight: 700;
+            color: var(--un-text);
+            margin-bottom: 8px;
+        }
+
+        .form-control {
+            border-radius: 14px;
+            border: 2px solid #e4edf3;
+            padding: 14px 15px;
+            font-size: 1rem;
+            box-shadow: none;
+        }
+
+        .form-control:focus {
+            border-color: var(--un-blue);
+            box-shadow: 0 0 0 4px rgba(0, 158, 219, .10);
+        }
+
+        .helper-text {
+            margin-top: 7px;
+            color: var(--un-muted);
+            font-size: .88rem;
+        }
+
+        .status-box {
+            display: none;
+            margin-top: 14px;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: .94rem;
+            font-weight: 600;
+        }
+
+        .status-box.show { display: block; }
+        .status-invited {
+            background: #ecfdf5;
+            border: 1px solid #b7e6ca;
+            color: #166534;
+        }
+        .status-registered {
+            background: #eff6ff;
+            border: 1px solid #bfd8fb;
+            color: #1d4ed8;
+        }
+        .status-walkin {
+            background: #fff7ed;
+            border: 1px solid #fdc38d;
+            color: #9a3412;
+        }
+        .status-already {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 22px;
+        }
+
+        .btn-un-primary {
+            background: linear-gradient(135deg, var(--un-blue-dark) 0%, var(--un-blue) 100%);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            padding: 14px 22px;
+            font-weight: 800;
+            letter-spacing: .01em;
+            box-shadow: 0 10px 24px rgba(0, 119, 182, .22);
+        }
+
+        .btn-un-primary:hover {
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .btn-un-light {
+            background: #f6f9fb;
+            color: var(--un-navy);
+            border: 1px solid var(--un-border);
+            border-radius: 14px;
+            padding: 14px 18px;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .btn-un-light:hover {
+            color: var(--un-navy);
+            background: #eef4f8;
+        }
+
+        .public-footer {
+            text-align: center;
+            color: #6b7d8a;
+            font-size: .9rem;
+            padding: 18px 10px 2px;
+        }
+
+        .public-footer i {
+            color: var(--un-blue-dark);
+        }
+
+        .text-danger.small {
+            margin-top: 6px;
+            display: block;
+        }
+
+        .alert {
+            border-radius: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .invite-header,
+            .invite-body {
+                padding: 20px;
+            }
+
+            .top-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .agency-logo-wrap {
+                width: 72px;
+                height: 72px;
+            }
+
+            .meeting-title {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-shell">
+    <div class="invite-card">
+        <div class="invite-header">
+            <div class="header-inner">
+                <div class="agency-logo-wrap">
+                    {% if booking.requested_by.agency and booking.requested_by.agency.logo %}
+                        <img src="{{ booking.requested_by.agency.logo.url }}" alt="{{ booking.requested_by.agency.name }}">
+                    {% elif booking.requested_by.agency and booking.requested_by.agency.code %}
+                        <div class="agency-logo-fallback">{{ booking.requested_by.agency.code|slice:":3"|upper }}</div>
+                    {% else %}
+                        <div class="agency-logo-fallback"><i class="bi bi-building"></i></div>
+                    {% endif %}
+                </div>
+
+                <div class="header-text">
+                    <div class="eyebrow">
+                        <i class="bi bi-globe2"></i>
+                        Meeting Invitation
+                    </div>
+
+                    <h1 class="meeting-title">{{ booking.title }}</h1>
+
+                    <p class="meeting-subtitle">
+                        {% if booking.enable_attendance %}
+                            Please use this official page to check in for your meeting attendance.
+                        {% else %}
+                            You are invited to register for this meeting using the official form below.
+                        {% endif %}
+                    </p>
+
+                    <div class="host-meta">
+                        {% if booking.requested_by.agency %}
+                            <div class="host-pill">
+                                <i class="bi bi-bank2"></i>
+                                Inviting Agency: {{ booking.requested_by.agency.name }}
+                            </div>
+                        {% endif %}
+
+                        {% if booking.requested_by.get_full_name %}
+                            <div class="host-pill">
+                                <i class="bi bi-person-badge"></i>
+                                Host: {{ booking.requested_by.get_full_name|default:booking.requested_by.username }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="invite-body">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags|default:'info' }} mb-3">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <div class="top-grid">
+                <div class="panel">
+                    <div class="panel-title">
+                        <i class="bi bi-calendar-event"></i>
+                        Meeting Details
+                    </div>
+
+                    <div class="detail-list">
+                        <div class="detail-item">
+                            <div class="detail-icon"><i class="bi bi-calendar3"></i></div>
+                            <div>
+                                <div class="detail-label">Date</div>
+                                <div class="detail-value">{{ booking.date }}</div>
+                            </div>
+                        </div>
+
+                        <div class="detail-item">
+                            <div class="detail-icon"><i class="bi bi-clock"></i></div>
+                            <div>
+                                <div class="detail-label">Time</div>
+                                <div class="detail-value">{{ booking.start_time }} - {{ booking.end_time }}</div>
+                            </div>
+                        </div>
+
+                        <div class="detail-item">
+                            <div class="detail-icon"><i class="bi bi-door-open"></i></div>
+                            <div>
+                                <div class="detail-label">Venue</div>
+                                <div class="detail-value">{{ booking.room.name }}</div>
+                            </div>
+                        </div>
+
+                        {% if booking.room.location %}
+                        <div class="detail-item">
+                            <div class="detail-icon"><i class="bi bi-geo-alt"></i></div>
+                            <div>
+                                <div class="detail-label">Location</div>
+                                <div class="detail-value">{{ booking.room.location }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="welcome-note">
+                    <h3>Welcome</h3>
+                    <p>
+                        We are pleased to invite you to this meeting. Kindly complete your details accurately so your attendance can be recorded properly.
+                    </p>
+                    <p>
+                        This page is intended for invited participants and public attendees who were given the official meeting link.
+                    </p>
+
+                    {% if booking.enable_attendance %}
+                        <div class="mode-box attendance">
+                            <strong>Attendance mode:</strong>
+                            Invited or pre-registered guests may be confirmed automatically, while walk-ins may be submitted for host approval.
+                        </div>
+                    {% else %}
+                        <div class="mode-box registration">
+                            <strong>Registration mode:</strong>
+                            Complete the form below to confirm your participation before the meeting starts.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-panel">
+                <div class="form-intro">
+                    <h3>
+                        {% if booking.enable_attendance %}
+                            Attendance Check-In
+                        {% else %}
+                            Participant Registration
+                        {% endif %}
+                    </h3>
+                    <p>
+                        Enter your details below to continue.
+                    </p>
+                </div>
+
+                <form method="post" novalidate id="meetingRegistrationForm">
+                    {% csrf_token %}
+
+                    <input type="hidden" name="mode" value="{% if booking.enable_attendance %}attendance{% else %}register{% endif %}">
+                    <input type="hidden" name="email_status" id="email_status" value="walkin">
+
+                    <div class="mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Full Name</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <span class="text-danger small">{{ form.name.errors|join:", " }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.email.id_for_label }}" class="form-label">Email Address</label>
+                        {{ form.email }}
+                        {% if form.email.errors %}
+                            <span class="text-danger small">{{ form.email.errors|join:", " }}</span>
+                        {% endif %}
+                        <div class="helper-text">
+                            Please use the same email address you received the invitation with, if applicable.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.organization.id_for_label }}" class="form-label">Organization</label>
+                        {{ form.organization }}
+                        {% if form.organization.errors %}
+                            <span class="text-danger small">{{ form.organization.errors|join:", " }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if booking.enable_attendance %}
+                        <div id="emailStatusBox" class="status-box"></div>
+                    {% endif %}
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-un-primary">
+                            {% if booking.enable_attendance %}
+                                <i class="bi bi-check2-circle me-2"></i>Confirm Attendance
+                            {% else %}
+                                <i class="bi bi-person-check me-2"></i>Register Now
+                            {% endif %}
+                        </button>
+
+                        <a href="javascript:window.close();" class="btn-un-light">
+                            Close
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+            <div class="public-footer">
+                <i class="bi bi-shield-check me-1"></i>
+                Official public meeting page
+                {% if booking.requested_by.agency %}
+                    · {{ booking.requested_by.agency.name }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if booking.enable_attendance %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const emailInput = document.getElementById('{{ form.email.id_for_label }}');
+    const statusInput = document.getElementById('email_status');
+    const statusBox = document.getElementById('emailStatusBox');
+
+    if (!emailInput || !statusInput || !statusBox) return;
+
+    let timeout = null;
+
+    function setStatus(type, text) {
+        statusBox.className = 'status-box show';
+
+        if (type === 'already') {
+            statusBox.classList.add('status-already');
+            statusInput.value = 'already_checked_in';
+        } else if (type === 'invited') {
+            statusBox.classList.add('status-invited');
+            statusInput.value = 'invited';
+        } else if (type === 'registered') {
+            statusBox.classList.add('status-registered');
+            statusInput.value = 'registered';
+        } else {
+            statusBox.classList.add('status-walkin');
+            statusInput.value = 'walkin';
+        }
+
+        statusBox.innerHTML = text;
+    }
+
+    function clearStatus() {
+        statusBox.className = 'status-box';
+        statusBox.innerHTML = '';
+        statusInput.value = 'walkin';
+    }
+
+    async function checkEmail(email) {
+        if (!email) {
+            clearStatus();
+            return;
+        }
+
+        try {
+            const url = "{% url 'accounts:attendance_checkin_lookup' booking.registration_code %}?email=" + encodeURIComponent(email);
+            const response = await fetch(url, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (!response.ok) {
+                clearStatus();
+                return;
+            }
+
+            const data = await response.json();
+
+            if (data.already_checked_in) {
+                setStatus('already', '<i class="bi bi-exclamation-triangle me-2"></i>This email has already been checked in for this meeting.');
+                return;
+            }
+
+            if (data.is_invited) {
+                setStatus('invited', '<i class="bi bi-patch-check me-2"></i>You are on the invited list and will be confirmed automatically.');
+                return;
+            }
+
+            if (data.is_registered) {
+                setStatus('registered', '<i class="bi bi-person-check me-2"></i>You are already pre-registered and will be confirmed automatically.');
+                return;
+            }
+
+            setStatus('walkin', '<i class="bi bi-person-plus me-2"></i>You will be processed as a walk-in attendee and may require approval.');
+        } catch (err) {
+            clearStatus();
+        }
+    }
+
+    emailInput.addEventListener('input', function () {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => checkEmail(this.value.trim()), 400);
+    });
+
+    emailInput.addEventListener('blur', function () {
+        checkEmail(this.value.trim());
+    });
+});
+</script>
+{% endif %}
+</body>
+</html>

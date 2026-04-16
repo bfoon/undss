@@ -141,7 +141,6 @@ class LoginForm(forms.Form):
         return cleaned_data
 
 
-
 class UserProfileForm(forms.ModelForm):
     class Meta:
         model = User
@@ -170,14 +169,12 @@ class UserProfileForm(forms.ModelForm):
         )
 
 
-
 # Which roles ICT is allowed to assign (adjust as needed)
 ICT_ASSIGNABLE_ROLES = [
     ('requester', 'Requester (Staff)'),
     ('reception', 'Receptionist'),
     ('registry', 'Registry'),
     ('data_entry', 'Data Entry (Security Guard)'),
-    # Usually don't allow ICT to create LSA/SOC/ICT Focal
 ]
 
 
@@ -188,54 +185,27 @@ class ICTUserCreateForm(forms.ModelForm):
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'employee_id', 'role']
         widgets = {
-            'username': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter username'
-            }),
-            'first_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter first name'
-            }),
-            'last_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter last name'
-            }),
-            'email': forms.EmailInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'user@example.com'
-            }),
-            'phone': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': '+1234567890'
-            }),
-            'employee_id': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter employee ID'
-            }),
-            'role': forms.Select(attrs={
-                'class': 'form-select'
-            }),
+            'username': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter username'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter first name'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter last name'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'user@example.com'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+1234567890'}),
+            'employee_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter employee ID'}),
+            'role': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
-
-        # Restrict role choices to ICT-assignable roles only
         self.fields['role'].choices = [('', '---------')] + ICT_ASSIGNABLE_ROLES
-
-        # Make certain fields required
         self.fields['username'].required = True
         self.fields['role'].required = True
-
-        # Add help text
-        self.fields['username'].help_text = 'Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.'
+        self.fields['username'].help_text = 'Required. 150 characters or fewer.'
         self.fields['email'].help_text = 'Optional. Used for password reset links.'
         self.fields['employee_id'].help_text = 'Optional. Internal employee identifier.'
         self.fields['role'].help_text = 'Select the role for this user within your agency.'
 
     def clean_username(self):
-        """Validate that username is unique."""
         username = self.cleaned_data.get('username')
         if username and User.objects.filter(username=username).exists():
             raise ValidationError('A user with this username already exists.')
@@ -248,17 +218,14 @@ class ICTUserCreateForm(forms.ModelForm):
         return email
 
     def clean_employee_id(self):
-        """Validate that employee_id is unique if provided."""
         employee_id = self.cleaned_data.get('employee_id')
         if employee_id:
-            # Strip whitespace
             employee_id = employee_id.strip()
             if User.objects.filter(employee_id=employee_id).exists():
                 raise ValidationError('A user with this employee ID already exists.')
         return employee_id
 
     def clean_role(self):
-        """Validate that the role is one of the allowed roles for ICT."""
         role = self.cleaned_data.get('role')
         if role:
             allowed_roles = [r[0] for r in ICT_ASSIGNABLE_ROLES]
@@ -267,20 +234,13 @@ class ICTUserCreateForm(forms.ModelForm):
         return role
 
     def save(self, commit=True):
-        """Save the user and assign to the ICT focal's agency."""
         user = super().save(commit=False)
-
-        # Assign to the ICT focal's agency
         if self.request_user and self.request_user.agency_id:
             user.agency_id = self.request_user.agency_id
-
-        # Set user as active but without a usable password initially
         user.is_active = True
         user.set_unusable_password()
-
         if commit:
             user.save()
-
         return user
 
 
@@ -291,81 +251,45 @@ class ICTUserUpdateForm(forms.ModelForm):
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'employee_id', 'role']
         widgets = {
-            'username': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter username'
-            }),
-            'first_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter first name'
-            }),
-            'last_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter last name'
-            }),
-            'email': forms.EmailInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'user@example.com'
-            }),
-            'phone': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': '+1234567890'
-            }),
-            'employee_id': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter employee ID'
-            }),
-            'role': forms.Select(attrs={
-                'class': 'form-select'
-            }),
+            'username': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter username'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter first name'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter last name'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'user@example.com'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+1234567890'}),
+            'employee_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter employee ID'}),
+            'role': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
-
-        # Restrict role choices to ICT-assignable roles only
         self.fields['role'].choices = [('', '---------')] + ICT_ASSIGNABLE_ROLES
-
-        # Make certain fields required
         self.fields['username'].required = True
         self.fields['role'].required = True
 
-        # Add help text
-        self.fields['username'].help_text = 'Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.'
-        self.fields['email'].help_text = 'Optional. Used for password reset links.'
-        self.fields['employee_id'].help_text = 'Optional. Internal employee identifier.'
-        self.fields['role'].help_text = 'Select the role for this user within your agency.'
-
     def clean_username(self):
-        """Validate that username is unique (excluding current user)."""
         username = self.cleaned_data.get('username')
         if username and User.objects.filter(username=username).exclude(pk=self.instance.pk).exists():
             raise ValidationError('A user with this username already exists.')
         return username
 
     def clean_email(self):
-        """Validate that email is unique if provided (excluding current user)."""
         email = self.cleaned_data.get('email')
         if email:
-            # Strip whitespace
             email = email.strip()
             if User.objects.filter(email=email).exclude(pk=self.instance.pk).exists():
                 raise ValidationError('A user with this email already exists.')
         return email
 
     def clean_employee_id(self):
-        """Validate that employee_id is unique if provided (excluding current user)."""
         employee_id = self.cleaned_data.get('employee_id')
         if employee_id:
-            # Strip whitespace
             employee_id = employee_id.strip()
             if User.objects.filter(employee_id=employee_id).exclude(pk=self.instance.pk).exists():
                 raise ValidationError('A user with this employee ID already exists.')
         return employee_id
 
     def clean_role(self):
-        """Validate that the role is one of the allowed roles for ICT."""
         role = self.cleaned_data.get('role')
         if role:
             allowed_roles = [r[0] for r in ICT_ASSIGNABLE_ROLES]
@@ -374,15 +298,12 @@ class ICTUserUpdateForm(forms.ModelForm):
         return role
 
     def clean(self):
-        """Additional validation to prevent ICT focal from changing agency."""
         cleaned_data = super().clean()
-
-        # Ensure user stays in the same agency
         if self.instance.pk and self.request_user:
             if self.instance.agency_id != self.request_user.agency_id:
                 raise ValidationError('You can only edit users in your own agency.')
-
         return cleaned_data
+
 
 class CustomUserRegistrationForm(UserCreationForm):
     email = forms.EmailField(required=True)
@@ -391,6 +312,7 @@ class CustomUserRegistrationForm(UserCreationForm):
     class Meta:
         model = User
         fields = ["username", "email", "phone", "password1", "password2"]
+
 
 class RegistrationInviteForm(forms.ModelForm):
     class Meta:
@@ -406,9 +328,7 @@ class RegistrationInviteForm(forms.ModelForm):
         if value <= 0:
             raise forms.ValidationError("Validity must be at least 1 hour.")
         if value >= 24:
-            raise forms.ValidationError(
-                "Validity must be less than 24 hours (max 23)."
-            )
+            raise forms.ValidationError("Validity must be less than 24 hours (max 23).")
         return value
 
 
@@ -456,15 +376,12 @@ class RoomBookingForm(forms.ModelForm):
                                                         label="Optional Amenities")
 
     requested_amenities = forms.ModelMultipleChoiceField(
-        queryset=RoomAmenity.objects.none(),  # Dynamically populated in __init__
+        queryset=RoomAmenity.objects.none(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
         label="Request Optional Amenities"
     )
-    agenda_document = forms.FileField(
-        required=False,
-        label="Upload Agenda (PDF, DOCX, etc.)"
-    )
+    agenda_document = forms.FileField(required=False, label="Upload Agenda (PDF, DOCX, etc.)")
 
     attendee_emails = forms.CharField(
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'e.g., colleague1@example.com, colleague2@example.com'}),
@@ -481,9 +398,9 @@ class RoomBookingForm(forms.ModelForm):
     class Meta:
         model = RoomBooking
         fields = [
-            "room", "title", "description", "agenda_document",
-            "date", "start_time", "end_time",
-            "requested_amenities", "attendee_emails", "virtual_meeting_link",
+            "room", "title", "description", "agenda_document", "date", "start_time", "end_time",
+            "requested_amenities", "attendee_emails", "virtual_meeting_link", "enable_attendance",
+            "enable_invite_link"
         ]
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
@@ -493,22 +410,18 @@ class RoomBookingForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        # Dynamically filter amenities based on the selected room
+        room = kwargs.pop('room', None)
         super().__init__(*args, **kwargs)
-        room = None
-        if 'initial' in kwargs and 'room' in kwargs['initial']:
-            room = Room.objects.get(pk=kwargs['initial']['room'])
-        elif self.instance.pk:
-            room = self.instance.room
-
-        if room:
-            self.fields['requested_amenities'].queryset = room.amenities.filter(is_active=True)
+        selected_room = room or (self.instance.room if self.instance and self.instance.pk else None)
+        if selected_room:
+            self.fields['requested_amenities'].queryset = selected_room.amenities.filter(is_active=True)
+            self.fields['enable_attendance'].widget = forms.CheckboxInput(attrs={'id': 'id_enable_attendance'})
+            self.fields['enable_invite_link'].widget = forms.CheckboxInput(attrs={'id': 'id_enable_invite_link'})
+        else:
+            self.fields['requested_amenities'].queryset = RoomAmenity.objects.none()
 
     def clean(self):
         cleaned = super().clean()
-
-        # Only validate recurring fields when the user explicitly
-        # enabled the recurring toggle (is_recurring=True).
         is_recurring = cleaned.get("is_recurring")
         if not is_recurring:
             return cleaned
@@ -519,17 +432,13 @@ class RoomBookingForm(forms.ModelForm):
 
         if not frequency:
             raise ValidationError("Please select a repeat frequency.")
-
         if not interval:
             raise ValidationError("Please specify the repeat interval (e.g. every 1 week).")
-
         if not until:
             raise ValidationError("Please specify an end date for the recurring booking.")
-
         if until and cleaned.get("date") and until < cleaned.get("date"):
             raise ValidationError("End date cannot be before the start date.")
 
-        # Validate monthly-weekday mode fields
         if frequency == "monthly":
             monthly_type = cleaned.get("monthly_type") or "day"
             if monthly_type == "weekday":
@@ -543,56 +452,68 @@ class RoomBookingForm(forms.ModelForm):
                     raise ValidationError(
                         "Please select which day of the week for the monthly recurrence."
                     )
-
         return cleaned
 
 
 class RoomBookingApprovalForm(forms.ModelForm):
     """
-    Form for an approver to confirm which amenities are available and to
-    provide a reason if rejecting the request.
+    Form for an approver to:
+    1. Confirm which amenities (from those requested) are actually available.
+    2. Provide a rejection reason if declining.
+
+    FIX: approved_amenities queryset is populated from the booking's
+         requested_amenities; initial is pre-ticked with all requested ones
+         so the approver can uncheck any unavailable items.
     """
-    # This field will be populated with the amenities the user *requested*.
-    # The approver can then uncheck any that are not available.
+
     approved_amenities = forms.ModelMultipleChoiceField(
-        queryset=RoomAmenity.objects.none(),  # Dynamically set in __init__
+        queryset=RoomAmenity.objects.none(),   # set in __init__
         widget=forms.CheckboxSelectMultiple,
         required=False,
-        label="Confirm Available Amenities"
+        label="Confirm Available Amenities",
+        help_text="Uncheck any amenities that are NOT available for this booking."
     )
 
-    # A separate field for the rejection reason, not tied to the model directly
-    # until the rejection action is confirmed in the view.
     rejection_reason = forms.CharField(
-        widget=forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
+        widget=forms.Textarea(attrs={'rows': 3, 'class': 'form-control',
+                                     'placeholder': 'Provide a reason for rejection...'}),
         required=False,
-        label="Reason (Required if Rejecting)"
+        label="Reason for Rejection (required if rejecting)"
     )
 
     class Meta:
         model = RoomBooking
-        # This form's primary purpose is to save the `approved_amenities` field.
-        # The rejection reason is handled separately in the view.
-        fields = ['approved_amenities']
+        # Only expose read-only booking details + the two decision fields.
+        # We intentionally exclude editable booking fields so approvers
+        # cannot accidentally change the room/date/time.
+        fields = [
+            "approved_amenities",
+        ]
 
     def __init__(self, *args, **kwargs):
-        # The booking instance is passed from the view
-        booking = kwargs.get('instance')
         super().__init__(*args, **kwargs)
 
-        if booking:
-            # The queryset for the checklist should only contain amenities the user asked for.
-            self.fields['approved_amenities'].queryset = booking.requested_amenities.all()
+        booking = self.instance  # always passed via instance=booking in the view
 
-            # For convenience, we pre-select all the requested amenities.
-            # The approver's job is to *uncheck* any that are unavailable.
-            self.fields['approved_amenities'].initial = booking.requested_amenities.all()
+        if booking and booking.pk:
+            # Populate the amenity queryset with what the requester asked for.
+            requested_qs = booking.requested_amenities.filter(is_active=True)
+            self.fields['approved_amenities'].queryset = requested_qs
+
+            # Pre-tick all requested amenities — approver unchecks unavailable ones.
+            self.fields['approved_amenities'].initial = requested_qs
+
+    def clean_rejection_reason(self):
+        """
+        Only validate the rejection_reason in the view (it checks the action button),
+        but strip whitespace here for convenience.
+        """
+        return (self.cleaned_data.get('rejection_reason') or '').strip()
 
 
 class RoomSeriesApprovalForm(forms.Form):
     """
     Form for approving/rejecting an entire recurring booking series.
-    This remains a standard Form as it doesn't directly edit a model instance.
     """
     ACTION_CHOICES = (
         ("approve", "Approve entire series"),
@@ -611,7 +532,6 @@ class MeetingAttendeeForm(forms.ModelForm):
     """
     Form for external attendees to register for a meeting via the public link.
     """
-
     class Meta:
         model = MeetingAttendee
         fields = ['name', 'email', 'organization']
@@ -622,17 +542,11 @@ class MeetingAttendeeForm(forms.ModelForm):
                 attrs={'class': 'form-control', 'placeholder': 'Your Organization (Optional)'}),
         }
 
+
 class RoomForm(forms.ModelForm):
     """
     Professional Room create/update form.
-
-    - Allows selecting amenities (RoomAmenity)
-    - Allows selecting approvers (Users)
-    - Adds approval_mode (manual/auto/mixed) to control workflow
-    - Keeps RoomApprover links in sync with selected approvers
-      because your booking approval views use RoomApprover links.
     """
-
     amenities = forms.ModelMultipleChoiceField(
         queryset=RoomAmenity.objects.filter(is_active=True),
         widget=forms.CheckboxSelectMultiple,
@@ -650,60 +564,35 @@ class RoomForm(forms.ModelForm):
     class Meta:
         model = Room
         fields = [
-            "name",
-            "code",
-            "room_type",
-            "location",
-            "capacity",
-            "description",
-            "approval_mode",  # ✅ add this field in Room model
-            "is_active",
-            "amenities",
-            "approvers",
+            "name", "code", "room_type", "location", "capacity", "description",
+            "approval_mode", "is_active", "amenities", "approvers",
         ]
         widgets = {
-            "name": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "e.g. Conference Room A"}
-            ),
-            "code": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "e.g. CR-A, LIB-1"}
-            ),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Conference Room A"}),
+            "code": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. CR-A, LIB-1"}),
             "room_type": forms.Select(attrs={"class": "form-select"}),
-            "location": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "e.g. UN House 1st Floor"}
-            ),
-            "capacity": forms.NumberInput(
-                attrs={"class": "form-control", "placeholder": "Number of people", "min": 1}
-            ),
+            "location": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. UN House 1st Floor"}),
+            "capacity": forms.NumberInput(attrs={"class": "form-control", "placeholder": "Number of people", "min": 1}),
             "description": forms.Textarea(
-                attrs={"class": "form-control", "rows": 4, "placeholder": "Describe the room and its purpose"}
-            ),
-            "approval_mode": forms.Select(attrs={"class": "form-select"}),  # ✅
+                attrs={"class": "form-control", "rows": 4, "placeholder": "Describe the room and its purpose"}),
+            "approval_mode": forms.Select(attrs={"class": "form-select"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # If editing, prefill selections
         if self.instance.pk:
-            # Amenities already M2M on Room
             self.fields["amenities"].initial = self.instance.amenities.filter(is_active=True)
-
-            # Approvers:
-            # Prefer RoomApprover links (since your workflow uses them), fall back to Room.approvers.
             linked_users = User.objects.filter(
                 room_approver_roles__room=self.instance,
                 room_approver_roles__is_active=True,
             ).distinct()
-
             if linked_users.exists():
                 self.fields["approvers"].initial = linked_users
             else:
                 self.fields["approvers"].initial = self.instance.approvers.filter(is_active=True)
 
     def clean_code(self):
-        """Validate that code is unique (excluding current instance if editing)."""
         code = self.cleaned_data.get("code")
         if code:
             code = code.strip().upper()
@@ -715,7 +604,6 @@ class RoomForm(forms.ModelForm):
         return code
 
     def clean_name(self):
-        """Validate that name is unique (excluding current instance if editing)."""
         name = self.cleaned_data.get("name")
         if name:
             name = name.strip()
@@ -727,42 +615,25 @@ class RoomForm(forms.ModelForm):
         return name
 
     def save(self, commit=True):
-        """
-        Save room + sync:
-        - Room.amenities M2M
-        - Room.approvers M2M (optional/legacy)
-        - RoomApprover links (ACTIVE) to match selected approvers (this is what your workflow uses)
-        """
         room = super().save(commit=commit)
-
-        # M2M saving
         if commit:
             self.save_m2m()
 
         selected_amenities = self.cleaned_data.get("amenities")
         selected_approvers = self.cleaned_data.get("approvers")
 
-        # Ensure amenities match selection (defensive)
         if selected_amenities is not None:
             room.amenities.set(selected_amenities)
 
-        # Keep Room.approvers updated too (since you have this M2M on the model)
         if selected_approvers is not None:
             room.approvers.set(selected_approvers)
-
-            # ---- Sync RoomApprover links (THIS is what your views use) ----
             selected_ids = set(selected_approvers.values_list("id", flat=True))
-
-            # Deactivate links not selected
             RoomApprover.objects.filter(room=room).exclude(user_id__in=selected_ids).update(is_active=False)
-
-            # Activate/create selected links
-            existing = set(RoomApprover.objects.filter(room=room, user_id__in=selected_ids).values_list("user_id", flat=True))
-
+            existing = set(
+                RoomApprover.objects.filter(room=room, user_id__in=selected_ids).values_list("user_id", flat=True))
             to_create = [RoomApprover(room=room, user_id=uid, is_active=True) for uid in (selected_ids - existing)]
             if to_create:
                 RoomApprover.objects.bulk_create(to_create)
-
             RoomApprover.objects.filter(room=room, user_id__in=selected_ids).update(is_active=True)
 
         return room

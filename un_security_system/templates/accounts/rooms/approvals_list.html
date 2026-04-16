@@ -669,6 +669,19 @@
                             </div>
                         </div>
 
+                        <!-- Amenities requested -->
+                        {% with amenities=item.requested_amenities.all %}
+                        {% if amenities %}
+                        <div class="mb-2 d-flex flex-wrap gap-1">
+                            {% for a in amenities %}
+                            <span class="badge rounded-pill" style="background:#ede9fe;color:#4c1d95;font-size:.78rem;font-weight:600;padding:.3rem .7rem;">
+                                <i class="{{ a.icon_class|default:'bi bi-stars' }} me-1"></i>{{ a.name }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% endwith %}
+
                         <!-- Footer -->
                         <div class="booking-footer">
                             <div class="time-ago">
