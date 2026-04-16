@@ -95,10 +95,26 @@
         background: white; border: 2px solid #c7d2fe; border-radius: 10px;
         padding: .5rem .9rem; cursor: pointer; transition: all .2s;
     }
-    .amenity-check-item:has(input:checked) {
-        background: #4f46e5; border-color: #4f46e5; color: white;
+    .amenity-check-item {
+        position: relative;
     }
-    .amenity-check-item input { display: none; }
+    /* Real checkbox — visually hidden but still clickable so :has() works */
+    .amenity-check-item input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;   /* label handles the click natively */
+    }
+    /* Style when checked — :has() for modern browsers */
+    .amenity-check-item:has(input:checked),
+    .amenity-check-item.is-checked {
+        background: #4f46e5;
+        border-color: #4f46e5;
+        color: white;
+    }
+    .amenity-check-item:has(input:checked) i,
+    .amenity-check-item.is-checked i { color: white; }
     .amenity-check-item i { font-size: 1.1rem; }
     .amenity-check-item span { font-size: .9rem; font-weight: 600; }
     .no-amenities-note { font-size: .9rem; color: #6b7280; font-style: italic; }
@@ -284,33 +300,16 @@
                         Unticked items will be marked as unavailable.
                     </p>
 
-                    {# Render approved_amenities checkboxes manually for nice styling #}
                     <div class="amenity-check-list" id="amenityChecklist">
                         {% for amenity in form.approved_amenities %}
-                        <label class="amenity-check-item">
+                        <label class="amenity-check-item{% if amenity.data.selected %} is-checked{% endif %}"
+                               for="{{ amenity.id_for_label }}">
                             {{ amenity.tag }}
-                            {% if amenity.choice_label %}
-                                <i class="{{ amenity.data.attrs.icon_class|default:'bi bi-check-circle' }}"></i>
-                                <span>{{ amenity.choice_label }}</span>
-                            {% else %}
-                                <span>{{ amenity }}</span>
-                            {% endif %}
+                            <i class="{{ amenity.data.attrs.icon_class|default:'bi bi-stars' }}"></i>
+                            <span>{{ amenity.choice_label }}</span>
                         </label>
                         {% endfor %}
                     </div>
-
-                    {# Fallback: render the raw queryset if above loop gives nothing #}
-                    <div id="amenityFallback" style="display:none;">
-                        {% for amenity in requested %}
-                        <div class="amenity-check-item d-inline-flex me-2 mb-2">
-                            <i class="{{ amenity.icon_class|default:'bi bi-check-circle' }} me-1"></i>
-                            <span>{{ amenity.name }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-
-                    {# Hidden field container for the actual form widget (needed for POST) #}
-                    <div class="d-none">{{ form.approved_amenities }}</div>
 
                 {% else %}
                     <p class="no-amenities-note">
@@ -398,29 +397,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const actionButtons  = document.querySelectorAll('.action-btn');
     const templateBtns   = document.querySelectorAll('.template-btn');
 
-    // ── Amenity checklist wiring ───────────────────────────────────
-    // The real checkboxes are hidden (rendered by Django form widget inside .d-none).
-    // The styled labels in #amenityChecklist mirror them.
-    const hiddenChecks = document.querySelectorAll('.d-none input[type="checkbox"]');
-    const styledItems  = document.querySelectorAll('#amenityChecklist .amenity-check-item');
+    // ── Amenity checklist — .is-checked fallback for browsers without :has() ──
+    // The real checkboxes sit inside each styled label (amenity.tag).
+    // Clicking the label toggles the checkbox natively.
+    // :has(input:checked) handles styling in modern browsers.
+    // We also toggle .is-checked so older browsers get the visual too.
+    document.querySelectorAll('#amenityChecklist .amenity-check-item').forEach(function(label) {
+        const cb = label.querySelector('input[type="checkbox"]');
+        if (!cb) return;
 
-    // Show fallback only if styled items are empty
-    if (styledItems.length === 0 && hiddenChecks.length > 0) {
-        document.getElementById('amenityFallback').style.display = 'flex';
-    }
+        // Set initial state
+        if (cb.checked) label.classList.add('is-checked');
 
-    // Sync styled label clicks → hidden checkboxes
-    styledItems.forEach(function (label, i) {
-        const hiddenCb = hiddenChecks[i];
-        if (!hiddenCb) return;
-
-        // Mirror initial state
-        if (hiddenCb.checked) label.classList.add('checked');
-
-        label.addEventListener('click', function (e) {
-            e.preventDefault();
-            hiddenCb.checked = !hiddenCb.checked;
-            label.classList.toggle('checked', hiddenCb.checked);
+        cb.addEventListener('change', function() {
+            label.classList.toggle('is-checked', this.checked);
         });
     });
 

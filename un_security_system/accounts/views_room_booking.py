@@ -79,6 +79,16 @@ def _send_email_async(subject, message, recipients):
     # fire-and-forget background thread
     threading.Thread(target=_task, daemon=True).start()
 
+def ensure_booking_registration_code(booking):
+    """
+    Ensure a booking has a registration code when invite link is enabled.
+    Returns the booking.registration_code after saving if needed.
+    """
+    if booking.enable_invite_link and not booking.registration_code:
+        import uuid
+        booking.registration_code = uuid.uuid4()
+        booking.save(update_fields=["registration_code"])
+    return booking.registration_code
 
 def notify_approvers_new_booking(booking):
     approver_emails = list(
@@ -243,23 +253,45 @@ def notify_requester_booking_submitted(booking):
     _send_email_async(subject, message, [booking.requested_by.email])
 
 
-def notify_requester_booking_approved(request, booking):  # <--- ADD `request` HERE
-    if not booking.requested_by.email: return
 
-    # This line requires the `request` object to build the full URL
-    registration_link = request.build_absolute_uri(
-        reverse('accounts:meeting_registration', args=[booking.registration_code])
-    )
+def notify_requester_booking_approved(request, booking):
+    if not booking.requested_by.email:
+        return
+
+    registration_link = None
+
+    # Only build a public registration link if the feature is enabled
+    if booking.enable_invite_link:
+        ensure_booking_registration_code(booking)
+        registration_link = request.build_absolute_uri(
+            reverse('accounts:meeting_registration', args=[booking.registration_code])
+        )
+
+    requester_name = booking.requested_by.get_full_name() or booking.requested_by.username
 
     message = (
-        f"Dear {booking.requested_by.get_full_name()},\n\n"
+        f"Dear {requester_name},\n\n"
         f"Your booking for '{booking.title}' has been APPROVED.\n\n"
-        f"Attendee Registration Link:\n{registration_link}\n\nPlease share this link with your attendees.\n\n"
+    )
+
+    if registration_link:
+        message += (
+            f"Attendee Registration Link:\n{registration_link}\n\n"
+            "Please share this link with your attendees.\n\n"
+        )
+
+    message += (
         "A calendar invite has been sent to you and your listed guests.\n\n"
         "Please remember to leave the room neat and tidy as you found it.\n\n"
         "Thank you."
     )
-    _send_email_async(f"Approved: {booking.title}", message, [booking.requested_by.email])
+
+    _send_email_async(
+        f"Approved: {booking.title}",
+        message,
+        [booking.requested_by.email]
+    )
+
 def notify_attendee_of_registration(attendee):
     subject = f"Registration Confirmed: {attendee.booking.title}"
     message = (
@@ -880,6 +912,7 @@ def _booking_public_link_status(booking):
         "badge_class": "primary",
         "reason": "The public link is active.",
     }
+
 
 
 def _booking_public_link_block_reason(booking):
@@ -1633,6 +1666,8 @@ def room_booking_approve_view(request, pk):
                 # Save the form to update the `approved_amenities` on the booking instance
                 booking = form.save()
 
+                ensure_booking_registration_code(booking)
+
                 # Finalize the approval
                 booking.approve(request.user)
 
@@ -1705,6 +1740,8 @@ def room_series_approve_view(request, pk):
             if action == "approve":
                 series.approve(request.user)
                 # notify_requester_series_approved(request, series)
+
+                ensure_booking_registration_code(booking)
 
                 # Send invite for the first occurrence, which contains the recurrence rule
                 first_booking = series.occurrences.order_by('date', 'start_time').first()
@@ -1827,7 +1864,7 @@ def room_detail_api(request, pk):
 def attendance_checkin_lookup(request, registration_code):
     booking = get_object_or_404(RoomBooking, registration_code=registration_code)
 
-    block_reason = _public_link_block_reason(booking)
+    block_reason = _booking_public_link_block_reason(booking)
     if block_reason:
         return JsonResponse({
             'closed': True,
