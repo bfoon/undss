@@ -13,11 +13,15 @@ urlpatterns = [
     path("export/", views.export_visitors, name="visitor_export"),
     path("reports/", views.VisitorReportView.as_view(), name="visitor_reports"),
 
-    # actions from the detail page
+    # Actions from the detail page
     path('<int:pk>/request-clearance/', views.visitor_request_clearance, name='visitor_request_clearance'),
     path('<int:pk>/lsa-approve/', views.visitor_lsa_approve, name='visitor_lsa_approve'),
     path('<int:pk>/lsa-reject/', views.visitor_lsa_reject, name='visitor_lsa_reject'),
     path('<int:pk>/cancel-request/', views.visitor_cancel_request, name='visitor_cancel_request'),
+
+    # ── Meeting-sync ─────────────────────────────────────────────────────────
+    # POST to re-pull accepted meeting registrants as group members
+    path('<int:pk>/sync-meeting/', views.sync_meeting_members, name='sync_meeting_members'),
 
     # Group Member Management
     path('<int:visitor_id>/member/<int:member_id>/delete/',

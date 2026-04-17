@@ -310,6 +310,62 @@
       </div>
 
       <!-- Group Members Section -->
+      {% if visitor.linked_booking %}
+<div class="alert d-flex align-items-start align-items-md-center
+            justify-content-between flex-column flex-md-row gap-3
+            py-2 px-3 mb-3"
+     style="background:#dbeafe;border:1px solid #bfdbfe;border-radius:10px;">
+
+    <div class="d-flex align-items-center gap-2">
+        <span style="font-size:1.25rem;color:#1d4ed8;">
+            <i class="bi bi-calendar-check-fill"></i>
+        </span>
+        <div>
+            <div class="fw-semibold" style="color:#1e3a8a;font-size:.9rem;">
+                Linked meeting: {{ visitor.linked_booking.title }}
+            </div>
+            <div class="small" style="color:#3b82f6;">
+                {{ visitor.linked_booking.date|date:"l, d F Y" }}
+                &nbsp;·&nbsp;
+                {{ visitor.linked_booking.start_time|time:"H:i" }}–{{ visitor.linked_booking.end_time|time:"H:i" }}
+                &nbsp;·&nbsp;
+                {{ visitor.linked_booking.room.name }}
+                {% if linked_attendee_count is not None %}
+                &nbsp;·&nbsp;
+                <strong>{{ linked_attendee_count }}</strong> accepted registrant{{ linked_attendee_count|pluralize }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        {# Link to the meeting booking detail (uses accounts namespace) #}
+        <a href="{% url 'accounts:booking_detail' visitor.linked_booking.pk %}"
+           class="btn btn-sm btn-outline-primary"
+           target="_blank"
+           title="Open meeting">
+            <i class="bi bi-box-arrow-up-right me-1"></i>View Meeting
+        </a>
+
+        {# Sync button — POST to re-pull accepted attendees #}
+        {% if request.user.is_superuser or request.user.role in 'lsa,soc' or visitor.registered_by == request.user %}
+        <form method="post"
+              action="{% url 'visitors:sync_meeting_members' visitor.pk %}"
+              class="d-inline"
+              onsubmit="this.querySelector('button').disabled=true;
+                        this.querySelector('button').innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span>Syncing…';">
+            {% csrf_token %}
+            <button type="submit"
+                    class="btn btn-sm btn-primary"
+                    title="Re-pull accepted registrants from this meeting">
+                <i class="bi bi-arrow-repeat me-1"></i>Sync Now
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
       {% if visitor.visitor_type == 'group' %}
       <div class="card shadow-sm mt-4">
         <div class="card-body p-4">
@@ -427,6 +483,24 @@
                         </div>
                         {% endif %}
                       </div>
+                      {% if member.from_meeting %}
+                      <span class="badge ms-1"
+                            style="background:#dbeafe;color:#1e40af;font-size:.7rem;font-weight:600;
+                                   border:1px solid #bfdbfe;border-radius:999px;padding:.15rem .5rem;"
+                            title="Auto-synced from meeting registration">
+                          <i class="bi bi-calendar2-check me-1"></i>Meeting
+                      </span>
+                  {% endif %}
+
+                  {% if not member.id_number %}
+                      <span class="badge ms-1"
+                            style="background:#fef3c7;color:#92400e;font-size:.7rem;font-weight:600;
+                                   border:1px solid #fde68a;border-radius:999px;padding:.15rem .5rem;"
+                            title="ID not yet captured — will be verified at the gate">
+                          <i class="bi bi-exclamation-circle me-1"></i>ID pending
+                      </span>
+                  {% endif %}
+
                     </div>
                   </div>
                 </div>

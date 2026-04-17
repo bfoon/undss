@@ -33,6 +33,12 @@
         letter-spacing: 0.03em;
     }
 
+    /* Meeting-link section gets a distinct accent colour */
+    .form-section.meeting-link-section {
+        border-left-color: #0ea5e9;
+        background: linear-gradient(135deg, #f0f9ff 0%, #f8f9fa 100%);
+    }
+
     .required-field label::after {
         content: " *";
         color: #dc3545;
@@ -56,14 +62,10 @@
         margin-top: 0.25rem;
     }
 
-    /* ================================
-       FLOATING / PILL LABELS
-       ================================ */
-
-    /* Crispy/Bootstrap fields inside sections */
+    /* Floating / pill labels */
     .form-section .mb-3 {
         position: relative;
-        padding-top: 1.2rem; /* space for pill label */
+        padding-top: 1.2rem;
         margin-bottom: 1rem;
     }
 
@@ -86,41 +88,9 @@
         white-space: nowrap;
     }
 
-    /* Manual fields inside group members card */
-    .group-member-card .form-group {
-        position: relative;
-        padding-top: 1.2rem;
-        margin-bottom: 0.9rem;
-    }
-
-    .group-member-card .form-group > label.form-label,
-    .group-member-card .form-group > label {
-        position: absolute;
-        top: 0;
-        left: 0.75rem;
-        transform: translateY(-50%);
-        background: #ffffff;
-        padding: 0.1rem 0.6rem;
-        border-radius: 999px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: #1565c0;
-        box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.08);
-        z-index: 2;
-        white-space: nowrap;
-    }
-
-    /* Make sure required star stays tight with the pill label */
-    .required-field label::after {
-        margin-left: 0.15rem;
-    }
-
-    /* Placeholder styling so the contrast with label feels intentional */
-    .form-control::placeholder {
-        color: #b0b0b0;
-        font-size: 0.85rem;
+    .meeting-link-section .mb-3 > label.form-label,
+    .meeting-link-section .mb-3 > label {
+        background: #f0f9ff;
     }
 
     /* Group Members Styling */
@@ -157,6 +127,12 @@
     .group-member-card:hover {
         box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         transform: translateY(-2px);
+    }
+
+    /* Meeting-synced member card gets a teal accent */
+    .group-member-card.from-meeting {
+        border-left-color: #0ea5e9;
+        background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
     }
 
     .group-member-card .member-number {
@@ -221,6 +197,16 @@
         box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
     }
 
+    /* Disable the add-member button when meeting is linked */
+    .add-member-btn:disabled,
+    .add-member-btn[disabled] {
+        background: #9e9e9e;
+        transform: none;
+        box-shadow: none;
+        cursor: not-allowed;
+        opacity: 0.65;
+    }
+
     .group-summary {
         background: #ffffff;
         border-radius: 8px;
@@ -266,6 +252,37 @@
         margin-top: 1rem;
     }
 
+    .group-member-card .form-group {
+        position: relative;
+        padding-top: 1.2rem;
+        margin-bottom: 0.9rem;
+    }
+
+    .group-member-card .form-group > label.form-label,
+    .group-member-card .form-group > label {
+        position: absolute;
+        top: 0;
+        left: 0.75rem;
+        transform: translateY(-50%);
+        background: #ffffff;
+        padding: 0.1rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #1565c0;
+        box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.08);
+        z-index: 2;
+        white-space: nowrap;
+    }
+
+    .group-member-card.from-meeting .form-group > label.form-label,
+    .group-member-card.from-meeting .form-group > label {
+        background: #f0f9ff;
+        color: #0369a1;
+    }
+
     .empty-state {
         text-align: center;
         padding: 2rem 1rem;
@@ -277,6 +294,49 @@
         font-size: 2.5rem;
         color: #bdbdbd;
         margin-bottom: 0.75rem;
+    }
+
+    /* Meeting preview pill */
+    .meeting-preview-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #dbeafe;
+        color: #1e40af;
+        border-radius: 999px;
+        padding: 0.3rem 0.8rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: 1px solid #bfdbfe;
+        animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Synced-member notice strip inside group section */
+    #meeting-sync-notice {
+        display: none;
+        background: #dbeafe;
+        border: 1px solid #bfdbfe;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        color: #1e40af;
+        margin-bottom: 1rem;
+    }
+
+    #meeting-sync-notice.show {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    .form-control::placeholder {
+        color: #b0b0b0;
+        font-size: 0.85rem;
     }
 </style>
 {% endblock %}
@@ -295,7 +355,7 @@
                     </h1>
                     <p class="text-muted mb-0">
                         {% if object %}
-                            Review and update the visitor’s personal details and visit information.
+                            Review and update the visitor's personal details and visit information.
                         {% else %}
                             Capture key information to pre-clear and register a new visitor.
                         {% endif %}
@@ -385,6 +445,15 @@
                                 <span class="badge bg-primary ms-2" id="member-count-badge">0 members</span>
                             </h6>
 
+                            <!-- Meeting-sync notice (shown when a meeting is linked) -->
+                            <div id="meeting-sync-notice">
+                                <i class="bi bi-calendar-check-fill flex-shrink-0"></i>
+                                <span id="meeting-sync-notice-text">
+                                    Members are automatically populated from the linked meeting's accepted registrants.
+                                    You can still add additional members manually below.
+                                </span>
+                            </div>
+
                             <div class="group-summary">
                                 <div class="group-summary-icon">
                                     <i class="bi bi-people"></i>
@@ -402,9 +471,9 @@
                                 <!-- Empty state -->
                                 <div class="empty-state" id="empty-members-state">
                                     <i class="bi bi-person-plus-fill"></i>
-                                    <p class="mb-0">
+                                    <p class="mb-0" id="empty-members-text">
                                         No additional group members have been added.<br>
-                                        Click <strong>“Add Group Member”</strong> to register each accompanying visitor.
+                                        Click <strong>"Add Group Member"</strong> to register each accompanying visitor.
                                     </p>
                                 </div>
                             </div>
@@ -469,6 +538,42 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- ── Meeting Link ──────────────────────────────────────────────── -->
+                        {% if form.linked_booking %}
+                        <div class="form-section meeting-link-section" id="meeting-link-section">
+                            <h6>
+                                <i class="bi bi-calendar-event me-1"></i>
+                                Link to a Meeting
+                                <span class="badge ms-2"
+                                      style="background:#0ea5e9;font-size:.68rem;font-weight:500;letter-spacing:.03em;">
+                                    Optional
+                                </span>
+                            </h6>
+                            <p class="small text-muted mb-3" style="font-weight:400;text-transform:none;letter-spacing:0;">
+                                Select an upcoming approved meeting to link this access request.
+                                Accepted registrants will be automatically imported as group members and
+                                kept in sync whenever new people register — including after this request is saved.
+                            </p>
+
+                            <div class="row align-items-end">
+                                <div class="col-md-8">
+                                    <div class="mb-3">
+                                        {{ form.linked_booking|as_crispy_field }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <!-- Live attendee-count preview -->
+                                    <div id="meeting-attendee-preview" style="display:none;">
+                                        <span class="meeting-preview-pill">
+                                            <i class="bi bi-people-fill"></i>
+                                            <span id="attendee-preview-text">…</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
 
                         <!-- Vehicle Information -->
                         <div class="form-section">
@@ -536,7 +641,7 @@
                 </div>
             </div>
 
-            <!-- Quick Actions -->
+            <!-- Quick Actions (edit mode) -->
             {% if object %}
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a class="btn btn-outline-primary btn-sm" href="{% url 'visitors:visitor_detail' object.pk %}">
@@ -554,8 +659,10 @@
                     <i class="bi bi-lightbulb me-2 mt-1"></i>
                     <div>
                         <strong>Registration guidance:</strong>
-                        Please confirm the visitor’s host, purpose of visit, and identification details before submitting.
+                        Please confirm the visitor's host, purpose of visit, and identification details before submitting.
                         For group visits, ensure each accompanying member is listed with their ID information.
+                        When linking to a meeting, accepted registrants are imported automatically — their IDs can be
+                        verified and completed at the gate.
                     </div>
                 </div>
             </div>
@@ -563,7 +670,7 @@
     </div>
 </div>
 
-<!-- Hidden template for group member form -->
+<!-- Hidden template for manually-added group member form -->
 <template id="member-form-template">
     <div class="group-member-card" data-member-index="">
         <div class="member-number"></div>
@@ -649,7 +756,7 @@
             <textarea class="form-control"
                       name="member_notes[]"
                       rows="2"
-                      placeholder="Any additional information (e.g. role in group, special access needs)"></textarea>
+                      placeholder="Any additional information"></textarea>
         </div>
     </div>
 </template>
@@ -658,13 +765,14 @@
 
 {% block extra_js %}
 <script>
+// ─── State ───────────────────────────────────────────────────────────────────
 let memberIndex = 0;
+let meetingLinked = false;   // true when a booking is selected
 
-// Preview ID photo
+// ─── ID photo preview ────────────────────────────────────────────────────────
 function previewIDPhoto(input) {
     const container = input.parentElement.querySelector('.id-photo-preview-container');
     container.innerHTML = '';
-
     if (input.files && input.files[0]) {
         const reader = new FileReader();
         reader.onload = function (e) {
@@ -677,7 +785,7 @@ function previewIDPhoto(input) {
     }
 }
 
-// Update member count
+// ─── Member count display ────────────────────────────────────────────────────
 function updateMemberCount() {
     const cards = document.querySelectorAll('.group-member-card');
     const count = cards.length;
@@ -687,44 +795,40 @@ function updateMemberCount() {
     const totalGroupCount = document.getElementById('total-group-count');
     const emptyState = document.getElementById('empty-members-state');
 
-    if (badge) {
-        badge.textContent = `${count} member${count !== 1 ? 's' : ''}`;
-    }
-
-    if (totalGroupCount) {
-        totalGroupCount.textContent = totalCount;
-    }
-
+    if (badge) badge.textContent = `${count} member${count !== 1 ? 's' : ''}`;
+    if (totalGroupCount) totalGroupCount.textContent = totalCount;
     if (emptyState) {
         emptyState.style.display = count === 0 ? 'block' : 'none';
+        if (meetingLinked && count === 0) {
+            const txt = document.getElementById('empty-members-text');
+            if (txt) {
+                txt.innerHTML = `
+                    <i class="bi bi-arrow-repeat d-block mb-2" style="font-size:2rem;color:#0ea5e9;"></i>
+                    Meeting registrants will be imported automatically when you save.<br>
+                    You can also add additional members manually using the button below.
+                `;
+            }
+        }
     }
 
-    // Update member numbers
     cards.forEach((card, idx) => {
         const numberBadge = card.querySelector('.member-number');
-        if (numberBadge) {
-            numberBadge.textContent = idx + 1;
-        }
+        if (numberBadge) numberBadge.textContent = idx + 1;
     });
 }
 
-// Add group member
+// ─── Add group member manually ───────────────────────────────────────────────
 const addMemberBtn = document.getElementById('add-member-btn');
 if (addMemberBtn) {
     addMemberBtn.addEventListener('click', function () {
         const template = document.getElementById('member-form-template');
         const container = document.getElementById('group-members-container');
-
-        if (!template || !container) {
-            return;
-        }
+        if (!template || !container) return;
 
         const clone = template.content.cloneNode(true);
         const card = clone.querySelector('.group-member-card');
-
         card.dataset.memberIndex = memberIndex++;
 
-        // Add remove functionality
         const removeBtn = clone.querySelector('.remove-member-btn');
         if (removeBtn) {
             removeBtn.addEventListener('click', function () {
@@ -736,64 +840,120 @@ if (addMemberBtn) {
         container.appendChild(clone);
         updateMemberCount();
 
-        // Scroll to new member
-        setTimeout(() => {
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 100);
+        setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
     });
 }
 
-// Toggle group members section based on visitor type
-document.addEventListener('DOMContentLoaded', function () {
-    const form = document.getElementById('visitor-form');
-    const visitorTypeField = document.getElementById('id_visitor_type');
-    const groupMembersSection = document.getElementById('group-members-section');
+// ─── Toggle group section based on visitor type ──────────────────────────────
+function toggleGroupSection(visitorType) {
+    const section = document.getElementById('group-members-section');
+    if (!section) return;
+    if (visitorType === 'group') {
+        section.classList.add('show');
+    } else {
+        section.classList.remove('show');
+    }
+}
 
-    if (visitorTypeField && groupMembersSection) {
-        function toggleGroupSection() {
-            if (visitorTypeField.value === 'group') {
-                groupMembersSection.classList.add('show');
-            } else {
-                groupMembersSection.classList.remove('show');
-            }
+// ─── Meeting booking selector ────────────────────────────────────────────────
+function onBookingSelected(bookingId) {
+    const previewBox   = document.getElementById('meeting-attendee-preview');
+    const previewText  = document.getElementById('attendee-preview-text');
+    const syncNotice   = document.getElementById('meeting-sync-notice');
+    const typeSelect   = document.getElementById('id_visitor_type');
+
+    meetingLinked = !!bookingId;
+
+    if (bookingId) {
+        // Force visitor_type to group
+        if (typeSelect) {
+            typeSelect.value = 'group';
+            typeSelect.dispatchEvent(new Event('change'));
+        }
+        toggleGroupSection('group');
+
+        // Show sync notice
+        if (syncNotice) syncNotice.classList.add('show');
+
+        // Fetch attendee count
+        if (previewBox && previewText) {
+            previewBox.style.display = 'block';
+            previewText.textContent = 'Loading…';
+
+            fetch(`/accounts/api/booking/${bookingId}/attendees/count/`)
+                .then(r => r.ok ? r.json() : Promise.reject())
+                .then(data => {
+                    const count = data.accepted_count || 0;
+                    previewText.innerHTML =
+                        `<strong>${count}</strong> accepted registrant${count !== 1 ? 's' : ''} will be imported`;
+                })
+                .catch(() => {
+                    previewText.textContent = 'Could not load count';
+                });
         }
 
-        // Initial check
-        toggleGroupSection();
+        updateMemberCount();
 
-        // Listen for changes
-        visitorTypeField.addEventListener('change', toggleGroupSection);
+    } else {
+        meetingLinked = false;
+        if (previewBox) previewBox.style.display = 'none';
+        if (syncNotice) syncNotice.classList.remove('show');
+
+        // Restore empty-state text
+        const txt = document.getElementById('empty-members-text');
+        if (txt) {
+            txt.innerHTML = `No additional group members have been added.<br>
+                Click <strong>"Add Group Member"</strong> to register each accompanying visitor.`;
+        }
+
+        // Re-evaluate group section visibility from the type selector
+        if (typeSelect) toggleGroupSection(typeSelect.value);
+    }
+}
+
+// ─── DOMContentLoaded wiring ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+    const form          = document.getElementById('visitor-form');
+    const visitorType   = document.getElementById('id_visitor_type');
+    const bookingSelect = document.getElementById('id_linked_booking');
+
+    // Visitor type → show/hide group section
+    if (visitorType) {
+        toggleGroupSection(visitorType.value);
+        visitorType.addEventListener('change', function () {
+            toggleGroupSection(this.value);
+        });
     }
 
-    // Unsaved changes warning
-    let formChanged = false;
-
-    if (form) {
-        const inputs = form.querySelectorAll('input, select, textarea');
-        inputs.forEach(input => {
-            input.addEventListener('change', function () {
-                formChanged = true;
-            });
+    // Booking selector → live preview
+    if (bookingSelect) {
+        bookingSelect.addEventListener('change', function () {
+            onBookingSelected(this.value);
         });
+        // Trigger on load (handles edit/re-submit scenario)
+        if (bookingSelect.value) onBookingSelected(bookingSelect.value);
+    }
 
+    // Unsaved-changes warning
+    let formChanged = false;
+    if (form) {
+        form.querySelectorAll('input, select, textarea').forEach(input => {
+            input.addEventListener('change', () => { formChanged = true; });
+        });
         window.addEventListener('beforeunload', function (e) {
             if (formChanged) {
                 e.preventDefault();
-                e.returnValue = 'You have unsaved changes. Are you sure you want to leave this page?';
+                e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
                 return e.returnValue;
             }
         });
+        form.addEventListener('submit', () => { formChanged = false; });
 
-        form.addEventListener('submit', function () {
-            formChanged = false;
-        });
-
-        // Auto-focus first logical input field
         const firstInput = form.querySelector('input:not([type="hidden"]), select, textarea');
-        if (firstInput) {
-            firstInput.focus();
-        }
+        if (firstInput) firstInput.focus();
     }
+
+    updateMemberCount();
 });
 </script>
 {% endblock %}

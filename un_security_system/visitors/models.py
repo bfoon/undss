@@ -68,6 +68,22 @@ class Visitor(models.Model):
     card_issued_at = models.DateTimeField(null=True, blank=True)
     card_returned_at = models.DateTimeField(null=True, blank=True)
 
+    # ─── Meeting link ─────────────────────────────────────────────────────────
+    # Optional FK to the room-booking (meeting) this access request is tied to.
+    # Uses a string reference so this app does not hard-depend on the accounts app.
+    linked_booking = models.ForeignKey(
+        'accounts.RoomBooking',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='visitor_access_requests',
+        verbose_name='Linked meeting',
+        help_text=(
+            "If set, group members are automatically populated from the meeting's "
+            "accepted registrants and kept in sync as new people register."
+        ),
+    )
+
     class Meta:
         ordering = ['-registered_at']
 
@@ -92,13 +108,84 @@ class Visitor(models.Model):
 
         today = timezone.now().date()
 
-        # If no window was set, treat as normal approved visitor (your current behavior)
         if not self.clearance_valid_from and not self.clearance_valid_until:
             return True
 
         start = self.clearance_valid_from or today
         end = self.clearance_valid_until or today
         return start <= today <= end
+
+    def sync_members_from_booking(self):
+        """
+        Pull accepted MeetingAttendee records from linked_booking and create/update
+        corresponding GroupMember records.
+
+        Rules:
+        - Only runs when linked_booking is set and visitor_type == 'group'.
+        - Matches on email (case-insensitive). If a GroupMember with the same email
+          already exists (and was sourced from the meeting), it is updated rather than
+          duplicated.
+        - Members that were manually added (meeting_attendee_id is None) are left alone.
+        - Returns (created, updated) counts.
+        """
+        if not self.linked_booking or self.visitor_type != 'group':
+            return 0, 0
+
+        try:
+            from accounts.models import MeetingAttendee  # lazy import to avoid circular
+        except ImportError:
+            return 0, 0
+
+        accepted_qs = MeetingAttendee.objects.filter(
+            booking=self.linked_booking,
+            is_accepted=True,
+        )
+
+        created = 0
+        updated = 0
+
+        for attendee in accepted_qs:
+            email = (attendee.email or '').strip().lower()
+
+            # Try to find an existing GroupMember linked to this exact attendee
+            existing = self.group_members.filter(meeting_attendee_id=attendee.pk).first()
+
+            if not existing and email:
+                # Also try to match by email in case it was created before attendee_id was stored
+                existing = self.group_members.filter(
+                    email__iexact=email,
+                    meeting_attendee_id__isnull=False,
+                ).first()
+
+            name = (attendee.name or '').strip() or email
+            phone = (getattr(attendee, 'phone', '') or '').strip()
+            org = (getattr(attendee, 'organization', '') or '').strip()
+
+            if existing:
+                # Update mutable fields in case the attendee updated their profile
+                existing.full_name = name or existing.full_name
+                existing.contact_number = phone or existing.contact_number
+                existing.notes = f"Synced from meeting: {self.linked_booking.title}"
+                existing.meeting_attendee_id = attendee.pk
+                existing.save(update_fields=[
+                    'full_name', 'contact_number', 'notes', 'meeting_attendee_id',
+                ])
+                updated += 1
+            else:
+                GroupMember.objects.create(
+                    visitor=self,
+                    full_name=name or 'Unknown',
+                    contact_number=phone,
+                    email=email,
+                    id_type='other',
+                    id_number='',        # gate officer fills this in on arrival
+                    nationality='',
+                    notes=f"Synced from meeting: {self.linked_booking.title}",
+                    meeting_attendee_id=attendee.pk,
+                )
+                created += 1
+
+        return created, updated
 
 
 class GroupMember(models.Model):
@@ -115,7 +202,7 @@ class GroupMember(models.Model):
     contact_number = models.CharField(max_length=20, blank=True, help_text="Phone or mobile number")
     email = models.EmailField(blank=True, help_text="Email address (optional)")
     id_type = models.CharField(max_length=20, choices=ID_TYPES, help_text="Type of identification")
-    id_number = models.CharField(max_length=100, help_text="ID/Passport number")
+    id_number = models.CharField(max_length=100, blank=True, help_text="ID/Passport number")
     nationality = models.CharField(max_length=100, blank=True)
 
     # Photo ID upload (optional but recommended)
@@ -125,13 +212,28 @@ class GroupMember(models.Model):
     added_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True, help_text="Additional notes about this member")
 
+    # ─── Meeting-sync tracking ────────────────────────────────────────────────
+    # When this member was auto-created from a MeetingAttendee record, we store
+    # the PK of that attendee so we can avoid duplicating on re-sync.
+    meeting_attendee_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="PK of the MeetingAttendee this record was synced from (if any).",
+    )
+
     class Meta:
         ordering = ['full_name']
         verbose_name = 'Group Member'
         verbose_name_plural = 'Group Members'
 
     def __str__(self):
-        return f"{self.full_name} ({self.get_id_type_display()}: {self.id_number})"
+        return f"{self.full_name} ({self.get_id_type_display()}: {self.id_number or 'ID pending'})"
+
+    @property
+    def from_meeting(self):
+        """True if this member was auto-synced from a meeting registration."""
+        return self.meeting_attendee_id is not None
 
 
 class VisitorLog(models.Model):

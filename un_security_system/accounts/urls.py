@@ -11,7 +11,7 @@ from .views_room_booking import (
     booking_attendee_count_api, meeting_registration_success_view, room_detail_api, attendance_checkin_lookup,
     walkin_decision_view, check_availability_api, meeting_qr_code_download_view,
     booking_attendance_export_csv, booking_attendance_export_excel, toggle_booking_option_view,
-    agenda_document_qr_view,
+    agenda_document_qr_view, attendance_page_view, accept_registration_view,
 )
 from .views_asset_verify import asset_verify, asset_verification_history
 
@@ -261,6 +261,8 @@ urlpatterns = [
     path('meeting/register/qr/<uuid:registration_code>/', meeting_qr_code_view,
          name='meeting_qr_code'),
     path('meeting/register/success/', meeting_registration_success_view, name='meeting_registration_success'),
+    path('registration/<int:pk>/<str:action>/', accept_registration_view, name='accept_registration'),
+    path('meeting/attendance/<uuid:registration_code>/', attendance_page_view, name='meeting_attendance_page'),
     path('api/room-details/<int:pk>/', room_detail_api, name='room_detail_api'),
     path('meeting/register/<uuid:registration_code>/check/', attendance_checkin_lookup, name='attendance_checkin_lookup'),
     path('attendance/<int:pk>/<str:action>/', walkin_decision_view, name='walkin_decision'),

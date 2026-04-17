@@ -639,6 +639,10 @@ class RoomBooking(models.Model):
         default=False,
         help_text="Generate a public invitation/registration link for attendees."
     )
+    auto_accept_registration = models.BooleanField(
+        default=False,
+        help_text="Automatically accept all registrations without manual approval."
+    )
 
     class Meta:
         ordering = ["-date", "start_time"]
@@ -724,6 +728,12 @@ class AttendanceRecord(models.Model):
     name = models.CharField(max_length=200)
     email = models.EmailField()
     organization = models.CharField(max_length=200, blank=True)
+    gender = models.CharField(
+        max_length=10, blank=True,
+        choices=[('male', 'Male'), ('female', 'Female'), ('other', 'Other / Prefer not to say')],
+        help_text="Gender (collected during attendance check-in)"
+    )
+    phone = models.CharField(max_length=30, blank=True, help_text="Phone number (optional)")
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_approval')
 
@@ -762,7 +772,18 @@ class MeetingAttendee(models.Model):
     name = models.CharField(max_length=200)
     email = models.EmailField()
     organization = models.CharField(max_length=200, blank=True)
+    gender = models.CharField(
+        max_length=10, blank=True,
+        choices=[('male', 'Male'), ('female', 'Female'), ('other', 'Other / Prefer not to say')],
+    )
+    phone = models.CharField(max_length=30, blank=True)
     registered_at = models.DateTimeField(auto_now_add=True)
+    is_accepted = models.BooleanField(
+        default=True,
+        help_text="Whether this registration has been accepted by the host. "
+                  "False = pending host review (when auto_accept_registration is off)."
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['registered_at']

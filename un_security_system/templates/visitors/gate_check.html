@@ -306,6 +306,20 @@
                                  id="member_id_number_{{ member.id }}"
                                  value="{{ member.id_number }}">
                         </div>
+
+                        {% if member.from_meeting and not member.id_number %}
+                            <div class="form-text text-warning mt-1">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Registered via meeting — please verify and enter ID at gate.
+                            </div>
+                        {% elif member.id_number %}
+                            <div class="form-text text-muted mt-1">
+                                On file: <strong>{{ member.id_number }}</strong>
+                                {% if member.from_meeting %}
+                                    <span class="badge bg-info ms-1" style="font-size:.65rem;">Meeting</span>
+                                {% endif %}
+                            </div>
+                        {% endif %}
                         <div class="col-md-6">
                           <label class="form-label form-label-sm mb-1">
                             Visitor Card Number <span class="text-danger">*</span>

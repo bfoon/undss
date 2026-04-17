@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count
 from django.db import transaction, IntegrityError
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.core.paginator import Paginator
 from django.utils.decorators import method_decorator
 from datetime import timedelta
@@ -19,8 +19,6 @@ import logging
 from django.views.generic import TemplateView
 
 from django.core.files.uploadedfile import UploadedFile
-
-
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -46,18 +44,12 @@ def is_lsa_or_soc(user):
 
 
 def _gate_role(user):
-    # Guards (data_entry), LSA, SOC, and superusers can verify at the gate
     return user.is_authenticated and (
         getattr(user, 'role', None) in ('data_entry', 'lsa', 'soc') or user.is_superuser
     )
 
 
 def _send_notification(subject: str, message: str, recipients):
-    """
-    Central helper to send email notifications in the background using a thread.
-    Uses DEFAULT_FROM_EMAIL or EMAIL_HOST_USER.
-    Silently ignores if no sender or recipients.
-    """
     from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or getattr(settings, "EMAIL_HOST_USER", None)
     if not from_email:
         return
@@ -79,24 +71,18 @@ def _send_notification(subject: str, message: str, recipients):
                 fail_silently=False,
             )
         except Exception as exc:
-            # Optional: log for debugging
             logger.exception("Background email send failed: %s", exc)
 
-    # Fire-and-forget thread
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
 
+
 def _notify_lsa_soc_new_request(visitor, request):
-    """
-    Notify all LSAs and SOC in the same agency (if available) when a new request is created.
-    """
-    # Prefer same-agency LSA+SOC, fallback to all if no agency
     base_qs = User.objects.filter(role__in=['lsa', 'soc'], is_active=True)
     if visitor.registered_by and getattr(visitor.registered_by, "agency_id", None):
         base_qs = base_qs.filter(agency_id=visitor.registered_by.agency_id)
 
     recipients = list(base_qs.values_list('email', flat=True))
-
     if not recipients:
         return
 
@@ -121,14 +107,10 @@ def _notify_lsa_soc_new_request(visitor, request):
         f"You can review this request here:\n{detail_url}\n\n"
         f"Best regards,\nUN Security / Common Services System"
     )
-
     _send_notification(subject, message, recipients)
 
 
 def _notify_requester_status_change(visitor, status_label: str, extra_notes: str = ""):
-    """
-    Notify the requester (registered_by) when status changes: approved, rejected, cancelled.
-    """
     requester = getattr(visitor, "registered_by", None)
     if not requester or not requester.email:
         return
@@ -144,16 +126,11 @@ def _notify_requester_status_change(visitor, status_label: str, extra_notes: str
     )
     if extra_notes:
         message += f"Notes: {extra_notes}\n\n"
-
     message += "Best regards,\nUN Security / Common Services System"
-
     _send_notification(subject, message, requester.email)
 
 
 def _notify_requester_check_in(visitor, gate=None):
-    """
-    Notify requester when the visitor checks in.
-    """
     requester = getattr(visitor, "registered_by", None)
     if not requester or not requester.email:
         return
@@ -166,15 +143,11 @@ def _notify_requester_check_in(visitor, gate=None):
     )
     if gate:
         message += f"Gate: {gate}\n"
-
     message += "\nBest regards,\nUN Security / Common Services System"
     _send_notification(subject, message, requester.email)
 
 
 def _notify_requester_check_out(visitor, gate=None, duration_str=None):
-    """
-    Notify requester when the visitor checks out / leaves.
-    """
     requester = getattr(visitor, "registered_by", None)
     if not requester or not requester.email:
         return
@@ -189,17 +162,11 @@ def _notify_requester_check_out(visitor, gate=None, duration_str=None):
         message += f"Duration of visit: {duration_str}\n"
     if gate:
         message += f"Gate: {gate}\n"
-
     message += "\nBest regards,\nUN Security / Common Services System"
     _send_notification(subject, message, requester.email)
 
 
-
 def _compute_valid_until(start_date, value: int, unit: str):
-    """
-    start_date: date
-    unit: 'days'|'months'|'years'
-    """
     if unit == "days":
         return start_date + timedelta(days=value)
     if unit == "months":
@@ -210,20 +177,11 @@ def _compute_valid_until(start_date, value: int, unit: str):
 
 
 def _apply_clearance_window_from_post(visitor, request):
-    """
-    Reads optional clearance duration from POST:
-      - clearance_value: int
-      - clearance_unit: days|months|years
-
-    If provided, sets:
-      - visitor.clearance_valid_from
-      - visitor.clearance_valid_until
-    """
     val = (request.POST.get("clearance_value") or "").strip()
     unit = (request.POST.get("clearance_unit") or "").strip().lower()
 
     if not val or unit not in {"days", "months", "years"}:
-        return  # no window set, keep normal approval behavior
+        return
 
     try:
         value = int(val)
@@ -238,10 +196,6 @@ def _apply_clearance_window_from_post(visitor, request):
 
 
 def _clearance_is_active_today(visitor: Visitor, today=None) -> bool:
-    """
-    Returns True if today is within [valid_from, valid_until] when those values exist.
-    If no window is set, treat as active (optional policy). You can flip this if you want strict windows.
-    """
     if today is None:
         today = timezone.localdate()
 
@@ -253,6 +207,26 @@ def _clearance_is_active_today(visitor: Visitor, today=None) -> bool:
     if vu and today > vu:
         return False
     return True
+
+
+# -------------------------------------------------------------------
+# Meeting-sync helper
+# -------------------------------------------------------------------
+
+def _sync_visitor_from_meeting(visitor, performed_by=None):
+    """
+    Run sync_members_from_booking() and log the result.
+    Returns (created, updated).
+    """
+    created, updated = visitor.sync_members_from_booking()
+    if (created or updated) and performed_by:
+        VisitorLog.objects.create(
+            visitor=visitor,
+            action='approval',
+            performed_by=performed_by,
+            notes=f"Meeting sync: {created} new member(s) added, {updated} updated.",
+        )
+    return created, updated
 
 
 # -------------------------------------------------------------------
@@ -269,52 +243,35 @@ class VisitorListView(LoginRequiredMixin, ListView):
         user = self.request.user
         qs = Visitor.objects.all()
 
-        # Who can see everything
         privileged_roles = {'lsa', 'soc', 'data_entry'}
         is_privileged = user.is_superuser or getattr(user, 'role', None) in privileged_roles
 
-        # Non-privileged users only see what they registered
         if not is_privileged:
             qs = qs.filter(registered_by=user)
 
-        # --- Filters from URL kwarg (legacy) ---
         filter_status = self.kwargs.get('filter_status')
-
-        # --- Filters from querystring ---
-        # Template uses "status_filter" and "date_range"
         status_filter = self.request.GET.get('status_filter') or ''
         search = (self.request.GET.get('search') or '').strip()
         date_range = self.request.GET.get('date_range') or ''
 
-        # Valid status values (from your model choices)
         valid_statuses = {choice[0] for choice in getattr(Visitor, 'APPROVAL_STATUS', [])}
 
-        # 1) URL path status has highest priority if valid
         if filter_status and (not status_filter) and filter_status in valid_statuses:
             qs = qs.filter(status=filter_status)
-        # 2) Otherwise use querystring status_filter
         elif status_filter and status_filter in valid_statuses:
             qs = qs.filter(status=status_filter)
 
-        # --- Date range filter ---
         if date_range:
             today = timezone.now().date()
             if date_range == 'today':
                 qs = qs.filter(registered_at__date=today)
             elif date_range == 'week':
                 start = today - timezone.timedelta(days=7)
-                qs = qs.filter(
-                    registered_at__date__gte=start,
-                    registered_at__date__lte=today,
-                )
+                qs = qs.filter(registered_at__date__gte=start, registered_at__date__lte=today)
             elif date_range == 'month':
                 start = today.replace(day=1)
-                qs = qs.filter(
-                    registered_at__date__gte=start,
-                    registered_at__date__lte=today,
-                )
+                qs = qs.filter(registered_at__date__gte=start, registered_at__date__lte=today)
 
-        # --- Search filter ---
         if search:
             qs = qs.filter(
                 Q(full_name__icontains=search) |
@@ -323,7 +280,6 @@ class VisitorListView(LoginRequiredMixin, ListView):
                 Q(phone__icontains=search)
             )
 
-        # Order newest first
         return qs.order_by('-registered_at')
 
     def get_context_data(self, **kwargs):
@@ -332,7 +288,7 @@ class VisitorListView(LoginRequiredMixin, ListView):
         privileged_roles = {'lsa', 'soc', 'data_entry'}
         mine_only = not (user.is_superuser or getattr(user, 'role', None) in privileged_roles)
 
-        qs = self.object_list  # filtered queryset
+        qs = self.object_list
 
         ctx.update({
             'status_filter': self.request.GET.get('status_filter', ''),
@@ -340,7 +296,6 @@ class VisitorListView(LoginRequiredMixin, ListView):
             'filter_status': self.kwargs.get('filter_status', ''),
             'status_choices': getattr(Visitor, 'APPROVAL_STATUS', []),
             'mine_only': mine_only,
-
             'total_count': qs.count(),
             'pending_count': qs.filter(status='pending').count(),
             'approved_count': qs.filter(status='approved').count(),
@@ -367,6 +322,18 @@ class VisitorDetailView(LoginRequiredMixin, DetailView):
         ctx['logs'] = VisitorLog.objects.filter(
             visitor=self.object
         ).select_related('performed_by').order_by('-timestamp')
+
+        # Pass linked booking attendee count for the sync banner
+        visitor = self.object
+        if visitor.linked_booking:
+            try:
+                from accounts.models import MeetingAttendee
+                ctx['linked_attendee_count'] = MeetingAttendee.objects.filter(
+                    booking=visitor.linked_booking, is_accepted=True
+                ).count()
+            except ImportError:
+                ctx['linked_attendee_count'] = 0
+
         return ctx
 
 
@@ -376,17 +343,47 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
     template_name = 'visitors/visitor_form.html'
     success_url = reverse_lazy('visitors:visitor_list')
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # Pass upcoming bookings for the JS preview fetch URL hint
+        try:
+            from accounts.models import RoomBooking
+            ctx['has_upcoming_bookings'] = RoomBooking.objects.filter(
+                status='approved', date__gte=timezone.now().date()
+            ).exists()
+        except ImportError:
+            ctx['has_upcoming_bookings'] = False
+        return ctx
+
     def form_valid(self, form):
         form.instance.registered_by = self.request.user
         response = super().form_valid(form)
         visitor = form.instance
 
-        # Handle group members if visitor type is 'group'
         member_count = 0
-        if visitor.visitor_type == 'group':
+
+        # ── Meeting-link sync ──────────────────────────────────────────────
+        if visitor.linked_booking:
+            # Ensure visitor_type is group when a meeting is linked
+            if visitor.visitor_type != 'group':
+                visitor.visitor_type = 'group'
+                visitor.save(update_fields=['visitor_type'])
+
+            created, updated = _sync_visitor_from_meeting(visitor, self.request.user)
+            member_count = created
+
+            if created or updated:
+                messages.info(
+                    self.request,
+                    f"Auto-imported {created} meeting registrant(s) as group members"
+                    + (f" ({updated} updated)." if updated else "."),
+                )
+
+        # ── Manual group members from form ─────────────────────────────────
+        elif visitor.visitor_type == 'group':
             member_count = self._save_group_members(visitor)
 
-        # Notify LSA/SOC of new request
+        # Notify LSA/SOC
         _notify_lsa_soc_new_request(visitor, self.request)
 
         # Auto-approve if user is LSA
@@ -407,7 +404,6 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
             if member_count > 0:
                 success_msg += f' Group includes {member_count} member(s).'
             messages.success(self.request, success_msg)
-
             _notify_requester_status_change(visitor, 'approved')
         else:
             success_msg = f'Visitor {visitor.full_name} registered successfully. Awaiting LSA approval.'
@@ -418,8 +414,7 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
         return response
 
     def _save_group_members(self, visitor):
-        """Process and save group members from form data"""
-        # Get arrays from POST data
+        """Process and save manually-entered group members from form POST data."""
         names = self.request.POST.getlist('member_full_name[]')
         contacts = self.request.POST.getlist('member_contact[]')
         emails = self.request.POST.getlist('member_email[]')
@@ -427,23 +422,19 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
         id_numbers = self.request.POST.getlist('member_id_number[]')
         nationalities = self.request.POST.getlist('member_nationality[]')
         notes_list = self.request.POST.getlist('member_notes[]')
-
-        # Get uploaded files
         id_photos = self.request.FILES.getlist('member_id_photo[]')
 
         saved_count = 0
 
-        # Process each member
         for idx, name in enumerate(names):
             if not name or not name.strip():
-                continue  # Skip empty entries
+                continue
 
-            # Validate required fields
             id_type = id_types[idx] if idx < len(id_types) else ''
             id_number = id_numbers[idx] if idx < len(id_numbers) else ''
 
             if not id_type or not id_number:
-                continue  # Skip if missing required fields
+                continue
 
             member_data = {
                 'visitor': visitor,
@@ -456,14 +447,11 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
                 'notes': notes_list[idx].strip() if idx < len(notes_list) else '',
             }
 
-            # Create member
             try:
                 member = GroupMember.objects.create(**member_data)
 
-                # Handle photo upload if provided
                 if idx < len(id_photos) and id_photos[idx]:
-                    # Validate file size
-                    if id_photos[idx].size <= 5 * 1024 * 1024:  # 5MB limit
+                    if id_photos[idx].size <= 5 * 1024 * 1024:
                         member.id_photo = id_photos[idx]
                         member.save()
 
@@ -472,7 +460,6 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
                 logger.error(f"Error saving group member: {e}")
                 continue
 
-        # Log group member addition
         if saved_count > 0:
             VisitorLog.objects.create(
                 visitor=visitor,
@@ -483,8 +470,6 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
 
         return saved_count
 
-
-# Replace your VisitorUpdateView with this updated version:
 
 class VisitorUpdateView(LoginRequiredMixin, UpdateView):
     model = Visitor
@@ -497,27 +482,45 @@ class VisitorUpdateView(LoginRequiredMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['is_edit'] = True
-        # Pass existing group members to template
         if self.object.visitor_type == 'group':
             context['existing_members'] = self.object.group_members.all()
+
+        # Pass upcoming bookings for the JS preview
+        try:
+            from accounts.models import RoomBooking
+            context['has_upcoming_bookings'] = RoomBooking.objects.filter(
+                status='approved', date__gte=timezone.now().date()
+            ).exists()
+        except ImportError:
+            context['has_upcoming_bookings'] = False
+
         return context
 
     def form_valid(self, form):
         response = super().form_valid(form)
         visitor = form.instance
 
-        # Handle group members if visitor type is 'group'
         member_count = 0
-        if visitor.visitor_type == 'group':
-            # Option 1: Keep existing members and add new ones
-            # Option 2: Clear all and re-add (uncomment line below)
-            # visitor.group_members.all().delete()
 
+        # ── Meeting-link sync ──────────────────────────────────────────────
+        if visitor.linked_booking:
+            if visitor.visitor_type != 'group':
+                visitor.visitor_type = 'group'
+                visitor.save(update_fields=['visitor_type'])
+
+            created, updated = _sync_visitor_from_meeting(visitor, self.request.user)
+            member_count = created
+
+            if created or updated:
+                messages.info(
+                    self.request,
+                    f"Meeting sync: {created} new member(s) imported"
+                    + (f", {updated} updated." if updated else "."),
+                )
+
+        # ── Manual group members from form ─────────────────────────────────
+        elif visitor.visitor_type == 'group':
             member_count = self._save_group_members(visitor)
-        else:
-            # If changed from group to other type, optionally clear members
-            # visitor.group_members.all().delete()
-            pass
 
         success_msg = f'Visitor {visitor.full_name} updated successfully.'
         if member_count > 0:
@@ -527,8 +530,7 @@ class VisitorUpdateView(LoginRequiredMixin, UpdateView):
         return response
 
     def _save_group_members(self, visitor):
-        """Process and save group members from form data"""
-        # Same implementation as VisitorCreateView
+        """Process and save group members from form data (update path)."""
         names = self.request.POST.getlist('member_full_name[]')
         contacts = self.request.POST.getlist('member_contact[]')
         emails = self.request.POST.getlist('member_email[]')
@@ -585,20 +587,64 @@ class VisitorUpdateView(LoginRequiredMixin, UpdateView):
         return saved_count
 
 
-# Add this new view for managing group members after creation:
+# -------------------------------------------------------------------
+# Meeting-sync view
+# -------------------------------------------------------------------
+
+@login_required
+@require_POST
+def sync_meeting_members(request, pk):
+    """
+    Manually trigger a re-sync of group members from the linked meeting's
+    accepted registrants. Safe to call multiple times — duplicates are never created.
+    Accessible by: the original requester, LSA, SOC, or superuser.
+    """
+    visitor = get_object_or_404(Visitor, pk=pk)
+    user = request.user
+
+    can_sync = (
+        user.is_superuser
+        or getattr(user, 'role', None) in ('lsa', 'soc')
+        or (visitor.registered_by_id and visitor.registered_by_id == user.pk)
+    )
+
+    if not can_sync:
+        messages.error(request, "You don't have permission to sync this visitor.")
+        return redirect('visitors:visitor_detail', pk=pk)
+
+    if not visitor.linked_booking:
+        messages.warning(request, "This visitor access request has no linked meeting.")
+        return redirect('visitors:visitor_detail', pk=pk)
+
+    created, updated = _sync_visitor_from_meeting(visitor, performed_by=user)
+
+    if created == 0 and updated == 0:
+        messages.info(request, "Everything is already up to date — no new registrants to import.")
+    else:
+        messages.success(
+            request,
+            f"Sync complete — {created} new member(s) added"
+            + (f", {updated} existing record(s) updated." if updated else "."),
+        )
+
+    return redirect('visitors:visitor_detail', pk=pk)
+
+
+# -------------------------------------------------------------------
+# Group member management
+# -------------------------------------------------------------------
 
 @login_required
 def delete_group_member(request, visitor_id, member_id):
-    """Delete a specific group member"""
+    """Delete a specific group member."""
     visitor = get_object_or_404(Visitor, pk=visitor_id)
     member = get_object_or_404(GroupMember, pk=member_id, visitor=visitor)
 
-    # Check permissions
     user = request.user
     can_delete = (
-            user.is_superuser or
-            user.role in ['lsa', 'soc'] or
-            (visitor.registered_by and visitor.registered_by.id == user.id)
+        user.is_superuser or
+        getattr(user, 'role', None) in ['lsa', 'soc'] or
+        (visitor.registered_by and visitor.registered_by.id == user.id)
     )
 
     if not can_delete:
@@ -625,6 +671,9 @@ def delete_group_member(request, visitor_id, member_id):
     })
 
 
+# -------------------------------------------------------------------
+# Approval
+# -------------------------------------------------------------------
 
 @login_required
 @user_passes_test(is_lsa_or_soc)
@@ -635,52 +684,39 @@ def approve_visitor(request, visitor_id):
         form = VisitorApprovalForm(request.POST)
         if form.is_valid():
             action = form.cleaned_data['action']
-            notes = form.cleaned_data['notes']
+            notes = form.cleaned_data.get('notes', '')
+            rejection_reason = form.cleaned_data.get('rejection_reason', '')
 
             if action == 'approve':
                 visitor.status = 'approved'
                 visitor.approved_by = request.user
                 visitor.approval_date = timezone.now()
-
-                # NEW: optional long-term clearance window
-                _apply_clearance_window_from_post(visitor, request)
-
-                visitor.save(update_fields=[
-                    "status", "approved_by", "approval_date",
-                    "clearance_valid_from", "clearance_valid_until",
-                ])
+                visitor.save()
 
                 VisitorLog.objects.create(
                     visitor=visitor,
                     action='approval',
                     performed_by=request.user,
-                    notes=(
-                        "Approved on visitor detail page. "
-                        f"Valid from {visitor.clearance_valid_from} until {visitor.clearance_valid_until}."
-                        if (visitor.clearance_valid_from or visitor.clearance_valid_until)
-                        else "Approved on visitor detail page."
-                    )
+                    notes=notes or 'Approved'
                 )
-                messages.success(request, f'Visitor {visitor.full_name} approved.')
-
+                messages.success(request, f'Visitor {visitor.full_name} approved successfully.')
                 _notify_requester_status_change(visitor, 'approved', notes)
 
             elif action == 'reject':
                 visitor.status = 'rejected'
-                visitor.rejection_reason = form.cleaned_data['rejection_reason']
+                visitor.rejection_reason = rejection_reason
                 visitor.save()
 
                 VisitorLog.objects.create(
                     visitor=visitor,
                     action='rejection',
                     performed_by=request.user,
-                    notes=visitor.rejection_reason
+                    notes=rejection_reason
                 )
-                messages.success(request, f'Visitor {visitor.full_name} rejected.')
+                messages.warning(request, f'Visitor {visitor.full_name} has been rejected.')
+                _notify_requester_status_change(visitor, 'rejected', rejection_reason)
 
-                _notify_requester_status_change(visitor, 'rejected', visitor.rejection_reason)
-
-            return redirect('visitors:visitor_list')
+            return redirect('visitors:visitor_detail', pk=visitor.pk)
     else:
         form = VisitorApprovalForm()
 
@@ -689,6 +725,11 @@ def approve_visitor(request, visitor_id):
         'form': form
     })
 
+
+# -------------------------------------------------------------------
+# Check-in / Check-out (JSON API used by quick-check)
+# -------------------------------------------------------------------
+
 @login_required
 def check_in_visitor(request, visitor_id):
     if request.method != "POST":
@@ -696,7 +737,6 @@ def check_in_visitor(request, visitor_id):
 
     visitor = get_object_or_404(Visitor, id=visitor_id)
 
-    # ✅ NEW: must be cleared for today (approved + within validity window if set)
     if not visitor.clearance_is_active_today():
         return JsonResponse({"error": "Visitor is not cleared for today."}, status=400)
 
@@ -704,23 +744,18 @@ def check_in_visitor(request, visitor_id):
         return JsonResponse({"error": "Visitor already checked in"}, status=400)
 
     gate = request.POST.get("gate", "front")
-
-    # ID & card from request (if provided)
     id_number_input = (request.POST.get("id_number") or "").strip()
     card_number_input = (request.POST.get("card_number") or "").strip()
 
-    # ---- Enforce ID requirement ----
     if not visitor.id_number and not id_number_input:
         return JsonResponse(
             {"error": "Visitor ID number is required for check-in."},
             status=400,
         )
 
-    # If a new ID was captured at the gate, update the record
     if id_number_input and id_number_input != (visitor.id_number or ""):
         visitor.id_number = id_number_input
 
-    # ---- Enforce card requirement ----
     card = getattr(visitor, "visitor_card", None)
 
     if card is None and not card_number_input:
@@ -729,12 +764,8 @@ def check_in_visitor(request, visitor_id):
             status=400,
         )
 
-    # ✅ NEW: allow repeat cycle even if they checked out previously
-    # (visitor can come again tomorrow, next week, etc. within clearance window)
     visitor.checked_out = False
     visitor.check_out_time = None
-
-    # Mark visitor as checked in
     visitor.checked_in = True
     visitor.check_in_time = timezone.now()
     visitor.save()
@@ -778,46 +809,24 @@ def check_out_visitor(request, visitor_id):
 
     visitor = get_object_or_404(Visitor, id=visitor_id)
 
-    if not visitor.checked_in:
-        return JsonResponse({"error": "Visitor not checked in"}, status=400)
-
-    if visitor.checked_out:
-        return JsonResponse({"error": "Visitor already checked out"}, status=400)
+    if not visitor.checked_in or visitor.checked_out:
+        return JsonResponse({"error": "Visitor not currently checked in"}, status=400)
 
     gate = request.POST.get("gate", "front")
 
-    # Optional override card number from request (e.g. scanned at exit)
-    card_number_input = (request.POST.get("card_number") or "").strip()
-
-    # Mark visitor as checked out
+    visitor.checked_in = False
     visitor.checked_out = True
     visitor.check_out_time = timezone.now()
-
-    # ✅ NEW: important for multi-visits
-    visitor.checked_in = False
-
     visitor.save()
 
-    duration = visitor.check_out_time - visitor.check_in_time
-    duration_str = str(duration).split(".")[0]
+    duration = None
+    duration_str = None
+    if visitor.check_in_time:
+        duration = visitor.check_out_time - visitor.check_in_time
+        duration_str = str(duration).split(".")[0]
 
     card = getattr(visitor, "visitor_card", None)
-
-    note_parts = [
-        f"Checked out at {visitor.check_out_time.strftime('%H:%M')}",
-        f"Duration: {duration_str}",
-    ]
-
-    if card:
-        note_parts.append(f"Card {card.number}")
-        effective_card_number = card.number
-    elif card_number_input:
-        note_parts.append(f"Card {card_number_input}")
-        effective_card_number = card_number_input
-    else:
-        effective_card_number = None
-
-    note = " · ".join(note_parts)
+    effective_card_number = card.number if card else "N/A"
 
     VisitorLog.objects.create(
         visitor=visitor,
@@ -825,7 +834,7 @@ def check_out_visitor(request, visitor_id):
         action="check_out",
         performed_by=request.user,
         gate=gate,
-        notes=note,
+        notes=f"Checked out at {visitor.check_out_time.strftime('%H:%M')}",
     )
 
     _notify_requester_check_out(visitor, gate=gate, duration_str=duration_str)
@@ -839,6 +848,7 @@ def check_out_visitor(request, visitor_id):
             "card_number": effective_card_number,
         }
     )
+
 
 @login_required
 def quick_check_page(request):
@@ -887,27 +897,26 @@ def visitor_logs_detail(request, visitor_id):
     })
 
 
+# -------------------------------------------------------------------
 # API Views
+# -------------------------------------------------------------------
+
 @login_required
 def quick_visitor_check(request):
-    """API endpoint for quick visitor check-in/out"""
     if request.method == 'POST':
         visitor_id = request.POST.get('visitor_id')
         action = request.POST.get('action')
         gate = request.POST.get('gate', 'front')
 
         try:
-            # Try to find visitor by ID number, name, or database ID
             visitor = None
             if visitor_id and visitor_id.isdigit():
-                # Try database ID first
                 try:
                     visitor = Visitor.objects.get(id=visitor_id)
                 except Visitor.DoesNotExist:
                     pass
 
             if not visitor and visitor_id:
-                # Search by ID number or name
                 visitors = Visitor.objects.filter(
                     Q(id_number=visitor_id) |
                     Q(full_name__icontains=visitor_id)
@@ -980,9 +989,7 @@ def visitor_stats_api(request):
         'approved': Visitor.objects.filter(status='approved').count(),
         'rejected': Visitor.objects.filter(status='rejected').count(),
         'active': Visitor.objects.filter(checked_in=True, checked_out=False).count(),
-        'completed_today': Visitor.objects.filter(
-            check_out_time__date=today
-        ).count(),
+        'completed_today': Visitor.objects.filter(check_out_time__date=today).count(),
         'by_type': {
             vtype[0]: Visitor.objects.filter(visitor_type=vtype[0]).count()
             for vtype in Visitor.VISITOR_TYPES
@@ -1007,7 +1014,10 @@ def visitor_status_api(request, visitor_id):
     })
 
 
+# -------------------------------------------------------------------
 # Bulk Operations
+# -------------------------------------------------------------------
+
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def bulk_approve_visitors(request):
@@ -1029,8 +1039,6 @@ def bulk_approve_visitors(request):
                 notes='Bulk approval'
             )
             count += 1
-
-            # Notify requester for each approved visitor
             _notify_requester_status_change(visitor, 'approved', 'Bulk approval')
 
         messages.success(request, f'{count} visitors approved successfully.')
@@ -1049,10 +1057,13 @@ def export_visitors(request):
         'Visitor Type', 'Purpose', 'Person to Visit', 'Department',
         'Expected Date', 'Expected Time', 'Has Vehicle', 'Vehicle Plate',
         'Registered Date', 'Registered By', 'Approved By', 'Approval Date',
-        'Checked In', 'Check In Time', 'Checked Out', 'Check Out Time'
+        'Checked In', 'Check In Time', 'Checked Out', 'Check Out Time',
+        'Linked Meeting',
     ])
 
-    queryset = Visitor.objects.all().select_related('registered_by', 'approved_by')
+    queryset = Visitor.objects.all().select_related(
+        'registered_by', 'approved_by', 'linked_booking'
+    )
 
     status = request.GET.get('status')
     if status:
@@ -1067,6 +1078,10 @@ def export_visitors(request):
         queryset = queryset.filter(registered_at__date__lte=date_to)
 
     for visitor in queryset.order_by('-registered_at'):
+        linked = ''
+        if visitor.linked_booking:
+            linked = f"{visitor.linked_booking.title} ({visitor.linked_booking.date})"
+
         writer.writerow([
             visitor.full_name,
             visitor.id_number,
@@ -1089,11 +1104,16 @@ def export_visitors(request):
             'Yes' if visitor.checked_in else 'No',
             visitor.check_in_time.strftime('%Y-%m-%d %H:%M') if visitor.check_in_time else '',
             'Yes' if visitor.checked_out else 'No',
-            visitor.check_out_time.strftime('%Y-%m-%d %H:%M') if visitor.check_out_time else ''
+            visitor.check_out_time.strftime('%Y-%m-%d %H:%M') if visitor.check_out_time else '',
+            linked,
         ])
 
     return response
 
+
+# -------------------------------------------------------------------
+# Verify / Gate page
+# -------------------------------------------------------------------
 
 @login_required
 def visitor_verify_page(request):
@@ -1118,7 +1138,6 @@ def visitor_verify_page(request):
             if len(matches) == 1:
                 result = matches[0]
 
-    # Use Visitor.status directly
     is_cleared = False
     status_label = None
     if result:
@@ -1157,8 +1176,6 @@ def visitor_verify_lookup_api(request):
         return JsonResponse({"ok": False, "found": False})
 
     status = getattr(visitor, "status", None)
-
-    # ✅ NEW: active clearance check
     is_cleared_today = visitor.clearance_is_active_today()
 
     data = {
@@ -1180,14 +1197,12 @@ def visitor_verify_lookup_api(request):
     return JsonResponse(data)
 
 
-# --- Lightweight approval actions to use on the Visitor detail page ---
+# -------------------------------------------------------------------
+# LSA clearance actions (detail page buttons)
+# -------------------------------------------------------------------
 
 @login_required
 def visitor_request_clearance(request, pk):
-    """
-    Any authenticated user can (re-)request clearance by setting status to 'pending'.
-    Useful if a request was cancelled/rejected and needs re-submission.
-    """
     visitor = get_object_or_404(Visitor, pk=pk)
     if request.method == "POST":
         visitor.status = "pending"
@@ -1199,8 +1214,6 @@ def visitor_request_clearance(request, pk):
             notes="Clearance (re)requested."
         )
         messages.success(request, "Clearance requested from LSA/SOC.")
-
-        # Notify LSA/SOC about new (re)request
         _notify_lsa_soc_new_request(visitor, request)
 
     return redirect("visitors:visitor_detail", pk=pk)
@@ -1216,7 +1229,6 @@ def visitor_lsa_approve(request, pk):
         visitor.approved_by = request.user
         visitor.approval_date = timezone.now()
 
-        # ✅ allow approver to choose validity window (days/months/years)
         _apply_clearance_window_from_post(visitor, request)
 
         visitor.save()
@@ -1237,14 +1249,10 @@ def visitor_lsa_approve(request, pk):
 @login_required
 @user_passes_test(is_lsa_or_soc)
 def visitor_lsa_reject(request, pk):
-    """
-    LSA rejects the visitor. If you have a rejection reason in a form, you can pass it in POST['notes'].
-    """
     visitor = get_object_or_404(Visitor, pk=pk)
     if request.method == "POST":
         note = request.POST.get("notes", "").strip()
         visitor.status = "rejected"
-        # If you have a field 'rejection_reason' on Visitor, set it too:
         if hasattr(visitor, "rejection_reason"):
             visitor.rejection_reason = note
             visitor.save(update_fields=["status", "rejection_reason"])
@@ -1258,8 +1266,6 @@ def visitor_lsa_reject(request, pk):
             notes=note or "Rejected on visitor detail page."
         )
         messages.warning(request, f"Visitor {visitor.full_name} rejected.")
-
-        # Notify requester
         _notify_requester_status_change(visitor, 'rejected', note)
 
     return redirect("visitors:visitor_detail", pk=pk)
@@ -1267,9 +1273,6 @@ def visitor_lsa_reject(request, pk):
 
 @login_required
 def visitor_cancel_request(request, pk):
-    """
-    Allow the original requester, LSA, or superuser to cancel a pending request.
-    """
     visitor = get_object_or_404(Visitor, pk=pk)
     can_cancel = (
         request.user.is_superuser
@@ -1290,15 +1293,17 @@ def visitor_cancel_request(request, pk):
             notes="Request cancelled."
         )
         messages.info(request, "Visitor request cancelled.")
-
-        # Notify LSA/SOC that a request was cancelled (optional but useful)
         _notify_lsa_soc_new_request(visitor, request)
 
-        # Notify requester themselves if someone else cancelled (LSA/admin)
         if request.user != visitor.registered_by:
             _notify_requester_status_change(visitor, 'cancelled')
 
     return redirect("visitors:visitor_detail", pk=pk)
+
+
+# -------------------------------------------------------------------
+# Gate check view
+# -------------------------------------------------------------------
 
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -1308,11 +1313,12 @@ def gate_check_view(request, pk):
       - Only guards/LSA/SOC/superuser can access (_gate_role)
       - Enforces: must be approved + clearance active today to check in
       - Allows repeated check-in/check-out cycles within clearance window
-      - On check-out, sets checked_in=False (fixes your UI stuck issue)
-      - Frees ALL cards issued_to this visitor (primary + group)
+      - On check-out, sets checked_in=False so UI allows check-in again
+      - Frees ALL cards issued to this visitor (primary + group)
+      - Meeting-linked groups: gate officer fills in missing IDs at the gate
     """
     if not _gate_role(request.user):
-        messages.error(request, "You don’t have permission to perform gate actions.")
+        messages.error(request, "You don't have permission to perform gate actions.")
         return redirect("visitors:visitor_detail", pk=pk)
 
     visitor = get_object_or_404(Visitor, pk=pk)
@@ -1341,13 +1347,8 @@ def gate_check_view(request, pk):
                 messages.error(request, "Visitor is not approved by LSA.")
                 return redirect("visitors:visitor_detail", pk=visitor.pk)
 
-            # ✅ Must be cleared for today (within window if set)
-            if hasattr(visitor, "clearance_is_active_today"):
-                # If it's a @property, it's boolean
-                is_ok = visitor.clearance_is_active_today
-            else:
-                # fallback (if your model uses method)
-                is_ok = visitor.clearance_is_active_today() if hasattr(visitor, "clearance_is_active_today") else True
+            is_ok = visitor.clearance_is_active_today() if callable(visitor.clearance_is_active_today) \
+                else visitor.clearance_is_active_today
 
             if not is_ok:
                 messages.error(request, "Visitor clearance is not active today (expired or not started yet).")
@@ -1356,26 +1357,35 @@ def gate_check_view(request, pk):
             if id_number and id_number != (visitor.id_number or ""):
                 visitor.id_number = id_number
 
-            # ---- Group validation (optional: keep your existing logic) ----
+            # ── Group member verification ──────────────────────────────────
             group_card_notes = []
             group_card_data = []
 
             if visitor.visitor_type == "group":
                 member_ids = request.POST.getlist("member_ids")
-                members_qs = visitor.group_members.filter(id__in=member_ids)
+                members_qs = visitor.group_members.filter(id__in=member_ids) if member_ids \
+                    else visitor.group_members.all()
                 errors = []
 
                 for member in members_qs:
                     mid = (request.POST.get(f"member_id_number_{member.id}") or "").strip()
                     mcard = (request.POST.get(f"member_card_number_{member.id}") or "").strip()
 
-                    if not mid:
+                    # Update ID on record if provided at gate (meeting-synced members arrive without one)
+                    if mid and mid != (member.id_number or ""):
+                        member.id_number = mid
+                        member.save(update_fields=["id_number"])
+
+                    # For meeting-synced members, ID is collected at gate so only enforce card
+                    if not member.from_meeting and not mid and not member.id_number:
                         errors.append(f"{member.full_name}: ID number is required.")
                     if not mcard:
                         errors.append(f"{member.full_name}: visitor card number is required.")
 
-                    group_card_data.append({"member": member, "id_number": mid, "card_number": mcard})
-                    group_card_notes.append(f"{member.full_name} – ID {mid or 'N/A'}, Card {mcard or 'N/A'}")
+                    group_card_data.append({"member": member, "id_number": mid or member.id_number, "card_number": mcard})
+                    group_card_notes.append(
+                        f"{member.full_name} – ID {mid or member.id_number or 'N/A'}, Card {mcard or 'N/A'}"
+                    )
 
                 if errors:
                     for msg_text in errors:
@@ -1392,7 +1402,6 @@ def gate_check_view(request, pk):
                     if main_card.in_use:
                         raise ValueError(f"Card {main_card.number} is already in use.")
 
-                    # mark card in use
                     main_card.in_use = True
                     main_card.issued_to = visitor
                     main_card.issued_at = now
@@ -1401,13 +1410,12 @@ def gate_check_view(request, pk):
                     main_card.returned_by = None
                     main_card.save()
 
-                    # ✅ IMPORTANT: allow re-check-in cycles
                     visitor.visitor_card = main_card
                     visitor.card_issued_at = now
                     visitor.checked_in = True
-                    visitor.checked_out = False          # ✅ reset
+                    visitor.checked_out = False
                     visitor.check_in_time = now
-                    visitor.check_out_time = None        # ✅ reset (optional but clean)
+                    visitor.check_out_time = None
                     visitor.save(update_fields=[
                         "visitor_card", "card_issued_at",
                         "checked_in", "checked_out",
@@ -1441,7 +1449,7 @@ def gate_check_view(request, pk):
 
                 base_note = f"Issued card {main_card.number}"
                 if group_card_notes:
-                    base_note += " | Group cards: " + "; ".join(group_card_notes)
+                    base_note += " | Group: " + "; ".join(group_card_notes)
 
                 VisitorLog.objects.create(
                     visitor=visitor,
@@ -1485,7 +1493,6 @@ def gate_check_view(request, pk):
                 now = timezone.now()
 
                 if not cards_qs.exists():
-                    # ✅ FIX: must set checked_in=False so UI allows check-in again
                     visitor.checked_in = False
                     visitor.checked_out = True
                     visitor.check_out_time = now
@@ -1515,10 +1522,9 @@ def gate_check_view(request, pk):
                     card.save()
                     card_numbers.append(card.number)
 
-                # ✅ FIX: this is what was missing in your gate view
                 visitor.card_returned_at = now
                 visitor.visitor_card = None
-                visitor.checked_in = False            # ✅ VERY IMPORTANT
+                visitor.checked_in = False
                 visitor.checked_out = True
                 visitor.check_out_time = now
                 visitor.save(update_fields=[
@@ -1547,41 +1553,36 @@ def gate_check_view(request, pk):
 
     return render(request, "visitors/gate_check.html", {"visitor": visitor, "form": form})
 
+
+# -------------------------------------------------------------------
+# Visitor card management
+# -------------------------------------------------------------------
+
 @login_required
 def visitor_card_list(request):
     qs = VisitorCard.objects.all().order_by('number')
 
-    # Search
     q = (request.GET.get('q') or '').strip()
     if q:
-        qs = qs.filter(
-            Q(number__icontains=q)
-            # add more fields here if needed, e.g. holder name
-        )
+        qs = qs.filter(Q(number__icontains=q))
 
-    # Status filter: all / available / in_use / inactive
     flt = (request.GET.get('filter') or 'all').strip()
-
     if flt == 'available':
         qs = qs.filter(is_active=True, in_use=False)
     elif flt == 'in_use':
         qs = qs.filter(is_active=True, in_use=True)
     elif flt == 'inactive':
         qs = qs.filter(is_active=False)
-    # 'all' = no extra filter
 
-    # Pagination
     paginator = Paginator(qs, 25)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
-    # Stats
     total_cards = VisitorCard.objects.count()
     available_cards = VisitorCard.objects.filter(is_active=True, in_use=False).count()
     in_use_cards = VisitorCard.objects.filter(is_active=True, in_use=True).count()
     inactive_cards = VisitorCard.objects.filter(is_active=False).count()
 
-    # Permission to manage cards (edit/history/create)
     can_manage_cards = (
         request.user.is_superuser
         or getattr(request.user, 'role', None) in {'lsa', 'soc', 'data_entry'}
@@ -1603,13 +1604,9 @@ def visitor_card_list(request):
     }
     return render(request, 'visitors/card_list.html', context)
 
+
 @login_required
 def visitor_card_create(request):
-    """
-    Create a new visitor card.
-
-    Only LSA / SOC / data_entry / superuser can create cards.
-    """
     user = request.user
     allowed_roles = {'lsa', 'soc', 'data_entry'}
     user_role = getattr(user, 'role', None)
@@ -1631,12 +1628,7 @@ def visitor_card_create(request):
             })
 
         try:
-            VisitorCard.objects.create(
-                number=number,
-                is_active=is_active,
-                # sane defaults
-                in_use=False,
-            )
+            VisitorCard.objects.create(number=number, is_active=is_active, in_use=False)
         except IntegrityError:
             messages.error(request, f"Card with number '{number}' already exists.")
             return render(request, "visitors/card_form.html", {
@@ -1646,10 +1638,8 @@ def visitor_card_create(request):
             })
 
         messages.success(request, f"Visitor card '{number}' created successfully.")
-        # redirect back to list
         return redirect("visitors:visitor_card_list")
 
-    # GET request – show empty form
     context = {
         "page_title": "Create Visitor Card",
         "number": "",
@@ -1657,19 +1647,14 @@ def visitor_card_create(request):
     }
     return render(request, "visitors/card_form.html", context)
 
+
 @login_required
 def visitor_card_detail(request, pk):
     card = get_object_or_404(VisitorCard, pk=pk)
 
-    # Get all log entries related to this card:
-    #  - Either the FK `card` is set
-    #  - OR the notes contain the card number (for older logs)
     card_history = (
         VisitorLog.objects
-        .filter(
-            Q(card=card) |
-            Q(notes__icontains=card.number)
-        )
+        .filter(Q(card=card) | Q(notes__icontains=card.number))
         .select_related('visitor', 'performed_by')
         .order_by('-timestamp')
     )
@@ -1717,16 +1702,17 @@ def visitor_card_check_api(request):
     except VisitorCard.DoesNotExist:
         return JsonResponse({'ok': True, 'exists': False, 'available': False})
 
+
+# -------------------------------------------------------------------
+# Reports
+# -------------------------------------------------------------------
+
 class VisitorReportView(LoginRequiredMixin, TemplateView):
-    """
-    Simple reports page for visitors – totals, by status, by date.
-    """
     template_name = "visitors/visitor_reports.html"
 
     def get_queryset_base(self):
         user = self.request.user
         qs = Visitor.objects.all()
-
         privileged_roles = {'lsa', 'soc', 'data_entry'}
         if not (user.is_superuser or getattr(user, 'role', None) in privileged_roles):
             qs = qs.filter(registered_by=user)
@@ -1744,17 +1730,30 @@ class VisitorReportView(LoginRequiredMixin, TemplateView):
         ctx["cancelled_count"] = qs.filter(status="cancelled").count()
 
         ctx["today_visitors"] = qs.filter(
-            Q(registered_at__date=today) | Q(created_at__date=today)
+            Q(registered_at__date=today)
         ).count()
 
-        # Simple last 7 days trend
         last_7_days = []
         for i in range(7):
             day = today - timedelta(days=i)
-            c = qs.filter(
-                Q(registered_at__date=day) | Q(created_at__date=day)
-            ).count()
+            c = qs.filter(registered_at__date=day).count()
             last_7_days.append({"date": day, "count": c})
         ctx["last_7_days"] = list(reversed(last_7_days))
 
         return ctx
+
+
+# -------------------------------------------------------------------
+# Gate lookup / verify
+# -------------------------------------------------------------------
+
+@login_required
+def gate_check_view_lookup(request):
+    """Simple gate lookup page — find visitor by ID or name."""
+    return render(request, "visitors/gate_lookup.html", {})
+
+
+@login_required
+def quick_check_page(request):
+    form = QuickVisitorCheckForm()
+    return render(request, 'visitors/quick_check.html', {'form': form})

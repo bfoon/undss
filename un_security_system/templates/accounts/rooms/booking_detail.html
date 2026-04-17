@@ -164,6 +164,65 @@
 .amenity-pill.denied   {background:#fee2e2;color:#991b1b;text-decoration:line-through;}
 .amenity-pill.requested{background:#ede9fe;color:#4c1d95;}
 
+/* ── Invite list ── */
+.invite-list-tabs .nav-link { border-radius:10px 10px 0 0; font-weight:600; font-size:.85rem; padding:.45rem .9rem; }
+.invite-list-tabs .nav-link.active { background:#009edb; color:white; border-color:#009edb; }
+.inv-row {
+    display:flex; align-items:center; gap:.75rem; padding:.75rem 1rem;
+    border-bottom:1px solid #f1f5f9; transition:.15s;
+}
+.inv-row:last-child { border-bottom:0; }
+.inv-row:hover { background:#f8fbfd; }
+.inv-avatar {
+    width:36px; height:36px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:.88rem; color:white;
+}
+.inv-avatar.invited-only { background:linear-gradient(135deg,#8b5cf6,#6d28d9); }
+.inv-avatar.registered   { background:linear-gradient(135deg,#0b74b8,#009edb); }
+.inv-avatar.both         { background:linear-gradient(135deg,#059669,#10b981); }
+.inv-name  { font-weight:700; font-size:.9rem; color:#0f172a; }
+.inv-email { font-size:.78rem; color:#64748b; }
+.inv-meta  { font-size:.76rem; color:#94a3b8; }
+.inv-source-badge {
+    display:inline-flex; align-items:center; gap:.28rem; border-radius:999px;
+    font-size:.72rem; font-weight:700; padding:.18rem .55rem; white-space:nowrap;
+}
+.src-invited    { background:#ede9fe; color:#4c1d95; }
+.src-registered { background:#e0f2fe; color:#0369a1; }
+.src-both       { background:#d1fae5; color:#065f46; }
+.inv-status-badge {
+    display:inline-flex; align-items:center; gap:.28rem; border-radius:999px;
+    font-size:.72rem; font-weight:700; padding:.18rem .55rem; white-space:nowrap;
+}
+.inv-not-arrived { background:#f1f5f9; color:#64748b; }
+.inv-checked-in  { background:#d1fae5; color:#065f46; }
+.inv-pending-reg { background:#fef3c7; color:#92400e; }
+.inv-accepted    { background:#dbeafe; color:#1e40af; }
+.inv-actions { margin-left:auto; display:flex; gap:.4rem; flex-shrink:0; }
+.inv-action-btn {
+    width:28px; height:28px; border-radius:8px; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:.8rem; transition:.15s;
+}
+.inv-action-btn.accept  { background:#d1fae5; color:#059669; }
+.inv-action-btn.reject  { background:#fee2e2; color:#dc2626; }
+.inv-action-btn.remove  { background:#f1f5f9; color:#64748b; }
+.inv-action-btn:hover.accept { background:#a7f3d0; }
+.inv-action-btn:hover.reject { background:#fecaca; }
+.inv-action-btn:hover.remove { background:#e2e8f0; }
+.pending-reg-card {
+    border:2px solid #fbbf24; border-radius:12px; padding:.8rem 1rem; margin-bottom:.6rem;
+    background:#fffbeb; display:flex; align-items:center; gap:.85rem; flex-wrap:wrap;
+    animation:slideIn .3s ease;
+}
+.pending-reg-avatar {
+    width:38px; height:38px; border-radius:50%;
+    background:linear-gradient(135deg,#f59e0b,#d97706);
+    display:flex; align-items:center; justify-content:center; color:white; font-weight:800; flex-shrink:0;
+}
+.auto-accept-on  { background:#d1fae5; color:#065f46; }
+.auto-accept-off { background:#fef3c7; color:#92400e; }
+
 @media (max-width:991.98px){.sticky-top{position:static !important;}}
 </style>
 {% endblock %}
@@ -292,6 +351,31 @@
                         {% endif %}
                     </div>
 
+                    {# Auto-Accept Registration #}
+                    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+                        <div>
+                            <div class="fw-semibold"><i class="bi bi-person-check-fill me-2 text-success"></i>Auto-Accept Registrations</div>
+                            <small class="text-muted">
+                                {% if booking.auto_accept_registration %}
+                                    New registrations are <strong class="text-success">accepted automatically</strong>.
+                                {% else %}
+                                    New registrations require <strong class="text-warning">manual approval</strong> from you.
+                                {% endif %}
+                            </small>
+                        </div>
+                        {% if request.user == booking.requested_by or request.user.is_superuser %}
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input opt-toggle" type="checkbox" role="switch"
+                                   id="toggleAutoAccept" data-field="auto_accept_registration"
+                                   {% if booking.auto_accept_registration %}checked{% endif %}>
+                        </div>
+                        {% else %}
+                        <span class="badge {% if booking.auto_accept_registration %}auto-accept-on{% else %}auto-accept-off{% endif %}">
+                            {% if booking.auto_accept_registration %}Auto{% else %}Manual{% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+
                     {# ICT Support #}
                     <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
                         <div>
@@ -391,23 +475,50 @@
             {% endif %}
 
             {# ── Amenities ── #}
-            {% with approved=booking.approved_amenities.all requested=booking.requested_amenities.all %}
-            {% if requested %}
+            {% with approved=booking.approved_amenities.all requested=booking.requested_amenities.all selected=booking.selected_amenities.all %}
+            {% if approved or requested or selected %}
             <div class="eo-card mb-4">
                 <div class="eo-card-head">
                     <h5><i class="bi bi-stars me-2 text-warning"></i>Amenities</h5>
                 </div>
                 <div class="card-body">
                     {% if approved %}
-                        <p class="text-muted small mb-2">Confirmed available:</p>
+                        {# Approver has confirmed which amenities are available #}
+                        <p class="text-muted small mb-2">Confirmed available by approver:</p>
                         <div class="d-flex flex-wrap gap-2 mb-2">
-                            {% for a in approved %}<span class="amenity-pill confirmed"><i class="{{ a.icon_class|default:'bi bi-check-circle-fill' }}"></i>{{ a.name }}</span>{% endfor %}
+                            {% for a in approved %}
+                            <span class="amenity-pill confirmed">
+                                <i class="{{ a.icon_class|default:'bi bi-check-circle-fill' }}"></i>{{ a.name }}
+                            </span>
+                            {% endfor %}
                         </div>
-                        {% for a in requested %}{% if a not in approved %}<span class="amenity-pill denied"><i class="{{ a.icon_class|default:'bi bi-x-circle' }}"></i>{{ a.name }}</span>{% endif %}{% endfor %}
-                    {% else %}
-                        <p class="text-muted small mb-2">Requested (pending confirmation):</p>
+                        {# Show denied (requested but not confirmed) #}
+                        {% for a in requested %}
+                            {% if a not in approved %}
+                            <span class="amenity-pill denied">
+                                <i class="{{ a.icon_class|default:'bi bi-x-circle' }}"></i>{{ a.name }}
+                            </span>
+                            {% endif %}
+                        {% endfor %}
+                    {% elif requested %}
+                        {# Pending approval — show what was requested #}
+                        <p class="text-muted small mb-2">Requested (awaiting approver confirmation):</p>
                         <div class="d-flex flex-wrap gap-2">
-                            {% for a in requested %}<span class="amenity-pill requested"><i class="{{ a.icon_class|default:'bi bi-hourglass-split' }}"></i>{{ a.name }}</span>{% endfor %}
+                            {% for a in requested %}
+                            <span class="amenity-pill requested">
+                                <i class="{{ a.icon_class|default:'bi bi-hourglass-split' }}"></i>{{ a.name }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    {% elif selected %}
+                        {# Auto-approved booking — selected_amenities only #}
+                        <p class="text-muted small mb-2">Selected amenities:</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for a in selected %}
+                            <span class="amenity-pill confirmed">
+                                <i class="{{ a.icon_class|default:'bi bi-check-circle-fill' }}"></i>{{ a.name }}
+                            </span>
+                            {% endfor %}
                         </div>
                     {% endif %}
                 </div>
@@ -415,7 +526,181 @@
             {% endif %}
             {% endwith %}
 
-            {# ── Attendance / Attendees ── #}
+            {# ══════════════════════════════════════════════════════════ #}
+            {# ── INVITE LIST (invited + registered, unified view) ── #}
+            {# ══════════════════════════════════════════════════════════ #}
+            {% if invite_list or booking.attendee_emails %}
+            <div class="eo-card mb-4">
+                <div class="eo-card-head">
+                    <h5><i class="bi bi-list-check me-2 text-primary"></i>Invite List</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <span style="display:inline-flex;align-items:center;gap:.3rem;background:#dbeafe;color:#1e40af;border-radius:999px;padding:.25rem .75rem;font-size:.8rem;font-weight:700;">
+                            <i class="bi bi-person-check-fill"></i>{{ registered_count }} registered
+                        </span>
+                        <span style="display:inline-flex;align-items:center;gap:.3rem;background:#ede9fe;color:#4c1d95;border-radius:999px;padding:.25rem .75rem;font-size:.8rem;font-weight:700;">
+                            <i class="bi bi-envelope-fill"></i>{{ invited_count }} invited
+                        </span>
+                    </div>
+                </div>
+
+                {# ── Pending Registrations (manual-approval mode) ── #}
+                {% if pending_registrations and not booking.auto_accept_registration %}
+                <div class="card-body border-bottom pb-2">
+                    <h6 class="text-warning fw-bold mb-2">
+                        <i class="bi bi-person-exclamation me-1"></i>
+                        Registrations Awaiting Approval ({{ pending_registrations|length }})
+                    </h6>
+                    {% for entry in pending_registrations %}
+                    <div class="pending-reg-card" id="preg{{ entry.attendee_pk }}">
+                        <div class="pending-reg-avatar">{{ entry.name|slice:":1"|upper }}</div>
+                        <div style="flex:1;min-width:0;">
+                            <div class="walkin-name">{{ entry.name }}</div>
+                            <div class="walkin-meta">
+                                <i class="bi bi-envelope me-1"></i>{{ entry.email }}
+                                {% if entry.organization %} · {{ entry.organization }}{% endif %}
+                                {% if entry.gender %} · {{ entry.gender|capfirst }}{% endif %}
+                                {% if entry.phone %} · {{ entry.phone }}{% endif %}
+                            </div>
+                        </div>
+                        {% if request.user == booking.requested_by or request.user.is_superuser %}
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-success fw-bold px-3"
+                                    onclick="decideRegistration({{ entry.attendee_pk }},'accept')">
+                                <i class="bi bi-check-lg me-1"></i>Accept
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger px-2"
+                                    onclick="decideRegistration({{ entry.attendee_pk }},'reject')">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {# ── Tabs: All / Invited-only / Registered ── #}
+                <div class="card-body py-2 pb-0">
+                    <ul class="nav nav-tabs invite-list-tabs" id="inviteTabs">
+                        <li class="nav-item">
+                            <button class="nav-link active" data-filter="all">
+                                All <span class="badge bg-secondary ms-1">{{ invite_list|length }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-filter="invited">
+                                <i class="bi bi-envelope me-1"></i>Invited
+                                <span class="badge bg-secondary ms-1">{{ invited_count }}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-filter="registered">
+                                <i class="bi bi-person-check me-1"></i>Registered
+                                <span class="badge bg-secondary ms-1">{{ registered_count }}</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <div id="inviteListBody">
+                {% for entry in invite_list %}
+                <div class="inv-row"
+                     data-source="{{ entry.source }}"
+                     id="invrow{{ entry.attendee_pk|default:forloop.counter }}">
+
+                    {# Avatar #}
+                    <div class="inv-avatar {{ entry.source }}">
+                        {% if entry.name %}{{ entry.name|slice:":1"|upper }}{% else %}<i class="bi bi-envelope-fill" style="font-size:.75rem;"></i>{% endif %}
+                    </div>
+
+                    {# Info #}
+                    <div style="flex:1;min-width:0;">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            {% if entry.name %}
+                            <span class="inv-name">{{ entry.name }}</span>
+                            {% endif %}
+
+                            {# Source badge #}
+                            {% if entry.source == 'both' %}
+                            <span class="inv-source-badge src-both"><i class="bi bi-patch-check-fill"></i>Invited &amp; Registered</span>
+                            {% elif entry.source == 'invited' %}
+                            <span class="inv-source-badge src-invited"><i class="bi bi-envelope-fill"></i>Invited</span>
+                            {% else %}
+                            <span class="inv-source-badge src-registered"><i class="bi bi-person-check-fill"></i>Registered</span>
+                            {% endif %}
+
+                            {# Registration acceptance status #}
+                            {% if entry.attendee_obj %}
+                                {% if not entry.is_accepted %}
+                                <span class="inv-status-badge inv-pending-reg"><i class="bi bi-hourglass-split"></i>Pending Approval</span>
+                                {% elif booking.auto_accept_registration %}
+                                <span class="inv-status-badge inv-accepted"><i class="bi bi-check-circle-fill"></i>Auto-Accepted</span>
+                                {% else %}
+                                <span class="inv-status-badge inv-accepted"><i class="bi bi-check-circle-fill"></i>Accepted</span>
+                                {% endif %}
+                            {% endif %}
+
+                            {# Attendance check-in status (if attendance tracking is on) #}
+                            {% if booking.enable_attendance and entry.attendance_record %}
+                                {% if entry.attendance_record.status == 'present' %}
+                                <span class="inv-status-badge inv-checked-in"><i class="bi bi-qr-code-scan"></i>Checked In</span>
+                                {% elif entry.attendance_record.status == 'approved' %}
+                                <span class="inv-status-badge inv-checked-in"><i class="bi bi-check2-circle"></i>Present</span>
+                                {% elif entry.attendance_record.status == 'pending_approval' %}
+                                <span class="att-badge att-pending" style="font-size:.72rem;"><i class="bi bi-hourglass-split"></i>Walk-in Pending</span>
+                                {% endif %}
+                            {% elif booking.enable_attendance %}
+                                {% if entry.source != 'invited' or entry.attendee_obj %}
+                                <span class="inv-status-badge inv-not-arrived"><i class="bi bi-clock"></i>Not checked in</span>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        <div class="inv-email">{{ entry.email }}</div>
+                        {% if entry.organization or entry.gender or entry.phone %}
+                        <div class="inv-meta">
+                            {% if entry.organization %}<i class="bi bi-building me-1"></i>{{ entry.organization }}{% endif %}
+                            {% if entry.gender %} · {{ entry.gender|capfirst }}{% endif %}
+                            {% if entry.phone %} · <i class="bi bi-telephone me-1"></i>{{ entry.phone }}{% endif %}
+                        </div>
+                        {% endif %}
+                        {% if entry.registered_at %}
+                        <div class="inv-meta"><i class="bi bi-clock me-1"></i>Registered {{ entry.registered_at|timesince }} ago</div>
+                        {% elif entry.source == 'invited' %}
+                        <div class="inv-meta text-muted"><i class="bi bi-clock me-1"></i>Not yet registered</div>
+                        {% endif %}
+                    </div>
+
+                    {# Actions — only owner/superuser sees them #}
+                    {% if request.user == booking.requested_by or request.user.is_superuser %}
+                    <div class="inv-actions">
+                        {% if entry.attendee_pk %}
+                            {% if not entry.is_accepted %}
+                            <button class="inv-action-btn accept" title="Accept registration"
+                                    onclick="decideRegistration({{ entry.attendee_pk }},'accept')">
+                                <i class="bi bi-check-lg"></i>
+                            </button>
+                            {% endif %}
+                            <button class="inv-action-btn remove" title="Remove from list"
+                                    onclick="removeRegistration({{ entry.attendee_pk }}, 'invrow{{ entry.attendee_pk }}')">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-person-x fs-3 d-block mb-2 opacity-40"></i>
+                    No invited or registered attendees yet.
+                </div>
+                {% endfor %}
+                </div>{# /inviteListBody #}
+            </div>
+            {% endif %}
+
+            {# ══════════════════════════════════════════════════════════ #}
+            {# ── ATTENDANCE / REGISTERED ATTENDEES ── #}
+            {# ══════════════════════════════════════════════════════════ #}
             <div class="eo-card">
                 <div class="eo-card-head">
                     <h5>
@@ -442,7 +727,7 @@
                         <i class="bi bi-shield-check"></i>
                         <div>
                             <strong>Attendance Tracking Active</strong>
-                            <small>Invited &amp; pre-registered guests are auto-confirmed. Walk-ins need your approval.</small>
+                            <small>Invited &amp; pre-registered guests are auto-confirmed on QR scan. Walk-ins need host approval.</small>
                         </div>
                     </div>
                     {% if pending_walkins %}
@@ -458,9 +743,12 @@
                                 <div class="walkin-meta">
                                     <i class="bi bi-envelope me-1"></i>{{ att.email }}
                                     {% if att.organization %} · {{ att.organization }}{% endif %}
+                                    {% if att.gender %} · {{ att.gender|capfirst }}{% endif %}
+                                    {% if att.phone %} · {{ att.phone }}{% endif %}
                                     <span class="ms-2 opacity-75">{{ att.checked_in_at|timesince }} ago</span>
                                 </div>
                             </div>
+                            {% if request.user == booking.requested_by or request.user.is_superuser %}
                             <div class="d-flex gap-2">
                                 <button class="btn btn-sm btn-success fw-bold px-3" onclick="decideWalkin({{ att.pk }},'approve')">
                                     <i class="bi bi-check-lg me-1"></i>Accept
@@ -469,6 +757,7 @@
                                     <i class="bi bi-x-lg"></i>
                                 </button>
                             </div>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -487,6 +776,8 @@
                                 <strong>{{ att.name }}</strong>
                                 <span class="text-muted small">({{ att.email }})</span>
                                 {% if att.organization %}<br><small class="text-muted"><i class="bi bi-building me-1"></i>{{ att.organization }}</small>{% endif %}
+                                {% if att.gender %}<small class="text-muted ms-2">{{ att.gender|capfirst }}</small>{% endif %}
+                                {% if att.phone %}<small class="text-muted ms-2"><i class="bi bi-telephone me-1"></i>{{ att.phone }}</small>{% endif %}
                                 <div class="mt-1 d-flex flex-wrap gap-1">
                                     {% if att.was_invited %}<span class="att-badge att-invited"><i class="bi bi-envelope-fill"></i>Invited</span>{% endif %}
                                     {% if att.was_preregistered and not att.was_invited %}<span class="att-badge att-prereg"><i class="bi bi-person-check-fill"></i>Pre-reg</span>{% endif %}
@@ -721,7 +1012,8 @@ function copyLink(){
                 if(data.success){
                     updateStatusBadge(data.public_status);
                     setMsg(data.message||'Updated.',true);
-                    if(field==='enable_invite_link') window.location.reload();
+                    // Reload for structural changes that affect rendering
+                    if(field==='enable_invite_link' || field==='auto_accept_registration') window.location.reload();
                 } else {
                     self.checked=!self.checked; setMsg(data.message||'Unable to update.',false);
                 }
@@ -731,5 +1023,98 @@ function copyLink(){
         });
     });
 })();
+
+/* ── Invite list tab filtering ── */
+(function(){
+    var tabs = document.querySelectorAll('#inviteTabs .nav-link');
+    tabs.forEach(function(tab){
+        tab.addEventListener('click', function(){
+            tabs.forEach(function(t){ t.classList.remove('active'); });
+            this.classList.add('active');
+            var filter = this.dataset.filter;
+            document.querySelectorAll('#inviteListBody .inv-row').forEach(function(row){
+                if(filter === 'all'){
+                    row.style.display = '';
+                } else if(filter === 'invited'){
+                    row.style.display = (row.dataset.source === 'invited' || row.dataset.source === 'both') ? '' : 'none';
+                } else if(filter === 'registered'){
+                    row.style.display = (row.dataset.source === 'registered' || row.dataset.source === 'both') ? '' : 'none';
+                }
+            });
+        });
+    });
+})();
+
+/* ── Registration accept / reject ── */
+function getCsrfToken(){ var m=document.cookie.match(/csrftoken=([^;]+)/); return m?m[1]:''; }
+
+window.decideRegistration = function(pk, action){
+    var card = document.getElementById('preg'+pk);
+    var row  = document.getElementById('invrow'+pk);
+    if(card){ card.style.opacity='.5'; card.style.pointerEvents='none'; }
+    fetch('/accounts/registration/'+pk+'/'+action+'/',{
+        method:'POST',
+        headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCsrfToken()}
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+        if(d.success){
+            if(card) card.remove();
+            if(action === 'accept' && row){
+                // Update badge in the invite list row
+                var badges = row.querySelectorAll('.inv-status-badge');
+                badges.forEach(function(b){ b.remove(); });
+                var nameDiv = row.querySelector('.d-flex.align-items-center');
+                if(nameDiv){
+                    var b = document.createElement('span');
+                    b.className = 'inv-status-badge inv-accepted';
+                    b.innerHTML = '<i class="bi bi-check-circle-fill"></i>Accepted';
+                    nameDiv.appendChild(b);
+                }
+                // Remove accept button, keep remove button
+                var acceptBtn = row.querySelector('.inv-action-btn.accept');
+                if(acceptBtn) acceptBtn.remove();
+            } else if(action === 'reject'){
+                // Remove both the pending approval card and the invite list row
+                var fadeOut = function(el){
+                    if(!el) return;
+                    el.style.transition = 'opacity .35s';
+                    el.style.opacity = '0';
+                    setTimeout(function(){ if(el && el.parentNode) el.parentNode.removeChild(el); }, 380);
+                };
+                fadeOut(card);
+                fadeOut(row);
+            }
+        } else {
+            if(card){ card.style.opacity='1'; card.style.pointerEvents=''; }
+            alert(d.message || 'Error processing request.');
+        }
+    })
+    .catch(function(){
+        if(card){ card.style.opacity='1'; card.style.pointerEvents=''; }
+    });
+};
+
+window.removeRegistration = function(pk, rowId){
+    if(!confirm('Remove this person from the registration list?')) return;
+    var row = document.getElementById(rowId);
+    if(row){ row.style.opacity='.5'; row.style.pointerEvents='none'; }
+    fetch('/accounts/registration/'+pk+'/remove/',{
+        method:'POST',
+        headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':getCsrfToken()}
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+        if(d.success){
+            if(row){ row.style.opacity='0'; row.style.transition='opacity .3s'; setTimeout(function(){ row.remove(); },300); }
+        } else {
+            if(row){ row.style.opacity='1'; row.style.pointerEvents=''; }
+            alert(d.message || 'Error removing registration.');
+        }
+    })
+    .catch(function(){
+        if(row){ row.style.opacity='1'; row.style.pointerEvents=''; }
+    });
+};
 </script>
 {% endblock %}

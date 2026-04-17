@@ -259,29 +259,43 @@ def notify_requester_booking_approved(request, booking):
         return
 
     registration_link = None
+    attendance_link = None
 
-    # Only build a public registration link if the feature is enabled
     if booking.enable_invite_link:
         ensure_booking_registration_code(booking)
-        registration_link = request.build_absolute_uri(
-            reverse('accounts:meeting_registration', args=[booking.registration_code])
-        )
+        if booking.enable_attendance:
+            attendance_link = request.build_absolute_uri(
+                reverse('accounts:meeting_attendance_page', args=[booking.registration_code])
+            )
+        else:
+            registration_link = request.build_absolute_uri(
+                reverse('accounts:meeting_registration', args=[booking.registration_code])
+            )
 
     requester_name = booking.requested_by.get_full_name() or booking.requested_by.username
 
     message = (
         f"Dear {requester_name},\n\n"
         f"Your booking for '{booking.title}' has been APPROVED.\n\n"
+        f"Details:\n"
+        f"  Room: {booking.room.name} ({booking.room.code})\n"
+        f"  Date: {booking.date}\n"
+        f"  Time: {booking.start_time} \u2013 {booking.end_time}\n\n"
     )
 
-    if registration_link:
+    if attendance_link:
+        message += (
+            f"Attendance QR / Check-in Link:\n{attendance_link}\n\n"
+            "Display or share this QR code so attendees can scan it on the day to check in.\n\n"
+        )
+    elif registration_link:
         message += (
             f"Attendee Registration Link:\n{registration_link}\n\n"
-            "Please share this link with your attendees.\n\n"
+            "Please share this link with your attendees so they can register in advance.\n\n"
         )
 
     message += (
-        "A calendar invite has been sent to you and your listed guests.\n\n"
+        "A calendar invite has been attached to this email.\n\n"
         "Please remember to leave the room neat and tidy as you found it.\n\n"
         "Thank you."
     )
@@ -1427,6 +1441,7 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
 
                         if selected_amenities:
                             booking.selected_amenities.set(selected_amenities)
+                            booking.requested_amenities.set(selected_amenities)  # mirror for detail page display
 
                         if booking.enable_invite_link and not booking.registration_code:
                             import uuid
@@ -1503,6 +1518,7 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
 
         if selected_amenities:
             self.object.selected_amenities.set(selected_amenities)
+            self.object.requested_amenities.set(selected_amenities)  # mirror for detail page display
 
         if self.object.enable_invite_link and not self.object.registration_code:
             import uuid
@@ -1688,7 +1704,7 @@ def room_booking_approve_view(request, pk):
                     })
 
                 booking.reject(request.user, reason=rejection_reason)
-                # notify_requester_booking_rejected(booking) # Assumes this function exists
+                notify_requester_booking_rejected(booking)
                 messages.warning(request, "Booking has been rejected.")
                 return redirect("accounts:room_approvals")
 
@@ -1739,7 +1755,7 @@ def room_series_approve_view(request, pk):
 
             if action == "approve":
                 series.approve(request.user)
-                # notify_requester_series_approved(request, series)
+                notify_requester_series_approved(series)
 
                 ensure_booking_registration_code(booking)
 
@@ -1757,7 +1773,7 @@ def room_series_approve_view(request, pk):
                                   {"series": series, "room": room, "form": form})
 
                 series.reject(request.user, reason=reason)
-                # notify_requester_series_rejected(series)
+                notify_requester_series_rejected(series)
                 messages.warning(request,
                                  f"Series rejected. All {series.occurrences.count()} occurrences have been rejected.")
 
@@ -1783,21 +1799,26 @@ def booking_detail_view(request, pk):
             'attendees',
             'approved_amenities',
             'requested_amenities',
+            'selected_amenities',
             'attendance_records',
         ),
         pk=pk,
     )
 
-    if not booking.registration_code:
+    # Only generate a registration_code when the public link feature is actually enabled
+    if booking.enable_invite_link and not booking.registration_code:
         import uuid as _uuid
         booking.registration_code = _uuid.uuid4()
         booking.save(update_fields=['registration_code'])
 
-    registration_link = request.build_absolute_uri(
-        reverse('accounts:meeting_registration', args=[booking.registration_code])
-    )
-
-    qr_download_link = reverse('accounts:meeting_qr_code_download', args=[booking.registration_code])
+    if booking.registration_code:
+        registration_link = request.build_absolute_uri(
+            reverse('accounts:meeting_registration', args=[booking.registration_code])
+        )
+        qr_download_link = reverse('accounts:meeting_qr_code_download', args=[booking.registration_code])
+    else:
+        registration_link = None
+        qr_download_link = None
 
     all_records = booking.attendance_records.all()
     pending_walkins = [r for r in all_records if r.status == 'pending_approval']
@@ -1814,7 +1835,73 @@ def booking_detail_view(request, pk):
     meeting_started = _booking_has_started(booking)
     meeting_ended = _booking_has_ended(booking)
 
-    # Agenda document QR URL (points to the agenda_document_qr_view)
+    # ── Invite list: combine invited emails + registered attendees ──────────
+    # Parse the comma-separated invited emails into a set for fast lookup
+    invited_email_set = {
+        e.strip().lower()
+        for e in (booking.attendee_emails or '').split(',')
+        if e.strip()
+    }
+
+    # Build the registered list with their attendance status merged in
+    registered_attendees = list(booking.attendees.all().order_by('registered_at'))
+
+    # Build a map: email → attendance record (for cross-referencing check-in status)
+    attendance_map = {
+        r.email.lower(): r for r in all_records
+    }
+
+    # Build a unified invite list entry per unique email
+    # Each entry: { email, name, organization, gender, phone,
+    #               source (invited/registered/both), registered_at,
+    #               attendance_record (or None), attendee_obj (or None) }
+    invite_list = []
+    seen_emails = set()
+
+    # Start with registered attendees (they have the most info)
+    for att in registered_attendees:
+        email = att.email.lower()
+        seen_emails.add(email)
+        att_record = attendance_map.get(email)
+        invite_list.append({
+            'email': att.email,
+            'name': att.name,
+            'organization': getattr(att, 'organization', ''),
+            'gender': getattr(att, 'gender', ''),
+            'phone': getattr(att, 'phone', ''),
+            'source': 'both' if email in invited_email_set else 'registered',
+            'registered_at': att.registered_at,
+            'attendance_record': att_record,
+            'attendee_obj': att,
+            'attendee_pk': att.pk,
+            'is_accepted': getattr(att, 'is_accepted', True),
+        })
+
+    # Add pure invite-only entries (emailed but haven't registered yet)
+    for email in sorted(invited_email_set):
+        if email not in seen_emails:
+            att_record = attendance_map.get(email)
+            invite_list.append({
+                'email': email,
+                'name': '',
+                'organization': '',
+                'gender': '',
+                'phone': '',
+                'source': 'invited',
+                'registered_at': None,
+                'attendance_record': att_record,
+                'attendee_obj': None,
+                'attendee_pk': None,
+                'is_accepted': True,
+            })
+
+    # Pending registrations (not auto-accepted): registered but not yet accepted
+    pending_registrations = [
+        e for e in invite_list
+        if e['attendee_obj'] is not None and not e.get('is_accepted', True)
+    ]
+
+    # Agenda document QR URL
     agenda_qr_url = None
     if booking.agenda_document:
         agenda_qr_url = reverse('accounts:booking_agenda_qr', args=[booking.pk])
@@ -1831,6 +1918,10 @@ def booking_detail_view(request, pk):
         'meeting_started': meeting_started,
         'meeting_ended': meeting_ended,
         'agenda_qr_url': agenda_qr_url,
+        'invite_list': invite_list,
+        'invited_count': len(invited_email_set),
+        'registered_count': len(registered_attendees),
+        'pending_registrations': pending_registrations,
     })
 
 
@@ -2032,13 +2123,29 @@ def meeting_registration_view(request, registration_code):
 
             attendee = form.save(commit=False)
             attendee.booking = booking
+            # Save gender and phone if the model supports them (safe before migration)
+            gender = request.POST.get('gender', '').strip()
+            phone  = request.POST.get('phone', '').strip()
+            if hasattr(attendee, 'gender'):
+                attendee.gender = gender
+            if hasattr(attendee, 'phone'):
+                attendee.phone = phone
+            # Set is_accepted based on the booking's auto-accept setting
+            if hasattr(attendee, 'is_accepted'):
+                attendee.is_accepted = getattr(booking, 'auto_accept_registration', True)
             try:
                 attendee.save()
                 notify_attendee_of_registration(attendee)
-                messages.success(
-                    request,
-                    "Thank you for registering! A confirmation email has been sent."
-                )
+                if getattr(booking, 'auto_accept_registration', False):
+                    messages.success(
+                        request,
+                        "You are registered and your spot is confirmed!"
+                    )
+                else:
+                    messages.success(
+                        request,
+                        "Thank you for registering! A confirmation email has been sent."
+                    )
                 return redirect('accounts:meeting_registration_success')
             except Exception:
                 messages.error(
@@ -2097,6 +2204,217 @@ def walkin_decision_view(request, pk, action):
 
     return JsonResponse({'success': False, 'message': 'Invalid action.'}, status=400)
 
+
+def attendance_page_view(request, registration_code):
+    """
+    Public attendance check-in page — opened when a user scans the meeting QR code.
+
+    Flow
+    ----
+    Step 1  (GET / POST step=email):
+        User enters their email address.
+        * Already checked in  →  show status message.
+        * Invited or pre-registered  →  show confirm form (name pre-filled).
+        * Unknown walk-in  →  show full form (name, org, gender, phone).
+
+    Step 2  (POST step=checkin):
+        Create AttendanceRecord.
+        * Invited / pre-registered  →  status = 'present'  (auto-confirmed).
+        * Walk-in  →  status = 'pending_approval'  (host must approve).
+    """
+    booking = get_object_or_404(
+        RoomBooking.objects.select_related('room', 'requested_by'),
+        registration_code=registration_code,
+    )
+
+    # If attendance tracking is off, fall back to the standard registration page.
+    if not booking.enable_attendance:
+        return redirect('accounts:meeting_registration', registration_code=registration_code)
+
+    block_reason = _booking_public_link_block_reason(booking)
+    if block_reason:
+        return render(
+            request,
+            'accounts/rooms/meeting_registration_closed.html',
+            {
+                'booking': booking,
+                'block_reason': block_reason,
+                'public_status': _booking_public_link_status(booking),
+            },
+            status=410,
+        )
+
+    public_status = _booking_public_link_status(booking)
+    step = request.POST.get('step', 'email') if request.method == 'POST' else 'email'
+
+    # ── STEP 1 : email lookup ────────────────────────────────────────────────
+    if request.method == 'POST' and step == 'email':
+        email = (request.POST.get('email') or '').strip().lower()
+        if not email:
+            return render(request, 'accounts/rooms/attendance_page.html', {
+                'booking': booking,
+                'public_status': public_status,
+                'step': 'email',
+                'error': 'Please enter a valid email address.',
+            })
+
+        # Already checked in?
+        existing = AttendanceRecord.objects.filter(
+            booking=booking, email__iexact=email
+        ).first()
+        if existing:
+            return render(request, 'accounts/rooms/attendance_page.html', {
+                'booking': booking,
+                'public_status': public_status,
+                'step': 'already_in',
+                'record': existing,
+            })
+
+        invited_emails = [
+            e.strip().lower()
+            for e in (booking.attendee_emails or '').split(',')
+            if e.strip()
+        ]
+        is_invited    = email in invited_emails
+        is_registered = MeetingAttendee.objects.filter(
+            booking=booking, email__iexact=email
+        ).exists()
+
+        if is_invited or is_registered:
+            prefill_name = ''
+            if is_registered:
+                reg_att = MeetingAttendee.objects.filter(
+                    booking=booking, email__iexact=email
+                ).first()
+                prefill_name = reg_att.name if reg_att else ''
+            return render(request, 'accounts/rooms/attendance_page.html', {
+                'booking': booking,
+                'public_status': public_status,
+                'step': 'confirm',
+                'email': email,
+                'prefill_name': prefill_name,
+                'is_invited': is_invited,
+                'is_registered': is_registered,
+            })
+
+        # Unknown walk-in — collect full details
+        return render(request, 'accounts/rooms/attendance_page.html', {
+            'booking': booking,
+            'public_status': public_status,
+            'step': 'walkin_form',
+            'email': email,
+        })
+
+    # ── STEP 2 : submit check-in ─────────────────────────────────────────────
+    if request.method == 'POST' and step == 'checkin':
+        email        = (request.POST.get('email')        or '').strip().lower()
+        name         = (request.POST.get('name')         or '').strip()
+        organization = (request.POST.get('organization') or '').strip()
+        gender       = (request.POST.get('gender')       or '').strip()
+        phone        = (request.POST.get('phone')        or '').strip()
+
+        if not email or not name:
+            return render(request, 'accounts/rooms/attendance_page.html', {
+                'booking': booking,
+                'public_status': public_status,
+                'step': 'email',
+                'error': 'Missing required fields. Please try again.',
+            })
+
+        # Race-condition guard
+        existing = AttendanceRecord.objects.filter(
+            booking=booking, email__iexact=email
+        ).first()
+        if existing:
+            return render(request, 'accounts/rooms/attendance_page.html', {
+                'booking': booking,
+                'public_status': public_status,
+                'step': 'already_in',
+                'record': existing,
+            })
+
+        invited_emails = [
+            e.strip().lower()
+            for e in (booking.attendee_emails or '').split(',')
+            if e.strip()
+        ]
+        is_invited    = email in invited_emails
+        is_registered = MeetingAttendee.objects.filter(
+            booking=booking, email__iexact=email
+        ).exists()
+        is_auto = is_invited or is_registered
+
+        record = AttendanceRecord(
+            booking=booking,
+            name=name,
+            email=email,
+            organization=organization,
+            status='present' if is_auto else 'pending_approval',
+            was_invited=is_invited,
+            was_preregistered=is_registered,
+        )
+        # Store gender / phone only if the model has them (avoids errors before migration)
+        if hasattr(AttendanceRecord, 'gender'):
+            record.gender = gender
+        if hasattr(AttendanceRecord, 'phone'):
+            record.phone = phone
+        record.save()
+
+        return render(request, 'accounts/rooms/attendance_page.html', {
+            'booking': booking,
+            'public_status': public_status,
+            'step': 'success',
+            'name': name,
+            'is_auto': is_auto,
+        })
+
+    # ── Default GET: show email input ────────────────────────────────────────
+    return render(request, 'accounts/rooms/attendance_page.html', {
+        'booking': booking,
+        'public_status': public_status,
+        'step': 'email',
+    })
+
+
+
+
+@login_required
+@require_POST
+def accept_registration_view(request, pk, action):
+    """
+    POST /accounts/registration/<pk>/accept/  or  /reject/  or  /remove/
+    Accepts, rejects, or removes a MeetingAttendee registration.
+    Only the booking owner or a superuser can call this.
+    """
+    attendee = get_object_or_404(MeetingAttendee, pk=pk)
+    booking = attendee.booking
+
+    is_owner = booking.requested_by == request.user
+    is_room_approver = RoomApprover.objects.filter(
+        room=booking.room, user=request.user, is_active=True
+    ).exists()
+
+    if not (is_owner or is_room_approver or request.user.is_superuser):
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    if action == 'accept':
+        if hasattr(attendee, 'is_accepted'):
+            attendee.is_accepted = True
+            attendee.save(update_fields=['is_accepted'])
+        return JsonResponse({'success': True, 'action': 'accepted', 'pk': pk})
+
+    elif action == 'reject':
+        # Delete the registration entirely — setting is_accepted=False would
+        # just make it reappear on every refresh as "pending".
+        attendee.delete()
+        return JsonResponse({'success': True, 'action': 'rejected', 'pk': pk})
+
+    elif action == 'remove':
+        attendee.delete()
+        return JsonResponse({'success': True, 'action': 'removed', 'pk': pk})
+
+    return JsonResponse({'success': False, 'message': 'Invalid action.'}, status=400)
+
 def meeting_registration_success_view(request):
     return render(request, 'accounts/rooms/meeting_registration_success.html')
 
@@ -2120,9 +2438,16 @@ def meeting_qr_code_view(request, registration_code):
     if block_reason:
         raise Http404("This public meeting link is no longer available.")
 
-    registration_url = request.build_absolute_uri(
-        reverse('accounts:meeting_registration', args=[registration_code])
-    )
+    # Encode the attendance URL in the QR when attendance tracking is on;
+    # otherwise encode the standard registration URL.
+    if booking.enable_attendance:
+        registration_url = request.build_absolute_uri(
+            reverse('accounts:meeting_attendance_page', args=[registration_code])
+        )
+    else:
+        registration_url = request.build_absolute_uri(
+            reverse('accounts:meeting_registration', args=[registration_code])
+        )
 
     # ── Colour palette ─────────────────────────────────────────────────────
     DEEP_NAVY = (10,  25,  61)
@@ -3323,7 +3648,7 @@ def toggle_booking_option_view(request, pk):
     field = (request.POST.get("field") or "").strip()
     raw_value = (request.POST.get("value") or "").strip().lower()
 
-    allowed_boolean_fields = {"enable_attendance", "enable_invite_link"}
+    allowed_boolean_fields = {"enable_attendance", "enable_invite_link", "auto_accept_registration"}
 
     if field in allowed_boolean_fields:
         value = raw_value in {"1", "true", "yes", "on"}

@@ -6,7 +6,53 @@ from crispy_forms.bootstrap import Field, InlineRadios
 from .models import Visitor, VisitorLog, GroupMember
 
 
+# ---------------------------------------------------------------------------
+# Helper: build the meeting choices queryset
+# We lazy-import to avoid hard circular dependency.
+# ---------------------------------------------------------------------------
+
+def _upcoming_bookings_qs():
+    """Return approved RoomBookings that are today or in the future."""
+    try:
+        from accounts.models import RoomBooking
+        today = timezone.now().date()
+        return (
+            RoomBooking.objects
+            .filter(status='approved', date__gte=today)
+            .order_by('date', 'start_time')
+            .select_related('room')
+        )
+    except Exception:
+        return []
+
+
+class MeetingModelChoiceField(forms.ModelChoiceField):
+    """Renders a RoomBooking as a human-readable label in the dropdown."""
+
+    def label_from_instance(self, obj):
+        try:
+            return f"{obj.date.strftime('%d %b %Y')} {obj.start_time.strftime('%H:%M')} — {obj.title} ({obj.room.name})"
+        except Exception:
+            return str(obj)
+
+
 class VisitorForm(forms.ModelForm):
+
+    # ── Meeting link (optional) ──────────────────────────────────────────────
+    # We define this as a proper ModelChoiceField so it renders as a <select>.
+    # The queryset is overridden in __init__ so it stays current.
+    linked_booking = MeetingModelChoiceField(
+        queryset=None,          # set in __init__
+        required=False,
+        label='Link to a meeting',
+        empty_label='— No meeting link —',
+        help_text=(
+            'Optional. Select an upcoming approved meeting. Accepted registrants '
+            'will be automatically added as group members and kept in sync.'
+        ),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
     class Meta:
         model = Visitor
         fields = [
@@ -14,7 +60,8 @@ class VisitorForm(forms.ModelForm):
             'visitor_type', 'purpose_of_visit', 'person_to_visit',
             'department_to_visit', 'expected_date', 'expected_time',
             'estimated_duration', 'has_vehicle', 'vehicle_plate',
-            'vehicle_make', 'vehicle_model', 'vehicle_color'
+            'vehicle_make', 'vehicle_model', 'vehicle_color',
+            'linked_booking',
         ]
         widgets = {
             'expected_date': forms.DateInput(attrs={'type': 'date', 'min': timezone.now().date()}),
@@ -25,6 +72,10 @@ class VisitorForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Set the live queryset for upcoming meetings
+        self.fields['linked_booking'].queryset = _upcoming_bookings_qs()
+
         self.helper = FormHelper()
         self.helper.form_method = 'post'
         self.helper.form_class = 'form-horizontal'
@@ -98,6 +149,12 @@ class VisitorForm(forms.ModelForm):
         if has_vehicle and not vehicle_plate:
             raise forms.ValidationError('Vehicle plate number is required when visitor has a vehicle.')
 
+        # If a meeting is linked, visitor_type must be 'group' — enforce silently
+        # so the group-member section is always shown for meeting-linked access requests.
+        linked_booking = cleaned_data.get('linked_booking')
+        if linked_booking:
+            cleaned_data['visitor_type'] = 'group'
+
         return cleaned_data
 
 
@@ -145,11 +202,9 @@ class GroupMemberForm(forms.ModelForm):
         """Validate uploaded ID photo"""
         id_photo = self.cleaned_data.get('id_photo')
         if id_photo:
-            # Check file size (5MB limit)
             if id_photo.size > 5 * 1024 * 1024:
                 raise forms.ValidationError('Image file size must be less than 5MB.')
 
-            # Check file type
             allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
             if hasattr(id_photo, 'content_type'):
                 if id_photo.content_type not in allowed_types:
@@ -262,23 +317,16 @@ class GateCheckForm(forms.Form):
     )
 
     def __init__(self, *args, visitor=None, **kwargs):
-        """
-        Pass the visitor instance so we can:
-        - decide if ID is really required on check-in
-        - show better help text when an ID already exists
-        """
         self.visitor = visitor
         super().__init__(*args, **kwargs)
 
         if self.visitor and getattr(self.visitor, "id_number", None):
-            # Visitor already has an ID on file
             current_id = self.visitor.id_number
             self.fields["id_number"].help_text = (
                 f"Current ID on file: {current_id}. "
                 "Fill only if you need to update it at the gate."
             )
         else:
-            # No ID on file yet
             self.fields["id_number"].help_text = "Required for first check-in."
 
     def clean(self):
@@ -287,18 +335,13 @@ class GateCheckForm(forms.Form):
         id_number = cleaned.get("id_number")
         card_number = cleaned.get("card_number")
 
-        # Normalize action just in case
         if action:
             action = str(action)
 
         if action == "check_in":
-            # Card is ALWAYS required on check-in
             if not card_number:
                 self.add_error("card_number", "Card number is required for check-in.")
 
-            # ID is required if:
-            # - no ID in the form AND
-            # - no ID already stored on the visitor
             visitor_has_id = bool(getattr(self.visitor, "id_number", None)) if self.visitor else False
             if not id_number and not visitor_has_id:
                 self.add_error("id_number", "Visitor ID is required for check-in.")
