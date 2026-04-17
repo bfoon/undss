@@ -13,56 +13,55 @@
 
 {% block extra_css %}
 <style>
+    :root {
+        --un-blue: #009edb;
+        --un-dark-blue: #1f4788;
+        --un-light-blue: #e6f7ff;
+    }
+
     .form-section {
         background: #f8f9fa;
-        border-radius: 8px;
+        border-radius: 10px;
         padding: 1.25rem 1.5rem;
         margin-bottom: 1.25rem;
-        border-left: 4px solid var(--un-blue, #009edb);
+        border-left: 4px solid var(--un-blue);
     }
 
     .form-section h6 {
-        color: var(--un-dark-blue, #1f4788);
+        color: var(--un-dark-blue);
         margin-bottom: 0.75rem;
-        font-weight: 600;
+        font-weight: 700;
         display: flex;
         align-items: center;
-        gap: 0.35rem;
-        font-size: 0.95rem;
+        gap: 0.4rem;
+        font-size: 0.85rem;
         text-transform: uppercase;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.06em;
     }
 
-    /* Meeting-link section gets a distinct accent colour */
-    .form-section.meeting-link-section {
+    /* Meeting-linked section styling */
+    .form-section.meeting-section {
         border-left-color: #0ea5e9;
-        background: linear-gradient(135deg, #f0f9ff 0%, #f8f9fa 100%);
+        background: linear-gradient(135deg, #f0f9ff 0%, #f8fafc 100%);
     }
 
-    .required-field label::after {
-        content: " *";
-        color: #dc3545;
+    /* Read-only / locked field overlay */
+    .field-locked input,
+    .field-locked select,
+    .field-locked textarea {
+        background-color: #e9ecef !important;
+        color: #495057 !important;
+        cursor: not-allowed;
+        border-color: #ced4da;
     }
 
-    .timestamp-info {
-        background: var(--un-light-blue, #e6f7ff);
-        border-radius: 6px;
-        padding: 0.5rem 0.75rem;
-        font-size: 0.85rem;
-        color: var(--un-dark-blue, #1f4788);
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        border: 1px solid rgba(0, 158, 219, 0.1);
+    .field-locked label::after {
+        content: " 🔒";
+        font-size: 0.7rem;
+        opacity: 0.5;
     }
 
-    .form-help-text {
-        font-size: 0.85rem;
-        color: var(--un-gray, #6c757d);
-        margin-top: 0.25rem;
-    }
-
-    /* Floating / pill labels */
+    /* Pill labels */
     .form-section .mb-3 {
         position: relative;
         padding-top: 1.2rem;
@@ -78,222 +77,65 @@
         background: #f8f9fa;
         padding: 0.1rem 0.6rem;
         border-radius: 999px;
-        font-size: 0.72rem;
-        font-weight: 600;
+        font-size: 0.7rem;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: var(--un-dark-blue, #1f4788);
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04);
+        color: var(--un-dark-blue);
+        box-shadow: 0 0 0 1px rgba(0,0,0,0.04);
         z-index: 2;
         white-space: nowrap;
     }
 
-    .meeting-link-section .mb-3 > label.form-label,
-    .meeting-link-section .mb-3 > label {
+    .meeting-section .mb-3 > label.form-label,
+    .meeting-section .mb-3 > label {
         background: #f0f9ff;
     }
 
-    /* Group Members Styling */
-    #group-members-section {
-        display: none;
-        background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-top: 1rem;
-        border: 2px solid #2196F3;
+    .required-field label::after {
+        content: " *";
+        color: #dc3545;
     }
 
-    #group-members-section.show {
-        display: block;
-        animation: slideDown 0.3s ease-out;
-    }
-
-    @keyframes slideDown {
-        from { opacity: 0; transform: translateY(-10px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .group-member-card {
-        background: #ffffff;
-        border-radius: 8px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        border-left: 4px solid #2196F3;
-        position: relative;
-        transition: all 0.3s ease;
-    }
-
-    .group-member-card:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-        transform: translateY(-2px);
-    }
-
-    /* Meeting-synced member card gets a teal accent */
-    .group-member-card.from-meeting {
-        border-left-color: #0ea5e9;
-        background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
-    }
-
-    .group-member-card .member-number {
-        position: absolute;
-        top: -12px;
-        left: 12px;
-        background: linear-gradient(135deg, #2196F3, #1976D2);
-        color: #ffffff;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 0.85rem;
-        box-shadow: 0 2px 6px rgba(33, 150, 243, 0.4);
-    }
-
-    .remove-member-btn {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        background: #ff5252;
-        border: none;
-        color: #ffffff;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-    }
-
-    .remove-member-btn:hover {
-        background: #d32f2f;
-        transform: rotate(90deg);
-    }
-
-    .add-member-btn {
-        background: linear-gradient(135deg, #4CAF50, #45a049);
-        border: none;
-        color: #ffffff;
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s;
+    .timestamp-info {
+        background: var(--un-light-blue);
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.82rem;
+        color: var(--un-dark-blue);
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
-        font-size: 0.95rem;
+        gap: 0.35rem;
+        border: 1px solid rgba(0,158,219,0.15);
     }
 
-    .add-member-btn:hover {
-        background: linear-gradient(135deg, #45a049, #388e3c);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
-    }
-
-    /* Disable the add-member button when meeting is linked */
-    .add-member-btn:disabled,
-    .add-member-btn[disabled] {
-        background: #9e9e9e;
-        transform: none;
-        box-shadow: none;
-        cursor: not-allowed;
-        opacity: 0.65;
-    }
-
-    .group-summary {
-        background: #ffffff;
-        border-radius: 8px;
-        padding: 1rem 1.25rem;
-        margin-bottom: 1rem;
+    /* Meeting link banner */
+    .meeting-link-banner {
+        background: linear-gradient(135deg, #1e40af 0%, #0ea5e9 100%);
+        color: #fff;
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.5rem;
         display: flex;
         align-items: center;
         gap: 1rem;
-        border: 2px dashed #2196F3;
     }
 
-    .group-summary-icon {
+    .meeting-link-banner .banner-icon {
         font-size: 2rem;
-        color: #2196F3;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        flex-shrink: 0;
+        opacity: 0.9;
     }
 
-    .group-summary-text {
-        flex: 1;
-        font-size: 0.9rem;
-    }
-
-    .group-summary-count {
-        font-size: 1.75rem;
+    .meeting-link-banner .banner-title {
         font-weight: 700;
-        color: #2196F3;
+        font-size: 1rem;
+        margin-bottom: 0.2rem;
     }
 
-    .id-photo-preview {
-        max-width: 150px;
-        max-height: 150px;
-        margin-top: 0.5rem;
-        border-radius: 8px;
-        border: 2px solid #e0e0e0;
-    }
-
-    .member-form-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 1rem;
-        margin-top: 1rem;
-    }
-
-    .group-member-card .form-group {
-        position: relative;
-        padding-top: 1.2rem;
-        margin-bottom: 0.9rem;
-    }
-
-    .group-member-card .form-group > label.form-label,
-    .group-member-card .form-group > label {
-        position: absolute;
-        top: 0;
-        left: 0.75rem;
-        transform: translateY(-50%);
-        background: #ffffff;
-        padding: 0.1rem 0.6rem;
-        border-radius: 999px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: #1565c0;
-        box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.08);
-        z-index: 2;
-        white-space: nowrap;
-    }
-
-    .group-member-card.from-meeting .form-group > label.form-label,
-    .group-member-card.from-meeting .form-group > label {
-        background: #f0f9ff;
-        color: #0369a1;
-    }
-
-    .empty-state {
-        text-align: center;
-        padding: 2rem 1rem;
-        color: #757575;
-        font-size: 0.9rem;
-    }
-
-    .empty-state i {
-        font-size: 2.5rem;
-        color: #bdbdbd;
-        margin-bottom: 0.75rem;
+    .meeting-link-banner .banner-sub {
+        font-size: 0.82rem;
+        opacity: 0.85;
     }
 
     /* Meeting preview pill */
@@ -311,12 +153,22 @@
         animation: fadeIn 0.25s ease;
     }
 
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(4px); }
-        to   { opacity: 1; transform: translateY(0); }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+    /* Group members */
+    #group-members-section {
+        display: none;
+        background: linear-gradient(135deg, #e3f2fd 0%, #f5f5f5 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        border: 2px solid #2196F3;
     }
 
-    /* Synced-member notice strip inside group section */
+    #group-members-section.show { display: block; animation: slideDown 0.3s ease-out; }
+
+    @keyframes slideDown { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:none; } }
+
     #meeting-sync-notice {
         display: none;
         background: #dbeafe;
@@ -326,18 +178,84 @@
         font-size: 0.875rem;
         color: #1e40af;
         margin-bottom: 1rem;
-    }
-
-    #meeting-sync-notice.show {
-        display: flex;
         align-items: center;
         gap: 0.6rem;
     }
 
-    .form-control::placeholder {
-        color: #b0b0b0;
-        font-size: 0.85rem;
+    #meeting-sync-notice.show { display: flex; }
+
+    .group-member-card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-left: 4px solid #2196F3;
+        position: relative;
+        transition: all 0.3s ease;
     }
+
+    .group-member-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(-2px); }
+
+    .group-member-card .member-number {
+        position: absolute;
+        top: -12px; left: 12px;
+        background: linear-gradient(135deg, #2196F3, #1976D2);
+        color: #fff;
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 0.85rem;
+        box-shadow: 0 2px 6px rgba(33,150,243,0.4);
+    }
+
+    .remove-member-btn {
+        position: absolute; top: 12px; right: 12px;
+        background: #ff5252; border: none; color: #fff;
+        width: 32px; height: 32px; border-radius: 50%;
+        cursor: pointer; transition: all 0.2s;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.1rem;
+    }
+
+    .remove-member-btn:hover { background: #d32f2f; transform: rotate(90deg); }
+
+    .add-member-btn {
+        background: linear-gradient(135deg, #4CAF50, #45a049);
+        border: none; color: #fff;
+        padding: 0.75rem 1.5rem; border-radius: 8px;
+        font-weight: 600; cursor: pointer; transition: all 0.3s;
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        box-shadow: 0 4px 12px rgba(76,175,80,0.3);
+    }
+
+    .add-member-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(76,175,80,0.4); }
+
+    .group-member-card .form-group {
+        position: relative; padding-top: 1.2rem; margin-bottom: 0.9rem;
+    }
+
+    .group-member-card .form-group > label {
+        position: absolute; top: 0; left: 0.75rem;
+        transform: translateY(-50%);
+        background: #fff;
+        padding: 0.1rem 0.6rem; border-radius: 999px;
+        font-size: 0.7rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        color: #1565c0; box-shadow: 0 0 0 1px rgba(21,101,192,0.08);
+        z-index: 2; white-space: nowrap;
+    }
+
+    .group-summary {
+        background: #fff; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem;
+        display: flex; align-items: center; gap: 1rem; border: 2px dashed #2196F3;
+    }
+
+    .group-summary-count { font-size: 1.75rem; font-weight: 700; color: #2196F3; }
+
+    .form-control::placeholder { color: #b0b0b0; font-size: 0.85rem; }
+
+    .id-photo-preview { max-width: 150px; max-height: 150px; margin-top: 0.5rem; border-radius: 8px; border: 2px solid #e0e0e0; }
 </style>
 {% endblock %}
 
@@ -346,6 +264,7 @@
 <div class="container" style="max-width: 900px;">
     <div class="row">
         <div class="col-12">
+
             <!-- Page Header -->
             <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
                 <div>
@@ -353,18 +272,15 @@
                         <i class="bi bi-{% if object %}pencil-square{% else %}person-plus{% endif %} me-2"></i>
                         {% if object %}Update Visitor Record{% else %}Register Visitor{% endif %}
                     </h1>
-                    <p class="text-muted mb-0">
-                        {% if object %}
-                            Review and update the visitor's personal details and visit information.
-                        {% else %}
-                            Capture key information to pre-clear and register a new visitor.
-                        {% endif %}
+                    <p class="text-muted mb-0 small">
+                        {% if object %}Review and update the visitor record.
+                        {% else %}Capture information to pre-clear and register a new visitor.{% endif %}
                     </p>
                 </div>
                 <div class="timestamp-info">
                     <i class="bi bi-clock"></i>
                     <span>{% now "M j, Y H:i" %}</span>
-                    <span>•</span>
+                    <span>·</span>
                     <span>{{ request.user.get_full_name|default:request.user.username }}</span>
                 </div>
             </div>
@@ -374,188 +290,25 @@
                 <div class="card-body p-4">
                     {% if messages %}
                         {% for message in messages %}
-                            <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
-                                <i class="bi bi-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'error' or message.tags == 'danger' %}exclamation-triangle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
+                        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
                         {% endfor %}
                     {% endif %}
 
                     <form method="post" enctype="multipart/form-data" novalidate id="visitor-form">
                         {% csrf_token %}
 
-                        <!-- Personal Information -->
-                        <div class="form-section">
-                            <h6>
-                                <i class="bi bi-person"></i>
-                                Personal Information
-                            </h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    {% if form.full_name %}
-                                        <div class="mb-3 required-field">
-                                            {{ form.full_name|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    {% if form.id_number %}
-                                        <div class="mb-3 required-field">
-                                            {{ form.id_number|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    {% if form.phone %}
-                                        <div class="mb-3">
-                                            {{ form.phone|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    {% if form.email %}
-                                        <div class="mb-3">
-                                            {{ form.email|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    {% if form.organization %}
-                                        <div class="mb-3">
-                                            {{ form.organization|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    {% if form.visitor_type %}
-                                        <div class="mb-3 required-field">
-                                            {{ form.visitor_type|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Group Members Section (Dynamic) -->
-                        <div id="group-members-section" aria-label="Group members for this visit">
-                            <h6 class="mb-3">
-                                <i class="bi bi-people-fill"></i>
-                                Group Members
-                                <span class="badge bg-primary ms-2" id="member-count-badge">0 members</span>
-                            </h6>
-
-                            <!-- Meeting-sync notice (shown when a meeting is linked) -->
-                            <div id="meeting-sync-notice">
-                                <i class="bi bi-calendar-check-fill flex-shrink-0"></i>
-                                <span id="meeting-sync-notice-text">
-                                    Members are automatically populated from the linked meeting's accepted registrants.
-                                    You can still add additional members manually below.
-                                </span>
-                            </div>
-
-                            <div class="group-summary">
-                                <div class="group-summary-icon">
-                                    <i class="bi bi-people"></i>
-                                </div>
-                                <div class="group-summary-text">
-                                    <strong>Total Group Size</strong>
-                                    <div class="small text-muted">
-                                        Includes the primary visitor listed above.
-                                    </div>
-                                </div>
-                                <div class="group-summary-count" id="total-group-count">1</div>
-                            </div>
-
-                            <div id="group-members-container">
-                                <!-- Empty state -->
-                                <div class="empty-state" id="empty-members-state">
-                                    <i class="bi bi-person-plus-fill"></i>
-                                    <p class="mb-0" id="empty-members-text">
-                                        No additional group members have been added.<br>
-                                        Click <strong>"Add Group Member"</strong> to register each accompanying visitor.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <button type="button"
-                                    class="add-member-btn mt-2"
-                                    id="add-member-btn"
-                                    aria-label="Add a new group member">
-                                <i class="bi bi-plus-circle-fill"></i>
-                                Add Group Member
-                            </button>
-                        </div>
-
-                        <!-- Visit Details -->
-                        <div class="form-section">
-                            <h6>
-                                <i class="bi bi-building"></i>
-                                Visit Details
-                            </h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    {% if form.person_to_visit %}
-                                        <div class="mb-3 required-field">
-                                            {{ form.person_to_visit|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    {% if form.department_to_visit %}
-                                        <div class="mb-3">
-                                            {{ form.department_to_visit|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-12">
-                                    {% if form.purpose_of_visit %}
-                                        <div class="mb-3 required-field">
-                                            {{ form.purpose_of_visit|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4">
-                                    {% if form.expected_date %}
-                                        <div class="mb-3">
-                                            {{ form.expected_date|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4">
-                                    {% if form.expected_time %}
-                                        <div class="mb-3">
-                                            {{ form.expected_time|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                                <div class="col-md-4">
-                                    {% if form.estimated_duration %}
-                                        <div class="mb-3">
-                                            {{ form.estimated_duration|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ── Meeting Link ──────────────────────────────────────────────── -->
+                        <!-- ══ MEETING LINK SELECTOR (top, before anything else) ══ -->
                         {% if form.linked_booking %}
-                        <div class="form-section meeting-link-section" id="meeting-link-section">
-                            <h6>
-                                <i class="bi bi-calendar-event me-1"></i>
-                                Link to a Meeting
-                                <span class="badge ms-2"
-                                      style="background:#0ea5e9;font-size:.68rem;font-weight:500;letter-spacing:.03em;">
-                                    Optional
-                                </span>
-                            </h6>
-                            <p class="small text-muted mb-3" style="font-weight:400;text-transform:none;letter-spacing:0;">
+                        <div class="form-section meeting-section" id="meeting-link-section">
+                            <h6><i class="bi bi-calendar-event"></i> Link to a Meeting <span class="badge ms-1" style="background:#0ea5e9;font-size:.65rem;">Optional</span></h6>
+                            <p class="small text-muted mb-3" style="text-transform:none;letter-spacing:0;font-weight:400;">
                                 Select an upcoming approved meeting to link this access request.
-                                Accepted registrants will be automatically imported as group members and
-                                kept in sync whenever new people register — including after this request is saved.
+                                All visitor details will be auto-filled from the meeting and
+                                accepted registrants will be imported as group members automatically.
                             </p>
-
                             <div class="row align-items-end">
                                 <div class="col-md-8">
                                     <div class="mb-3">
@@ -563,7 +316,6 @@
                                     </div>
                                 </div>
                                 <div class="col-md-4 mb-3">
-                                    <!-- Live attendee-count preview -->
                                     <div id="meeting-attendee-preview" style="display:none;">
                                         <span class="meeting-preview-pill">
                                             <i class="bi bi-people-fill"></i>
@@ -575,65 +327,151 @@
                         </div>
                         {% endif %}
 
-                        <!-- Vehicle Information -->
-                        <div class="form-section">
-                            <h6>
-                                <i class="bi bi-car-front"></i>
-                                Vehicle Information (Optional)
-                            </h6>
+                        <!-- Meeting-linked banner (shown after selection) -->
+                        <div id="meeting-linked-banner" style="display:none;">
+                            <div class="meeting-link-banner">
+                                <div class="banner-icon"><i class="bi bi-calendar-check-fill"></i></div>
+                                <div>
+                                    <div class="banner-title" id="banner-meeting-title">Meeting Access Request</div>
+                                    <div class="banner-sub" id="banner-meeting-sub">Fields are auto-populated from the selected meeting. Greyed-out fields are locked.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Personal Information -->
+                        <div class="form-section" id="personal-section">
+                            <h6><i class="bi bi-person"></i> Primary Contact / Reference</h6>
                             <div class="row">
-                                <div class="col-12 mb-3">
-                                    {% if form.has_vehicle %}
-                                        {{ form.has_vehicle|as_crispy_field }}
-                                    {% endif %}
+                                <div class="col-md-6">
+                                    <div class="mb-3 required-field" id="field-wrap-full_name">
+                                        {{ form.full_name|as_crispy_field }}
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
-                                    {% if form.vehicle_plate %}
-                                        <div class="mb-3">
-                                            {{ form.vehicle_plate|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
+                                    <div class="mb-3" id="field-wrap-id_number">
+                                        {{ form.id_number|as_crispy_field }}
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
-                                    {% if form.vehicle_make %}
-                                        <div class="mb-3">
-                                            {{ form.vehicle_make|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
+                                    <div class="mb-3" id="field-wrap-phone">
+                                        {{ form.phone|as_crispy_field }}
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
-                                    {% if form.vehicle_model %}
-                                        <div class="mb-3">
-                                            {{ form.vehicle_model|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
+                                    <div class="mb-3" id="field-wrap-email">
+                                        {{ form.email|as_crispy_field }}
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
-                                    {% if form.vehicle_color %}
-                                        <div class="mb-3">
-                                            {{ form.vehicle_color|as_crispy_field }}
-                                        </div>
-                                    {% endif %}
+                                    <div class="mb-3" id="field-wrap-organization">
+                                        {{ form.organization|as_crispy_field }}
+                                    </div>
                                 </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3 required-field" id="field-wrap-visitor_type">
+                                        {{ form.visitor_type|as_crispy_field }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Group Members Section -->
+                        <div id="group-members-section" aria-label="Group members for this visit">
+                            <h6 class="mb-3">
+                                <i class="bi bi-people-fill"></i>
+                                Group Members
+                                <span class="badge bg-primary ms-2" id="member-count-badge">0 members</span>
+                            </h6>
+
+                            <div id="meeting-sync-notice">
+                                <i class="bi bi-calendar-check-fill flex-shrink-0"></i>
+                                <span>Accepted meeting registrants will be imported automatically when you save.
+                                      You can still add additional members manually.</span>
+                            </div>
+
+                            <div class="group-summary">
+                                <div style="font-size:2rem;color:#2196F3;"><i class="bi bi-people"></i></div>
+                                <div class="flex-grow-1">
+                                    <strong>Total Group Size</strong>
+                                    <div class="small text-muted">Includes primary contact above.</div>
+                                </div>
+                                <div class="group-summary-count" id="total-group-count">1</div>
+                            </div>
+
+                            <div id="group-members-container">
+                                <div class="text-center py-3 text-muted small" id="empty-members-state">
+                                    <i class="bi bi-person-plus-fill d-block mb-1" style="font-size:2rem;color:#bdbdbd;"></i>
+                                    <span id="empty-members-text">No additional members added. Click "Add Member" below.</span>
+                                </div>
+                            </div>
+
+                            <button type="button" class="add-member-btn mt-2" id="add-member-btn">
+                                <i class="bi bi-plus-circle-fill"></i> Add Group Member
+                            </button>
+                        </div>
+
+                        <!-- Visit Details -->
+                        <div class="form-section mt-3" id="visit-section">
+                            <h6><i class="bi bi-building"></i> Visit Details</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3 required-field" id="field-wrap-person_to_visit">
+                                        {{ form.person_to_visit|as_crispy_field }}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3" id="field-wrap-department_to_visit">
+                                        {{ form.department_to_visit|as_crispy_field }}
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="mb-3 required-field" id="field-wrap-purpose_of_visit">
+                                        {{ form.purpose_of_visit|as_crispy_field }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3" id="field-wrap-expected_date">
+                                        {{ form.expected_date|as_crispy_field }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3" id="field-wrap-expected_time">
+                                        {{ form.expected_time|as_crispy_field }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3" id="field-wrap-estimated_duration">
+                                        {{ form.estimated_duration|as_crispy_field }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Vehicle Information -->
+                        <div class="form-section" id="vehicle-section-wrap">
+                            <h6><i class="bi bi-car-front"></i> Vehicle Information <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Optional</span></h6>
+                            <div class="row">
+                                <div class="col-12 mb-3">{{ form.has_vehicle|as_crispy_field }}</div>
+                                <div class="col-md-6"><div class="mb-3">{{ form.vehicle_plate|as_crispy_field }}</div></div>
+                                <div class="col-md-6"><div class="mb-3">{{ form.vehicle_make|as_crispy_field }}</div></div>
+                                <div class="col-md-6"><div class="mb-3">{{ form.vehicle_model|as_crispy_field }}</div></div>
+                                <div class="col-md-6"><div class="mb-3">{{ form.vehicle_color|as_crispy_field }}</div></div>
                             </div>
                         </div>
 
                         <!-- Form Actions -->
                         <div class="d-flex justify-content-between align-items-center mt-4 flex-wrap gap-3">
-                            <div class="form-help-text d-flex align-items-center gap-1">
-                                <i class="bi bi-info-circle"></i>
-                                <span>
-                                    Visitor and vehicle details are recorded in line with UNDSS security procedures.
-                                </span>
-                            </div>
+                            <p class="small text-muted mb-0">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Details are recorded per UNDSS security procedures.
+                            </p>
                             <div class="d-flex gap-2">
                                 <button type="submit" class="btn btn-primary btn-lg">
                                     <i class="bi bi-{% if object %}check-circle{% else %}plus-circle{% endif %} me-2"></i>
                                     {% if object %}Save Changes{% else %}Register Visitor{% endif %}
                                 </button>
                                 <a href="{% url 'visitors:visitor_list' %}" class="btn btn-outline-secondary btn-lg">
-                                    <i class="bi bi-x-lg me-2"></i>
-                                    Cancel
+                                    <i class="bi bi-x-lg me-2"></i>Cancel
                                 </a>
                             </div>
                         </div>
@@ -641,141 +479,87 @@
                 </div>
             </div>
 
-            <!-- Quick Actions (edit mode) -->
             {% if object %}
-                <div class="d-flex flex-wrap gap-2 mt-3">
-                    <a class="btn btn-outline-primary btn-sm" href="{% url 'visitors:visitor_detail' object.pk %}">
-                        <i class="bi bi-eye me-1"></i>View Visitor Record
-                    </a>
-                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'visitors:visitor_list' %}">
-                        <i class="bi bi-list me-1"></i>Back to Visitor List
-                    </a>
-                </div>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <a class="btn btn-outline-primary btn-sm" href="{% url 'visitors:visitor_detail' object.pk %}">
+                    <i class="bi bi-eye me-1"></i>View Record
+                </a>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'visitors:visitor_list' %}">
+                    <i class="bi bi-list me-1"></i>Back to List
+                </a>
+            </div>
             {% endif %}
 
-            <!-- Information Alert -->
-            <div class="alert alert-info mt-3 mb-0">
-                <div class="d-flex align-items-start">
-                    <i class="bi bi-lightbulb me-2 mt-1"></i>
-                    <div>
-                        <strong>Registration guidance:</strong>
-                        Please confirm the visitor's host, purpose of visit, and identification details before submitting.
-                        For group visits, ensure each accompanying member is listed with their ID information.
-                        When linking to a meeting, accepted registrants are imported automatically — their IDs can be
-                        verified and completed at the gate.
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
 
-<!-- Hidden template for manually-added group member form -->
+<!-- Group member form template -->
 <template id="member-form-template">
     <div class="group-member-card" data-member-index="">
         <div class="member-number"></div>
-        <button type="button"
-                class="remove-member-btn"
-                title="Remove member"
-                aria-label="Remove this group member">
+        <button type="button" class="remove-member-btn" title="Remove member">
             <i class="bi bi-x-lg"></i>
         </button>
-
-        <div class="member-form-grid">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-top:1rem;">
             <div class="form-group">
-                <label class="form-label">Full Name <span class="text-danger">*</span></label>
-                <input type="text"
-                       class="form-control"
-                       name="member_full_name[]"
-                       required
-                       placeholder="As shown on ID">
+                <label>Full Name *</label>
+                <input type="text" class="form-control" name="member_full_name[]" required placeholder="As shown on ID">
             </div>
-
             <div class="form-group">
-                <label class="form-label">Contact Number</label>
-                <input type="text"
-                       class="form-control"
-                       name="member_contact[]"
-                       placeholder="+123 456 789">
+                <label>Contact Number</label>
+                <input type="text" class="form-control" name="member_contact[]" placeholder="+123 456 789">
             </div>
-
             <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email"
-                       class="form-control"
-                       name="member_email[]"
-                       placeholder="member@example.com">
+                <label>Email</label>
+                <input type="email" class="form-control" name="member_email[]" placeholder="member@example.com">
             </div>
-
             <div class="form-group">
-                <label class="form-label">ID Type <span class="text-danger">*</span></label>
-                <select class="form-control"
-                        name="member_id_type[]"
-                        required>
-                    <option value="">Select ID type</option>
+                <label>ID Type *</label>
+                <select class="form-control" name="member_id_type[]">
+                    <option value="">Select type</option>
                     <option value="passport">Passport</option>
-                    <option value="national_id">National ID Card</option>
+                    <option value="national_id">National ID</option>
                     <option value="driving_license">Driving Licence</option>
                     <option value="other">Other Photo ID</option>
                 </select>
             </div>
-
             <div class="form-group">
-                <label class="form-label">ID Number <span class="text-danger">*</span></label>
-                <input type="text"
-                       class="form-control"
-                       name="member_id_number[]"
-                       required
-                       placeholder="ID/Passport number">
+                <label>ID Number</label>
+                <input type="text" class="form-control" name="member_id_number[]" placeholder="ID/Passport number">
             </div>
-
             <div class="form-group">
-                <label class="form-label">Nationality</label>
-                <input type="text"
-                       class="form-control"
-                       name="member_nationality[]"
-                       placeholder="Country">
+                <label>Nationality</label>
+                <input type="text" class="form-control" name="member_nationality[]" placeholder="Country">
             </div>
         </div>
-
         <div class="form-group mt-3">
-            <label class="form-label">
-                <i class="bi bi-card-image me-1"></i>
-                ID Photo / Document (Optional)
-            </label>
-            <input type="file"
-                   class="form-control"
-                   name="member_id_photo[]"
-                   accept="image/*"
-                   onchange="previewIDPhoto(this)">
+            <label>ID Photo (Optional)</label>
+            <input type="file" class="form-control" name="member_id_photo[]" accept="image/*" onchange="previewIDPhoto(this)">
             <div class="id-photo-preview-container"></div>
         </div>
-
-        <div class="form-group mt-3">
-            <label class="form-label">Notes (Optional)</label>
-            <textarea class="form-control"
-                      name="member_notes[]"
-                      rows="2"
-                      placeholder="Any additional information"></textarea>
+        <div class="form-group mt-2">
+            <label>Notes</label>
+            <textarea class="form-control" name="member_notes[]" rows="2" placeholder="Additional information"></textarea>
         </div>
     </div>
 </template>
-
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// ─── State ───────────────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────────────────────
 let memberIndex = 0;
-let meetingLinked = false;   // true when a booking is selected
+let meetingLinked = false;
 
-// ─── ID photo preview ────────────────────────────────────────────────────────
+// ── ID photo preview ─────────────────────────────────────────────────────────
 function previewIDPhoto(input) {
     const container = input.parentElement.querySelector('.id-photo-preview-container');
+    if (!container) return;
     container.innerHTML = '';
     if (input.files && input.files[0]) {
         const reader = new FileReader();
-        reader.onload = function (e) {
+        reader.onload = e => {
             const img = document.createElement('img');
             img.src = e.target.result;
             img.className = 'id-photo-preview';
@@ -785,172 +569,162 @@ function previewIDPhoto(input) {
     }
 }
 
-// ─── Member count display ────────────────────────────────────────────────────
+// ── Member count badge ───────────────────────────────────────────────────────
 function updateMemberCount() {
     const cards = document.querySelectorAll('.group-member-card');
     const count = cards.length;
-    const totalCount = count + 1; // +1 for primary visitor
-
     const badge = document.getElementById('member-count-badge');
-    const totalGroupCount = document.getElementById('total-group-count');
-    const emptyState = document.getElementById('empty-members-state');
-
+    const totalEl = document.getElementById('total-group-count');
+    const emptyEl = document.getElementById('empty-members-state');
     if (badge) badge.textContent = `${count} member${count !== 1 ? 's' : ''}`;
-    if (totalGroupCount) totalGroupCount.textContent = totalCount;
-    if (emptyState) {
-        emptyState.style.display = count === 0 ? 'block' : 'none';
-        if (meetingLinked && count === 0) {
-            const txt = document.getElementById('empty-members-text');
-            if (txt) {
-                txt.innerHTML = `
-                    <i class="bi bi-arrow-repeat d-block mb-2" style="font-size:2rem;color:#0ea5e9;"></i>
-                    Meeting registrants will be imported automatically when you save.<br>
-                    You can also add additional members manually using the button below.
-                `;
-            }
-        }
-    }
-
-    cards.forEach((card, idx) => {
-        const numberBadge = card.querySelector('.member-number');
-        if (numberBadge) numberBadge.textContent = idx + 1;
+    if (totalEl) totalEl.textContent = count + 1;
+    if (emptyEl) emptyEl.style.display = count === 0 ? 'block' : 'none';
+    cards.forEach((card, i) => {
+        const num = card.querySelector('.member-number');
+        if (num) num.textContent = i + 1;
     });
 }
 
-// ─── Add group member manually ───────────────────────────────────────────────
-const addMemberBtn = document.getElementById('add-member-btn');
-if (addMemberBtn) {
-    addMemberBtn.addEventListener('click', function () {
-        const template = document.getElementById('member-form-template');
-        const container = document.getElementById('group-members-container');
-        if (!template || !container) return;
-
-        const clone = template.content.cloneNode(true);
-        const card = clone.querySelector('.group-member-card');
-        card.dataset.memberIndex = memberIndex++;
-
-        const removeBtn = clone.querySelector('.remove-member-btn');
-        if (removeBtn) {
-            removeBtn.addEventListener('click', function () {
-                card.remove();
-                updateMemberCount();
-            });
-        }
-
-        container.appendChild(clone);
+// ── Add group member ─────────────────────────────────────────────────────────
+document.getElementById('add-member-btn')?.addEventListener('click', function () {
+    const tpl = document.getElementById('member-form-template');
+    const container = document.getElementById('group-members-container');
+    if (!tpl || !container) return;
+    const clone = tpl.content.cloneNode(true);
+    const card = clone.querySelector('.group-member-card');
+    card.dataset.memberIndex = memberIndex++;
+    clone.querySelector('.remove-member-btn')?.addEventListener('click', () => {
+        card.remove();
         updateMemberCount();
+    });
+    container.appendChild(clone);
+    updateMemberCount();
+    setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+});
 
-        setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+// ── Toggle group section ─────────────────────────────────────────────────────
+function toggleGroupSection(type) {
+    const sec = document.getElementById('group-members-section');
+    if (!sec) return;
+    sec.classList.toggle('show', type === 'group');
+}
+
+// ── Lock / unlock fields when meeting is selected ────────────────────────────
+const LOCKED_FIELDS = [
+    'full_name', 'organization', 'phone', 'email',
+    'person_to_visit', 'department_to_visit',
+    'purpose_of_visit', 'expected_date', 'expected_time',
+    'estimated_duration', 'visitor_type',
+];
+
+function setFieldValue(fieldName, value) {
+    const el = document.getElementById('id_' + fieldName);
+    if (el) el.value = value;
+}
+
+function lockFields(lock) {
+    LOCKED_FIELDS.forEach(name => {
+        const el = document.getElementById('id_' + name);
+        const wrap = document.getElementById('field-wrap-' + name);
+        if (el) {
+            el.readOnly = lock;
+            el.disabled = false; // keep in POST but visually locked via CSS
+        }
+        if (wrap) wrap.classList.toggle('field-locked', lock);
     });
 }
 
-// ─── Toggle group section based on visitor type ──────────────────────────────
-function toggleGroupSection(visitorType) {
-    const section = document.getElementById('group-members-section');
-    if (!section) return;
-    if (visitorType === 'group') {
-        section.classList.add('show');
-    } else {
-        section.classList.remove('show');
-    }
-}
-
-// ─── Meeting booking selector ────────────────────────────────────────────────
+// ── Meeting selector handler ─────────────────────────────────────────────────
 function onBookingSelected(bookingId) {
-    const previewBox   = document.getElementById('meeting-attendee-preview');
-    const previewText  = document.getElementById('attendee-preview-text');
-    const syncNotice   = document.getElementById('meeting-sync-notice');
-    const typeSelect   = document.getElementById('id_visitor_type');
+    const preview    = document.getElementById('meeting-attendee-preview');
+    const previewTxt = document.getElementById('attendee-preview-text');
+    const syncNotice = document.getElementById('meeting-sync-notice');
+    const banner     = document.getElementById('meeting-linked-banner');
+    const bannerTitle = document.getElementById('banner-meeting-title');
+    const bannerSub   = document.getElementById('banner-meeting-sub');
+    const typeSelect = document.getElementById('id_visitor_type');
 
     meetingLinked = !!bookingId;
 
-    if (bookingId) {
-        // Force visitor_type to group
-        if (typeSelect) {
-            typeSelect.value = 'group';
-            typeSelect.dispatchEvent(new Event('change'));
-        }
-        toggleGroupSection('group');
-
-        // Show sync notice
-        if (syncNotice) syncNotice.classList.add('show');
-
-        // Fetch attendee count
-        if (previewBox && previewText) {
-            previewBox.style.display = 'block';
-            previewText.textContent = 'Loading…';
-
-            fetch(`/accounts/api/booking/${bookingId}/attendees/count/`)
-                .then(r => r.ok ? r.json() : Promise.reject())
-                .then(data => {
-                    const count = data.accepted_count || 0;
-                    previewText.innerHTML =
-                        `<strong>${count}</strong> accepted registrant${count !== 1 ? 's' : ''} will be imported`;
-                })
-                .catch(() => {
-                    previewText.textContent = 'Could not load count';
-                });
-        }
-
-        updateMemberCount();
-
-    } else {
-        meetingLinked = false;
-        if (previewBox) previewBox.style.display = 'none';
+    if (!bookingId) {
+        lockFields(false);
+        if (preview) preview.style.display = 'none';
         if (syncNotice) syncNotice.classList.remove('show');
-
-        // Restore empty-state text
-        const txt = document.getElementById('empty-members-text');
-        if (txt) {
-            txt.innerHTML = `No additional group members have been added.<br>
-                Click <strong>"Add Group Member"</strong> to register each accompanying visitor.`;
-        }
-
-        // Re-evaluate group section visibility from the type selector
+        if (banner) banner.style.display = 'none';
         if (typeSelect) toggleGroupSection(typeSelect.value);
+        return;
     }
+
+    // Fetch meeting details from the attendee count API (it returns booking info too)
+    // We'll hit a small visitors-side API that returns the booking info
+    fetch(`/visitors/api/booking-info/${bookingId}/`)
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(data => {
+            // Auto-populate fields
+            setFieldValue('full_name', `Access — ${data.title}`);
+            setFieldValue('organization', data.agency || data.requested_by_org || '');
+            setFieldValue('phone', data.host_phone || '');
+            setFieldValue('email', data.host_email || '');
+            setFieldValue('person_to_visit', data.host_name || '');
+            setFieldValue('department_to_visit', data.room || '');
+            setFieldValue('purpose_of_visit', `Meeting: ${data.title}${data.description ? '\n' + data.description : ''}`);
+            setFieldValue('expected_date', data.date || '');
+            setFieldValue('expected_time', data.start_time || '');
+            setFieldValue('estimated_duration', data.duration || '');
+            if (typeSelect) {
+                typeSelect.value = 'group';
+                typeSelect.dispatchEvent(new Event('change'));
+            }
+            lockFields(true);
+            toggleGroupSection('group');
+
+            if (syncNotice) syncNotice.classList.add('show');
+            if (banner) banner.style.display = 'block';
+            if (bannerTitle) bannerTitle.textContent = `Access for: ${data.title}`;
+            if (bannerSub) bannerSub.textContent =
+                `${data.date} · ${data.start_time}–${data.end_time} · ${data.room}`;
+
+            if (preview) preview.style.display = 'block';
+            if (previewTxt)
+                previewTxt.innerHTML = `<strong>${data.accepted_count || 0}</strong> accepted registrant${(data.accepted_count || 0) !== 1 ? 's' : ''} will be imported`;
+
+            updateMemberCount();
+        })
+        .catch(() => {
+            if (preview) preview.style.display = 'none';
+        });
 }
 
-// ─── DOMContentLoaded wiring ─────────────────────────────────────────────────
+// ── DOMContentLoaded ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
-    const form          = document.getElementById('visitor-form');
-    const visitorType   = document.getElementById('id_visitor_type');
-    const bookingSelect = document.getElementById('id_linked_booking');
+    const form       = document.getElementById('visitor-form');
+    const typeSelect = document.getElementById('id_visitor_type');
+    const bookingSel = document.getElementById('id_linked_booking');
 
-    // Visitor type → show/hide group section
-    if (visitorType) {
-        toggleGroupSection(visitorType.value);
-        visitorType.addEventListener('change', function () {
-            toggleGroupSection(this.value);
+    if (typeSelect) {
+        toggleGroupSection(typeSelect.value);
+        typeSelect.addEventListener('change', function () {
+            if (!meetingLinked) toggleGroupSection(this.value);
         });
     }
 
-    // Booking selector → live preview
-    if (bookingSelect) {
-        bookingSelect.addEventListener('change', function () {
+    if (bookingSel) {
+        bookingSel.addEventListener('change', function () {
             onBookingSelected(this.value);
         });
-        // Trigger on load (handles edit/re-submit scenario)
-        if (bookingSelect.value) onBookingSelected(bookingSelect.value);
+        if (bookingSel.value) onBookingSelected(bookingSel.value);
     }
 
-    // Unsaved-changes warning
+    // Unsaved changes warning
     let formChanged = false;
     if (form) {
-        form.querySelectorAll('input, select, textarea').forEach(input => {
-            input.addEventListener('change', () => { formChanged = true; });
+        form.querySelectorAll('input, select, textarea').forEach(el => {
+            el.addEventListener('change', () => { formChanged = true; });
         });
-        window.addEventListener('beforeunload', function (e) {
-            if (formChanged) {
-                e.preventDefault();
-                e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-                return e.returnValue;
-            }
+        window.addEventListener('beforeunload', e => {
+            if (formChanged) { e.preventDefault(); e.returnValue = ''; }
         });
         form.addEventListener('submit', () => { formChanged = false; });
-
-        const firstInput = form.querySelector('input:not([type="hidden"]), select, textarea');
-        if (firstInput) firstInput.focus();
     }
 
     updateMemberCount();

@@ -27,6 +27,17 @@ from django.contrib.auth import get_user_model
 from .models import Visitor, VisitorLog, VisitorCard, GroupMember
 from .forms import VisitorForm, VisitorApprovalForm, QuickVisitorCheckForm, GateCheckForm
 
+# ── Member gate-action views (imported so urls.py can use a single views module)
+from .views_member_actions import (
+    member_checkin,
+    member_checkout,
+    member_flag_attention,
+    member_clear_attention,
+    member_update_field,
+    member_upload_photo,
+    booking_info_api,
+)
+
 logger = logging.getLogger(__name__)
 
 User = get_user_model()

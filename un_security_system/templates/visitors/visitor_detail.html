@@ -4,160 +4,168 @@
 
 {% block extra_css %}
 <style>
+  :root {
+    --un-blue: #009edb;
+    --un-dark-blue: #1f4788;
+  }
+
+  /* ── Status badges ── */
   .status-badge {
-    padding: 0.5rem 1rem;
-    border-radius: 2rem;
-    font-weight: 600;
-    font-size: 0.875rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
+    padding: 0.45rem 1rem; border-radius: 2rem;
+    font-weight: 700; font-size: 0.8rem;
+    display: inline-flex; align-items: center; gap: 0.4rem;
+  }
+  .status-pending    { background:#fff3cd;  color:#856404; border:2px solid #ffc107; }
+  .status-approved   { background:#d1e7dd;  color:#0f5132; border:2px solid #198754; }
+  .status-rejected   { background:#f8d7da;  color:#842029; border:2px solid #dc3545; }
+  .status-cancelled  { background:#e2e3e5;  color:#41464b; border:2px solid #6c757d; }
+  .status-in-compound{ background:#d1f4e0;  color:#0f5132; border:2px solid #20c997; }
+  .status-checked-out{ background:#cfe2ff;  color:#084298; border:2px solid #0d6efd; }
+  .status-not-checked{ background:#f8f9fa;  color:#495057; border:2px solid #dee2e6; }
+
+  /* ── Info grid ── */
+  .header-card { background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%); color:#fff; border:none; margin-bottom:1.5rem; }
+  .info-grid { display:grid; gap:0.75rem; }
+  .info-item { display:flex; padding:0.65rem 0.75rem; border-radius:0.5rem; background:#f8f9fa; transition:background 0.2s; }
+  .info-item:hover { background:#e9ecef; }
+  .info-label { font-weight:600; color:#6c757d; min-width:140px; display:flex; align-items:center; gap:0.4rem; font-size:.85rem; }
+  .info-value { color:#212529; flex:1; font-size:.9rem; }
+  .section-header { display:flex; align-items:center; gap:0.5rem; font-weight:700; color:#495057; margin-bottom:1rem; padding-bottom:0.5rem; border-bottom:2px solid #e9ecef; font-size:.9rem; }
+  .action-card { border-left:4px solid var(--un-blue); background:#f8f9fa; }
+  .quick-action-btn { transition:all 0.2s; }
+  .quick-action-btn:hover { transform:translateY(-2px); box-shadow:0 4px 8px rgba(0,0,0,.1); }
+
+  /* ── Timeline ── */
+  .timeline-item { position:relative; padding-left:2rem; padding-bottom:1.5rem; border-left:2px solid #dee2e6; }
+  .timeline-item:last-child { border-left:2px solid transparent; padding-bottom:0; }
+  .timeline-dot { position:relative; left:-0.5rem; top:0.25rem; width:1rem; height:1rem; background:var(--un-blue); border-radius:50%; border:3px solid #fff; box-shadow:0 0 0 2px var(--un-blue); }
+
+  /* ── Meeting link banner ── */
+  .meeting-link-banner {
+    background: linear-gradient(135deg, #1e3a8a 0%, #0ea5e9 100%);
+    color: #fff; border-radius: 12px;
+    padding: 1rem 1.25rem; margin-bottom: 1.25rem;
   }
 
-  .status-pending { background: #fff3cd; color: #856404; border: 2px solid #ffc107; }
-  .status-approved { background: #d1e7dd; color: #0f5132; border: 2px solid #198754; }
-  .status-rejected { background: #f8d7da; color: #842029; border: 2px solid #dc3545; }
-  .status-cancelled { background: #e2e3e5; color: #41464b; border: 2px solid #6c757d; }
-  .status-in-compound { background: #d1f4e0; color: #0f5132; border: 2px solid #20c997; }
-  .status-checked-out { background: #cfe2ff; color: #084298; border: 2px solid #0d6efd; }
-  .status-not-checked { background: #f8f9fa; color: #495057; border: 2px solid #dee2e6; }
-
-  /* NEW: clearance window badges */
-  .status-valid { background: #d1e7dd; color: #0f5132; border: 2px solid #198754; }
-  .status-expired { background: #fff3cd; color: #856404; border: 2px solid #f59f00; }
-  .status-not-started { background: #e2e3e5; color: #41464b; border: 2px solid #6c757d; }
-
-  .header-card {
-    background: linear-gradient(135deg, #0d6efd 0%, #0dcaf0 100%);
-    color: white;
-    border: none;
-    margin-bottom: 1.5rem;
-  }
-
-  .info-grid { display: grid; gap: 1rem; }
-
-  .info-item {
-    display: flex;
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    background: #f8f9fa;
-    transition: all 0.2s;
-  }
-
-  .info-item:hover { background: #e9ecef; }
-
-  .info-label {
-    font-weight: 600;
-    color: #6c757d;
-    min-width: 140px;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .info-value { color: #212529; flex: 1; }
-
-  .action-card { border-left: 4px solid #0d6efd; background: #f8f9fa; }
-
-  .timeline-item {
-    position: relative;
-    padding-left: 2rem;
-    padding-bottom: 1.5rem;
-    border-left: 2px solid #dee2e6;
-  }
-
-  .timeline-item:last-child { border-left: 2px solid transparent; padding-bottom: 0; }
-
-  .timeline-dot {
-    position: relative;
-    left: -0.5rem;
-    top: 0.25rem;
-    width: 1rem;
-    height: 1rem;
-    background: #0d6efd;
-    border-radius: 50%;
-    border: 3px solid white;
-    box-shadow: 0 0 0 2px #0d6efd;
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 600;
-    color: #495057;
+  /* ── Member card ── */
+  .member-card {
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
     margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid #e9ecef;
+    transition: box-shadow .2s;
+    background: #fff;
+  }
+  .member-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  .member-card-header {
+    padding: 0.75rem 1rem;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #f1f5f9;
+    background: #f8fafc;
+  }
+  .member-card-body { padding: 0.9rem 1rem; }
+
+  /* Member status pills */
+  .member-status { font-size:.72rem; font-weight:700; padding:.15rem .55rem; border-radius:999px; }
+  .member-status.in    { background:#d1f4e0; color:#0f5132; border:1px solid #86efac; }
+  .member-status.out   { background:#cfe2ff; color:#084298; border:1px solid #93c5fd; }
+  .member-status.none  { background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; }
+  .member-status.flag  { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+  .member-status.meet  { background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; }
+
+  /* Per-member action buttons */
+  .member-action-btn {
+    font-size:.75rem; padding:.25rem .6rem; border-radius:6px;
+    display:inline-flex; align-items:center; gap:.3rem;
+    font-weight:600; transition:all .15s;
+  }
+  .member-action-btn:hover { transform:translateY(-1px); }
+
+  /* Edit icon on detail fields */
+  .editable-field-row {
+    display:flex; align-items:center; gap:.5rem;
+    font-size:.85rem; color:#374151; padding:.25rem 0;
+  }
+  .edit-field-btn {
+    border:none; background:transparent; padding:.1rem .3rem;
+    color:#94a3b8; cursor:pointer; border-radius:4px; transition:color .15s;
+    flex-shrink:0;
+  }
+  .edit-field-btn:hover { color:var(--un-blue); background:#e0f2fe; }
+
+  /* ID photo in member card */
+  .member-photo {
+    width:80px; height:80px; object-fit:cover;
+    border-radius:8px; border:2px solid #e2e8f0; cursor:pointer;
+    transition:transform .2s;
+  }
+  .member-photo:hover { transform:scale(1.05); }
+  .photo-placeholder {
+    width:80px; height:80px; border-radius:8px; border:2px dashed #cbd5e1;
+    display:flex; align-items:center; justify-content:center;
+    color:#94a3b8; font-size:1.5rem; cursor:pointer;
+    background:#f8fafc; transition:background .15s;
+  }
+  .photo-placeholder:hover { background:#e0f2fe; color:var(--un-blue); }
+
+  /* Need-attention chip */
+  .attention-badge {
+    font-size:.7rem; font-weight:700; padding:.2rem .6rem; border-radius:999px;
+    background:#fef3c7; color:#92400e; border:1px solid #fde68a;
+    display:inline-flex; align-items:center; gap:.3rem; animation:pulse-warn 2s infinite;
+  }
+  @keyframes pulse-warn {
+    0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.4); }
+    50%      { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
   }
 
-  .quick-action-btn { transition: all 0.2s; }
-  .quick-action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-
-  .alert-gate-status { border-left: 4px solid; background: #f8f9fa; }
-  .alert-gate-status.can-checkin { border-color: #198754; }
-  .alert-gate-status.in-compound { border-color: #20c997; }
-  .alert-gate-status.no-action { border-color: #6c757d; }
-
-  .id-document-preview { transition: all 0.3s ease; }
-  .id-document-preview img:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  /* Alert gate status */
+  .alert-gate-status { border-left:4px solid; background:#f8f9fa; }
+  .alert-gate-status.can-checkin { border-color:#198754; }
+  .alert-gate-status.in-compound  { border-color:#20c997; }
+  .alert-gate-status.no-action    { border-color:#6c757d; }
 </style>
 {% endblock %}
 
 {% block content %}
 {% with visitor=visitor|default:object %}
 
-<div class="container" style="max-width: 1200px;">
+<div class="container" style="max-width:1200px;">
 
-  <!-- Header Card -->
+  <!-- ═══ HEADER CARD ═══ -->
   <div class="card header-card shadow-sm">
     <div class="card-body p-4">
       <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
         <div>
-          <h2 class="mb-2">
-            <i class="bi bi-person-badge-fill"></i>
-            {{ visitor.full_name|default:"Visitor" }}
+          <h2 class="mb-1">
+            <i class="bi bi-person-badge-fill me-2"></i>{{ visitor.full_name|default:"Visitor" }}
+            {% if visitor.is_meeting_linked %}
+              <span class="badge ms-2" style="background:#0ea5e9;font-size:.6rem;vertical-align:middle;">Meeting Access</span>
+            {% endif %}
           </h2>
-          <div class="opacity-75">
-            <i class="bi bi-calendar-check"></i>
+          <div class="opacity-75 small">
+            <i class="bi bi-calendar-check me-1"></i>
             Registered {{ visitor.registered_at|date:"M d, Y" }} at {{ visitor.registered_at|date:"H:i" }}
             {% if visitor.registered_by %}
-              <span class="mx-2">·</span>
-              <i class="bi bi-person"></i> by {{ visitor.registered_by.username }}
+              <span class="mx-2">·</span><i class="bi bi-person me-1"></i>{{ visitor.registered_by.get_full_name|default:visitor.registered_by.username }}
             {% endif %}
           </div>
           {% if visitor.organization %}
-            <div class="opacity-75 mt-1">
-              <i class="bi bi-building"></i> {{ visitor.organization }}
-            </div>
+          <div class="opacity-75 small mt-1">
+            <i class="bi bi-building me-1"></i>{{ visitor.organization }}
+          </div>
           {% endif %}
         </div>
-
-       <div class="d-flex gap-2 align-items-start">
-        {% if visitor.checked_in and not visitor.checked_out %}
-          <span class="status-badge status-in-compound">
-            <i class="bi bi-geo-alt-fill"></i> In Compound
-          </span>
-
-        {% elif visitor.checked_out and visitor.status == 'approved' and visitor.clearance_is_active_today and visitor.clearance_valid_from or visitor.clearance_valid_until %}
-          <span class="status-badge status-approved">
-            <i class="bi bi-arrow-repeat"></i> Returning Visitor
-          </span>
-
-        {% elif visitor.checked_out %}
-          <span class="status-badge status-checked-out">
-            <i class="bi bi-check-circle-fill"></i> Checked Out
-          </span>
-
-        {# 4) Never checked in #}
-        {% else %}
-          <span class="status-badge status-not-checked">
-            <i class="bi bi-dash-circle"></i> Not Checked In
-          </span>
-         {% endif %}
-
-          <a class="btn btn-light" href="{% url 'visitors:visitor_list' %}" title="Back to visitor list">
-            <i class="bi bi-arrow-left"></i> Back
+        <div class="d-flex gap-2 align-items-start flex-wrap">
+          {% if visitor.checked_in and not visitor.checked_out %}
+            <span class="status-badge status-in-compound"><i class="bi bi-geo-alt-fill"></i> In Compound</span>
+          {% elif visitor.checked_out %}
+            <span class="status-badge status-checked-out"><i class="bi bi-check-circle-fill"></i> Checked Out</span>
+          {% else %}
+            <span class="status-badge status-not-checked"><i class="bi bi-dash-circle"></i> Not Checked In</span>
+          {% endif %}
+          <a class="btn btn-light btn-sm" href="{% url 'visitors:visitor_list' %}">
+            <i class="bi bi-arrow-left me-1"></i>Back
           </a>
         </div>
       </div>
@@ -166,360 +174,410 @@
 
   <div class="row g-4">
 
-    <!-- Left Column -->
+    <!-- ═══ LEFT COLUMN ═══ -->
     <div class="col-lg-8">
+
+      <!-- Meeting link banner -->
+      {% if visitor.linked_booking %}
+      <div class="meeting-link-banner">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+          <div class="d-flex align-items-center gap-3">
+            <i class="bi bi-calendar-check-fill" style="font-size:1.5rem;opacity:.9;"></i>
+            <div>
+              <div class="fw-bold">{{ visitor.linked_booking.title }}</div>
+              <div class="small opacity-85">
+                {{ visitor.linked_booking.date|date:"l, d F Y" }}
+                &nbsp;·&nbsp;{{ visitor.linked_booking.start_time|time:"H:i" }}–{{ visitor.linked_booking.end_time|time:"H:i" }}
+                &nbsp;·&nbsp;{{ visitor.linked_booking.room.name }}
+                {% if linked_attendee_count is not None %}
+                  &nbsp;·&nbsp;<strong>{{ linked_attendee_count }}</strong> accepted
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <a href="{% url 'accounts:booking_detail' visitor.linked_booking.pk %}" class="btn btn-sm btn-light" target="_blank">
+              <i class="bi bi-box-arrow-up-right me-1"></i>Meeting
+            </a>
+            {% if request.user.is_superuser or request.user.role in 'lsa,soc' or visitor.registered_by == request.user %}
+            <form method="post" action="{% url 'visitors:sync_meeting_members' visitor.pk %}" class="d-inline"
+                  onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span>Syncing…';">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-light">
+                <i class="bi bi-arrow-repeat me-1"></i>Sync Now
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
 
       <!-- Visit Information -->
       <div class="card shadow-sm mb-4">
         <div class="card-body p-4">
           <div class="section-header">
-            <i class="bi bi-info-circle-fill text-primary"></i>
-            <span>Visit Information</span>
+            <i class="bi bi-info-circle-fill text-primary"></i>Visit Information
           </div>
-
           <div class="info-grid">
             <div class="info-item">
-              <div class="info-label">
-                <i class="bi bi-person"></i> Full Name
-              </div>
+              <div class="info-label"><i class="bi bi-person"></i> Full Name</div>
               <div class="info-value">{{ visitor.full_name|default:"—" }}</div>
             </div>
-
             <div class="info-item">
-              <div class="info-label">
-                <i class="bi bi-building"></i> Organization
-              </div>
+              <div class="info-label"><i class="bi bi-building"></i> Organization</div>
               <div class="info-value">{{ visitor.organization|default:"—" }}</div>
             </div>
-
             <div class="info-item">
-              <div class="info-label">
-                <i class="bi bi-journal-text"></i> Purpose
-              </div>
+              <div class="info-label"><i class="bi bi-journal-text"></i> Purpose</div>
               <div class="info-value">{{ visitor.purpose_of_visit|default:"—" }}</div>
             </div>
-
             <div class="info-item">
-              <div class="info-label">
-                <i class="bi bi-calendar-event"></i> Visit Date
-              </div>
+              <div class="info-label"><i class="bi bi-calendar-event"></i> Visit Date</div>
               <div class="info-value">
-                {% if visitor.expected_date %}
-                  {{ visitor.expected_date|date:"l, F d, Y" }}
-                {% else %}
-                  —
-                {% endif %}
+                {% if visitor.expected_date %}{{ visitor.expected_date|date:"l, F d, Y" }}{% else %}—{% endif %}
               </div>
             </div>
-
             <div class="info-item">
-              <div class="info-label">
-                <i class="bi bi-person-check"></i> Host Staff
-              </div>
+              <div class="info-label"><i class="bi bi-person-check"></i> Host</div>
               <div class="info-value">{{ visitor.person_to_visit|default:"—" }}</div>
             </div>
-
             <div class="row g-0">
               <div class="col-md-6">
                 <div class="info-item me-md-2">
-                  <div class="info-label">
-                    <i class="bi bi-telephone"></i> Phone
-                  </div>
+                  <div class="info-label"><i class="bi bi-telephone"></i> Phone</div>
                   <div class="info-value">{{ visitor.phone|default:"—" }}</div>
                 </div>
               </div>
               <div class="col-md-6">
                 <div class="info-item ms-md-2 mt-3 mt-md-0">
-                  <div class="info-label">
-                    <i class="bi bi-envelope"></i> Email
-                  </div>
+                  <div class="info-label"><i class="bi bi-envelope"></i> Email</div>
                   <div class="info-value">{{ visitor.email|default:"—" }}</div>
                 </div>
               </div>
             </div>
-
-            <!-- NEW: Clearance validity window shown here too (nice for quick scanning) -->
             {% if visitor.clearance_valid_from or visitor.clearance_valid_until %}
-              <div class="info-item">
-                <div class="info-label">
-                  <i class="bi bi-calendar-range"></i> Clearance Window -
-                </div>
-                <div class="info-value">
-                  {% if visitor.clearance_valid_from %} From <strong>{{ visitor.clearance_valid_from|date:"M d, Y" }}</strong>{% else %}From <strong>—</strong>{% endif %}
-                  <span class="mx-2">·</span>
-                  {% if visitor.clearance_valid_until %}Until <strong>{{ visitor.clearance_valid_until|date:"M d, Y" }}</strong>{% else %}Until <strong>—</strong>{% endif %}
-                </div>
+            <div class="info-item">
+              <div class="info-label"><i class="bi bi-calendar-range"></i> Clearance</div>
+              <div class="info-value">
+                {% if visitor.clearance_valid_from %}From <strong>{{ visitor.clearance_valid_from|date:"M d, Y" }}</strong>{% endif %}
+                {% if visitor.clearance_valid_until %} · Until <strong>{{ visitor.clearance_valid_until|date:"M d, Y" }}</strong>{% endif %}
               </div>
+            </div>
             {% endif %}
-
           </div>
         </div>
       </div>
 
-      <!-- Vehicle Information -->
+      <!-- Vehicle -->
+      {% if visitor.has_vehicle %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-body p-4">
+          <div class="section-header">
+            <i class="bi bi-car-front-fill text-primary"></i>Vehicle
+            <span class="badge bg-primary ms-auto small">Registered</span>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label"><i class="bi bi-tag"></i> Plate</div>
+              <div class="info-value fw-bold">{{ visitor.vehicle_plate|default:"—" }}</div>
+            </div>
+            <div class="row g-0">
+              <div class="col-md-6">
+                <div class="info-item me-md-2">
+                  <div class="info-label"><i class="bi bi-car-front"></i> Make/Model</div>
+                  <div class="info-value">{{ visitor.vehicle_make|default:"" }} {{ visitor.vehicle_model|default:"" }}</div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="info-item ms-md-2 mt-3 mt-md-0">
+                  <div class="info-label"><i class="bi bi-palette"></i> Color</div>
+                  <div class="info-value">{{ visitor.vehicle_color|default:"—" }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ═══ GROUP MEMBERS ═══ -->
+      {% if visitor.visitor_type == 'group' %}
       <div class="card shadow-sm">
         <div class="card-body p-4">
           <div class="section-header">
-            <i class="bi bi-car-front-fill text-primary"></i>
-            <span>Vehicle Information</span>
-            {% if visitor.has_vehicle %}
-              <span class="badge bg-primary ms-auto">Has Vehicle</span>
-            {% else %}
-              <span class="badge bg-secondary ms-auto">No Vehicle</span>
+            <i class="bi bi-people-fill text-primary"></i>
+            {% if visitor.is_meeting_linked %}Meeting Attendees{% else %}Group Members{% endif %}
+            <span class="badge bg-primary ms-auto">{{ visitor.group_members.count }}</span>
+            {% if visitor.is_meeting_linked %}
+            <span class="badge bg-success ms-1" title="Checked in">{{ visitor.members_checked_in_count }} in</span>
+            {% if visitor.members_pending_count %}
+            <span class="badge bg-warning text-dark ms-1">{{ visitor.members_pending_count }} pending</span>
+            {% endif %}
             {% endif %}
           </div>
 
-          {% if visitor.has_vehicle %}
-            <div class="info-grid">
-              <div class="info-item">
-                <div class="info-label">
-                  <i class="bi bi-tag"></i> Plate Number
-                </div>
-                <div class="info-value fw-bold">{{ visitor.vehicle_plate|default:"—" }}</div>
-              </div>
-
-              <div class="row g-0">
-                <div class="col-md-6">
-                  <div class="info-item me-md-2">
-                    <div class="info-label">
-                      <i class="bi bi-car-front"></i> Make/Model
-                    </div>
-                    <div class="info-value">
-                      {% if visitor.vehicle_make or visitor.vehicle_model %}
-                        {{ visitor.vehicle_make|default:"" }} {{ visitor.vehicle_model|default:"" }}
-                      {% else %}
-                        —
-                      {% endif %}
-                    </div>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="info-item ms-md-2 mt-3 mt-md-0">
-                    <div class="info-label">
-                      <i class="bi bi-palette"></i> Color
-                    </div>
-                    <div class="info-value">{{ visitor.vehicle_color|default:"—" }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          {% else %}
-            <p class="text-muted mb-0">This visitor has not registered a vehicle.</p>
-          {% endif %}
-        </div>
-      </div>
-
-      <!-- Group Members Section -->
-      {% if visitor.linked_booking %}
-<div class="alert d-flex align-items-start align-items-md-center
-            justify-content-between flex-column flex-md-row gap-3
-            py-2 px-3 mb-3"
-     style="background:#dbeafe;border:1px solid #bfdbfe;border-radius:10px;">
-
-    <div class="d-flex align-items-center gap-2">
-        <span style="font-size:1.25rem;color:#1d4ed8;">
-            <i class="bi bi-calendar-check-fill"></i>
-        </span>
-        <div>
-            <div class="fw-semibold" style="color:#1e3a8a;font-size:.9rem;">
-                Linked meeting: {{ visitor.linked_booking.title }}
-            </div>
-            <div class="small" style="color:#3b82f6;">
-                {{ visitor.linked_booking.date|date:"l, d F Y" }}
-                &nbsp;·&nbsp;
-                {{ visitor.linked_booking.start_time|time:"H:i" }}–{{ visitor.linked_booking.end_time|time:"H:i" }}
-                &nbsp;·&nbsp;
-                {{ visitor.linked_booking.room.name }}
-                {% if linked_attendee_count is not None %}
-                &nbsp;·&nbsp;
-                <strong>{{ linked_attendee_count }}</strong> accepted registrant{{ linked_attendee_count|pluralize }}
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <div class="d-flex align-items-center gap-2 flex-shrink-0">
-        {# Link to the meeting booking detail (uses accounts namespace) #}
-        <a href="{% url 'accounts:booking_detail' visitor.linked_booking.pk %}"
-           class="btn btn-sm btn-outline-primary"
-           target="_blank"
-           title="Open meeting">
-            <i class="bi bi-box-arrow-up-right me-1"></i>View Meeting
-        </a>
-
-        {# Sync button — POST to re-pull accepted attendees #}
-        {% if request.user.is_superuser or request.user.role in 'lsa,soc' or visitor.registered_by == request.user %}
-        <form method="post"
-              action="{% url 'visitors:sync_meeting_members' visitor.pk %}"
-              class="d-inline"
-              onsubmit="this.querySelector('button').disabled=true;
-                        this.querySelector('button').innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span>Syncing…';">
-            {% csrf_token %}
-            <button type="submit"
-                    class="btn btn-sm btn-primary"
-                    title="Re-pull accepted registrants from this meeting">
-                <i class="bi bi-arrow-repeat me-1"></i>Sync Now
-            </button>
-        </form>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
-
-      {% if visitor.visitor_type == 'group' %}
-      <div class="card shadow-sm mt-4">
-        <div class="card-body p-4">
-          <div class="section-header">
-            <i class="bi bi-people-fill text-primary"></i>
-            <span>Group Members</span>
-            <span class="badge bg-primary ms-auto">
-              {{ visitor.group_members.count }} member{{ visitor.group_members.count|pluralize }}
-            </span>
-          </div>
-
           {% if visitor.group_members.exists %}
-            <div class="alert alert-info mb-3">
-              <i class="bi bi-info-circle me-2"></i>
-              <strong>Total Group Size:</strong> {{ visitor.total_group_size }} person{{ visitor.total_group_size|pluralize }}
-              (including primary visitor)
+
+            {# Summary bar for meeting-linked visitors #}
+            {% if visitor.is_meeting_linked %}
+            <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3">
+              <i class="bi bi-info-circle-fill flex-shrink-0"></i>
+              <span class="small">
+                For meeting-linked access, <strong>there is no single group check-in</strong>.
+                Each attendee is individually checked in using the button on their card below.
+                ID and visitor card are captured at the gate per person.
+              </span>
             </div>
+            {% else %}
+            {% if visitor.checked_in %}
+            <div class="alert alert-success d-flex align-items-center gap-2 py-2 mb-3">
+              <i class="bi bi-check-circle-fill flex-shrink-0"></i>
+              <span class="small">
+                Primary visitor checked in. Members not yet individually verified can be
+                checked in using the button on each card below.
+              </span>
+            </div>
+            {% endif %}
+            {% endif %}
 
-            <div class="row g-3">
-              {% for member in visitor.group_members.all %}
-              <div class="col-12">
-                <div class="card border-start border-primary border-3 shadow-sm">
-                  <div class="card-body">
-                    <div class="row align-items-start">
-                      <div class="col-md-8">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                          <h6 class="mb-0">
-                            <i class="bi bi-person-badge me-2"></i>
-                            {{ member.full_name }}
-                          </h6>
+            {% for member in visitor.group_members.all %}
+            <div class="member-card" id="member-card-{{ member.pk }}">
 
-                          {% if user.is_authenticated %}
-                            {% if visitor.checked_out %}
-                              {% if user.is_superuser %}
-                                <a href="{% url 'visitors:delete_group_member' visitor.pk member.pk %}"
-                                   class="btn btn-sm btn-outline-danger" title="Remove member">
-                                  <i class="bi bi-trash"></i>
-                                </a>
-                              {% endif %}
-                            {% else %}
-                              {% if user.is_superuser or user.role == 'lsa' or user.role == 'soc' or user == visitor.registered_by %}
-                                <a href="{% url 'visitors:delete_group_member' visitor.pk member.pk %}"
-                                   class="btn btn-sm btn-outline-danger" title="Remove member">
-                                  <i class="bi bi-trash"></i>
-                                </a>
-                              {% endif %}
-                            {% endif %}
-                          {% endif %}
-                        </div>
+              <!-- Member card header -->
+              <div class="member-card-header">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <strong class="small">{{ member.full_name }}</strong>
 
-                        <div class="row g-2 small">
-                          <div class="col-sm-6">
-                            <div class="d-flex align-items-center text-muted mb-1">
-                              <i class="bi bi-credit-card-2-front me-2"></i>
-                              <strong class="me-1">{{ member.get_id_type_display }}:</strong>
-                              {{ member.id_number }}
-                            </div>
-                          </div>
+                  {# Status pill #}
+                  {% if member.checked_in and not member.checked_out %}
+                    <span class="member-status in"><i class="bi bi-check-circle-fill me-1"></i>In</span>
+                  {% elif member.checked_out %}
+                    <span class="member-status out"><i class="bi bi-arrow-right-circle me-1"></i>Out</span>
+                  {% else %}
+                    <span class="member-status none"><i class="bi bi-dash-circle me-1"></i>Pending</span>
+                  {% endif %}
 
-                          {% if member.nationality %}
-                          <div class="col-sm-6">
-                            <div class="d-flex align-items-center text-muted mb-1">
-                              <i class="bi bi-flag me-2"></i>
-                              <strong class="me-1">Nationality:</strong>
-                              {{ member.nationality }}
-                            </div>
-                          </div>
-                          {% endif %}
+                  {% if member.from_meeting %}
+                    <span class="member-status meet"><i class="bi bi-calendar2-check me-1"></i>Meeting</span>
+                  {% endif %}
 
-                          {% if member.contact_number %}
-                          <div class="col-sm-6">
-                            <div class="d-flex align-items-center text-muted mb-1">
-                              <i class="bi bi-telephone me-2"></i>
-                              <strong class="me-1">Contact:</strong>
-                              {{ member.contact_number }}
-                            </div>
-                          </div>
-                          {% endif %}
-
-                          {% if member.email %}
-                          <div class="col-sm-6">
-                            <div class="d-flex align-items-center text-muted mb-1">
-                              <i class="bi bi-envelope me-2"></i>
-                              <strong class="me-1">Email:</strong>
-                              {{ member.email }}
-                            </div>
-                          </div>
-                          {% endif %}
-                        </div>
-
-                        {% if member.notes %}
-                        <div class="mt-2 small">
-                          <strong class="text-muted">Notes:</strong>
-                          <p class="mb-0 ms-3">{{ member.notes }}</p>
-                        </div>
-                        {% endif %}
-                      </div>
-
-                      <div class="col-md-4 text-end">
-                        {% if member.id_photo %}
-                        <div class="id-document-preview">
-                          <img src="{{ member.id_photo.url }}"
-                               alt="{{ member.full_name }} ID"
-                               class="img-thumbnail"
-                               style="max-width: 200px; max-height: 150px; cursor: pointer;"
-                               onclick="showImageModal(this.src, '{{ member.full_name }} - ID Document')">
-                          <div class="small text-muted mt-1">
-                            <i class="bi bi-card-image"></i> ID Document
-                          </div>
-                        </div>
-                        {% else %}
-                        <div class="text-muted small">
-                          <i class="bi bi-file-earmark-x"></i>
-                          <br>No ID photo uploaded
-                        </div>
-                        {% endif %}
-                      </div>
-                      {% if member.from_meeting %}
-                      <span class="badge ms-1"
-                            style="background:#dbeafe;color:#1e40af;font-size:.7rem;font-weight:600;
-                                   border:1px solid #bfdbfe;border-radius:999px;padding:.15rem .5rem;"
-                            title="Auto-synced from meeting registration">
-                          <i class="bi bi-calendar2-check me-1"></i>Meeting
-                      </span>
+                  {% if member.needs_attention %}
+                    <span class="attention-badge"><i class="bi bi-exclamation-triangle-fill"></i>Needs Attention</span>
                   {% endif %}
 
                   {% if not member.id_number %}
-                      <span class="badge ms-1"
-                            style="background:#fef3c7;color:#92400e;font-size:.7rem;font-weight:600;
-                                   border:1px solid #fde68a;border-radius:999px;padding:.15rem .5rem;"
-                            title="ID not yet captured — will be verified at the gate">
-                          <i class="bi bi-exclamation-circle me-1"></i>ID pending
-                      </span>
+                    <span class="member-status flag"><i class="bi bi-exclamation-circle me-1"></i>ID pending</span>
+                  {% endif %}
+                </div>
+
+                <!-- Header action buttons -->
+                <div class="d-flex gap-1 flex-shrink-0">
+                  {% if user.is_superuser or user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+
+                    {# Individual check-in button #}
+                    {% if not member.checked_in %}
+                    <button type="button"
+                            class="member-action-btn btn btn-sm btn-success"
+                            data-member-action="checkin"
+                            data-member-pk="{{ member.pk }}"
+                            data-member-name="{{ member.full_name|escapejs }}"
+                            onclick="openMemberCheckin({{ member.pk }}, '{{ member.full_name|escapejs }}', '{{ member.id_number|escapejs }}', {% if member.id_photo %}'{{ member.id_photo.url }}'{% else %}null{% endif %}, {{ member.from_meeting|lower }})">
+                      <i class="bi bi-box-arrow-in-right"></i> Check In
+                    </button>
+                    {% elif member.checked_in and not member.checked_out %}
+                    <button type="button"
+                            class="member-action-btn btn btn-sm btn-secondary"
+                            data-member-action="checkout"
+                            data-member-pk="{{ member.pk }}"
+                            data-member-name="{{ member.full_name|escapejs }}"
+                            onclick="openMemberCheckout({{ member.pk }}, '{{ member.full_name|escapejs }}', '{{ member.assigned_card.number|default:''|escapejs }}')">
+                      <i class="bi bi-box-arrow-right"></i> Check Out
+                    </button>
+                    {% endif %}
+
+                    {# Need attention flag #}
+                    {% if not member.needs_attention and member.checked_in and not member.checked_out %}
+                    <button type="button"
+                            class="member-action-btn btn btn-sm btn-outline-warning"
+                            onclick="openAttentionFlag({{ member.pk }}, '{{ member.full_name|escapejs }}')">
+                      <i class="bi bi-flag"></i>
+                    </button>
+                    {% elif member.needs_attention %}
+                    <form method="post" action="{% url 'visitors:member_clear_attention' visitor.pk member.pk %}" class="d-inline">
+                      {% csrf_token %}
+                      <button type="submit" class="member-action-btn btn btn-sm btn-warning"
+                              title="Mark as cleared">
+                        <i class="bi bi-check-lg"></i> Clear
+                      </button>
+                    </form>
+                    {% endif %}
+
                   {% endif %}
 
-                    </div>
-                  </div>
+                  <!-- Delete (for authorized users only) -->
+                  {% if not visitor.checked_in or user.is_superuser %}
+                  {% if user.is_superuser or user.role in 'lsa,soc' or user == visitor.registered_by %}
+                  <a href="{% url 'visitors:delete_group_member' visitor.pk member.pk %}"
+                     class="member-action-btn btn btn-sm btn-outline-danger"
+                     title="Remove member">
+                    <i class="bi bi-trash"></i>
+                  </a>
+                  {% endif %}
+                  {% endif %}
                 </div>
               </div>
-              {% endfor %}
+
+              <!-- Member card body -->
+              <div class="member-card-body">
+                <div class="row g-3 align-items-start">
+
+                  <!-- Left: detail fields with inline edit icons -->
+                  <div class="col-md-8">
+                    <div class="row g-2">
+
+                      <div class="col-sm-6">
+                        <div class="editable-field-row">
+                          <i class="bi bi-credit-card-2-front text-muted flex-shrink-0"></i>
+                          <span class="text-muted small me-1">ID:</span>
+                          <span id="mid-display-{{ member.pk }}">
+                            {% if member.id_number %}
+                              {{ member.get_id_type_display }}: <strong>{{ member.id_number }}</strong>
+                            {% else %}
+                              <em class="text-warning small">Not captured</em>
+                            {% endif %}
+                          </span>
+                          {% if user.role in 'data_entry,lsa,soc' or user.is_superuser %}
+                          <button class="edit-field-btn" onclick="editMemberField({{ member.pk }}, 'id_number', '{{ member.id_number|escapejs }}')" title="Edit ID number">
+                            <i class="bi bi-pencil-square"></i>
+                          </button>
+                          {% endif %}
+                        </div>
+                      </div>
+
+                      {% if member.contact_number %}
+                      <div class="col-sm-6">
+                        <div class="editable-field-row">
+                          <i class="bi bi-telephone text-muted flex-shrink-0"></i>
+                          <span class="text-muted small me-1">Phone:</span>
+                          <span id="mphone-display-{{ member.pk }}">{{ member.contact_number }}</span>
+                          {% if user.role in 'data_entry,lsa,soc' or user.is_superuser %}
+                          <button class="edit-field-btn" onclick="editMemberField({{ member.pk }}, 'contact_number', '{{ member.contact_number|escapejs }}')" title="Edit phone">
+                            <i class="bi bi-pencil-square"></i>
+                          </button>
+                          {% endif %}
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {% if member.email %}
+                      <div class="col-sm-6">
+                        <div class="editable-field-row">
+                          <i class="bi bi-envelope text-muted flex-shrink-0"></i>
+                          <span class="text-muted small me-1">Email:</span>
+                          <span>{{ member.email }}</span>
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {% if member.nationality %}
+                      <div class="col-sm-6">
+                        <div class="editable-field-row">
+                          <i class="bi bi-flag text-muted flex-shrink-0"></i>
+                          <span class="text-muted small me-1">Nationality:</span>
+                          <span>{{ member.nationality }}</span>
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {% if member.assigned_card %}
+                      <div class="col-sm-6">
+                        <div class="editable-field-row">
+                          <i class="bi bi-credit-card text-primary flex-shrink-0"></i>
+                          <span class="text-muted small me-1">Card:</span>
+                          <strong class="text-primary">{{ member.assigned_card.number }}</strong>
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {% if member.check_in_time %}
+                      <div class="col-sm-6">
+                        <div class="editable-field-row">
+                          <i class="bi bi-clock text-success flex-shrink-0"></i>
+                          <span class="text-muted small me-1">In:</span>
+                          <span class="text-success small">{{ member.check_in_time|date:"H:i" }}</span>
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {% if member.check_out_time %}
+                      <div class="col-sm-6">
+                        <div class="editable-field-row">
+                          <i class="bi bi-clock text-secondary flex-shrink-0"></i>
+                          <span class="text-muted small me-1">Out:</span>
+                          <span class="text-secondary small">{{ member.check_out_time|date:"H:i" }}</span>
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {% if member.gate_attention == 'needs_attention' and member.gate_attention_note %}
+                      <div class="col-12">
+                        <div class="alert alert-warning py-1 px-2 mb-0 small">
+                          <i class="bi bi-flag-fill me-1"></i>
+                          <strong>Gate note:</strong> {{ member.gate_attention_note }}
+                        </div>
+                      </div>
+                      {% endif %}
+
+                      {% if member.notes and not member.from_meeting %}
+                      <div class="col-12">
+                        <p class="text-muted small mb-0">
+                          <i class="bi bi-card-text me-1"></i>{{ member.notes }}
+                        </p>
+                      </div>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <!-- Right: ID photo -->
+                  <div class="col-md-4 text-center">
+                    {% if member.id_photo %}
+                    <img src="{{ member.id_photo.url }}"
+                         alt="{{ member.full_name }} ID"
+                         class="member-photo"
+                         onclick="showImageModal(this.src, '{{ member.full_name|escapejs }} — ID Document')"
+                         title="Click to enlarge">
+                    <div class="small text-muted mt-1"><i class="bi bi-card-image me-1"></i>ID Document</div>
+                    {% else %}
+                    <div class="photo-placeholder"
+                         onclick="openPhotoCapture({{ member.pk }}, '{{ member.full_name|escapejs }}')"
+                         title="Click to capture gate photo">
+                      <div>
+                        <i class="bi bi-camera d-block" style="font-size:1.8rem;"></i>
+                        <span style="font-size:.65rem;font-weight:600;">Take Photo</span>
+                      </div>
+                    </div>
+                    <div class="small text-muted mt-1">No photo — click to capture</div>
+                    {% endif %}
+                  </div>
+
+                </div>
+              </div>
             </div>
+            {% endfor %}
+
           {% else %}
             <div class="alert alert-warning mb-0">
-              <i class="bi bi-exclamation-triangle me-2"></i>
-              No group members have been added to this visit yet.
+              <i class="bi bi-exclamation-triangle me-2"></i>No group members added yet.
             </div>
           {% endif %}
         </div>
       </div>
       {% endif %}
 
-    </div>
+    </div><!-- /col-lg-8 -->
 
-    <!-- Right Column -->
+    <!-- ═══ RIGHT COLUMN ═══ -->
     <div class="col-lg-4">
 
       <!-- Clearance Status -->
@@ -527,322 +585,996 @@
         <div class="card-body p-4">
           <div class="d-flex align-items-center justify-content-between mb-3">
             <div class="section-header mb-0 pb-0 border-0">
-              <i class="bi bi-shield-check text-primary"></i>
-              <span>Clearance Status</span>
+              <i class="bi bi-shield-check text-primary"></i>Clearance
             </div>
-
             {% if visitor.status == 'pending' %}
-              <span class="status-badge status-pending">
-                <i class="bi bi-clock-fill"></i> Pending
-              </span>
+              <span class="status-badge status-pending"><i class="bi bi-clock-fill"></i> Pending</span>
             {% elif visitor.status == 'approved' %}
-              <span class="status-badge status-approved">
-                <i class="bi bi-check-circle-fill"></i> Cleared
-              </span>
+              <span class="status-badge status-approved"><i class="bi bi-check-circle-fill"></i> Cleared</span>
             {% elif visitor.status == 'rejected' %}
-              <span class="status-badge status-rejected">
-                <i class="bi bi-x-circle-fill"></i> Rejected
-              </span>
-            {% elif visitor.status == 'cancelled' %}
-              <span class="status-badge status-cancelled">
-                <i class="bi bi-slash-circle"></i> Cancelled
-              </span>
+              <span class="status-badge status-rejected"><i class="bi bi-x-circle-fill"></i> Rejected</span>
             {% else %}
-              <span class="status-badge status-not-checked">{{ visitor.status }}</span>
+              <span class="status-badge status-cancelled"><i class="bi bi-slash-circle"></i> {{ visitor.status|capfirst }}</span>
             {% endif %}
           </div>
 
-          {# NEW: Validity banner (only if approved + window exists) #}
-          {% if visitor.status == 'approved' %}
-            {% if visitor.clearance_valid_from or visitor.clearance_valid_until %}
-
-              {% if visitor.clearance_is_active_today %}
-                <div class="alert alert-success mb-3" style="border-left: 4px solid #198754;">
-                  <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-patch-check-fill"></i>
-                    <strong>Clearance Active Today</strong>
-                  </div>
-                  <div class="small opacity-75 mt-1">
-                    Valid
-                    {% if visitor.clearance_valid_from %}from {{ visitor.clearance_valid_from|date:"M d, Y" }}{% else %}from —{% endif %}
-                    ·
-                    {% if visitor.clearance_valid_until %}until {{ visitor.clearance_valid_until|date:"M d, Y" }}{% else %}until —{% endif %}
-                  </div>
-                </div>
-              {% else %}
-                <div class="alert alert-warning mb-3" style="border-left: 4px solid #f59f00;">
-                  <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    <strong>Clearance Not Active Today</strong>
-                  </div>
-                  <div class="small text-muted mt-1">
-                    {% if visitor.clearance_valid_from %}From {{ visitor.clearance_valid_from|date:"M d, Y" }}{% endif %}
-                    {% if visitor.clearance_valid_until %} · Until {{ visitor.clearance_valid_until|date:"M d, Y" }}{% endif %}
-                    <div class="mt-1">Gate check-in will be blocked until clearance is valid.</div>
-                  </div>
-                </div>
-              {% endif %}
-
+          {% if visitor.status == 'approved' and visitor.clearance_valid_from or visitor.clearance_valid_until %}
+            {% if visitor.clearance_is_active_today %}
+            <div class="alert alert-success mb-3" style="border-left:4px solid #198754;">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-patch-check-fill"></i><strong>Active Today</strong>
+              </div>
+              <div class="small opacity-75 mt-1">
+                {% if visitor.clearance_valid_from %}From {{ visitor.clearance_valid_from|date:"M d, Y" }}{% endif %}
+                {% if visitor.clearance_valid_until %} · Until {{ visitor.clearance_valid_until|date:"M d, Y" }}{% endif %}
+              </div>
+            </div>
+            {% else %}
+            <div class="alert alert-warning mb-3" style="border-left:4px solid #f59f00;">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-exclamation-triangle-fill"></i><strong>Not Active Today</strong>
+              </div>
+            </div>
             {% endif %}
           {% endif %}
+
           <div class="info-grid mb-3">
             <div class="info-item">
-              <div class="info-label">Requested By</div>
-              <div class="info-value">
-                {% if visitor.registered_by %}
-                  {{ visitor.registered_by.username }}
-                {% else %}
-                  —
+              <div class="info-label small">Requested By</div>
+              <div class="info-value small">{{ visitor.registered_by.get_full_name|default:visitor.registered_by.username }}</div>
+            </div>
+            {% if visitor.approved_by %}
+            <div class="info-item">
+              <div class="info-label small">Decision By</div>
+              <div class="info-value small">
+                {{ visitor.approved_by.username }}
+                {% if visitor.approval_date %}
+                  <div class="text-muted" style="font-size:.75rem;">{{ visitor.approval_date|date:"M d, Y H:i" }}</div>
                 {% endif %}
               </div>
             </div>
-
-            {% if visitor.agency_name %}
-              <div class="info-item">
-                <div class="info-label">Agency</div>
-                <div class="info-value">{{ visitor.agency_name }}</div>
-              </div>
-            {% endif %}
-
-            {% if visitor.approved_by %}
-              <div class="info-item">
-                <div class="info-label">LSA Decision</div>
-                <div class="info-value">
-                  {{ visitor.approved_by.username }}
-                  {% if visitor.approval_date %}
-                    <div class="small text-muted">{{ visitor.approval_date|date:"M d, Y H:i" }}</div>
-                  {% endif %}
-                </div>
-              </div>
-            {% endif %}
-
-            <!-- NEW: show window fields inside Clearance Status too -->
-            {% if visitor.clearance_valid_from or visitor.clearance_valid_until %}
-              <div class="info-item">
-                <div class="info-label">Validity</div>
-                <div class="info-value">
-                  {% if visitor.clearance_valid_from %}
-                    <div><small class="text-muted">From</small> {{ visitor.clearance_valid_from|date:"M d, Y" }}</div>
-                  {% endif %}
-                  {% if visitor.clearance_valid_until %}
-                    <div><small class="text-muted">Until</small> {{ visitor.clearance_valid_until|date:"M d, Y" }}</div>
-                  {% endif %}
-                </div>
-              </div>
             {% endif %}
           </div>
 
           <!-- Clearance Actions -->
           {% if user.is_authenticated %}
-            <div class="d-flex flex-column gap-2">
+          <div class="d-flex flex-column gap-2">
+
+            {# Meeting-linked: single approve only, no date window #}
+            {% if visitor.is_meeting_linked %}
               {% if user.role == 'lsa' and visitor.status == 'pending' %}
-                <form method="post" action="{% url 'visitors:visitor_lsa_approve' visitor.pk %}">
-                  {% csrf_token %}
+              <form method="post" action="{% url 'visitors:visitor_lsa_approve' visitor.pk %}">
+                {% csrf_token %}
+                {# Auto-set validity to meeting date only #}
+                <input type="hidden" name="clearance_value" value="1">
+                <input type="hidden" name="clearance_unit" value="days">
+                <button class="btn btn-success w-100 quick-action-btn" type="submit">
+                  <i class="bi bi-check-circle-fill me-1"></i>Approve Meeting Access
+                </button>
+              </form>
+              <form method="post" action="{% url 'visitors:visitor_lsa_reject' visitor.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-outline-danger w-100 quick-action-btn" type="submit">
+                  <i class="bi bi-x-octagon me-1"></i>Reject
+                </button>
+              </form>
+              {% endif %}
 
-                  <div class="row g-2 mb-2">
-                    <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Clearance Value</label>
-                      <input type="number" min="1" class="form-control" name="clearance_value" placeholder="e.g. 7">
-                    </div>
-                    <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Unit</label>
-                      <select class="form-select" name="clearance_unit" required>
-                        <option value="days" selected>Days</option>
-                        <option value="months">Months</option>
-                        <option value="years">Years</option>
-                      </select>
-                    </div>
+            {% else %}
+              {# Normal visitor: approve with window #}
+              {% if user.role == 'lsa' and visitor.status == 'pending' %}
+              <form method="post" action="{% url 'visitors:visitor_lsa_approve' visitor.pk %}">
+                {% csrf_token %}
+                <div class="row g-2 mb-2">
+                  <div class="col-6">
+                    <label class="form-label small text-muted mb-1">Validity</label>
+                    <input type="number" min="1" class="form-control form-control-sm" name="clearance_value" placeholder="e.g. 7">
                   </div>
+                  <div class="col-6">
+                    <label class="form-label small text-muted mb-1">Unit</label>
+                    <select class="form-select form-select-sm" name="clearance_unit">
+                      <option value="days" selected>Days</option>
+                      <option value="months">Months</option>
+                      <option value="years">Years</option>
+                    </select>
+                  </div>
+                </div>
+                <button class="btn btn-success w-100 quick-action-btn" type="submit">
+                  <i class="bi bi-check-circle-fill me-1"></i>Approve Visitor
+                </button>
+              </form>
+              <form method="post" action="{% url 'visitors:visitor_lsa_reject' visitor.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-outline-danger w-100 quick-action-btn" type="submit">
+                  <i class="bi bi-x-octagon me-1"></i>Reject
+                </button>
+              </form>
+              {% endif %}
+            {% endif %}
 
-                  <button class="btn btn-success w-100" type="submit">
-                    <i class="bi bi-check-circle-fill"></i> FSA Clear Visitor
-                  </button>
-                </form>
+            {% if visitor.status == 'pending' and visitor.registered_by and user.id == visitor.registered_by.id %}
+            <form method="post" action="{% url 'visitors:visitor_cancel_request' visitor.pk %}">
+              {% csrf_token %}
+              <button class="btn btn-outline-secondary w-100 quick-action-btn" type="submit">
+                <i class="bi bi-slash-circle me-1"></i>Cancel Request
+              </button>
+            </form>
+            {% endif %}
 
-                <form method="post" action="{% url 'visitors:visitor_lsa_reject' visitor.pk %}">
-                  {% csrf_token %}
-                  <button class="btn btn-outline-danger w-100 quick-action-btn" type="submit">
-                    <i class="bi bi-x-octagon"></i> Reject Request
-                  </button>
-                </form>
+            {% if visitor.status != 'pending' %}
+            <form method="post" action="{% url 'visitors:visitor_request_clearance' visitor.pk %}">
+              {% csrf_token %}
+              <button class="btn btn-primary w-100 quick-action-btn" type="submit">
+                <i class="bi bi-send-check me-1"></i>
+                {% if visitor.status == 'approved' %}Re-request Clearance{% else %}Request Clearance{% endif %}
+              </button>
+            </form>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Gate Actions -->
+      <div class="card shadow-sm mb-4 action-card">
+        <div class="card-body p-4">
+          <div class="section-header">
+            <i class="bi bi-door-open-fill text-primary"></i>Gate Actions
+          </div>
+
+          {% if user.role in 'data_entry,lsa,soc' or user.is_superuser %}
+
+            {% if visitor.is_meeting_linked %}
+              {# Meeting-linked: no primary check-in; handled per-member #}
+              {% if visitor.status == 'approved' %}
+              <div class="alert alert-info py-2 mb-2 small">
+                <i class="bi bi-info-circle-fill me-1"></i>
+                <strong>Meeting access:</strong> Check-in is handled per attendee on each member's card above.
+                {% if visitor.members_checked_in_count > 0 %}
+                  <strong>{{ visitor.members_checked_in_count }}</strong> member(s) currently in compound.
+                {% endif %}
+              </div>
+              {% else %}
+              <div class="alert alert-gate-status no-action mb-0">
+                <small class="text-muted"><i class="bi bi-clock me-1"></i>Awaiting clearance approval.</small>
+              </div>
               {% endif %}
 
-              {% if visitor.status == 'pending' and visitor.registered_by and user.id == visitor.registered_by.id %}
-                <form method="post" action="{% url 'visitors:visitor_cancel_request' visitor.pk %}">
-                  {% csrf_token %}
-                  <button class="btn btn-outline-secondary w-100 quick-action-btn" type="submit">
-                    <i class="bi bi-slash-circle"></i> Cancel Request
-                  </button>
-                </form>
-              {% endif %}
+            {% else %}
+              {# Normal visitor gate actions #}
+              {% if visitor.status == 'approved' and visitor.clearance_is_active_today and not visitor.checked_in %}
+              <div class="alert alert-gate-status can-checkin mb-3">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <i class="bi bi-info-circle-fill text-success"></i><strong>Ready for Check-in</strong>
+                </div>
+                <small class="text-muted">Clearance active. Visitor may enter.</small>
+              </div>
+              <a class="btn btn-success w-100 quick-action-btn mb-2" href="{% url 'visitors:gate_check' visitor.pk %}?action=check_in">
+                <i class="bi bi-box-arrow-in-right me-1"></i>Check In at Gate
+              </a>
 
-              {% if visitor.status != 'pending' %}
-                <form method="post" action="{% url 'visitors:visitor_request_clearance' visitor.pk %}">
-                  {% csrf_token %}
-                  <button class="btn btn-primary w-100 quick-action-btn" type="submit">
-                    <i class="bi bi-send-check"></i>
-                    {% if visitor.status == 'approved' or visitor.status == 'rejected' or visitor.status == 'cancelled' %}
-                      Re-request Clearance
-                    {% else %}
-                      Request Clearance
-                    {% endif %}
-                  </button>
-                </form>
+              {% elif visitor.checked_in and not visitor.checked_out %}
+              <div class="alert alert-gate-status in-compound mb-3">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <i class="bi bi-geo-alt-fill text-info"></i><strong>In Compound</strong>
+                </div>
+                <small class="text-muted">Visitor is inside. Ready for check-out.</small>
+              </div>
+              <a class="btn btn-dark w-100 quick-action-btn" href="{% url 'visitors:gate_check' visitor.pk %}?action=check_out">
+                <i class="bi bi-box-arrow-right me-1"></i>Check Out at Gate
+              </a>
+
+              {% else %}
+              <div class="alert alert-gate-status no-action mb-0">
+                <small class="text-muted">
+                  <i class="bi bi-info-circle me-1"></i>
+                  {% if visitor.status != 'approved' %}Visitor must be cleared first.
+                  {% elif not visitor.clearance_is_active_today %}Clearance not active today.
+                  {% else %}No gate action available.{% endif %}
+                </small>
+              </div>
               {% endif %}
+            {% endif %}
+
+          {% else %}
+            <div class="alert alert-gate-status no-action mb-0">
+              <small class="text-muted"><i class="bi bi-lock-fill me-1"></i>Gate actions require Guard, FSA, or SOC role.</small>
             </div>
           {% endif %}
         </div>
       </div>
 
-<!-- Gate Actions -->
-<div class="card shadow-sm mb-4 action-card">
-  <div class="card-body p-4">
-    <div class="section-header">
-      <i class="bi bi-door-open-fill text-primary"></i>
-      <span>Gate Actions</span>
-    </div>
-
-    {% if user.is_authenticated %}
-      {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' or user.is_superuser %}
-
-        {# Show Check-In when: approved + clearance active + NOT currently inside #}
-        {% if visitor.status == 'approved' and visitor.clearance_is_active_today and not visitor.checked_in %}
-
-          <div class="alert alert-gate-status can-checkin mb-3">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <i class="bi bi-info-circle-fill text-success"></i>
-              <strong>Ready for Check-in</strong>
-            </div>
-            <small class="text-muted">Clearance is active today. Visitor can enter the compound.</small>
-          </div>
-
-          <a class="btn btn-success w-100 quick-action-btn mb-2"
-             href="{% url 'visitors:gate_check' visitor.pk %}?action=check_in">
-            <i class="bi bi-box-arrow-in-right"></i> Check In at Gate
-          </a>
-
-        {# Show Check-Out ONLY when currently inside #}
-        {% elif visitor.checked_in and not visitor.checked_out %}
-
-          <div class="alert alert-gate-status in-compound mb-3">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <i class="bi bi-geo-alt-fill text-info"></i>
-              <strong>Visitor In Compound</strong>
-            </div>
-            <small class="text-muted">Visitor is currently inside. Ready for check-out.</small>
-          </div>
-
-          <a class="btn btn-dark w-100 quick-action-btn"
-             href="{% url 'visitors:gate_check' visitor.pk %}?action=check_out">
-            <i class="bi bi-box-arrow-right"></i> Check Out at Gate
-          </a>
-
-        {% else %}
-          <div class="alert alert-gate-status no-action mb-0">
-            <small class="text-muted">
-              <i class="bi bi-info-circle"></i>
-              {% if visitor.status != 'approved' %}
-                Visitor must be cleared before check-in.
-              {% elif visitor.status == 'approved' and not visitor.clearance_is_active_today %}
-                Visitor clearance is not active today (expired or not started yet).
-              {% else %}
-                No gate action available at this time.
-              {% endif %}
-            </small>
-          </div>
-        {% endif %}
-
-      {% else %}
-        <div class="alert alert-gate-status no-action mb-0">
-          <small class="text-muted">
-            <i class="bi bi-lock-fill"></i>
-            Gate actions are available to authorized personnel (Guards, FSA, SOC).
-          </small>
-        </div>
-      {% endif %}
-    {% else %}
-      <div class="alert alert-gate-status no-action mb-0">
-        <small class="text-muted">
-          <i class="bi bi-person-fill"></i>
-          Please sign in to perform gate actions.
-        </small>
-      </div>
-    {% endif %}
-  </div>
-</div>
-
-
-
-      <!-- Recent Activity Timeline -->
+      <!-- Recent Activity -->
       {% with logs=visitor.logs.all %}
-        {% if logs %}
-          <div class="card shadow-sm">
-            <div class="card-body p-4">
-              <div class="section-header">
-                <i class="bi bi-clock-history text-primary"></i>
-                <span>Recent Activity</span>
-              </div>
-
-              <div class="timeline">
-                {% for log in logs|slice:":8" %}
-                  <div class="timeline-item">
-                    <div class="timeline-dot"></div>
-                    <div>
-                      <div class="fw-semibold mb-1">
-                        {{ log.get_action_display|default:log.action }}
-                      </div>
-                      {% if log.description %}
-                        <div class="text-muted small mb-1">{{ log.description }}</div>
-                      {% endif %}
-                      <div class="text-muted small">
-                        <i class="bi bi-clock"></i>
-                        {{ log.timestamp|date:"M d, Y" }} at {{ log.timestamp|date:"H:i" }}
-                      </div>
-                    </div>
-                  </div>
-                {% endfor %}
-              </div>
-
-              {% if logs|length > 8 %}
-                <div class="text-center mt-3">
-                  <small class="text-muted">
-                    Showing 8 of {{ logs|length }} activities
-                  </small>
-                </div>
-              {% endif %}
-            </div>
+      {% if logs %}
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <div class="section-header">
+            <i class="bi bi-clock-history text-primary"></i>Recent Activity
           </div>
-        {% endif %}
+          <div class="timeline">
+            {% for log in logs|slice:":8" %}
+            <div class="timeline-item">
+              <div class="timeline-dot"></div>
+              <div>
+                <div class="fw-semibold small mb-1">{{ log.get_action_display|default:log.action }}</div>
+                {% if log.notes %}<div class="text-muted" style="font-size:.8rem;">{{ log.notes|truncatechars:80 }}</div>{% endif %}
+                <div class="text-muted" style="font-size:.75rem;">
+                  {{ log.timestamp|date:"M d, Y" }} · {{ log.timestamp|date:"H:i" }}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
       {% endwith %}
 
+    </div><!-- /col-lg-4 -->
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════════ -->
+
+<!-- Member Check-In Modal -->
+<div class="modal fade" id="memberCheckinModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i>Check In Member</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="" id="memberCheckinForm" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+          <input type="hidden" name="gate" value="front">
+          <div class="mb-3">
+            <strong id="checkin-member-name" class="d-block mb-2 fs-6"></strong>
+          </div>
+
+          <!-- Existing photo if any -->
+          <div id="checkin-current-photo" class="mb-3 text-center" style="display:none;">
+            <img id="checkin-photo-img" src="" alt="ID" class="img-thumbnail" style="max-height:120px;">
+            <div class="small text-muted mt-1">Current photo on file</div>
+          </div>
+
+          <!-- ID Number -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">ID Number <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="id_number" id="checkin-id-number"
+                   placeholder="Enter or scan ID number">
+            <div class="form-text" id="checkin-id-help"></div>
+          </div>
+
+          <!-- ID Type -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">ID Type</label>
+            <select class="form-select" name="id_type">
+              <option value="other">Other Photo ID</option>
+              <option value="passport">Passport</option>
+              <option value="national_id">National ID Card</option>
+              <option value="driving_license">Driving Licence</option>
+            </select>
+          </div>
+
+          <!-- Visitor Card -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Visitor Card Number <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="card_number" id="checkin-card-number"
+                   placeholder="Scan or type card number">
+            <div class="form-text text-muted small">Card availability is checked on submission.</div>
+          </div>
+
+          <!-- Face / ID photo capture -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">
+              <i class="bi bi-camera me-1"></i>Photo ID / Face Photo
+              <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Optional</span>
+            </label>
+
+            <!-- Camera capture option -->
+            <div class="d-flex gap-2 mb-2">
+              <button type="button" class="btn btn-sm btn-outline-primary" id="startCameraBtn">
+                <i class="bi bi-camera-fill me-1"></i>Camera
+              </button>
+              <label class="btn btn-sm btn-outline-secondary mb-0">
+                <i class="bi bi-upload me-1"></i>Upload
+                <input type="file" name="gate_photo" id="gatePhotoUpload" accept="image/*" style="display:none;" onchange="previewGatePhoto(this)">
+              </label>
+            </div>
+
+            <!-- Camera stream -->
+            <div id="cameraContainer" style="display:none;" class="mb-2">
+              <video id="cameraVideo" style="width:100%;max-height:200px;border-radius:8px;background:#000;" autoplay playsinline></video>
+              <button type="button" class="btn btn-success btn-sm mt-2 w-100" id="capturePhotoBtn">
+                <i class="bi bi-camera me-1"></i>Capture
+              </button>
+            </div>
+            <canvas id="captureCanvas" style="display:none;"></canvas>
+            <div id="capturedPhotoPreview" class="text-center" style="display:none;">
+              <img id="capturedPhotoImg" src="" class="img-thumbnail" style="max-height:150px;">
+              <div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>Photo captured</div>
+              <button type="button" class="btn btn-sm btn-link" id="retakeBtn">Retake</button>
+            </div>
+          </div>
+
+          <!-- Gate (selector) -->
+          <div class="mb-0">
+            <label class="form-label fw-semibold small">Gate</label>
+            <select class="form-select form-select-sm" name="gate">
+              <option value="front">Front Gate</option>
+              <option value="back">Back Gate</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success" id="memberCheckinSubmit">
+            <i class="bi bi-check-circle me-1"></i>Confirm Check In
+          </button>
+        </div>
+      </form>
     </div>
   </div>
+</div>
 
-  <!-- Image Modal -->
-  <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="imageModalLabel">ID Document</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<!-- Member Check-Out Modal -->
+<div class="modal fade" id="memberCheckoutModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-secondary text-white">
+        <h5 class="modal-title"><i class="bi bi-box-arrow-right me-2"></i>Check Out Member</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="" id="memberCheckoutForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <p class="mb-1">Check out <strong id="checkout-member-name"></strong>?</p>
+          <p class="small text-muted mb-0" id="checkout-card-info"></p>
+          <div class="mt-3">
+            <label class="form-label fw-semibold small">Gate</label>
+            <select class="form-select form-select-sm" name="gate">
+              <option value="front">Front Gate</option>
+              <option value="back">Back Gate</option>
+            </select>
+          </div>
         </div>
-        <div class="modal-body text-center">
-          <img id="modalImage" src="" alt="ID Document" class="img-fluid">
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-dark btn-sm">
+            <i class="bi bi-box-arrow-right me-1"></i>Confirm Check Out
+          </button>
         </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Need Attention Modal -->
+<div class="modal fade" id="attentionModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title"><i class="bi bi-flag-fill me-2"></i>Flag for Attention</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="" id="attentionForm">
+        {% csrf_token %}
+        <div class="modal-body">
+          <p class="mb-2">Flag <strong id="attention-member-name"></strong> for host verification.</p>
+          <div class="mb-0">
+            <label class="form-label fw-semibold small">Reason <span class="text-danger">*</span></label>
+            <textarea class="form-control" name="attention_note" rows="3"
+                      placeholder="Describe the concern (e.g. ID mismatch, suspicious behaviour)..." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm">
+            <i class="bi bi-flag me-1"></i>Send Alert to Host
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Field Modal -->
+<div class="modal fade" id="editFieldModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editFieldModalTitle">Edit Field</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="" id="editFieldForm">
+        {% csrf_token %}
+        <input type="hidden" name="field_name" id="editFieldName">
+        <div class="modal-body">
+          <div class="mb-0">
+            <label class="form-label fw-semibold small" id="editFieldLabel">Value</label>
+            <input type="text" class="form-control" name="field_value" id="editFieldValue">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-check-lg me-1"></i>Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Capture Modal (for no-photo members) -->
+<div class="modal fade" id="photoCaptureModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-camera me-2"></i>Capture Photo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="" id="photoCaptureForm" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+          <p class="small text-muted mb-3">Capturing photo for <strong id="photo-member-name"></strong>.</p>
+          <div class="d-flex gap-2 mb-3">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="startCameraBtn2">
+              <i class="bi bi-camera-fill me-1"></i>Camera
+            </button>
+            <label class="btn btn-outline-secondary btn-sm mb-0">
+              <i class="bi bi-upload me-1"></i>Upload
+              <input type="file" name="photo" id="photoUpload2" accept="image/*" style="display:none;" onchange="previewPhotoUpload(this)">
+            </label>
+          </div>
+          <div id="cameraContainer2" style="display:none;" class="mb-2">
+            <video id="cameraVideo2" style="width:100%;max-height:220px;border-radius:8px;background:#000;" autoplay playsinline></video>
+            <button type="button" class="btn btn-success btn-sm mt-2 w-100" id="capturePhotoBtn2">
+              <i class="bi bi-camera me-1"></i>Capture
+            </button>
+          </div>
+          <canvas id="captureCanvas2" style="display:none;"></canvas>
+          <div id="capturedPreview2" class="text-center" style="display:none;">
+            <img id="capturedImg2" src="" class="img-thumbnail" style="max-height:180px;">
+            <div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>Ready</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm" id="savePhotoBtn">
+            <i class="bi bi-save me-1"></i>Save Photo
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Image fullscreen modal -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="imageModalLabel">Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <img id="modalImage" src="" class="img-fluid">
       </div>
     </div>
   </div>
-
 </div>
 
-{% endwith %}
-
 <script>
-function showImageModal(imageSrc, title) {
-  document.getElementById('modalImage').src = imageSrc;
+const VISITOR_PK = {{ visitor.pk }};
+{% endwith %}
+let cameraStream = null;
+let capturedBlob = null;
+let cameraStream2 = null;
+let capturedBlob2 = null;
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+function showImageModal(src, title) {
+  document.getElementById('modalImage').src = src;
   document.getElementById('imageModalLabel').textContent = title;
-  const modal = new bootstrap.Modal(document.getElementById('imageModal'));
-  modal.show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('imageModal')).show();
+}
+
+function blobToInput(blob, inputId, previewId) {
+  const dt = new DataTransfer();
+  dt.items.add(new File([blob], 'gate_photo.jpg', { type: 'image/jpeg' }));
+  document.getElementById(inputId).files = dt.files;
+  const url = URL.createObjectURL(blob);
+  document.getElementById(previewId).src = url;
+}
+
+// ── Camera helpers ───────────────────────────────────────────────────────────
+async function startCamera(videoId, containerId) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const video = document.getElementById(videoId);
+    video.srcObject = stream;
+    document.getElementById(containerId).style.display = 'block';
+    return stream;
+  } catch (e) {
+    alert('Camera not available: ' + e.message);
+    return null;
+  }
+}
+
+function captureFromVideo(videoId, canvasId) {
+  const video = document.getElementById(videoId);
+  const canvas = document.getElementById(canvasId);
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+}
+
+function stopCamera(stream) {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+}
+
+// ── Member check-in modal ────────────────────────────────────────────────────
+function openMemberCheckin(memberPk, name, existingId, photoUrl, fromMeeting) {
+  document.getElementById('memberCheckinForm').action = `/visitors/${VISITOR_PK}/member/${memberPk}/checkin/`;
+  document.getElementById('memberCheckinForm').dataset.memberPk = memberPk;
+  document.getElementById('checkin-member-name').textContent = name;
+  document.getElementById('checkin-id-number').value = existingId || '';
+  document.getElementById('checkin-id-help').textContent =
+    existingId ? `On file: ${existingId}. Update if different at gate.` :
+    fromMeeting ? 'Registered via meeting — please verify and enter ID.' :
+    'Required for check-in.';
+
+  const photoSection = document.getElementById('checkin-current-photo');
+  if (photoUrl) {
+    photoSection.style.display = 'block';
+    document.getElementById('checkin-photo-img').src = photoUrl;
+  } else {
+    photoSection.style.display = 'none';
+  }
+
+  capturedBlob = null;
+  document.getElementById('capturedPhotoPreview').style.display = 'none';
+  document.getElementById('cameraContainer').style.display = 'none';
+  stopCamera(cameraStream); cameraStream = null;
+
+  // Reset submit button
+  const submitBtn = document.getElementById('memberCheckinSubmit');
+  submitBtn.disabled = false;
+  submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Confirm Check In';
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('memberCheckinModal')).show();
+}
+
+document.getElementById('startCameraBtn')?.addEventListener('click', async function () {
+  cameraStream = await startCamera('cameraVideo', 'cameraContainer');
+});
+
+document.getElementById('capturePhotoBtn')?.addEventListener('click', async function () {
+  capturedBlob = await captureFromVideo('cameraVideo', 'captureCanvas');
+  stopCamera(cameraStream); cameraStream = null;
+  document.getElementById('cameraContainer').style.display = 'none';
+  document.getElementById('capturedPhotoPreview').style.display = 'block';
+  const url = URL.createObjectURL(capturedBlob);
+  document.getElementById('capturedPhotoImg').src = url;
+});
+
+document.getElementById('retakeBtn')?.addEventListener('click', async function () {
+  document.getElementById('capturedPhotoPreview').style.display = 'none';
+  cameraStream = await startCamera('cameraVideo', 'cameraContainer');
+});
+
+document.getElementById('memberCheckinModal')?.addEventListener('hidden.bs.modal', function () {
+  stopCamera(cameraStream); cameraStream = null;
+});
+
+document.getElementById('memberCheckinForm')?.addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  // Attach captured camera photo to the file input if present
+  if (capturedBlob) {
+    const dt = new DataTransfer();
+    dt.items.add(new File([capturedBlob], 'gate_photo.jpg', { type: 'image/jpeg' }));
+    document.getElementById('gatePhotoUpload').files = dt.files;
+  }
+
+  const form = e.target;
+  const memberPk = parseInt(form.dataset.memberPk);
+  const submitBtn = document.getElementById('memberCheckinSubmit');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing…';
+
+  const formData = new FormData(form);
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+  try {
+    const resp = await fetch(form.action, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken, 'X-Fetch': '1' },
+      body: formData,
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      // ── Instant DOM update ──────────────────────────────────────────────
+      updateMemberCardAfterCheckin(memberPk, data);
+
+      // Close modal
+      bootstrap.Modal.getInstance(document.getElementById('memberCheckinModal'))?.hide();
+
+      // Show toast
+      showToast('success', data.message);
+    } else {
+      showToast('danger', data.error || 'Check-in failed.');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Confirm Check In';
+    }
+  } catch (err) {
+    showToast('danger', 'Network error. Please try again.');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Confirm Check In';
+  }
+});
+
+function previewGatePhoto(input) {
+  if (input.files && input.files[0]) {
+    const url = URL.createObjectURL(input.files[0]);
+    document.getElementById('capturedPhotoImg').src = url;
+    document.getElementById('capturedPhotoPreview').style.display = 'block';
+    document.getElementById('cameraContainer').style.display = 'none';
+  }
+}
+
+// ── Member check-out modal ────────────────────────────────────────────────────
+function openMemberCheckout(memberPk, name, cardNumber) {
+  document.getElementById('memberCheckoutForm').action = `/visitors/${VISITOR_PK}/member/${memberPk}/checkout/`;
+  document.getElementById('memberCheckoutForm').dataset.memberPk = memberPk;
+  document.getElementById('checkout-member-name').textContent = name;
+  document.getElementById('checkout-card-info').textContent =
+    cardNumber ? `Card ${cardNumber} will be returned.` : 'No card on record.';
+
+  // Reset submit button
+  const submitBtn = document.querySelector('#memberCheckoutModal [type=submit]');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-box-arrow-right me-1"></i>Confirm Check Out';
+  }
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('memberCheckoutModal')).show();
+}
+
+document.getElementById('memberCheckoutForm')?.addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  const form = e.target;
+  const memberPk = parseInt(form.dataset.memberPk);
+  const submitBtn = form.querySelector('[type=submit]');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing…';
+
+  const formData = new FormData(form);
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+  try {
+    const resp = await fetch(form.action, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken, 'X-Fetch': '1' },
+      body: formData,
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      // ── Instant DOM update ──────────────────────────────────────────────
+      updateMemberCardAfterCheckout(memberPk, data);
+
+      // Close modal
+      bootstrap.Modal.getInstance(document.getElementById('memberCheckoutModal'))?.hide();
+
+      showToast('success', data.message);
+    } else {
+      showToast('danger', data.error || 'Check-out failed.');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-box-arrow-right me-1"></i>Confirm Check Out';
+    }
+  } catch (err) {
+    showToast('danger', 'Network error. Please try again.');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-box-arrow-right me-1"></i>Confirm Check Out';
+  }
+});
+
+// ── DOM update helpers ───────────────────────────────────────────────────────
+
+/**
+ * After a successful check-in fetch, update the member card in-place:
+ * - Status pill → "In"
+ * - Button → "Check Out"
+ * - Adds check-in time row
+ * - Adds card number row
+ * - Updates ID display if newly captured
+ */
+function updateMemberCardAfterCheckin(memberPk, data) {
+  const card = document.getElementById(`member-card-${memberPk}`);
+  if (!card) return;
+
+  // ── Status pill ──────────────────────────────────────────────────────────
+  const pendingPill = card.querySelector('.member-status.none');
+  if (pendingPill) {
+    pendingPill.className = 'member-status in';
+    pendingPill.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>In';
+  }
+
+  // ── Swap button: Check In → Check Out ───────────────────────────────────
+  const checkinBtn = card.querySelector('[data-member-action="checkin"]');
+  if (checkinBtn) {
+    const memberName = checkinBtn.dataset.memberName || '';
+    checkinBtn.className = 'member-action-btn btn btn-sm btn-secondary';
+    checkinBtn.dataset.memberAction = 'checkout';
+    checkinBtn.setAttribute(
+      'onclick',
+      `openMemberCheckout(${memberPk}, '${memberName}', '${data.card_number || ''}')`
+    );
+    checkinBtn.innerHTML = '<i class="bi bi-box-arrow-right"></i> Check Out';
+  }
+
+  // ── Add attention flag button (appears once member is in compound) ───────
+  const btnGroup = card.querySelector('.member-card-header .d-flex.gap-1');
+  if (btnGroup && !btnGroup.querySelector('[onclick*="openAttentionFlag"]')) {
+    // Get the name from the check-out button's data attribute (we just set it)
+    const checkoutBtnNew = btnGroup.querySelector('[data-member-action="checkout"]');
+    const memberName = (checkoutBtnNew && checkoutBtnNew.dataset.memberName) || '';
+    const flagBtn = document.createElement('button');
+    flagBtn.type = 'button';
+    flagBtn.className = 'member-action-btn btn btn-sm btn-outline-warning';
+    flagBtn.title = 'Flag for attention';
+    flagBtn.setAttribute('onclick', `openAttentionFlag(${memberPk}, '${memberName}')`);
+    flagBtn.innerHTML = '<i class="bi bi-flag"></i>';
+    // Insert before the last button (delete)
+    const deleteBtn = btnGroup.querySelector('.btn-outline-danger');
+    btnGroup.insertBefore(flagBtn, deleteBtn || null);
+  }
+
+  // ── Card number row ──────────────────────────────────────────────────────
+  if (data.card_number) {
+    _addOrUpdateDetailRow(card, 'assigned-card', `
+      <i class="bi bi-credit-card text-primary flex-shrink-0"></i>
+      <span class="text-muted small me-1">Card:</span>
+      <strong class="text-primary">${data.card_number}</strong>
+    `);
+  }
+
+  // ── Check-in time row ────────────────────────────────────────────────────
+  if (data.check_in_time) {
+    _addOrUpdateDetailRow(card, 'checkin-time', `
+      <i class="bi bi-clock text-success flex-shrink-0"></i>
+      <span class="text-muted small me-1">In:</span>
+      <span class="text-success small">${data.check_in_time}</span>
+    `);
+  }
+
+  // ── ID number display ────────────────────────────────────────────────────
+  if (data.id_number) {
+    const idDisplay = card.querySelector(`#mid-display-${memberPk}`);
+    if (idDisplay) {
+      idDisplay.innerHTML = `Other Photo ID: <strong>${data.id_number}</strong>`;
+    }
+    // Remove "ID pending" pill if present
+    card.querySelectorAll('.member-status.flag').forEach(el => {
+      if (el.textContent.includes('ID pending')) el.remove();
+    });
+  }
+
+  // ── Photo thumbnail ──────────────────────────────────────────────────────
+  if (data.photo_url) {
+    const photoPlaceholder = card.querySelector('.photo-placeholder');
+    if (photoPlaceholder) {
+      const img = document.createElement('img');
+      img.src = data.photo_url;
+      img.alt = 'ID Photo';
+      img.className = 'member-photo';
+      img.title = 'Click to enlarge';
+      img.setAttribute('onclick', `showImageModal('${data.photo_url}', 'ID Document')`);
+      photoPlaceholder.replaceWith(img);
+    }
+  }
+
+  // ── Highlight briefly ────────────────────────────────────────────────────
+  card.style.transition = 'box-shadow 0.3s';
+  card.style.boxShadow = '0 0 0 3px #16a34a55';
+  setTimeout(() => { card.style.boxShadow = ''; }, 1800);
+}
+
+
+/**
+ * After a successful check-out fetch, update the member card in-place:
+ * - Status pill → "Out"
+ * - Button → gone (no re-check-in from detail page)
+ * - Adds check-out time row
+ * - Removes attention flag button
+ */
+function updateMemberCardAfterCheckout(memberPk, data) {
+  const card = document.getElementById(`member-card-${memberPk}`);
+  if (!card) return;
+
+  // ── Status pill ──────────────────────────────────────────────────────────
+  const inPill = card.querySelector('.member-status.in');
+  if (inPill) {
+    inPill.className = 'member-status out';
+    inPill.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i>Out';
+  }
+
+  // ── Remove Check Out button ──────────────────────────────────────────────
+  const checkoutBtn = card.querySelector('[data-member-action="checkout"]');
+  if (checkoutBtn) checkoutBtn.remove();
+
+  // ── Remove attention flag button (not relevant once out) ────────────────
+  card.querySelector('[onclick*="openAttentionFlag"]')?.remove();
+
+  // ── Check-out time row ───────────────────────────────────────────────────
+  if (data.check_out_time) {
+    _addOrUpdateDetailRow(card, 'checkout-time', `
+      <i class="bi bi-clock text-secondary flex-shrink-0"></i>
+      <span class="text-muted small me-1">Out:</span>
+      <span class="text-secondary small">${data.check_out_time}</span>
+    `);
+  }
+
+  // ── Card returned note ───────────────────────────────────────────────────
+  if (data.card_number_returned) {
+    // Safe cross-browser alternative to :has() — find the row that contains a credit-card icon
+    const allRows = card.querySelectorAll('.editable-field-row');
+    let cardRow = null;
+    allRows.forEach(row => {
+      if (row.querySelector('.bi-credit-card')) cardRow = row;
+    });
+    if (cardRow) {
+      cardRow.innerHTML = `
+        <i class="bi bi-credit-card text-muted flex-shrink-0"></i>
+        <span class="text-muted small me-1">Card:</span>
+        <span class="text-muted text-decoration-line-through">${data.card_number_returned}</span>
+        <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Returned</span>
+      `;
+    }
+  }
+
+  // ── Highlight briefly ────────────────────────────────────────────────────
+  card.style.transition = 'box-shadow 0.3s';
+  card.style.boxShadow = '0 0 0 3px #0d6efd44';
+  setTimeout(() => { card.style.boxShadow = ''; }, 1800);
+}
+
+
+/** Insert or update a detail row inside the member card body. */
+function _addOrUpdateDetailRow(card, dataKey, innerHtml) {
+  const body = card.querySelector('.member-card-body .row');
+  if (!body) return;
+  let row = body.querySelector(`[data-dyn="${dataKey}"]`);
+  if (!row) {
+    const col = document.createElement('div');
+    col.className = 'col-sm-6';
+    col.dataset.dyn = dataKey;
+    row = document.createElement('div');
+    row.className = 'editable-field-row';
+    col.appendChild(row);
+    body.appendChild(col);
+  }
+  row.innerHTML = innerHtml;
+}
+
+
+/** Bootstrap-style toast notification that auto-dismisses. */
+function showToast(type, message) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText =
+      'position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;';
+    document.body.appendChild(container);
+  }
+
+  const colours = {
+    success: { bg: '#16a34a', icon: 'bi-check-circle-fill' },
+    danger:  { bg: '#dc2626', icon: 'bi-exclamation-circle-fill' },
+    warning: { bg: '#d97706', icon: 'bi-exclamation-triangle-fill' },
+    info:    { bg: '#0ea5e9', icon: 'bi-info-circle-fill' },
+  };
+  const { bg, icon } = colours[type] || colours.info;
+
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    display:flex;align-items:center;gap:.6rem;
+    background:${bg};color:#fff;
+    padding:.65rem 1rem;border-radius:10px;
+    box-shadow:0 4px 16px rgba(0,0,0,.25);
+    font-size:.875rem;font-weight:500;
+    min-width:240px;max-width:360px;
+    animation:slideInToast .25s ease;
+  `;
+  toast.innerHTML = `<i class="bi ${icon} flex-shrink-0"></i><span>${message}</span>`;
+
+  if (!document.getElementById('toast-keyframes')) {
+    const style = document.createElement('style');
+    style.id = 'toast-keyframes';
+    style.textContent = '@keyframes slideInToast{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}';
+    document.head.appendChild(style);
+  }
+
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity .3s';
+    setTimeout(() => toast.remove(), 350);
+  }, 3500);
+}
+
+// ── Attention flag modal ─────────────────────────────────────────────────────
+function openAttentionFlag(memberPk, name) {
+  document.getElementById('attentionForm').action = `/visitors/${VISITOR_PK}/member/${memberPk}/flag-attention/`;
+  document.getElementById('attention-member-name').textContent = name;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('attentionModal')).show();
+}
+
+// ── Inline field edit modal ──────────────────────────────────────────────────
+function editMemberField(memberPk, fieldName, currentValue) {
+  const labels = {
+    'id_number': 'ID Number',
+    'contact_number': 'Contact Number / Phone',
+    'nationality': 'Nationality',
+  };
+  document.getElementById('editFieldForm').action = `/visitors/${VISITOR_PK}/member/${memberPk}/update-field/`;
+  document.getElementById('editFieldName').value = fieldName;
+  document.getElementById('editFieldValue').value = currentValue || '';
+  document.getElementById('editFieldLabel').textContent = labels[fieldName] || fieldName;
+  document.getElementById('editFieldModalTitle').textContent = `Edit: ${labels[fieldName] || fieldName}`;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('editFieldModal')).show();
+}
+
+// ── Photo capture from detail page ───────────────────────────────────────────
+function openPhotoCapture(memberPk, name) {
+  document.getElementById('photoCaptureForm').action = `/visitors/${VISITOR_PK}/member/${memberPk}/upload-photo/`;
+  document.getElementById('photo-member-name').textContent = name;
+  capturedBlob2 = null;
+  document.getElementById('capturedPreview2').style.display = 'none';
+  document.getElementById('cameraContainer2').style.display = 'none';
+  stopCamera(cameraStream2); cameraStream2 = null;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('photoCaptureModal')).show();
+}
+
+document.getElementById('startCameraBtn2')?.addEventListener('click', async function () {
+  cameraStream2 = await startCamera('cameraVideo2', 'cameraContainer2');
+});
+
+document.getElementById('capturePhotoBtn2')?.addEventListener('click', async function () {
+  capturedBlob2 = await captureFromVideo('cameraVideo2', 'captureCanvas2');
+  stopCamera(cameraStream2); cameraStream2 = null;
+  document.getElementById('cameraContainer2').style.display = 'none';
+  document.getElementById('capturedPreview2').style.display = 'block';
+  document.getElementById('capturedImg2').src = URL.createObjectURL(capturedBlob2);
+});
+
+document.getElementById('photoCaptureModal')?.addEventListener('hidden.bs.modal', function () {
+  stopCamera(cameraStream2); cameraStream2 = null;
+});
+
+document.getElementById('photoCaptureForm')?.addEventListener('submit', function (e) {
+  if (capturedBlob2) {
+    const dt = new DataTransfer();
+    dt.items.add(new File([capturedBlob2], 'gate_photo.jpg', { type: 'image/jpeg' }));
+    document.getElementById('photoUpload2').files = dt.files;
+  }
+});
+
+function previewPhotoUpload(input) {
+  if (input.files && input.files[0]) {
+    document.getElementById('capturedImg2').src = URL.createObjectURL(input.files[0]);
+    document.getElementById('capturedPreview2').style.display = 'block';
+  }
 }
 </script>
 {% endblock %}
