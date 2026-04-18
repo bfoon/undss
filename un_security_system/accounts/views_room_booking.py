@@ -1792,6 +1792,70 @@ def room_series_approve_view(request, pk):
 
 
 @login_required
+@login_required
+def series_detail_view(request, pk):
+    """
+    Detail page for a recurring booking series.
+    Shows a month-grouped timeline of all occurrences, series metadata,
+    completion stats, and per-occurrence cancel/detail actions.
+    Only the series owner can view this page.
+    """
+    series = get_object_or_404(
+        RoomBookingSeries.objects.select_related(
+            'room', 'requested_by', 'approved_by'
+        ),
+        pk=pk,
+        requested_by=request.user,
+    )
+    occ_list = list(
+        series.occurrences
+        .select_related('room')
+        .order_by('date', 'start_time')
+    )
+
+    today = date.today()
+    total     = len(occ_list)
+    approved  = sum(1 for o in occ_list if o.status == 'approved')
+    pending   = sum(1 for o in occ_list if o.status == 'pending')
+    cancelled = sum(1 for o in occ_list if o.status == 'cancelled')
+    rejected  = sum(1 for o in occ_list if o.status == 'rejected')
+    upcoming  = sum(1 for o in occ_list if o.date >= today and o.status in ('approved', 'pending'))
+    past      = sum(1 for o in occ_list if o.date < today)
+    next_occ  = next((o for o in occ_list if o.date >= today and o.status in ('approved', 'pending')), None)
+
+    # Group occurrences by month label so template can render month separators cleanly
+    from itertools import groupby
+    def month_key(o):
+        return o.date.strftime('%B %Y')
+
+    month_groups = [
+        {'month': month, 'occurrences': list(occs)}
+        for month, occs in groupby(occ_list, key=month_key)
+    ]
+
+    # Parse invited guest emails into a clean list
+    invited_emails = [
+        e.strip() for e in (series.attendee_emails or '').split(',') if e.strip()
+    ]
+
+    return render(request, 'accounts/rooms/series_detail.html', {
+        'series':          series,
+        'month_groups':    month_groups,
+        'today':           today,
+        'next_occurrence': next_occ,
+        'invited_emails':  invited_emails,
+        'stats': {
+            'total':    total,
+            'approved': approved,
+            'pending':  pending,
+            'cancelled':cancelled,
+            'rejected': rejected,
+            'upcoming': upcoming,
+            'past':     past,
+        },
+    })
+
+
 def booking_detail_view(request, pk):
     booking = get_object_or_404(
         RoomBooking.objects.select_related('room', 'requested_by', 'requested_by__agency')

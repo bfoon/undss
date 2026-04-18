@@ -1,0 +1,822 @@
+{% extends "base.html" %}
+{% block title %}{{ series.title }} — Recurring Series{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Breadcrumb ──────────────────────────────────────────────────────────── */
+.eo-breadcrumb {
+  display:flex; align-items:center; gap:.45rem; flex-wrap:wrap;
+  font-size:.87rem; margin-bottom:1rem;
+}
+.eo-breadcrumb a {
+  color:#0b74b8; text-decoration:none; font-weight:500;
+  display:inline-flex; align-items:center; gap:.3rem;
+}
+.eo-breadcrumb a:hover { text-decoration:underline; }
+.eo-breadcrumb .sep  { color:#94a3b8; font-size:.75rem; }
+.eo-breadcrumb .curr { color:#475569; font-weight:600; }
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+.series-hero {
+  position:relative; overflow:hidden; border-radius:24px; color:white;
+  background:linear-gradient(135deg, #0a193d 0%, #78350f 60%, #d97706 100%);
+  box-shadow:0 20px 48px rgba(10,25,61,.24); margin-bottom:1.5rem;
+}
+.series-hero::before {
+  content:""; position:absolute; width:360px; height:360px;
+  right:-100px; top:-100px; border-radius:50%; background:rgba(255,255,255,.06);
+  pointer-events:none;
+}
+.series-hero::after {
+  content:""; position:absolute; width:220px; height:220px;
+  left:-60px; bottom:-80px; border-radius:50%; background:rgba(255,255,255,.04);
+  pointer-events:none;
+}
+.hero-body { position:relative; z-index:1; padding:2rem 2.2rem; }
+
+.series-kicker {
+  display:inline-flex; align-items:center; gap:.45rem; padding:.38rem .9rem;
+  border-radius:999px; background:rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.18); font-weight:700; font-size:.8rem;
+  margin-bottom:.85rem; letter-spacing:.01em;
+}
+.hero-title {
+  font-size:clamp(1.6rem,3.5vw,2.3rem); font-weight:800;
+  line-height:1.18; margin-bottom:.35rem;
+}
+.hero-room { opacity:.82; font-size:.93rem; }
+.hero-desc {
+  background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.15);
+  border-radius:14px; padding:.75rem 1rem; margin-top:.8rem;
+  font-size:.9rem; line-height:1.65; opacity:.95;
+}
+.hero-pills { display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.9rem; }
+.hero-pill {
+  display:inline-flex; align-items:center; gap:.38rem; border-radius:999px;
+  background:rgba(255,255,255,.12); padding:.4rem .82rem;
+  border:1px solid rgba(255,255,255,.14); font-size:.86rem;
+}
+.hero-pill a { color:inherit; text-decoration:none; }
+
+/* Status ribbon */
+.sr {
+  display:inline-flex; align-items:center; gap:.4rem; padding:.48rem .9rem;
+  border-radius:999px; font-weight:800; font-size:.86rem; white-space:nowrap;
+}
+.sr-approved  { background:#d1fae5; color:#065f46; }
+.sr-pending   { background:#fef3c7; color:#92400e; }
+.sr-rejected  { background:#fee2e2; color:#991b1b; }
+.sr-cancelled { background:#e5e7eb; color:#374151; }
+
+/* ── Next occurrence spotlight ───────────────────────────────────────────── */
+.next-spot {
+  border-radius:18px; background:linear-gradient(135deg,#fffbeb,#fef3c7);
+  border:2px solid #fbbf24; padding:1.15rem 1.4rem; margin-bottom:1.5rem;
+  display:flex; align-items:center; gap:1.1rem; flex-wrap:wrap;
+}
+.next-icon {
+  width:54px; height:54px; border-radius:15px; flex-shrink:0;
+  background:linear-gradient(135deg,#f59e0b,#d97706); color:white;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.5rem; box-shadow:0 6px 16px rgba(245,158,11,.32);
+}
+.next-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#92400e; }
+.next-date  { font-size:1.15rem; font-weight:800; color:#78350f; line-height:1.25; margin-top:.1rem; }
+.next-time  { font-size:.88rem; color:#a16207; margin-top:.18rem; }
+.countdown  {
+  background:#f59e0b; color:white; border-radius:999px;
+  padding:.32rem .82rem; font-size:.8rem; font-weight:700;
+  display:inline-flex; align-items:center; gap:.3rem;
+  animation:beat 2.5s ease infinite;
+}
+@keyframes beat { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+
+/* ── Stats strip ─────────────────────────────────────────────────────────── */
+.stats-strip {
+  display:grid; grid-template-columns:repeat(6,1fr); gap:.8rem; margin-bottom:1.5rem;
+}
+@media (max-width:900px) { .stats-strip { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:500px) { .stats-strip { grid-template-columns:repeat(2,1fr); } }
+
+.stat-tile {
+  border-radius:16px; border:1.5px solid #e4edf3; background:white;
+  padding:1rem .75rem; text-align:center;
+  box-shadow:0 4px 12px rgba(15,23,42,.05);
+  transition:transform .18s, box-shadow .18s;
+}
+.stat-tile:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(15,23,42,.1); }
+.stat-num { font-size:1.9rem; font-weight:800; line-height:1; }
+.stat-lbl { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#64748b; margin-top:.28rem; }
+.s-total    .stat-num { color:#0a193d; }
+.s-approved .stat-num { color:#059669; }
+.s-upcoming .stat-num { color:#0b74b8; }
+.s-past     .stat-num { color:#94a3b8; }
+.s-pending  .stat-num { color:#d97706; }
+.s-cancelled .stat-num { color:#9ca3af; }
+
+/* ── Section cards ───────────────────────────────────────────────────────── */
+.eo-card {
+  border-radius:20px; border:1px solid #dce8f1;
+  box-shadow:0 8px 22px rgba(15,23,42,.06); background:white;
+  overflow:hidden; margin-bottom:1.5rem;
+}
+.eo-card-head {
+  background:linear-gradient(135deg,#f7fbfd,#eef7fb);
+  border-bottom:1px solid #dce8f1; padding:.85rem 1.25rem;
+  display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+}
+.eo-card-head h5, .eo-card-head h6 { margin:0; font-weight:700; color:#1e293b; }
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+.prog-wrap { padding:1rem 1.25rem; border-bottom:1px solid #f1f5f9; }
+.prog-head { display:flex; justify-content:space-between; font-size:.82rem; font-weight:600; margin-bottom:.4rem; }
+.prog-outer { height:9px; background:#e2e8f0; border-radius:999px; overflow:hidden; }
+.prog-inner {
+  height:100%; border-radius:999px;
+  background:linear-gradient(90deg,#10b981,#059669); transition:width .7s ease;
+}
+
+/* ── Timeline ────────────────────────────────────────────────────────────── */
+.tl-wrap { padding:1.1rem 1.4rem; }
+
+.month-sep {
+  display:flex; align-items:center; gap:.75rem; margin:.7rem 0 .5rem;
+  font-size:.75rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.07em; color:#94a3b8;
+}
+.month-sep::after { content:""; flex:1; height:1px; background:#e9eef5; }
+
+.tl-row {
+  display:grid; grid-template-columns:44px 1fr; gap:0;
+  position:relative; margin-bottom:.7rem;
+}
+
+/* Spine connector */
+.tl-row:not(:last-child) .tl-spine::after {
+  content:""; position:absolute; left:21px; top:44px;
+  width:2px; bottom:-8px; background:#e2e8f0; z-index:0;
+}
+.tl-spine {
+  position:relative; display:flex; flex-direction:column;
+  align-items:center; padding-top:12px;
+}
+.tl-dot {
+  width:18px; height:18px; border-radius:50%; border:3px solid white;
+  position:relative; z-index:1; flex-shrink:0;
+}
+.tl-dot.d-approved  { background:#10b981; box-shadow:0 0 0 2.5px #10b981; }
+.tl-dot.d-pending   { background:#f59e0b; box-shadow:0 0 0 2.5px #f59e0b; }
+.tl-dot.d-cancelled { background:#9ca3af; box-shadow:0 0 0 2.5px #cbd5e1; }
+.tl-dot.d-rejected  { background:#ef4444; box-shadow:0 0 0 2.5px #ef4444; }
+.tl-dot.d-past      { background:#cbd5e1; box-shadow:0 0 0 2.5px #cbd5e1; }
+.tl-dot.d-next      {
+  background:#0b74b8; border-width:3px; border-color:white;
+  box-shadow:0 0 0 3px #0b74b8, 0 0 0 6px #bae6fd;
+  animation:dot-pulse 2s ease infinite;
+}
+@keyframes dot-pulse { 0%,100%{box-shadow:0 0 0 3px #0b74b8, 0 0 0 6px rgba(186,230,253,.8)} 50%{box-shadow:0 0 0 3px #0b74b8, 0 0 0 9px rgba(186,230,253,.2)} }
+
+.tl-card {
+  border-radius:14px; border:1.5px solid #e4edf3; background:white;
+  padding:.85rem 1rem; margin-left:.5rem;
+  box-shadow:0 3px 10px rgba(15,23,42,.05);
+  transition:transform .15s, box-shadow .15s;
+}
+.tl-card:hover         { transform:translateY(-2px); box-shadow:0 8px 22px rgba(15,23,42,.09); }
+.tl-card.c-past        { background:#f8fafc; border-color:#e2e8f0; }
+.tl-card.c-next        { border-color:#0b74b8; border-width:2px; background:#f0f9ff; }
+.tl-card.c-cancelled   { opacity:.58; }
+.tl-card.c-rejected    { border-color:#fca5a5; }
+
+.occ-day   { font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; }
+.occ-date  { font-size:.97rem; font-weight:700; color:#1e293b; margin-top:.05rem; }
+.occ-time  { font-size:.8rem; color:#64748b; margin-top:.12rem; }
+
+/* Occurrence status chips */
+.occ-chip {
+  display:inline-flex; align-items:center; gap:.25rem;
+  border-radius:999px; font-size:.7rem; font-weight:700; padding:.16rem .5rem;
+}
+.chip-approved  { background:#d1fae5; color:#065f46; }
+.chip-pending   { background:#fef3c7; color:#92400e; }
+.chip-cancelled { background:#e5e7eb; color:#6b7280; }
+.chip-rejected  { background:#fee2e2; color:#991b1b; }
+.chip-completed { background:#f1f5f9; color:#64748b; }
+.chip-next      { background:#dbeafe; color:#1e40af; }
+
+/* Occurrence action buttons */
+.occ-acts { display:flex; gap:.35rem; margin-top:.6rem; flex-wrap:wrap; }
+.occ-btn {
+  display:inline-flex; align-items:center; gap:.28rem; padding:.28rem .65rem;
+  border-radius:8px; font-size:.76rem; font-weight:600;
+  border:1.5px solid; text-decoration:none; cursor:pointer;
+  transition:all .15s; background:white;
+}
+.occ-btn:hover   { transform:translateY(-1px); }
+.btn-view        { border-color:#0b74b8; color:#0b74b8; }
+.btn-view:hover  { background:#0b74b8; color:white; }
+.btn-cancel      { border-color:#ef4444; color:#ef4444; }
+.btn-cancel:hover{ background:#fee2e2; }
+.btn-muted       { border-color:#e2e8f0; color:#64748b; }
+.btn-muted:hover { background:#f1f5f9; }
+
+/* ── Sidebar info rows ───────────────────────────────────────────────────── */
+.inf-row { display:flex; align-items:start; gap:.75rem; padding:.7rem 1.1rem; border-bottom:1px solid #f1f5f9; }
+.inf-row:last-child { border-bottom:none; }
+.inf-icon {
+  width:34px; height:34px; border-radius:10px; flex-shrink:0;
+  background:linear-gradient(135deg,#fffbeb,#fef3c7);
+  display:flex; align-items:center; justify-content:center;
+  color:#d97706; font-size:.95rem;
+}
+.inf-lbl { font-size:.69rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; }
+.inf-val { font-size:.9rem; font-weight:600; color:#1e293b; margin-top:.08rem; line-height:1.4; }
+
+/* ── Donut canvas ring ───────────────────────────────────────────────────── */
+.donut-wrap { display:flex; align-items:center; gap:1.1rem; padding:1rem 1.25rem; }
+
+/* ── Guest chips ─────────────────────────────────────────────────────────── */
+.guest-chip {
+  display:inline-flex; align-items:center; gap:.3rem;
+  background:#f1f5f9; border-radius:999px; padding:.15rem .55rem;
+  margin:.15rem .1rem; font-size:.78rem; color:#475569;
+}
+
+/* ── Action row ──────────────────────────────────────────────────────────── */
+.act-row { display:flex; gap:.7rem; flex-wrap:wrap; padding:1rem 1.25rem; }
+.act-btn {
+  display:inline-flex; align-items:center; gap:.45rem; padding:.62rem 1.15rem;
+  border-radius:12px; font-weight:700; font-size:.86rem;
+  border:2px solid; text-decoration:none; cursor:pointer; transition:all .2s;
+}
+.act-btn:hover { transform:translateY(-2px); }
+.act-primary {
+  background:linear-gradient(135deg,#0b74b8,#009edb); color:white;
+  border-color:transparent; box-shadow:0 4px 14px rgba(11,116,184,.28);
+}
+.act-primary:hover { box-shadow:0 8px 22px rgba(11,116,184,.38); color:white; }
+.act-danger  { background:white; color:#dc2626; border-color:#fca5a5; }
+.act-danger:hover  { background:#fee2e2; border-color:#ef4444; }
+.act-muted   { background:#f8fafc; color:#475569; border-color:#e2e8f0; }
+.act-muted:hover   { background:#f1f5f9; }
+
+@media (max-width:767px) { .hero-body { padding:1.3rem 1.2rem; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:1100px;">
+
+  {# Breadcrumb #}
+  <nav class="eo-breadcrumb">
+    <a href="{% url 'accounts:room_list' %}"><i class="bi bi-house-door"></i>Rooms</a>
+    <span class="sep">›</span>
+    <a href="{% url 'accounts:room_detail' series.room.pk %}">{{ series.room.name }}</a>
+    <span class="sep">›</span>
+    <a href="{% url 'accounts:my_bookings' %}">My Bookings</a>
+    <span class="sep">›</span>
+    <span class="curr">{{ series.title|truncatechars:42 }}</span>
+  </nav>
+
+  <div class="d-flex gap-2 mb-4">
+    <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+    <a href="{% url 'accounts:my_bookings' %}" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-calendar2-week me-1"></i>All Bookings
+    </a>
+  </div>
+
+  {# ── HERO ── #}
+  <div class="series-hero">
+    <div class="hero-body">
+      <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+        <div style="flex:1;min-width:0;">
+          <div class="series-kicker">
+            <i class="bi bi-arrow-repeat"></i>
+            Recurring Series
+            {% if series.frequency %}&nbsp;·&nbsp;{{ series.get_frequency_display }}{% endif %}
+          </div>
+          <div class="hero-title">{{ series.title }}</div>
+          <div class="hero-room">
+            <i class="bi bi-door-open me-1"></i>
+            {{ series.room.name }}{% if series.room.code %} ({{ series.room.code }}){% endif %}
+          </div>
+          {% if series.description %}
+          <div class="hero-desc">{{ series.description }}</div>
+          {% endif %}
+          <div class="hero-pills">
+            <span class="hero-pill">
+              <i class="bi bi-calendar-range"></i>
+              {{ series.start_date|date:"d M Y" }} –
+              {% if series.end_date %}{{ series.end_date|date:"d M Y" }}{% else %}Ongoing{% endif %}
+            </span>
+            <span class="hero-pill">
+              <i class="bi bi-clock"></i>
+              {{ series.start_time|time:"H:i" }} – {{ series.end_time|time:"H:i" }}
+            </span>
+            <span class="hero-pill">
+              <i class="bi bi-calendar-check"></i>
+              {{ stats.total }} occurrence{{ stats.total|pluralize }}
+            </span>
+            {% if series.virtual_meeting_link %}
+            <span class="hero-pill">
+              <a href="{{ series.virtual_meeting_link }}" target="_blank" style="color:inherit;">
+                <i class="bi bi-camera-video"></i> Virtual Link
+              </a>
+            </span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="flex-shrink-0 text-end d-flex flex-column align-items-end gap-2">
+          {% if series.status == "approved" %}
+            <span class="sr sr-approved"><i class="bi bi-check-circle-fill"></i>Approved</span>
+          {% elif series.status == "pending" %}
+            <span class="sr sr-pending"><i class="bi bi-clock-fill"></i>Pending</span>
+          {% elif series.status == "rejected" %}
+            <span class="sr sr-rejected"><i class="bi bi-x-circle-fill"></i>Rejected</span>
+          {% elif series.status == "cancelled" %}
+            <span class="sr sr-cancelled"><i class="bi bi-slash-circle"></i>Cancelled</span>
+          {% endif %}
+          <span style="opacity:.72;font-size:.78rem;">
+            Created {{ series.created_at|timesince }} ago
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── NEXT OCCURRENCE SPOTLIGHT ── #}
+  {% if next_occurrence %}
+  <div class="next-spot">
+    <div class="next-icon"><i class="bi bi-calendar-event"></i></div>
+    <div style="flex:1;min-width:0;">
+      <div class="next-label">Next Occurrence</div>
+      <div class="next-date">{{ next_occurrence.date|date:"l, d F Y" }}</div>
+      <div class="next-time">
+        <i class="bi bi-clock me-1"></i>
+        {{ next_occurrence.start_time|time:"H:i" }} – {{ next_occurrence.end_time|time:"H:i" }}
+      </div>
+    </div>
+    <div class="d-flex flex-column align-items-end gap-2">
+      <span class="countdown">
+        <i class="bi bi-hourglass-split"></i>
+        In {{ next_occurrence.date|timeuntil }}
+      </span>
+      {% if next_occurrence.status == "approved" or next_occurrence.status == "pending" %}
+      <a href="{% url 'accounts:booking_detail' next_occurrence.pk %}"
+         class="btn btn-sm fw-bold"
+         style="background:#f59e0b;color:white;border:none;border-radius:8px;">
+        <i class="bi bi-eye me-1"></i>View Details
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── STATS STRIP ── #}
+  <div class="stats-strip">
+    <div class="stat-tile s-total">
+      <div class="stat-num">{{ stats.total }}</div>
+      <div class="stat-lbl">Total</div>
+    </div>
+    <div class="stat-tile s-approved">
+      <div class="stat-num">{{ stats.approved }}</div>
+      <div class="stat-lbl">Approved</div>
+    </div>
+    <div class="stat-tile s-upcoming">
+      <div class="stat-num">{{ stats.upcoming }}</div>
+      <div class="stat-lbl">Upcoming</div>
+    </div>
+    <div class="stat-tile s-past">
+      <div class="stat-num">{{ stats.past }}</div>
+      <div class="stat-lbl">Past</div>
+    </div>
+    <div class="stat-tile s-pending">
+      <div class="stat-num">{{ stats.pending }}</div>
+      <div class="stat-lbl">Pending</div>
+    </div>
+    <div class="stat-tile s-cancelled">
+      <div class="stat-num">{{ stats.cancelled }}</div>
+      <div class="stat-lbl">Cancelled</div>
+    </div>
+  </div>
+
+  {# ── MAIN GRID ── #}
+  <div class="row g-4">
+
+    {# LEFT: occurrence timeline #}
+    <div class="col-lg-8">
+      <div class="eo-card">
+        <div class="eo-card-head">
+          <h5><i class="bi bi-calendar-week me-2" style="color:#f59e0b;"></i>Occurrence Timeline</h5>
+          <span style="font-size:.8rem;color:#64748b;">{{ stats.total }} meeting{{ stats.total|pluralize }}</span>
+        </div>
+
+        {% if stats.total > 0 %}
+        <div class="prog-wrap">
+          <div class="prog-head">
+            <span style="color:#475569;">Completion</span>
+            <span style="color:#059669;">{{ stats.past }} / {{ stats.total }} done</span>
+          </div>
+          <div class="prog-outer">
+            <div class="prog-inner" id="progBar" style="width:0%;"></div>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="tl-wrap">
+          {% if month_groups %}
+            {% for group in month_groups %}
+
+              <div class="month-sep">{{ group.month }}</div>
+
+              {% for occ in group.occurrences %}
+              <div class="tl-row">
+                {# Spine dot #}
+                <div class="tl-spine">
+                  {% if next_occurrence and occ.pk == next_occurrence.pk %}
+                    <div class="tl-dot d-next" title="Next upcoming"></div>
+                  {% elif occ.date < today %}
+                    <div class="tl-dot d-past"></div>
+                  {% elif occ.status == "approved" %}
+                    <div class="tl-dot d-approved"></div>
+                  {% elif occ.status == "pending" %}
+                    <div class="tl-dot d-pending"></div>
+                  {% elif occ.status == "cancelled" %}
+                    <div class="tl-dot d-cancelled"></div>
+                  {% elif occ.status == "rejected" %}
+                    <div class="tl-dot d-rejected"></div>
+                  {% else %}
+                    <div class="tl-dot d-past"></div>
+                  {% endif %}
+                </div>
+
+                {# Card #}
+                <div class="tl-card
+                  {% if occ.date < today %}c-past{% endif %}
+                  {% if next_occurrence and occ.pk == next_occurrence.pk %}c-next{% endif %}
+                  {% if occ.status == 'cancelled' %}c-cancelled{% endif %}
+                  {% if occ.status == 'rejected' %}c-rejected{% endif %}">
+
+                  <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                    <div>
+                      <div class="occ-day">{{ occ.date|date:"D" }}</div>
+                      <div class="occ-date">{{ occ.date|date:"d F Y" }}</div>
+                      <div class="occ-time">
+                        <i class="bi bi-clock me-1"></i>
+                        {{ occ.start_time|time:"H:i" }} – {{ occ.end_time|time:"H:i" }}
+                      </div>
+                    </div>
+                    <div class="d-flex gap-1 flex-wrap justify-content-end">
+                      {% if next_occurrence and occ.pk == next_occurrence.pk %}
+                        <span class="occ-chip chip-next"><i class="bi bi-arrow-right-circle-fill"></i>Next</span>
+                      {% endif %}
+                      {% if occ.date < today and occ.status == "approved" %}
+                        <span class="occ-chip chip-completed"><i class="bi bi-check2"></i>Completed</span>
+                      {% elif occ.status == "approved" %}
+                        <span class="occ-chip chip-approved"><i class="bi bi-check-circle-fill"></i>Approved</span>
+                      {% elif occ.status == "pending" %}
+                        <span class="occ-chip chip-pending"><i class="bi bi-clock-fill"></i>Pending</span>
+                      {% elif occ.status == "cancelled" %}
+                        <span class="occ-chip chip-cancelled"><i class="bi bi-slash-circle"></i>Cancelled</span>
+                      {% elif occ.status == "rejected" %}
+                        <span class="occ-chip chip-rejected"><i class="bi bi-x-circle-fill"></i>Rejected</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="occ-acts">
+                    {% if occ.status == "approved" or occ.status == "pending" %}
+                      <a href="{% url 'accounts:booking_detail' occ.pk %}" class="occ-btn btn-view">
+                        <i class="bi bi-eye"></i> View Details
+                      </a>
+                    {% else %}
+                      <a href="{% url 'accounts:booking_detail' occ.pk %}" class="occ-btn btn-muted">
+                        <i class="bi bi-eye"></i> View
+                      </a>
+                    {% endif %}
+                    {% if occ.status == "approved" or occ.status == "pending" %}
+                      <button class="occ-btn btn-cancel"
+                              onclick="cancelOccurrence({{ occ.pk }}, '{{ occ.date|date:"d M Y" }}')">
+                        <i class="bi bi-x-circle"></i> Cancel
+                      </button>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+
+            {% endfor %}
+          {% else %}
+            <div class="text-center py-5 text-muted">
+              <i class="bi bi-calendar-x d-block mb-2" style="font-size:2.8rem;opacity:.25;"></i>
+              No occurrences found for this series.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# RIGHT: info sidebar #}
+    <div class="col-lg-4">
+
+      {# Rejection alert #}
+      {% if series.status == "rejected" and series.rejection_reason %}
+      <div class="alert mb-3"
+           style="background:#fee2e2;border:2px solid #ef4444;border-radius:16px;padding:1rem;">
+        <div class="d-flex align-items-center gap-2 fw-bold mb-1" style="color:#991b1b;">
+          <i class="bi bi-exclamation-triangle-fill"></i>Series Rejected
+        </div>
+        <div style="color:#7f1d1d;font-size:.88rem;">{{ series.rejection_reason }}</div>
+      </div>
+      {% endif %}
+
+      {# Series info #}
+      <div class="eo-card mb-3">
+        <div class="eo-card-head">
+          <h6><i class="bi bi-info-circle me-2" style="color:#f59e0b;"></i>Series Info</h6>
+        </div>
+
+        <div class="inf-row">
+          <div class="inf-icon"><i class="bi bi-arrow-repeat"></i></div>
+          <div>
+            <div class="inf-lbl">Frequency</div>
+            <div class="inf-val">
+              {{ series.get_frequency_display|default:"One-time" }}
+              {% if series.interval and series.interval > 1 %}(every {{ series.interval }}){% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="inf-row">
+          <div class="inf-icon"><i class="bi bi-calendar-range"></i></div>
+          <div>
+            <div class="inf-lbl">Date Range</div>
+            <div class="inf-val">
+              {{ series.start_date|date:"d M Y" }} →
+              {% if series.end_date %}{{ series.end_date|date:"d M Y" }}
+              {% else %}<em style="color:#94a3b8;font-weight:400;">No end date</em>{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="inf-row">
+          <div class="inf-icon"><i class="bi bi-clock"></i></div>
+          <div>
+            <div class="inf-lbl">Time Slot</div>
+            <div class="inf-val">{{ series.start_time|time:"H:i" }} – {{ series.end_time|time:"H:i" }}</div>
+          </div>
+        </div>
+
+        <div class="inf-row">
+          <div class="inf-icon"><i class="bi bi-door-open"></i></div>
+          <div>
+            <div class="inf-lbl">Room</div>
+            <div class="inf-val">
+              <a href="{% url 'accounts:room_detail' series.room.pk %}"
+                 style="color:#0b74b8;text-decoration:none;">{{ series.room.name }}</a>
+              {% if series.room.code %}
+                <span style="color:#94a3b8;font-size:.8rem;"> ({{ series.room.code }})</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        {% if series.weekdays_csv %}
+        <div class="inf-row">
+          <div class="inf-icon"><i class="bi bi-calendar3-week"></i></div>
+          <div>
+            <div class="inf-lbl">Days</div>
+            <div class="inf-val">{{ series.weekdays_csv }}</div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if series.ict_support and series.ict_support != "none" %}
+        <div class="inf-row">
+          <div class="inf-icon"><i class="bi bi-pc-display"></i></div>
+          <div>
+            <div class="inf-lbl">ICT Support</div>
+            <div class="inf-val">{{ series.get_ict_support_display }}</div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if series.approved_by %}
+        <div class="inf-row">
+          <div class="inf-icon"><i class="bi bi-person-check"></i></div>
+          <div>
+            <div class="inf-lbl">Approved By</div>
+            <div class="inf-val">{{ series.approved_by.get_full_name|default:series.approved_by.username }}</div>
+            {% if series.approved_at %}
+            <div style="font-size:.73rem;color:#94a3b8;">{{ series.approved_at|date:"d M Y · H:i" }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      {# Completion donut #}
+      {% if stats.total > 0 %}
+      <div class="eo-card mb-3">
+        <div class="eo-card-head">
+          <h6><i class="bi bi-pie-chart me-2" style="color:#f59e0b;"></i>Completion</h6>
+        </div>
+        <div class="donut-wrap">
+          <canvas id="donutCanvas" width="90" height="90"></canvas>
+          <div style="flex:1;">
+            <div class="d-flex justify-content-between small mb-1 fw-semibold">
+              <span style="color:#059669;"><i class="bi bi-check2-circle me-1"></i>{{ stats.past }} past</span>
+              <span style="color:#0b74b8;">{{ stats.upcoming }} upcoming</span>
+            </div>
+            <div class="prog-outer">
+              <div class="prog-inner" id="progBar2" style="width:0%;"></div>
+            </div>
+            <div class="small mt-2" style="color:#94a3b8;">
+              {{ stats.total }} total · {{ stats.cancelled }} cancelled
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {# Invited guests #}
+      {% if invited_emails %}
+      <div class="eo-card mb-3">
+        <div class="eo-card-head">
+          <h6>
+            <i class="bi bi-envelope me-2" style="color:#f59e0b;"></i>
+            Invited Guests
+            <span class="badge ms-2" style="background:#fef3c7;color:#92400e;font-size:.7rem;">{{ invited_emails|length }}</span>
+          </h6>
+        </div>
+        <div class="p-3">
+          {% for email in invited_emails %}
+          <span class="guest-chip">
+            <i class="bi bi-envelope" style="color:#64748b;font-size:.75rem;"></i>
+            {{ email }}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# Actions #}
+      <div class="eo-card">
+        <div class="eo-card-head">
+          <h6><i class="bi bi-lightning me-2" style="color:#f59e0b;"></i>Actions</h6>
+        </div>
+        <div class="act-row">
+          <a href="{% url 'accounts:room_detail' series.room.pk %}" class="act-btn act-primary">
+            <i class="bi bi-door-open"></i>View Room
+          </a>
+          {% if series.status == "approved" or series.status == "pending" %}
+          <button class="act-btn act-danger" onclick="cancelSeries({{ series.pk }}, {{ stats.total }})">
+            <i class="bi bi-x-circle"></i>Cancel Series
+          </button>
+          {% endif %}
+          <a href="{% url 'accounts:my_bookings' %}" class="act-btn act-muted">
+            <i class="bi bi-arrow-left"></i>All Bookings
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Progress bars & donut ─────────────────────────────────────────────────
+const PAST  = {{ stats.past }};
+const TOTAL = {{ stats.total }};
+const pct   = TOTAL > 0 ? Math.round(PAST / TOTAL * 100) : 0;
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Animate progress bars
+  ['progBar','progBar2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) requestAnimationFrame(() => el.style.width = pct + '%');
+  });
+
+  // Draw donut canvas
+  const canvas = document.getElementById('donutCanvas');
+  if (canvas) {
+    const ctx    = canvas.getContext('2d');
+    const cx = 45, cy = 45, r = 36, lw = 11;
+    const start  = -Math.PI / 2;
+    const filled = (pct / 100) * 2 * Math.PI;
+
+    // Track (grey)
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = lw;
+    ctx.stroke();
+
+    // Fill (green) — animate
+    let current = 0;
+    const target = filled;
+    function draw() {
+      ctx.clearRect(0, 0, 90, 90);
+      // track
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2*Math.PI);
+      ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=lw; ctx.stroke();
+      // fill
+      if (current > 0) {
+        ctx.beginPath(); ctx.arc(cx, cy, r, start, start + current);
+        ctx.strokeStyle='#10b981'; ctx.lineWidth=lw;
+        ctx.lineCap='round'; ctx.stroke();
+      }
+      // centre text
+      ctx.fillStyle='#1e293b'; ctx.font='bold 16px system-ui';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(pct+'%', cx, cy);
+
+      if (current < target) {
+        current = Math.min(current + target / 40, target);
+        requestAnimationFrame(draw);
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+});
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+function getCsrf() {
+  let v = null;
+  document.cookie.split(';').forEach(c => {
+    c = c.trim();
+    if (c.startsWith('csrftoken=')) v = decodeURIComponent(c.slice(10));
+  });
+  return v;
+}
+
+function toast(msg, type) {
+  const colours = { success:'#10b981', error:'#ef4444', warning:'#f59e0b', info:'#0b74b8' };
+  const n = document.createElement('div');
+  n.style.cssText = `position:fixed;top:20px;right:20px;z-index:9999;padding:.9rem 1.4rem;
+    border-radius:12px;background:${colours[type]||colours.info};color:white;
+    font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.22);
+    font-size:.88rem;display:flex;align-items:center;gap:.5rem;max-width:380px;
+    animation:tslide .3s ease;`;
+  const icons = { success:'check-circle', error:'exclamation-circle', warning:'exclamation-triangle', info:'info-circle' };
+  n.innerHTML = `<i class="bi bi-${icons[type]||'info-circle'}"></i>${msg}`;
+  if (!document.getElementById('_tst')) {
+    const s = document.createElement('style');
+    s.id='_tst';
+    s.textContent='@keyframes tslide{from{transform:translateX(110%);opacity:0}to{transform:none;opacity:1}}';
+    document.head.appendChild(s);
+  }
+  document.body.appendChild(n);
+  setTimeout(()=>{ n.style.opacity='0'; n.style.transition='opacity .3s'; setTimeout(()=>n.remove(),350); }, 4500);
+}
+
+// ── Cancel single occurrence ──────────────────────────────────────────────
+function cancelOccurrence(id, dateStr) {
+  if (!confirm(`Cancel occurrence on ${dateStr}?\n\nOnly this date will be cancelled. All other occurrences remain active.`)) return;
+  const btn = event.target.closest('button');
+  if (btn) { btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span>'; }
+
+  fetch(`/accounts/rooms/occurrences/${id}/cancel/`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      toast(`Occurrence on ${dateStr} cancelled.`, 'success');
+      setTimeout(() => location.reload(), 1100);
+    } else {
+      toast(d.message || 'Could not cancel occurrence.', 'error');
+      if (btn) { btn.disabled=false; btn.innerHTML='<i class="bi bi-x-circle"></i> Cancel'; }
+    }
+  })
+  .catch(() => { toast('Network error.', 'error'); if(btn){btn.disabled=false;} });
+}
+
+// ── Cancel entire series ──────────────────────────────────────────────────
+function cancelSeries(id, count) {
+  if (!confirm(`⚠️ Cancel entire series?\n\nThis will cancel all ${count} occurrence${count!==1?'s':''} and free up the room for every time slot.\n\nThis cannot be undone. Continue?`)) return;
+  const btn = event.target.closest('button');
+  if (btn) { btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span>Cancelling…'; }
+
+  fetch(`/accounts/rooms/series/${id}/cancel/`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      toast(`Series cancelled — ${d.occurrence_count || count} occurrence${count!==1?'s':''} freed.`, 'success');
+      setTimeout(() => window.location = '{% url "accounts:my_bookings" %}', 1500);
+    } else {
+      toast(d.message || 'Could not cancel series.', 'error');
+      if (btn) { btn.disabled=false; btn.innerHTML='<i class="bi bi-x-circle"></i> Cancel Series'; }
+    }
+  })
+  .catch(() => { toast('Network error.', 'error'); if(btn){btn.disabled=false;} });
+}
+</script>
+{% endblock %}

@@ -950,9 +950,14 @@
                                                 {{ occurrence.start_time|time:"H:i" }} – {{ occurrence.end_time|time:"H:i" }}
                                             </span>
                                         </div>
-                                        <div class="d-flex align-items-center gap-2">
+                                        <div class="d-flex align-items-center gap-2 flex-wrap">
                                             {% if occurrence.status == "approved" %}
                                                 <span class="badge bg-success">Approved</span>
+                                                <a href="{% url 'accounts:booking_detail' occurrence.id %}"
+                                                   class="btn btn-sm btn-outline-primary"
+                                                   title="View details for this occurrence">
+                                                    <i class="bi bi-eye"></i> Details
+                                                </a>
                                                 <button class="btn btn-sm btn-outline-danger"
                                                         onclick="cancelOccurrence({{ occurrence.id }}, '{{ occurrence.date|date:"M d, Y" }}')"
                                                         title="Cancel this occurrence only">
@@ -960,6 +965,11 @@
                                                 </button>
                                             {% elif occurrence.status == "pending" %}
                                                 <span class="badge bg-warning text-dark">Pending</span>
+                                                <a href="{% url 'accounts:booking_detail' occurrence.id %}"
+                                                   class="btn btn-sm btn-outline-primary"
+                                                   title="View details for this occurrence">
+                                                    <i class="bi bi-eye"></i> Details
+                                                </a>
                                                 <button class="btn btn-sm btn-outline-danger"
                                                         onclick="cancelOccurrence({{ occurrence.id }}, '{{ occurrence.date|date:"M d, Y" }}')"
                                                         title="Cancel this occurrence only">
@@ -967,6 +977,11 @@
                                                 </button>
                                             {% elif occurrence.status == "rejected" %}
                                                 <span class="badge bg-danger">Rejected</span>
+                                                <a href="{% url 'accounts:booking_detail' occurrence.id %}"
+                                                   class="btn btn-sm btn-outline-secondary btn-sm"
+                                                   title="View this occurrence">
+                                                    <i class="bi bi-eye"></i>
+                                                </a>
                                             {% elif occurrence.status == "cancelled" %}
                                                 <span class="badge bg-secondary">Cancelled</span>
                                             {% endif %}
@@ -988,61 +1003,56 @@
                             {% endif %}
 
                             <div class="booking-actions">
-                                <a href="{% url 'accounts:room_detail' item.series.room.id %}" class="action-btn primary">
-                                    <i class="bi bi-eye"></i>
+                                <a href="{% url 'accounts:series_detail' item.series.id %}" class="action-btn primary">
+                                    <i class="bi bi-calendar-range"></i>
+                                    View Series
+                                </a>
+                                <a href="{% url 'accounts:room_detail' item.series.room.id %}" class="action-btn">
+                                    <i class="bi bi-door-open"></i>
                                     View Room
                                 </a>
-                                {% if item.series.status == "pending" %}
+                                {% if item.series.status == "pending" or item.series.status == "approved" %}
                                     <button class="action-btn" onclick="cancelSeries({{ item.series.id }})">
                                         <i class="bi bi-x-circle"></i>
                                         Cancel Series
                                     </button>
-                                {% elif item.series.status == "approved" %}
-                                    <button class="action-btn" onclick="cancelSeries({{ item.series.id }})">
-                                        <i class="bi bi-x-circle"></i>
-                                        Cancel Series
-                                    </button>
-                                    <small class="text-muted d-block mt-2">
-                                        <i class="bi bi-info-circle"></i>
-                                        Cancelling will free up the room for all {{ item.occurrence_count }} time slots
-                                    </small>
                                 {% endif %}
                             </div>
                         </div>
 
                     {% else %}
-                        {# Single Booking Card #}
-                        <div class="booking-card {{ item.status }}"
-                             data-searchable="{{ item.title|lower }} {{ item.room.name|lower }} {{ item.description|lower }}">
+                        {# Single Booking Card — item.booking is the RoomBooking object #}
+                        <div class="booking-card {{ item.booking.status }}"
+                             data-searchable="{{ item.booking.title|lower }} {{ item.booking.room.name|lower }} {{ item.booking.description|lower }}">
 
                             <div class="booking-header">
                                 <div class="booking-title-section">
                                     <div class="booking-title">
                                         <i class="bi bi-calendar-event"></i>
-                                        {{ item.title }}
+                                        {{ item.booking.title }}
                                     </div>
                                     <div class="booking-subtitle">
                                         <i class="bi bi-door-open me-1"></i>
-                                        {{ item.room.name }} ({{ item.room.code }})
+                                        {{ item.booking.room.name }} ({{ item.booking.room.code }})
                                     </div>
                                 </div>
                                 <div>
-                                    {% if item.status == "approved" %}
+                                    {% if item.booking.status == "approved" %}
                                         <span class="status-badge status-approved">
                                             <i class="bi bi-check-circle"></i>
                                             Approved
                                         </span>
-                                    {% elif item.status == "pending" %}
+                                    {% elif item.booking.status == "pending" %}
                                         <span class="status-badge status-pending">
                                             <i class="bi bi-clock-history"></i>
                                             Pending
                                         </span>
-                                    {% elif item.status == "rejected" %}
+                                    {% elif item.booking.status == "rejected" %}
                                         <span class="status-badge status-rejected">
                                             <i class="bi bi-x-circle"></i>
                                             Rejected
                                         </span>
-                                    {% elif item.status == "cancelled" %}
+                                    {% elif item.booking.status == "cancelled" %}
                                         <span class="status-badge status-cancelled">
                                             <i class="bi bi-slash-circle"></i>
                                             Cancelled
@@ -1053,82 +1063,66 @@
 
                             <div class="booking-details">
                                 <div class="detail-item">
-                                    <div class="detail-icon">
-                                        <i class="bi bi-calendar3"></i>
-                                    </div>
+                                    <div class="detail-icon"><i class="bi bi-calendar3"></i></div>
                                     <div class="detail-content">
                                         <div class="detail-label">Date</div>
-                                        <div class="detail-value">{{ item.date|date:"M d, Y" }}</div>
+                                        <div class="detail-value">{{ item.booking.date|date:"l, M d, Y" }}</div>
                                     </div>
                                 </div>
-
                                 <div class="detail-item">
-                                    <div class="detail-icon">
-                                        <i class="bi bi-clock"></i>
-                                    </div>
+                                    <div class="detail-icon"><i class="bi bi-clock"></i></div>
                                     <div class="detail-content">
                                         <div class="detail-label">Time</div>
                                         <div class="detail-value">
-                                            {{ item.start_time|time:"H:i" }} – {{ item.end_time|time:"H:i" }}
+                                            {{ item.booking.start_time|time:"H:i" }} – {{ item.booking.end_time|time:"H:i" }}
                                         </div>
                                     </div>
                                 </div>
-
                                 <div class="detail-item">
-                                    <div class="detail-icon">
-                                        <i class="bi bi-person"></i>
-                                    </div>
+                                    <div class="detail-icon"><i class="bi bi-person"></i></div>
                                     <div class="detail-content">
                                         <div class="detail-label">Requested</div>
-                                        <div class="detail-value">{{ item.created_at|timesince }} ago</div>
+                                        <div class="detail-value">{{ item.booking.created_at|timesince }} ago</div>
                                     </div>
                                 </div>
                             </div>
 
-                            {% if item.description %}
-                                <div style="margin: 1rem 0; padding: 1rem; background: #f9fafb; border-radius: 10px;">
+                            {% if item.booking.description %}
+                                <div style="margin:1rem 0;padding:1rem;background:#f9fafb;border-radius:10px;">
                                     <div class="detail-label mb-2">Description</div>
-                                    <div style="color: #4b5563;">{{ item.description }}</div>
+                                    <div style="color:#4b5563;">{{ item.booking.description }}</div>
                                 </div>
                             {% endif %}
 
-                            {% if item.status == "rejected" and item.rejection_reason %}
+                            {% if item.booking.status == "rejected" and item.booking.rejection_reason %}
                                 <div class="rejection-reason">
                                     <div class="rejection-reason-title">
                                         <i class="bi bi-exclamation-triangle"></i>
                                         Rejection Reason
                                     </div>
-                                    <div class="rejection-reason-text">
-                                        {{ item.rejection_reason }}
-                                    </div>
+                                    <div class="rejection-reason-text">{{ item.booking.rejection_reason }}</div>
                                 </div>
                             {% endif %}
 
                             <div class="booking-actions">
-                                <a href="{% url 'accounts:room_detail' item.room.id %}" class="action-btn primary">
+                                <a href="{% url 'accounts:booking_detail' item.booking.id %}" class="action-btn primary">
                                     <i class="bi bi-eye"></i>
+                                    View Details
+                                </a>
+                                <a href="{% url 'accounts:room_detail' item.booking.room.id %}" class="action-btn">
+                                    <i class="bi bi-door-open"></i>
                                     View Room
                                 </a>
-                                {% if item.status == "approved" %}
-                                    <a href="{% url 'accounts:booking_detail' item.id %}" class="action-btn primary">
-                                        <i class="bi bi-qr-code"></i>
-                                        Attendees &amp; QR
-                                    </a>
-                                {% endif %}
-                                {% if item.status == "pending" %}
-                                    <button class="action-btn" onclick="cancelBooking({{ item.id }})">
+                                {% if item.booking.status == "pending" %}
+                                    <button class="action-btn" onclick="cancelBooking({{ item.booking.id }})">
                                         <i class="bi bi-x-circle"></i>
                                         Cancel Request
                                     </button>
-                                {% elif item.status == "approved" %}
-                                    <button class="action-btn" onclick="cancelBooking({{ item.id }})">
+                                {% elif item.booking.status == "approved" %}
+                                    <button class="action-btn" onclick="cancelBooking({{ item.booking.id }})">
                                         <i class="bi bi-x-circle"></i>
                                         Cancel Booking
                                     </button>
-                                    <small class="text-muted d-block mt-2">
-                                        <i class="bi bi-info-circle"></i>
-                                        Cancelling will free up the room for this time slot
-                                    </small>
                                 {% endif %}
                             </div>
                         </div>
