@@ -264,10 +264,21 @@ def member_checkout(request, visitor_id, member_id):
 @require_POST
 def member_flag_attention(request, visitor_id, member_id):
     """
-    POST: flag a member as needing host attention.
-    Sends a notification to the meeting host (or registered_by user).
+    POST: flag a group member as needing host attention at the gate.
+
+    Behaviour:
+    - Saves gate_attention = 'needs_attention' + the officer's note on the GroupMember
+    - If the visitor is meeting-linked: also sets gate_flag=True + gate_flag_note on
+      the linked MeetingAttendee so the flag shows on the booking detail page
+    - Sends an email to the host (meeting requester OR visitor registered_by)
+    - Creates a VisitorLog entry
+    - Supports X-Fetch: 1 for AJAX calls (returns JSON)
     """
+    is_fetch = request.headers.get('X-Fetch') == '1'
+
     if not _gate_role(request.user):
+        if is_fetch:
+            return JsonResponse({'ok': False, 'error': 'Permission denied.'}, status=403)
         messages.error(request, "You don't have permission to flag gate attention.")
         return redirect('visitors:visitor_detail', pk=visitor_id)
 
@@ -276,6 +287,8 @@ def member_flag_attention(request, visitor_id, member_id):
     note    = (request.POST.get('attention_note') or '').strip()
 
     if not note:
+        if is_fetch:
+            return JsonResponse({'ok': False, 'error': 'Please provide a reason.'}, status=400)
         messages.error(request, "Please provide a reason for flagging this person.")
         return redirect('visitors:visitor_detail', pk=visitor_id)
 
@@ -285,6 +298,8 @@ def member_flag_attention(request, visitor_id, member_id):
     member.gate_attention_raised_at = now
     member.save(update_fields=['gate_attention', 'gate_attention_note', 'gate_attention_raised_at'])
 
+    gate_user = request.user.get_full_name() or request.user.username
+
     VisitorLog.objects.create(
         visitor=visitor,
         action='gate_flag',
@@ -293,69 +308,123 @@ def member_flag_attention(request, visitor_id, member_id):
         notes=f"Attention flagged for {member.full_name}: {note}",
     )
 
-    # Update meeting attendee gate_attention status if linked
+    # ── Propagate flag to MeetingAttendee (meeting-linked visitors) ──────────
     if member.from_meeting:
         try:
             from accounts.models import MeetingAttendee
             attendee = MeetingAttendee.objects.filter(pk=member.meeting_attendee_id).first()
             if attendee:
-                # Store in attendee note field if available
-                attendee_note = getattr(attendee, 'note', None)
-                if attendee_note is not None:
-                    attendee.note = f"[GATE FLAG] {note}"
-                    attendee.save(update_fields=['note'])
-        except Exception:
-            pass
+                attendee.gate_flag = True
+                attendee.gate_flag_note = note
+                attendee.gate_flag_raised_at = now
+                attendee.gate_flag_by = gate_user
+                update_fields = []
+                for f in ('gate_flag', 'gate_flag_note', 'gate_flag_raised_at', 'gate_flag_by'):
+                    if hasattr(attendee, f):
+                        update_fields.append(f)
+                if update_fields:
+                    attendee.save(update_fields=update_fields)
+        except Exception as e:
+            logger.warning("Could not propagate gate flag to MeetingAttendee: %s", e)
 
-    # Notify host (meeting organiser or registered_by)
-    _notify_host_attention(visitor, member, note, request)
+    # ── Send email notification to host ──────────────────────────────────────
+    host, detail_url = _resolve_host_and_url(visitor, request)
+    _send_attention_email(visitor, member, note, gate_user, host, detail_url)
 
-    messages.warning(
-        request,
-        f"{member.full_name} flagged for host attention. Host has been notified."
-    )
+    msg = f"{member.full_name} flagged for attention. Host has been notified."
+
+    if is_fetch:
+        return JsonResponse({
+            'ok': True,
+            'message': msg,
+            'member_pk': member.pk,
+            'note': note,
+            'raised_at': now.strftime('%H:%M'),
+        })
+
+    messages.warning(request, msg)
     return redirect('visitors:visitor_detail', pk=visitor_id)
 
 
-def _notify_host_attention(visitor, member, note, request):
-    """Email the meeting host or access-request creator about a flagged member."""
+def _resolve_host_and_url(visitor, request):
+    """Return (host_user, absolute_detail_url) for the visitor's host."""
+    from django.urls import reverse
+
+    host = None
+    detail_url = ''
+
+    if visitor.linked_booking:
+        host = getattr(visitor.linked_booking, 'requested_by', None)
+        try:
+            detail_url = request.build_absolute_uri(
+                reverse('accounts:booking_detail', kwargs={'pk': visitor.linked_booking.pk})
+            )
+        except Exception:
+            pass
+
+    if not host:
+        host = getattr(visitor, 'registered_by', None)
+
+    if not detail_url:
+        try:
+            detail_url = request.build_absolute_uri(
+                reverse('visitors:visitor_detail', kwargs={'pk': visitor.pk})
+            )
+        except Exception:
+            pass
+
+    return host, detail_url
+
+
+def _send_attention_email(visitor, member, note, gate_user, host, detail_url):
+    """
+    Send an attention-alert email to the host in a background thread.
+    Works for both meeting-linked and standalone visitor access requests.
+    """
+    if not host or not getattr(host, 'email', None):
+        return
+
     try:
         from django.core.mail import send_mail
         from django.conf import settings
-
-        # Host is the meeting requester if linked, else the visitor access requester
-        host = None
-        if visitor.linked_booking:
-            host = getattr(visitor.linked_booking, 'requested_by', None)
-        if not host:
-            host = visitor.registered_by
-        if not host or not host.email:
-            return
 
         from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
         if not from_email:
             return
 
-        gate_user = request.user.get_full_name() or request.user.username
-        subject = f"[Security] Gate attention needed – {member.full_name}"
+        is_meeting = bool(visitor.linked_booking)
+        meeting_info = ''
+        if is_meeting:
+            b = visitor.linked_booking
+            meeting_info = (
+                f"  Meeting: {b.title}\n"
+                f"  Date:    {b.date.strftime('%A, %d %B %Y')}\n"
+                f"  Room:    {b.room.name}\n\n"
+            )
+
+        subject = f"[Security Alert] Gate attention needed — {member.full_name}"
         body = (
             f"Dear {host.get_full_name() or host.username},\n\n"
-            f"Gate security requires your assistance to verify the following person:\n\n"
-            f"  Name:    {member.full_name}\n"
-            f"  Visit:   {visitor.full_name} ({visitor.expected_date})\n"
+            f"Gate security has flagged one of your {'meeting attendees' if is_meeting else 'visitors'} "
+            f"and requires your immediate assistance.\n\n"
+            f"  Person:  {member.full_name}\n"
             f"  Concern: {note}\n\n"
-            f"Please come to the gate or contact security to assist.\n\n"
+            f"{meeting_info}"
+            f"Please come to the gate or contact security to help verify and clear this person.\n\n"
+            f"{'View meeting details' if is_meeting else 'View visitor record'}: {detail_url}\n\n"
             f"Flagged by: {gate_user}\n"
             f"Time: {timezone.now().strftime('%Y-%m-%d %H:%M')}\n\n"
             f"Best regards,\nUN Security / Gate Management System"
         )
+
         import threading
         threading.Thread(
             target=lambda: send_mail(subject, body, from_email, [host.email], fail_silently=True),
-            daemon=True
+            daemon=True,
         ).start()
-    except Exception:
-        pass
+
+    except Exception as e:
+        logger.warning("Failed to send attention email: %s", e)
 
 
 @login_required
@@ -539,3 +608,55 @@ def booking_info_api(request, booking_id):
 
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=404)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gate attention flags API — polled by booking_detail.html
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def visitor_gate_flags_api(request, visitor_id):
+    """
+    GET /visitors/<visitor_id>/gate-flags/
+    Returns all active attention flags on group members for this visitor.
+    Used by visitor_detail.html to poll for new flags without a page reload.
+    """
+    visitor = get_object_or_404(Visitor, pk=visitor_id)
+    flagged = visitor.group_members.filter(gate_attention='needs_attention').select_related('assigned_card')
+    flags = []
+    for m in flagged:
+        flags.append({
+            'member_pk': m.pk,
+            'name': m.full_name,
+            'note': m.gate_attention_note,
+            'raised_at': m.gate_attention_raised_at.strftime('%H:%M') if m.gate_attention_raised_at else '',
+        })
+    return JsonResponse({'ok': True, 'flags': flags, 'count': len(flags)})
+
+
+@login_required
+def booking_gate_flags_api(request, booking_id):
+    """
+    GET /visitors/api/booking-gate-flags/<booking_id>/
+    Returns all active gate attention flags for members linked to a booking.
+    Polled by booking_detail.html every 30 seconds.
+    """
+    try:
+        from accounts.models import RoomBooking
+        booking = get_object_or_404(RoomBooking, pk=booking_id)
+
+        # Find all visitor access requests linked to this booking
+        visitors = Visitor.objects.filter(linked_booking=booking)
+        flags = []
+        for v in visitors:
+            for m in v.group_members.filter(gate_attention='needs_attention'):
+                flags.append({
+                    'member_pk': m.pk,
+                    'name': m.full_name,
+                    'email': m.email,
+                    'note': m.gate_attention_note,
+                    'raised_at': m.gate_attention_raised_at.strftime('%H:%M') if m.gate_attention_raised_at else '',
+                    'visitor_pk': v.pk,
+                })
+        return JsonResponse({'ok': True, 'flags': flags, 'count': len(flags)})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)

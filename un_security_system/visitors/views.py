@@ -36,6 +36,8 @@ from .views_member_actions import (
     member_update_field,
     member_upload_photo,
     booking_info_api,
+    visitor_gate_flags_api,
+    booking_gate_flags_api,
 )
 
 logger = logging.getLogger(__name__)

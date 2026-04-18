@@ -1906,6 +1906,43 @@ def booking_detail_view(request, pk):
     if booking.agenda_document:
         agenda_qr_url = reverse('accounts:booking_agenda_qr', args=[booking.pk])
 
+    # ── Gate attention flags for meeting-linked visitor access requests ───────
+    # Find any GroupMembers linked to this booking's visitor access requests
+    # that have been flagged by gate security.
+    gate_flagged_members = []
+    try:
+        from visitors.models import Visitor as VisitorModel, GroupMember as GroupMemberModel
+        linked_visitors = VisitorModel.objects.filter(linked_booking=booking)
+        for v in linked_visitors:
+            for m in v.group_members.filter(gate_attention='needs_attention'):
+                gate_flagged_members.append({
+                    'member_pk': m.pk,
+                    'name': m.full_name,
+                    'email': m.email,
+                    'note': m.gate_attention_note,
+                    'raised_at': m.gate_attention_raised_at.strftime('%H:%M') if m.gate_attention_raised_at else '',
+                    'visitor_pk': v.pk,
+                    'attendee_pk': m.meeting_attendee_id,
+                })
+    except Exception:
+        pass
+
+    # Enrich invite_list entries with gate_flagged flag
+    # Match by attendee_pk (meeting_attendee_id on GroupMember)
+    flagged_attendee_pks = {f['attendee_pk'] for f in gate_flagged_members if f['attendee_pk']}
+    flagged_emails = {f['email'].lower() for f in gate_flagged_members if f['email']}
+    for entry in invite_list:
+        entry_email = (entry.get('email') or '').lower()
+        entry_pk = entry.get('attendee_pk')
+        is_flagged = (entry_pk and entry_pk in flagged_attendee_pks) or (entry_email in flagged_emails)
+        entry['gate_flagged'] = is_flagged
+        if is_flagged:
+            # Find the matching flag to get note
+            for f in gate_flagged_members:
+                if (f['attendee_pk'] == entry_pk) or (f['email'].lower() == entry_email):
+                    entry['gate_flag_note'] = f['note']
+                    break
+
     return render(request, 'accounts/rooms/booking_detail.html', {
         'booking': booking,
         'registration_link': registration_link,
@@ -1922,6 +1959,7 @@ def booking_detail_view(request, pk):
         'invited_count': len(invited_email_set),
         'registered_count': len(registered_attendees),
         'pending_registrations': pending_registrations,
+        'gate_flagged_members': gate_flagged_members,
     })
 
 

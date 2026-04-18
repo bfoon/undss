@@ -366,6 +366,43 @@
         margin-right: 2px;
     }
 
+    /* Gate status pills — shown in the Full Name cell */
+    .gate-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+    .gate-pill-in {
+        background: #d1fae5;
+        color: #065f46;
+        border: 1px solid #6ee7b7;
+    }
+    .gate-pill-out {
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #93c5fd;
+    }
+    .gate-pill-none {
+        background: #f3f4f6;
+        color: #6b7280;
+        border: 1px solid #d1d5db;
+    }
+    /* Pulse animation for in-compound pill */
+    @keyframes in-pulse {
+        0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+        50%      { box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+    }
+    .gate-pill-in {
+        animation: in-pulse 2.5s ease infinite;
+    }
+
 
     /* Responsive */
     @media (max-width: 768px) {
@@ -604,6 +641,7 @@
                             <th><i class="bi bi-person-check"></i> Host</th>
                             <th><i class="bi bi-bookmark"></i> Purpose</th>
                             <th><i class="bi bi-shield-check"></i> Status</th>
+                            <th><i class="bi bi-door-open"></i> Gate</th>
                             <th><i class="bi bi-calendar"></i> Registered</th>
                             <th class="text-end pe-4"><i class="bi bi-gear"></i> Actions</th>
                         </tr>
@@ -615,12 +653,6 @@
                                     <span class="visitor-id">#{{ visitor.id }}</span>
                                 </td>
                                 <td>
-                                    {% if visitor.checked_in and not visitor.checked_out %}
-                                        <i class="bi bi-arrow-up-short visitor-arrow-in"></i>
-                                    {% else %}
-                                        <i class="bi bi-arrow-down-short visitor-arrow-out"></i>
-                                    {% endif %}
-
                                     <span class="fw-semibold text-dark">
                                         {{ visitor.name|default:visitor.full_name|default:"N/A" }}
                                     </span>
@@ -696,6 +728,45 @@
                                         {% endif %}
                                     {% endif %}
                                 </td>
+
+                                {# ── Gate Status cell ── #}
+                                <td>
+                                    {% if visitor.checked_in and not visitor.checked_out %}
+                                        <span class="gate-pill gate-pill-in"
+                                              title="Currently inside the compound since {{ visitor.check_in_time|time:'H:i' }}">
+                                            <i class="bi bi-geo-alt-fill"></i> In Compound
+                                        </span>
+                                        {% if visitor.check_in_time %}
+                                        <div class="text-muted" style="font-size:.7rem;margin-top:2px;">
+                                            since {{ visitor.check_in_time|time:"H:i" }}
+                                        </div>
+                                        {% endif %}
+                                    {% elif visitor.checked_out %}
+                                        <span class="gate-pill gate-pill-out"
+                                              title="Checked out{% if visitor.check_out_time %} at {{ visitor.check_out_time|time:'H:i' }}{% endif %}">
+                                            <i class="bi bi-box-arrow-right"></i> Checked Out
+                                        </span>
+                                        {% if visitor.check_out_time %}
+                                        <div class="text-muted" style="font-size:.7rem;margin-top:2px;">
+                                            {{ visitor.check_out_time|time:"H:i" }}
+                                        </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="gate-pill gate-pill-none"
+                                              title="Has not checked in yet">
+                                            <i class="bi bi-dash-circle"></i> Not In
+                                        </span>
+                                    {% endif %}
+
+                                    {# Group: show member in/out counts if group visitor #}
+                                    {% if visitor.visitor_type == 'group' and visitor.group_members.exists %}
+                                    <div class="text-muted" style="font-size:.68rem;margin-top:3px;">
+                                        <i class="bi bi-people-fill me-1"></i>
+                                        {{ visitor.members_checked_in_count }}/{{ visitor.group_members.count }} in
+                                    </div>
+                                    {% endif %}
+                                </td>
+
                                 <td>
                                     {% if visitor.created_at %}
                                         <div class="small">
@@ -732,7 +803,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="9" class="border-0">
+                                <td colspan="10" class="border-0">
                                     <div class="empty-state">
                                         <div class="empty-state-icon">
                                             <i class="bi bi-people"></i>

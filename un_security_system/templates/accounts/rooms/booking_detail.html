@@ -224,6 +224,10 @@
 .auto-accept-off { background:#fef3c7; color:#92400e; }
 
 @media (max-width:991.98px){.sticky-top{position:static !important;}}
+@keyframes pulse-warn {
+  0%,100% { opacity:1; }
+  50%      { opacity:.5; }
+}
 </style>
 {% endblock %}
 
@@ -543,6 +547,65 @@
                     </div>
                 </div>
 
+                {# ── Gate Attention Alerts banner ────────────────────────────── #}
+                {# Shown when any visitor access request linked to this meeting   #}
+                {# has members flagged at the gate. Updates live via polling.     #}
+                {% if gate_flagged_members %}
+                <div id="gate-alerts-banner"
+                     class="mx-3 mt-3 mb-0 p-3 rounded"
+                     style="background:#fef3c7;border:2px solid #f59e0b;">
+                    <div class="d-flex align-items-center gap-2 mb-2 fw-bold" style="color:#92400e;">
+                        <i class="bi bi-exclamation-triangle-fill" style="animation:pulse-warn 1.5s infinite;"></i>
+                        Gate Attention Required
+                        <span class="badge ms-auto" style="background:#f59e0b;color:#fff;"
+                              id="gate-alert-count">{{ gate_flagged_members|length }}</span>
+                    </div>
+                    <div id="gate-alerts-list">
+                    {% for flag in gate_flagged_members %}
+                    <div class="d-flex align-items-start gap-2 mb-2 p-2 rounded"
+                         style="background:#fffbeb;border:1px solid #fde68a;"
+                         id="gate-flag-{{ flag.member_pk }}">
+                        <div style="flex:1;">
+                            <div class="small fw-bold" style="color:#78350f;">
+                                {{ flag.name }}
+                            </div>
+                            <div class="small" style="color:#92400e;">{{ flag.note }}</div>
+                            {% if flag.raised_at %}
+                            <div class="small" style="color:#a16207;">
+                                <i class="bi bi-clock me-1"></i>{{ flag.raised_at }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% if request.user == booking.requested_by or request.user.is_superuser %}
+                        <a href="{% url 'visitors:visitor_detail' flag.visitor_pk %}"
+                           class="btn btn-sm flex-shrink-0"
+                           style="font-size:.72rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>View
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    </div>
+                    <div class="small mt-1" style="color:#a16207;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Please go to the gate or contact security to assist.
+                        This panel updates automatically.
+                    </div>
+                </div>
+                {% else %}
+                <div id="gate-alerts-banner" style="display:none;"
+                     class="mx-3 mt-3 mb-0 p-3 rounded"
+                     style="background:#fef3c7;border:2px solid #f59e0b;">
+                    <div class="d-flex align-items-center gap-2 mb-2 fw-bold" style="color:#92400e;">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        Gate Attention Required
+                        <span class="badge ms-auto" style="background:#f59e0b;color:#fff;"
+                              id="gate-alert-count">0</span>
+                    </div>
+                    <div id="gate-alerts-list"></div>
+                </div>
+                {% endif %}
+
                 {# ── Pending Registrations (manual-approval mode) ── #}
                 {% if pending_registrations and not booking.auto_accept_registration %}
                 <div class="card-body border-bottom pb-2">
@@ -618,6 +681,16 @@
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             {% if entry.name %}
                             <span class="inv-name">{{ entry.name }}</span>
+                            {% endif %}
+
+                            {# Gate attention flag badge — shown when gate has flagged this person #}
+                            {% if entry.gate_flagged %}
+                            <span class="inv-status-badge"
+                                  style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;animation:pulse-warn 1.5s infinite;"
+                                  id="gate-badge-{{ entry.attendee_pk }}"
+                                  title="{{ entry.gate_flag_note }}">
+                                <i class="bi bi-flag-fill me-1"></i>Gate Alert
+                            </span>
                             {% endif %}
 
                             {# Source badge #}
@@ -1116,5 +1189,76 @@ window.removeRegistration = function(pk, rowId){
         if(row){ row.style.opacity='1'; row.style.pointerEvents=''; }
     });
 };
+
+// ── Gate attention flag polling ───────────────────────────────────────────────
+// Every 30 s, poll for new gate flags raised by security on meeting attendees.
+(function startGateFlagPoller() {
+  const BID = '{{ booking.pk }}';
+  const POLL_URL = `/visitors/api/booking-gate-flags/${BID}/`;
+  const INTERVAL = 30000;
+
+  const banner    = document.getElementById('gate-alerts-banner');
+  const flagsList = document.getElementById('gate-alerts-list');
+  const countBadge = document.getElementById('gate-alert-count');
+
+  if (!banner || !flagsList) return;
+
+  function addOrUpdateFlag(flag) {
+    const existingId = `gate-flag-${flag.member_pk}`;
+    if (document.getElementById(existingId)) return; // already showing
+
+    // Add to banner list
+    const item = document.createElement('div');
+    item.className = 'd-flex align-items-start gap-2 mb-2 p-2 rounded';
+    item.id = existingId;
+    item.style.cssText = 'background:#fffbeb;border:1px solid #fde68a;';
+    item.innerHTML = `
+      <div style="flex:1;">
+        <div class="small fw-bold" style="color:#78350f;">${flag.name}</div>
+        <div class="small" style="color:#92400e;">${flag.note}</div>
+        ${flag.raised_at ? `<div class="small" style="color:#a16207;"><i class="bi bi-clock me-1"></i>${flag.raised_at}</div>` : ''}
+      </div>
+      <a href="/visitors/${flag.visitor_pk}/" class="btn btn-sm flex-shrink-0"
+         style="font-size:.72rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">
+        <i class="bi bi-box-arrow-up-right me-1"></i>View
+      </a>`;
+    flagsList.insertBefore(item, flagsList.firstChild);
+
+    // Add pulsing badge to the attendee row if visible
+    if (flag.attendee_pk) {
+      const invRow = document.getElementById(`invrow${flag.attendee_pk}`);
+      if (invRow && !document.getElementById(`gate-badge-${flag.attendee_pk}`)) {
+        const nameRow = invRow.querySelector('.d-flex.align-items-center.gap-2');
+        if (nameRow) {
+          const badge = document.createElement('span');
+          badge.className = 'inv-status-badge';
+          badge.id = `gate-badge-${flag.attendee_pk}`;
+          badge.style.cssText = 'background:#fef3c7;color:#92400e;border:1px solid #fde68a;animation:pulse-warn 1.5s infinite;';
+          badge.title = flag.note;
+          badge.innerHTML = '<i class="bi bi-flag-fill me-1"></i>Gate Alert';
+          nameRow.appendChild(badge);
+        }
+      }
+    }
+  }
+
+  async function poll() {
+    try {
+      const resp = await fetch(POLL_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data.ok || !data.flags) return;
+
+      if (data.count > 0) {
+        banner.style.display = '';
+        data.flags.forEach(addOrUpdateFlag);
+        if (countBadge) countBadge.textContent = flagsList.querySelectorAll('[id^="gate-flag-"]').length;
+      }
+    } catch (_) { /* silent */ }
+  }
+
+  setTimeout(poll, 3000);
+  setInterval(poll, INTERVAL);
+})();
 </script>
 {% endblock %}

@@ -70,6 +70,12 @@ urlpatterns = [
     # Booking info for form auto-populate
     path('api/booking-info/<int:booking_id>/', views.booking_info_api, name='booking_info_api'),
 
+    # ── Gate attention flag APIs ───────────────────────────────────────────────
+    # Poll active flags on a single visitor's group members (visitor_detail.html)
+    path('<int:visitor_id>/gate-flags/', views.visitor_gate_flags_api, name='visitor_gate_flags'),
+    # Poll active flags across all visitors linked to a booking (booking_detail.html)
+    path('api/booking-gate-flags/<int:booking_id>/', views.booking_gate_flags_api, name='booking_gate_flags'),
+
     # ── Bulk Operations ───────────────────────────────────────────────────────
     path('bulk/approve/', views.bulk_approve_visitors, name='bulk_approve'),
     path('bulk/export/', views.export_visitors, name='export_visitors'),

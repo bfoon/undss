@@ -715,6 +715,81 @@
         </div>
       </div>
 
+      <!-- ══ Gate Attention Alerts ══════════════════════════════════════════ -->
+      {% with flagged_members=visitor.group_members.all %}
+      {% if visitor.visitor_type == 'group' %}
+      <div class="card shadow-sm mb-4" id="attention-alerts-card"
+           style="{% if not visitor.group_members.filter.exists %}display:none;{% endif %}border-left:4px solid #f59e0b;">
+        <div class="card-body p-4">
+          <div class="section-header" style="border-bottom-color:#fde68a;">
+            <i class="bi bi-exclamation-triangle-fill" style="color:#f59e0b;"></i>
+            Gate Alerts
+            <span class="badge ms-auto" style="background:#fef3c7;color:#92400e;font-size:.7rem;"
+                  id="alert-count-badge">
+              {% with cnt=visitor.group_members.filter.count %}{{ cnt }}{% endwith %}
+            </span>
+          </div>
+
+          <div id="attention-flags-list">
+            {% for member in visitor.group_members.all %}
+              {% if member.needs_attention %}
+              <div class="attention-flag-item mb-3 p-3 rounded"
+                   style="background:#fef3c7;border:1px solid #fde68a;"
+                   id="flag-item-{{ member.pk }}">
+                <div class="d-flex align-items-start justify-content-between gap-2">
+                  <div>
+                    <div class="fw-bold small" style="color:#92400e;">
+                      <i class="bi bi-flag-fill me-1"></i>{{ member.full_name }}
+                    </div>
+                    <div class="small mt-1" style="color:#78350f;">
+                      {{ member.gate_attention_note }}
+                    </div>
+                    {% if member.gate_attention_raised_at %}
+                    <div class="small mt-1" style="color:#a16207;">
+                      <i class="bi bi-clock me-1"></i>Flagged at {{ member.gate_attention_raised_at|time:"H:i" }}
+                    </div>
+                    {% endif %}
+                  </div>
+
+                  {% if request.user.is_superuser or request.user.role == 'lsa' or request.user.role == 'soc' or visitor.registered_by == request.user or visitor.linked_booking.requested_by == request.user %}
+                  <form method="post"
+                        action="{% url 'visitors:member_clear_attention' visitor.pk member.pk %}"
+                        class="flex-shrink-0">
+                    {% csrf_token %}
+                    <button type="submit"
+                            class="btn btn-sm btn-warning"
+                            style="font-size:.72rem;padding:.2rem .6rem;"
+                            title="Mark as cleared — host has verified this person">
+                      <i class="bi bi-check-lg me-1"></i>Clear
+                    </button>
+                  </form>
+                  {% endif %}
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+
+            <!-- Empty state (shown when all flags are cleared) -->
+            <div id="no-flags-msg" class="text-center text-muted small py-2"
+                 style="{% for m in visitor.group_members.all %}{% if m.needs_attention %}display:none;{% endif %}{% endfor %}">
+              <i class="bi bi-shield-check text-success me-1"></i>No active alerts
+            </div>
+          </div>
+
+          {% if visitor.linked_booking %}
+          <div class="mt-2 pt-2" style="border-top:1px solid #fde68a;">
+            <a href="{% url 'accounts:booking_detail' visitor.linked_booking.pk %}"
+               class="btn btn-sm w-100"
+               style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:.8rem;">
+              <i class="bi bi-calendar-event me-1"></i>View on Meeting Page
+            </a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+      {% endwith %}
+
       <!-- Gate Actions -->
       <div class="card shadow-sm mb-4 action-card">
         <div class="card-body p-4">
@@ -1515,9 +1590,158 @@ function showToast(type, message) {
 
 // ── Attention flag modal ─────────────────────────────────────────────────────
 function openAttentionFlag(memberPk, name) {
-  document.getElementById('attentionForm').action = `/visitors/${VISITOR_PK}/member/${memberPk}/flag-attention/`;
+  const form = document.getElementById('attentionForm');
+  form.action = `/visitors/${VISITOR_PK}/member/${memberPk}/flag-attention/`;
+  form.dataset.memberPk = memberPk;
+  form.dataset.memberName = name;
   document.getElementById('attention-member-name').textContent = name;
+
+  // Reset submit button
+  const submitBtn = form.querySelector('[type=submit]');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-flag me-1"></i>Send Alert to Host';
+  }
+  document.querySelector('#attentionModal textarea[name=attention_note]').value = '';
+
   bootstrap.Modal.getOrCreateInstance(document.getElementById('attentionModal')).show();
+}
+
+document.getElementById('attentionForm')?.addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const form = e.target;
+  const memberPk = parseInt(form.dataset.memberPk);
+  const memberName = form.dataset.memberName || '';
+  const note = (form.querySelector('textarea[name=attention_note]').value || '').trim();
+
+  if (!note) {
+    showToast('warning', 'Please describe the concern before flagging.');
+    return;
+  }
+
+  const submitBtn = form.querySelector('[type=submit]');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+
+  const formData = new FormData(form);
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+  try {
+    const resp = await fetch(form.action, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken, 'X-Fetch': '1' },
+      body: formData,
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      // Close modal
+      bootstrap.Modal.getInstance(document.getElementById('attentionModal'))?.hide();
+
+      // Update the member card — swap flag button to pulsing attention badge
+      _markMemberNeedsAttention(memberPk, memberName, note, data.raised_at || '');
+
+      // Add entry to the right-column Alerts card
+      _addAlertToSidebar(memberPk, memberName, note, data.raised_at || '');
+
+      showToast('warning', data.message);
+    } else {
+      showToast('danger', data.error || 'Could not send alert.');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-flag me-1"></i>Send Alert to Host';
+    }
+  } catch (err) {
+    showToast('danger', 'Network error. Please try again.');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-flag me-1"></i>Send Alert to Host';
+  }
+});
+
+/** After flagging: update the member card in-place — replace flag btn with pulsing badge + Clear btn */
+function _markMemberNeedsAttention(memberPk, memberName, note, raisedAt) {
+  const card = document.getElementById(`member-card-${memberPk}`);
+  if (!card) return;
+
+  // Replace flag button with attention badge
+  const flagBtn = card.querySelector('[onclick*="openAttentionFlag"]');
+  if (flagBtn) {
+    const badge = document.createElement('span');
+    badge.className = 'attention-badge';
+    badge.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>Needs Attention';
+    flagBtn.replaceWith(badge);
+  }
+
+  // Add / update the gate-note row inside the card body
+  const noteRowId = `gate-note-${memberPk}`;
+  let noteRow = document.getElementById(noteRowId);
+  if (!noteRow) {
+    const body = card.querySelector('.member-card-body .row');
+    if (body) {
+      const col = document.createElement('div');
+      col.className = 'col-12 mt-1';
+      col.innerHTML = `
+        <div id="${noteRowId}" class="alert alert-warning py-1 px-2 mb-0 small">
+          <i class="bi bi-flag-fill me-1"></i>
+          <strong>Gate note:</strong> <span class="gate-note-text"></span>
+        </div>`;
+      body.appendChild(col);
+      noteRow = document.getElementById(noteRowId);
+    }
+  }
+  if (noteRow) {
+    const span = noteRow.querySelector('.gate-note-text');
+    if (span) span.textContent = note;
+  }
+
+  // Show the attention alerts card if hidden
+  const alertsCard = document.getElementById('attention-alerts-card');
+  if (alertsCard) alertsCard.style.display = '';
+
+  // Glow card amber
+  card.style.transition = 'box-shadow 0.3s';
+  card.style.boxShadow = '0 0 0 3px #f59e0b88';
+  setTimeout(() => { card.style.boxShadow = ''; }, 2000);
+}
+
+/** Insert a new alert entry into the right-column Alerts card */
+function _addAlertToSidebar(memberPk, memberName, note, raisedAt) {
+  const list = document.getElementById('attention-flags-list');
+  if (!list) return;
+
+  // Hide "no flags" message
+  const noMsg = document.getElementById('no-flags-msg');
+  if (noMsg) noMsg.style.display = 'none';
+
+  // Don't add duplicate
+  if (document.getElementById(`flag-item-${memberPk}`)) return;
+
+  const timeStr = raisedAt || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  const item = document.createElement('div');
+  item.className = 'attention-flag-item mb-3 p-3 rounded';
+  item.id = `flag-item-${memberPk}`;
+  item.style.cssText = 'background:#fef3c7;border:1px solid #fde68a;';
+  item.innerHTML = `
+    <div class="d-flex align-items-start justify-content-between gap-2">
+      <div>
+        <div class="fw-bold small" style="color:#92400e;">
+          <i class="bi bi-flag-fill me-1"></i>${memberName}
+        </div>
+        <div class="small mt-1" style="color:#78350f;">${note}</div>
+        <div class="small mt-1" style="color:#a16207;">
+          <i class="bi bi-clock me-1"></i>Flagged at ${timeStr}
+        </div>
+      </div>
+    </div>`;
+  list.insertBefore(item, list.firstChild);
+
+  // Update badge count
+  const badge = document.getElementById('alert-count-badge');
+  if (badge) badge.textContent = list.querySelectorAll('.attention-flag-item').length;
+
+  // Show alert card
+  const alertsCard = document.getElementById('attention-alerts-card');
+  if (alertsCard) alertsCard.style.display = '';
 }
 
 // ── Inline field edit modal ──────────────────────────────────────────────────
@@ -1576,5 +1800,55 @@ function previewPhotoUpload(input) {
     document.getElementById('capturedPreview2').style.display = 'block';
   }
 }
+
+// ── Live polling — gate attention flags ──────────────────────────────────────
+// Every 30 s, check if any new attention flags have been raised by the gate.
+// Updates the sidebar alerts card without a page reload.
+(function startAttentionPoller() {
+  const listEl   = document.getElementById('attention-flags-list');
+  const cardEl   = document.getElementById('attention-alerts-card');
+  const badgeEl  = document.getElementById('alert-count-badge');
+  if (!listEl) return;   // not a group visitor — no polling needed
+
+  const POLL_URL = `/visitors/${VISITOR_PK}/gate-flags/`;
+  const INTERVAL = 30000;
+
+  async function poll() {
+    try {
+      const resp = await fetch(POLL_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data.ok) return;
+
+      data.flags.forEach(flag => {
+        // Skip if already in DOM
+        if (document.getElementById(`flag-item-${flag.member_pk}`)) return;
+
+        // Add to sidebar
+        _addAlertToSidebar(flag.member_pk, flag.name, flag.note, flag.raised_at);
+
+        // Update the member card if visible
+        const memberCard = document.getElementById(`member-card-${flag.member_pk}`);
+        if (memberCard) {
+          const existing = memberCard.querySelector('.attention-badge');
+          if (!existing) {
+            _markMemberNeedsAttention(flag.member_pk, flag.name, flag.note, flag.raised_at);
+          }
+        }
+      });
+
+      // Update badge
+      if (badgeEl) {
+        const activeCount = listEl.querySelectorAll('.attention-flag-item').length;
+        badgeEl.textContent = activeCount;
+        if (activeCount > 0 && cardEl) cardEl.style.display = '';
+      }
+    } catch (_) { /* silent — network blip */ }
+  }
+
+  // Initial poll after a short delay, then on interval
+  setTimeout(poll, 5000);
+  setInterval(poll, INTERVAL);
+})();
 </script>
 {% endblock %}
