@@ -1178,7 +1178,7 @@ class MyRoomBookingsView(LoginRequiredMixin, ListView):
         for booking in standalone_bookings:
             items.append({
                 'is_series': False,
-                **booking.__dict__,
+                'booking': booking,
                 'room': booking.room,
                 'approved_by': booking.approved_by,
                 'sort_date': booking.date,
