@@ -12,7 +12,7 @@ from .views_room_booking import (
     walkin_decision_view, check_availability_api, meeting_qr_code_download_view,
     booking_attendance_export_csv, booking_attendance_export_excel, toggle_booking_option_view,
     agenda_document_qr_view, attendance_page_view, accept_registration_view,
-    series_detail_view,
+    series_detail_view, reschedule_booking,
 )
 from .views_asset_verify import asset_verify, asset_verification_history
 
@@ -231,6 +231,7 @@ urlpatterns = [
 
     # Room Booking - Cancel Actions
     path("rooms/bookings/<int:pk>/cancel/", cancel_booking, name="cancel_booking"),
+    path("rooms/bookings/<int:pk>/reschedule/", reschedule_booking, name="reschedule_booking"),
     path("rooms/series/<int:pk>/cancel/", cancel_booking_series, name="cancel_series"),
     path("rooms/series/<int:pk>/detail/", series_detail_view, name="series_detail"),
     path("rooms/occurrences/<int:pk>/cancel/", cancel_series_occurrence, name="cancel_occurrence"),

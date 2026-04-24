@@ -246,7 +246,7 @@
     </nav>
 
     {# ── Back / navigation buttons ── #}
-    <div class="d-flex align-items-center gap-2 mb-4">
+    <div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
         <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Back
         </a>
@@ -256,6 +256,13 @@
         <a href="{% url 'accounts:room_detail' booking.room.pk %}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-door-open me-1"></i>{{ booking.room.name }}
         </a>
+        {% if request.user == booking.requested_by and booking.status in 'pending,approved' and not booking.series %}
+        <button class="btn btn-sm btn-outline-warning ms-auto fw-semibold"
+                data-bs-toggle="modal" data-bs-target="#rescheduleModal"
+                title="Move this booking to a new date/time">
+            <i class="bi bi-calendar-event me-1"></i>Reschedule
+        </button>
+        {% endif %}
     </div>
 
     <div class="row g-4">
@@ -978,7 +985,82 @@
     </div>
 </div>
 
-<script>
+{# ══ Reschedule Modal ══════════════════════════════════════════════════════ #}
+{% if request.user == booking.requested_by and booking.status in 'pending,approved' and not booking.series %}
+<div class="modal fade" id="rescheduleModal" tabindex="-1" aria-labelledby="rescheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:20px;overflow:hidden;border:none;box-shadow:0 20px 60px rgba(0,0,0,.18);">
+
+            <div class="modal-header" style="background:linear-gradient(135deg,#0a193d,#0b74b8);color:white;border:none;padding:1.25rem 1.5rem;">
+                <h5 class="modal-title fw-800" id="rescheduleModalLabel">
+                    <i class="bi bi-calendar-event me-2"></i>Reschedule Booking
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-4">
+                <div class="rounded-3 p-3 mb-4" style="background:#f0f7ff;border:1px solid #bfdbfe;">
+                    <div class="small fw-semibold text-primary mb-1"><i class="bi bi-info-circle me-1"></i>How rescheduling works</div>
+                    <div class="small text-secondary">
+                        The room slot you currently hold will be <strong>freed immediately</strong>.
+                        Your booking will move to the new slot and return to <strong>Pending</strong> for re-approval.
+                        If the new slot is unavailable you'll see an error before anything changes.
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-uppercase text-muted" style="letter-spacing:.4px;">Current booking</label>
+                    <div class="p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:.92rem;">
+                        <i class="bi bi-calendar3 me-2 text-secondary"></i>
+                        <strong>{{ booking.date|date:"l, F j, Y" }}</strong>
+                        &nbsp;·&nbsp;
+                        <i class="bi bi-clock me-1 text-secondary"></i>
+                        {{ booking.start_time|time:"H:i" }} – {{ booking.end_time|time:"H:i" }}
+                        &nbsp;·&nbsp;
+                        <i class="bi bi-door-open me-1 text-secondary"></i>{{ booking.room.name }}
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-3">
+                    <label for="rsNewDate" class="form-label fw-semibold">New Date <span class="text-danger">*</span></label>
+                    <input type="date" id="rsNewDate" class="form-control"
+                           min="{{ today_iso }}"
+                           value="{{ booking.date|date:'Y-m-d' }}">
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label for="rsStartTime" class="form-label fw-semibold">Start Time <span class="text-danger">*</span></label>
+                        <input type="time" id="rsStartTime" class="form-control"
+                               value="{{ booking.start_time|time:'H:i' }}">
+                    </div>
+                    <div class="col-6">
+                        <label for="rsEndTime" class="form-label fw-semibold">End Time <span class="text-danger">*</span></label>
+                        <input type="time" id="rsEndTime" class="form-control"
+                               value="{{ booking.end_time|time:'H:i' }}">
+                    </div>
+                </div>
+
+                <div id="rsAvailMsg" class="mt-3" style="display:none;"></div>
+                <div id="rsError"    class="mt-3 alert alert-danger py-2 small" style="display:none;"></div>
+            </div>
+
+            <div class="modal-footer border-0 px-4 pb-4 pt-0 gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning fw-bold px-4" id="rsCheckBtn" onclick="rsCheckAvailability()">
+                    <i class="bi bi-search me-1"></i>Check Availability
+                </button>
+                <button type="button" class="btn btn-primary fw-bold px-4" id="rsConfirmBtn"
+                        style="display:none;" onclick="rsConfirmReschedule()">
+                    <i class="bi bi-check-lg me-1"></i>Confirm Reschedule
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endif %}
 (function(){
     var BID     = {{ booking.pk }};
     var CAP     = {{ booking.room.capacity|default:"null" }};
@@ -1260,5 +1342,121 @@ window.removeRegistration = function(pk, rowId){
   setTimeout(poll, 3000);
   setInterval(poll, INTERVAL);
 })();
+/* ── Reschedule modal logic ─────────────────────────────────────────────── */
+(function () {
+    var AVAIL_URL  = "{% url 'accounts:check_availability' %}";
+    var RESCHED_URL = "{% url 'accounts:reschedule_booking' booking.pk %}";
+    var ROOM_ID    = {{ booking.room.pk }};
+
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+    function showErr(msg) {
+        var el = document.getElementById('rsError');
+        el.textContent = msg;
+        el.style.display = '';
+        document.getElementById('rsConfirmBtn').style.display = 'none';
+        document.getElementById('rsAvailMsg').style.display   = 'none';
+    }
+    function clearFeedback() {
+        document.getElementById('rsError').style.display    = 'none';
+        document.getElementById('rsAvailMsg').style.display = 'none';
+        document.getElementById('rsConfirmBtn').style.display = 'none';
+    }
+
+    // Reset state whenever the modal opens
+    document.getElementById('rescheduleModal').addEventListener('show.bs.modal', clearFeedback);
+    // Also reset when date/time inputs change
+    ['rsNewDate','rsStartTime','rsEndTime'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('change', clearFeedback);
+    });
+
+    window.rsCheckAvailability = function () {
+        var date  = document.getElementById('rsNewDate').value;
+        var start = document.getElementById('rsStartTime').value;
+        var end   = document.getElementById('rsEndTime').value;
+
+        clearFeedback();
+
+        if (!date || !start || !end) { showErr('Please fill in date, start time, and end time.'); return; }
+        if (end <= start)            { showErr('End time must be after start time.'); return; }
+
+        var btn = document.getElementById('rsCheckBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking…';
+
+        var params = new URLSearchParams({ room: ROOM_ID, date: date, start: start, end: end });
+        fetch(AVAIL_URL + '?' + params.toString(), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>Check Availability';
+
+            var msg = document.getElementById('rsAvailMsg');
+            if (d.available) {
+                msg.style.display = '';
+                msg.innerHTML = '<div class="alert alert-success py-2 small mb-0">'
+                    + '<i class="bi bi-check-circle-fill me-1"></i>'
+                    + 'The room is <strong>available</strong> for that slot. Click Confirm to proceed.'
+                    + '</div>';
+                document.getElementById('rsConfirmBtn').style.display = '';
+            } else {
+                var conflict = d.conflict
+                    ? ' (existing booking: ' + d.conflict.start + '–' + d.conflict.end + ')'
+                    : '';
+                showErr('The room is not available at that time' + conflict + '. Please choose a different slot.');
+            }
+        })
+        .catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>Check Availability';
+            showErr('Could not reach the server. Please try again.');
+        });
+    };
+
+    window.rsConfirmReschedule = function () {
+        var date  = document.getElementById('rsNewDate').value;
+        var start = document.getElementById('rsStartTime').value;
+        var end   = document.getElementById('rsEndTime').value;
+
+        var btn = document.getElementById('rsConfirmBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Rescheduling…';
+
+        var body = new URLSearchParams({
+            new_date:       date,
+            new_start_time: start,
+            new_end_time:   end,
+        });
+        fetch(RESCHED_URL, {
+            method:  'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken':      getCsrf(),
+                'Content-Type':     'application/x-www-form-urlencoded;charset=UTF-8',
+            },
+            body: body.toString(),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.success) {
+                // Full reload so the hero and status badge refresh
+                window.location.href = d.redirect || window.location.href;
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirm Reschedule';
+                showErr(d.message || 'Something went wrong. Please try again.');
+            }
+        })
+        .catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirm Reschedule';
+            showErr('Could not reach the server. Please try again.');
+        });
+    };
+})();
 </script>
-{% endblock %}

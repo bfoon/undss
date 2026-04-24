@@ -2024,6 +2024,7 @@ def booking_detail_view(request, pk):
         'registered_count': len(registered_attendees),
         'pending_registrations': pending_registrations,
         'gate_flagged_members': gate_flagged_members,
+        'today_iso': date_cls.today().isoformat(),
     })
 
 
@@ -3306,6 +3307,125 @@ def cancel_booking(request, pk):
             f'Booking "{booking_title}" for {room_name} on {booking_date} has been cancelled.'
         )
         return redirect('accounts:my_bookings')
+
+
+@login_required
+@require_POST
+def reschedule_booking(request, pk):
+    """
+    Reschedule a single standalone booking to a new date/time.
+
+    Rules:
+    - Only the requester can reschedule their own booking.
+    - Only pending or approved bookings can be rescheduled.
+    - Series bookings cannot be rescheduled individually here.
+    - The new slot must not conflict with another approved/pending booking.
+    - After reschedule the booking returns to 'pending' and approvers are notified.
+    - The original slot is freed immediately.
+    """
+    import json as _json
+
+    booking = get_object_or_404(RoomBooking, pk=pk)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    def _err(msg, status=400):
+        if is_ajax:
+            return JsonResponse({'success': False, 'message': msg}, status=status)
+        messages.error(request, msg)
+        return redirect('accounts:booking_detail', pk=pk)
+
+    # ── permission ──────────────────────────────────────────────────────────
+    if booking.requested_by != request.user:
+        return _err('You can only reschedule your own bookings.', 403)
+
+    if booking.status not in ('pending', 'approved'):
+        return _err(f'A {booking.get_status_display()} booking cannot be rescheduled.')
+
+    if booking.series:
+        return _err('This booking is part of a recurring series and cannot be rescheduled individually.')
+
+    # ── parse inputs ─────────────────────────────────────────────────────────
+    new_date_str  = (request.POST.get('new_date')       or '').strip()
+    new_start_str = (request.POST.get('new_start_time') or '').strip()
+    new_end_str   = (request.POST.get('new_end_time')   or '').strip()
+
+    if not all([new_date_str, new_start_str, new_end_str]):
+        return _err('Please provide the new date, start time, and end time.')
+
+    try:
+        new_date  = date_cls.fromisoformat(new_date_str)
+        new_start = time_cls.fromisoformat(new_start_str)
+        new_end   = time_cls.fromisoformat(new_end_str)
+    except ValueError:
+        return _err('Invalid date or time format.')
+
+    if new_date < date_cls.today():
+        return _err('You cannot reschedule a booking to a date in the past.')
+
+    if new_end <= new_start:
+        return _err('End time must be after start time.')
+
+    # Same slot — nothing to do
+    if new_date == booking.date and new_start == booking.start_time and new_end == booking.end_time:
+        return _err('The new date and time are the same as the current booking.')
+
+    # ── conflict check ────────────────────────────────────────────────────────
+    conflict = RoomBooking.objects.filter(
+        room=booking.room,
+        date=new_date,
+        status__in=('approved', 'pending'),
+        start_time__lt=new_end,
+        end_time__gt=new_start,
+    ).exclude(pk=booking.pk).first()
+
+    if conflict:
+        conflict_info = (
+            f"{conflict.start_time.strftime('%H:%M')}–{conflict.end_time.strftime('%H:%M')}"
+        )
+        return _err(
+            f'The room is not available at that time. '
+            f'There is already a booking from {conflict_info} on {new_date}. '
+            f'Please choose a different slot.'
+        )
+
+    # ── save ──────────────────────────────────────────────────────────────────
+    old_date  = booking.date
+    old_start = booking.start_time
+    old_end   = booking.end_time
+
+    booking.date       = new_date
+    booking.start_time = new_start
+    booking.end_time   = new_end
+    booking.status     = 'pending'          # reset — needs re-approval
+    booking.approved_by   = None
+    booking.approved_at   = None
+    booking.rejection_reason = ''
+    booking.save(update_fields=[
+        'date', 'start_time', 'end_time',
+        'status', 'approved_by', 'approved_at', 'rejection_reason',
+    ])
+
+    # notify approvers
+    notify_approvers_new_booking(booking)
+
+    msg = (
+        f'Booking rescheduled to {new_date} '
+        f'{new_start.strftime("%H:%M")}–{new_end.strftime("%H:%M")}. '
+        f'It is now pending re-approval.'
+    )
+
+    if is_ajax:
+        return JsonResponse({
+            'success': True,
+            'message': msg,
+            'new_date':  str(new_date),
+            'new_start': new_start.strftime('%H:%M'),
+            'new_end':   new_end.strftime('%H:%M'),
+            'redirect':  reverse('accounts:booking_detail', args=[pk]),
+        })
+
+    messages.success(request, msg)
+    return redirect('accounts:booking_detail', pk=pk)
 
 
 @login_required

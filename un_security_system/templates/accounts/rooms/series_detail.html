@@ -217,8 +217,24 @@
 .btn-view:hover  { background:#0b74b8; color:white; }
 .btn-cancel      { border-color:#ef4444; color:#ef4444; }
 .btn-cancel:hover{ background:#fee2e2; }
-.btn-muted       { border-color:#e2e8f0; color:#64748b; }
-.btn-muted:hover { background:#f1f5f9; }
+.btn-muted         { border-color:#e2e8f0; color:#64748b; }
+.btn-muted:hover   { background:#f1f5f9; }
+.btn-reschedule    { border-color:#f59e0b; color:#d97706; }
+.btn-reschedule:hover { background:#fffbeb; border-color:#d97706; }
+
+/* ── Reschedule modal ── */
+#rescheduleModal .modal-content {
+  border-radius:20px; overflow:hidden; border:none;
+  box-shadow:0 20px 60px rgba(0,0,0,.18);
+}
+#rescheduleModal .rs-info-box {
+  background:#f0f7ff; border:1px solid #bfdbfe;
+  border-radius:12px; padding:.85rem 1rem;
+}
+#rescheduleModal .rs-current-slot {
+  background:#f8fafc; border:1px solid #e2e8f0;
+  border-radius:12px; padding:.9rem 1rem; font-size:.92rem;
+}
 
 /* ── Sidebar info rows ───────────────────────────────────────────────────── */
 .inf-row { display:flex; align-items:start; gap:.75rem; padding:.7rem 1.1rem; border-bottom:1px solid #f1f5f9; }
@@ -497,6 +513,12 @@
                       </a>
                     {% endif %}
                     {% if occ.status == "approved" or occ.status == "pending" %}
+                      {% if occ.date >= today %}
+                      <button class="occ-btn btn-reschedule"
+                              onclick="openReschedule({{ occ.pk }}, '{{ occ.date|date:'Y-m-d' }}', '{{ occ.start_time|time:'H:i' }}', '{{ occ.end_time|time:'H:i' }}', '{{ series.room.name|escapejs }}', {{ series.room.pk }})">
+                        <i class="bi bi-calendar-event"></i> Reschedule
+                      </button>
+                      {% endif %}
                       <button class="occ-btn btn-cancel"
                               onclick="cancelOccurrence({{ occ.pk }}, '{{ occ.date|date:"d M Y" }}')">
                         <i class="bi bi-x-circle"></i> Cancel
@@ -818,5 +840,220 @@ function cancelSeries(id, count) {
   })
   .catch(() => { toast('Network error.', 'error'); if(btn){btn.disabled=false;} });
 }
+
+// ── Reschedule occurrence ─────────────────────────────────────────────────
+const AVAIL_URL = '/accounts/api/check-availability/';
+let _rsBookingId = null;
+let _rsRoomId    = null;
+
+function openReschedule(bookingId, currentDate, currentStart, currentEnd, roomName, roomId) {
+  _rsBookingId = bookingId;
+  _rsRoomId    = roomId;
+
+  document.getElementById('rsCurrentDate').textContent  = currentDate;
+  document.getElementById('rsCurrentTime').textContent  = currentStart + ' – ' + currentEnd;
+  document.getElementById('rsCurrentRoom').textContent  = roomName;
+  document.getElementById('rsNewDate').value            = currentDate;
+  document.getElementById('rsStartTime').value          = currentStart;
+  document.getElementById('rsEndTime').value            = currentEnd;
+
+  rsClearFeedback();
+  new bootstrap.Modal(document.getElementById('rescheduleModal')).show();
+}
+
+function rsClearFeedback() {
+  document.getElementById('rsError').style.display     = 'none';
+  document.getElementById('rsAvailMsg').style.display  = 'none';
+  document.getElementById('rsConfirmBtn').style.display = 'none';
+}
+
+function rsShowErr(msg) {
+  const el = document.getElementById('rsError');
+  el.textContent = msg;
+  el.style.display = '';
+  document.getElementById('rsConfirmBtn').style.display = 'none';
+  document.getElementById('rsAvailMsg').style.display   = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('rescheduleModal');
+  if (!modal) return;
+
+  // Min date = today
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('rsNewDate').setAttribute('min', today);
+
+  // Reset on any input change
+  ['rsNewDate','rsStartTime','rsEndTime'].forEach(id => {
+    document.getElementById(id).addEventListener('change', rsClearFeedback);
+  });
+
+  modal.addEventListener('hidden.bs.modal', () => {
+    _rsBookingId = null; _rsRoomId = null; rsClearFeedback();
+  });
+});
+
+window.rsCheckAvailability = function () {
+  const date  = document.getElementById('rsNewDate').value;
+  const start = document.getElementById('rsStartTime').value;
+  const end   = document.getElementById('rsEndTime').value;
+  rsClearFeedback();
+
+  if (!date || !start || !end) { rsShowErr('Please fill in date, start time and end time.'); return; }
+  if (end <= start)             { rsShowErr('End time must be after start time.'); return; }
+  if (!_rsRoomId)               { rsShowErr('Room information missing — please refresh.'); return; }
+
+  const btn = document.getElementById('rsCheckBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking…';
+
+  fetch(AVAIL_URL + '?' + new URLSearchParams({ room: _rsRoomId, date, start, end }), {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+  .then(r => r.json())
+  .then(d => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-search me-1"></i>Check Availability';
+    if (d.available) {
+      const msg = document.getElementById('rsAvailMsg');
+      msg.style.display = '';
+      msg.innerHTML = '<div class="alert alert-success py-2 small mb-0">'
+        + '<i class="bi bi-check-circle-fill me-1"></i>'
+        + 'Room is <strong>available</strong>. Click Confirm to reschedule this occurrence.'
+        + '</div>';
+      document.getElementById('rsConfirmBtn').style.display = '';
+    } else {
+      const info = d.conflict ? ` (conflict: ${d.conflict.start}–${d.conflict.end})` : '';
+      rsShowErr(`Room is not available at that time${info}. Please choose a different slot.`);
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-search me-1"></i>Check Availability';
+    rsShowErr('Could not reach server. Please try again.');
+  });
+};
+
+window.rsConfirmReschedule = function () {
+  if (!_rsBookingId) return;
+  const date  = document.getElementById('rsNewDate').value;
+  const start = document.getElementById('rsStartTime').value;
+  const end   = document.getElementById('rsEndTime').value;
+
+  const btn = document.getElementById('rsConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Rescheduling…';
+
+  fetch(`/accounts/rooms/bookings/${_rsBookingId}/reschedule/`, {
+    method: 'POST',
+    headers: {
+      'X-Requested-With':  'XMLHttpRequest',
+      'X-CSRFToken':       getCsrf(),
+      'Content-Type':      'application/x-www-form-urlencoded;charset=UTF-8',
+    },
+    body: new URLSearchParams({ new_date: date, new_start_time: start, new_end_time: end }).toString(),
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      bootstrap.Modal.getInstance(document.getElementById('rescheduleModal')).hide();
+      toast('Occurrence rescheduled — now pending re-approval.', 'success');
+      setTimeout(() => location.reload(), 1300);
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirm';
+      rsShowErr(d.message || 'Something went wrong. Please try again.');
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirm';
+    rsShowErr('Could not reach server. Please try again.');
+  });
+};
 </script>
+
+{# ══ Reschedule Modal ════════════════════════════════════════════════════ #}
+<div class="modal fade" id="rescheduleModal" tabindex="-1" aria-labelledby="rsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header border-0 pb-0"
+           style="background:linear-gradient(135deg,#0a193d,#0b74b8);color:white;padding:1.25rem 1.5rem;border-radius:20px 20px 0 0;">
+        <h5 class="modal-title fw-bold" id="rsModalLabel">
+          <i class="bi bi-calendar-event me-2"></i>Reschedule Occurrence
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body p-4">
+
+        <div class="rs-info-box mb-4">
+          <div class="small fw-semibold text-primary mb-1">
+            <i class="bi bi-info-circle me-1"></i>How rescheduling works
+          </div>
+          <div class="small text-secondary">
+            Only <strong>this occurrence</strong> will move — the rest of the series is unaffected.
+            The original slot is freed immediately and the occurrence returns to
+            <strong>Pending</strong> for re-approval.
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold small text-uppercase text-muted" style="letter-spacing:.4px;">
+            Current occurrence
+          </label>
+          <div class="rs-current-slot">
+            <i class="bi bi-calendar3 me-2 text-secondary"></i><span id="rsCurrentDate"></span>
+            &nbsp;·&nbsp;
+            <i class="bi bi-clock me-1 text-secondary"></i><span id="rsCurrentTime"></span>
+            &nbsp;·&nbsp;
+            <i class="bi bi-door-open me-1 text-secondary"></i><span id="rsCurrentRoom"></span>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="mb-3">
+          <label for="rsNewDate" class="form-label fw-semibold">
+            New Date <span class="text-danger">*</span>
+          </label>
+          <input type="date" id="rsNewDate" class="form-control">
+        </div>
+        <div class="row g-3">
+          <div class="col-6">
+            <label for="rsStartTime" class="form-label fw-semibold">
+              Start Time <span class="text-danger">*</span>
+            </label>
+            <input type="time" id="rsStartTime" class="form-control">
+          </div>
+          <div class="col-6">
+            <label for="rsEndTime" class="form-label fw-semibold">
+              End Time <span class="text-danger">*</span>
+            </label>
+            <input type="time" id="rsEndTime" class="form-control">
+          </div>
+        </div>
+
+        <div id="rsAvailMsg" class="mt-3" style="display:none;"></div>
+        <div id="rsError"    class="mt-3 alert alert-danger py-2 small" style="display:none;"></div>
+
+      </div>
+
+      <div class="modal-footer border-0 px-4 pb-4 pt-0 gap-2">
+        <button type="button" class="btn btn-outline-secondary rounded-3" data-bs-dismiss="modal">Dismiss</button>
+        <button type="button" class="btn btn-warning fw-bold px-4 rounded-3"
+                id="rsCheckBtn" onclick="rsCheckAvailability()">
+          <i class="bi bi-search me-1"></i>Check Availability
+        </button>
+        <button type="button" class="btn btn-primary fw-bold px-4 rounded-3"
+                id="rsConfirmBtn" style="display:none;" onclick="rsConfirmReschedule()">
+          <i class="bi bi-check-lg me-1"></i>Confirm
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 {% endblock %}

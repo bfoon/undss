@@ -678,7 +678,58 @@
         }
     }
 
-    @media (max-width: 768px) {
+    .action-btn.reschedule-btn {
+        border-color: #f59e0b;
+        color: #d97706;
+    }
+
+    .action-btn.reschedule-btn:hover {
+        border-color: #d97706;
+        background: #fffbeb;
+        color: #b45309;
+        transform: translateY(-1px);
+    }
+
+    .action-btn.danger-btn {
+        border-color: #fca5a5;
+        color: #dc2626;
+    }
+
+    .action-btn.danger-btn:hover {
+        border-color: #ef4444;
+        background: #fee2e2;
+        color: #b91c1c;
+        transform: translateY(-1px);
+    }
+
+    /* Reschedule modal */
+    #rescheduleModal .modal-content {
+        border-radius: 20px;
+        overflow: hidden;
+        border: none;
+        box-shadow: 0 20px 60px rgba(0,0,0,.18);
+    }
+
+    #rescheduleModal .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        padding: 1.25rem 1.5rem;
+    }
+
+    #rescheduleModal .current-slot {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: .9rem 1rem;
+        font-size: .92rem;
+    }
+
+    #rescheduleModal .info-box {
+        background: #f0f7ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+        padding: .85rem 1rem;
+    }
         .booking-details {
             grid-template-columns: 1fr;
         }
@@ -1023,7 +1074,9 @@
                     {% else %}
                         {# Single Booking Card — item.booking is the RoomBooking object #}
                         <div class="booking-card {{ item.booking.status }}"
-                             data-searchable="{{ item.booking.title|lower }} {{ item.booking.room.name|lower }} {{ item.booking.description|lower }}">
+                             data-searchable="{{ item.booking.title|lower }} {{ item.booking.room.name|lower }} {{ item.booking.description|lower }}"
+                             data-booking-id="{{ item.booking.id }}"
+                             data-room-id="{{ item.booking.room.id }}">
 
                             <div class="booking-header">
                                 <div class="booking-title-section">
@@ -1114,12 +1167,22 @@
                                     View Room
                                 </a>
                                 {% if item.booking.status == "pending" %}
-                                    <button class="action-btn" onclick="cancelBooking({{ item.booking.id }})">
+                                    <button class="action-btn reschedule-btn"
+                                            onclick="openReschedule({{ item.booking.id }}, '{{ item.booking.date|date:'Y-m-d' }}', '{{ item.booking.start_time|time:'H:i' }}', '{{ item.booking.end_time|time:'H:i' }}', '{{ item.booking.room.name|escapejs }}')">
+                                        <i class="bi bi-calendar-event"></i>
+                                        Reschedule
+                                    </button>
+                                    <button class="action-btn danger-btn" onclick="cancelBooking({{ item.booking.id }})">
                                         <i class="bi bi-x-circle"></i>
                                         Cancel Request
                                     </button>
                                 {% elif item.booking.status == "approved" %}
-                                    <button class="action-btn" onclick="cancelBooking({{ item.booking.id }})">
+                                    <button class="action-btn reschedule-btn"
+                                            onclick="openReschedule({{ item.booking.id }}, '{{ item.booking.date|date:'Y-m-d' }}', '{{ item.booking.start_time|time:'H:i' }}', '{{ item.booking.end_time|time:'H:i' }}', '{{ item.booking.room.name|escapejs }}')">
+                                        <i class="bi bi-calendar-event"></i>
+                                        Reschedule
+                                    </button>
+                                    <button class="action-btn danger-btn" onclick="cancelBooking({{ item.booking.id }})">
                                         <i class="bi bi-x-circle"></i>
                                         Cancel Booking
                                     </button>
@@ -1675,5 +1738,241 @@ function showNotification(message, type = 'info') {
         }, 300);
     }, 5000);
 }
+</script>
+
+{# ══ Reschedule Modal ═════════════════════════════════════════════════════ #}
+<div class="modal fade" id="rescheduleModal" tabindex="-1" aria-labelledby="rescheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" id="rescheduleModalContent">
+
+            <div class="modal-header" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border:none;border-radius:20px 20px 0 0;padding:1.25rem 1.5rem;">
+                <h5 class="modal-title fw-bold" id="rescheduleModalLabel">
+                    <i class="bi bi-calendar-event me-2"></i>Reschedule Booking
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-4">
+
+                <div class="info-box mb-4">
+                    <div class="small fw-semibold text-primary mb-1">
+                        <i class="bi bi-info-circle me-1"></i>How rescheduling works
+                    </div>
+                    <div class="small text-secondary">
+                        Your current slot will be <strong>freed immediately</strong>.
+                        The booking moves to the new slot and returns to
+                        <strong>Pending</strong> for re-approval.
+                        If the slot is unavailable you'll see an error — nothing changes.
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-uppercase text-muted" style="letter-spacing:.4px;">
+                        Current booking
+                    </label>
+                    <div class="current-slot">
+                        <i class="bi bi-calendar3 me-2 text-secondary"></i>
+                        <span id="rsCurrentDate"></span>
+                        &nbsp;·&nbsp;
+                        <i class="bi bi-clock me-1 text-secondary"></i>
+                        <span id="rsCurrentTime"></span>
+                        &nbsp;·&nbsp;
+                        <i class="bi bi-door-open me-1 text-secondary"></i>
+                        <span id="rsCurrentRoom"></span>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-3">
+                    <label for="rsNewDate" class="form-label fw-semibold">
+                        New Date <span class="text-danger">*</span>
+                    </label>
+                    <input type="date" id="rsNewDate" class="form-control">
+                </div>
+                <div class="row g-3 mb-1">
+                    <div class="col-6">
+                        <label for="rsStartTime" class="form-label fw-semibold">
+                            Start Time <span class="text-danger">*</span>
+                        </label>
+                        <input type="time" id="rsStartTime" class="form-control">
+                    </div>
+                    <div class="col-6">
+                        <label for="rsEndTime" class="form-label fw-semibold">
+                            End Time <span class="text-danger">*</span>
+                        </label>
+                        <input type="time" id="rsEndTime" class="form-control">
+                    </div>
+                </div>
+
+                <div id="rsAvailMsg" class="mt-3" style="display:none;"></div>
+                <div id="rsError"    class="mt-3 alert alert-danger py-2 small" style="display:none;"></div>
+            </div>
+
+            <div class="modal-footer border-0 px-4 pb-4 pt-0 gap-2">
+                <button type="button" class="btn btn-outline-secondary rounded-3" data-bs-dismiss="modal">
+                    Dismiss
+                </button>
+                <button type="button" class="btn btn-warning fw-bold px-4 rounded-3" id="rsCheckBtn"
+                        onclick="rsCheckAvailability()">
+                    <i class="bi bi-search me-1"></i>Check Availability
+                </button>
+                <button type="button" class="btn btn-primary fw-bold px-4 rounded-3" id="rsConfirmBtn"
+                        style="display:none;" onclick="rsConfirmReschedule()">
+                    <i class="bi bi-check-lg me-1"></i>Confirm
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+/* ── Reschedule modal ─────────────────────────────────────────────────────── */
+(function () {
+    var AVAIL_URL = '/accounts/api/check-availability/';
+    var _bookingId = null;
+    var _roomId    = null;
+    var today      = new Date().toISOString().slice(0, 10);
+
+    document.getElementById('rsNewDate').setAttribute('min', today);
+
+    // Reset feedback whenever inputs change
+    ['rsNewDate', 'rsStartTime', 'rsEndTime'].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', clearFeedback);
+    });
+
+    document.getElementById('rescheduleModal').addEventListener('hidden.bs.modal', function () {
+        _bookingId = null;
+        _roomId    = null;
+        clearFeedback();
+    });
+
+    function clearFeedback() {
+        document.getElementById('rsError').style.display    = 'none';
+        document.getElementById('rsAvailMsg').style.display = 'none';
+        document.getElementById('rsConfirmBtn').style.display = 'none';
+    }
+
+    function showErr(msg) {
+        var el = document.getElementById('rsError');
+        el.textContent = msg;
+        el.style.display = '';
+        document.getElementById('rsConfirmBtn').style.display = 'none';
+        document.getElementById('rsAvailMsg').style.display   = 'none';
+    }
+
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    // Called by each Reschedule button on the cards
+    window.openReschedule = function (bookingId, currentDate, currentStart, currentEnd, roomName) {
+        _bookingId = bookingId;
+
+        // Populate "current booking" display
+        document.getElementById('rsCurrentDate').textContent = currentDate;
+        document.getElementById('rsCurrentTime').textContent = currentStart + ' – ' + currentEnd;
+        document.getElementById('rsCurrentRoom').textContent = roomName;
+
+        // Pre-fill inputs with current values so user only changes what they need
+        document.getElementById('rsNewDate').value    = currentDate;
+        document.getElementById('rsStartTime').value  = currentStart;
+        document.getElementById('rsEndTime').value    = currentEnd;
+
+        clearFeedback();
+
+        // Get the room id from a hidden data attribute on the card
+        var card = document.querySelector('[data-booking-id="' + bookingId + '"]');
+        _roomId  = card ? card.dataset.roomId : null;
+
+        var modal = new bootstrap.Modal(document.getElementById('rescheduleModal'));
+        modal.show();
+    };
+
+    window.rsCheckAvailability = function () {
+        var date  = document.getElementById('rsNewDate').value;
+        var start = document.getElementById('rsStartTime').value;
+        var end   = document.getElementById('rsEndTime').value;
+
+        clearFeedback();
+
+        if (!date || !start || !end) { showErr('Please fill in date, start time, and end time.'); return; }
+        if (end <= start)            { showErr('End time must be after start time.'); return; }
+        if (!_roomId)                { showErr('Room information missing — please refresh the page.'); return; }
+
+        var btn = document.getElementById('rsCheckBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking…';
+
+        fetch(AVAIL_URL + '?' + new URLSearchParams({ room: _roomId, date: date, start: start, end: end }), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>Check Availability';
+
+            if (d.available) {
+                var msg = document.getElementById('rsAvailMsg');
+                msg.style.display = '';
+                msg.innerHTML = '<div class="alert alert-success py-2 small mb-0">'
+                    + '<i class="bi bi-check-circle-fill me-1"></i>'
+                    + 'Room is <strong>available</strong>. Click Confirm to reschedule.'
+                    + '</div>';
+                document.getElementById('rsConfirmBtn').style.display = '';
+            } else {
+                var info = d.conflict ? ' (conflict: ' + d.conflict.start + '–' + d.conflict.end + ')' : '';
+                showErr('Room is not available at that time' + info + '. Please choose a different slot.');
+            }
+        })
+        .catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>Check Availability';
+            showErr('Could not reach server. Please try again.');
+        });
+    };
+
+    window.rsConfirmReschedule = function () {
+        if (!_bookingId) return;
+
+        var date  = document.getElementById('rsNewDate').value;
+        var start = document.getElementById('rsStartTime').value;
+        var end   = document.getElementById('rsEndTime').value;
+
+        var btn = document.getElementById('rsConfirmBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Rescheduling…';
+
+        fetch('/accounts/rooms/bookings/' + _bookingId + '/reschedule/', {
+            method:  'POST',
+            headers: {
+                'X-Requested-With':  'XMLHttpRequest',
+                'X-CSRFToken':       getCsrf(),
+                'Content-Type':      'application/x-www-form-urlencoded;charset=UTF-8',
+            },
+            body: new URLSearchParams({ new_date: date, new_start_time: start, new_end_time: end }).toString(),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.success) {
+                bootstrap.Modal.getInstance(document.getElementById('rescheduleModal')).hide();
+                showNotification('Booking rescheduled — now pending re-approval.', 'success');
+                // Update the card in-place after a short delay
+                setTimeout(function () { window.location.reload(); }, 1200);
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirm';
+                showErr(d.message || 'Something went wrong. Please try again.');
+            }
+        })
+        .catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Confirm';
+            showErr('Could not reach server. Please try again.');
+        });
+    };
+})();
 </script>
 {% endblock %}
