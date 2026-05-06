@@ -54,53 +54,117 @@
   </div>
 {% endif %}
 
-<div class="table-responsive">
-  <table class="table align-middle">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Requester</th>
-        <th>Category</th>
-        <th>Unit</th>
-        <th>Justification</th>
-        <th class="text-end">Decision</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in pending_approvals %}
+{# ── Bulk asset request approvals ─────────────────────────────────── #}
+{% if pending_approvals %}
+<form method="post" id="bulkApproveForm">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="bulk_approve_requests">
+
+  <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-3">
+      <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" id="selectAllRequests">
+        <label class="form-check-label fw-semibold small" for="selectAllRequests">
+          Select all
+        </label>
+      </div>
+      <span class="text-muted small" id="selectedCount">0 selected</span>
+    </div>
+    <button type="submit" class="btn btn-sm btn-success" id="bulkApproveBtn" disabled>
+      <i class="bi bi-check-all me-1"></i> Approve Selected
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
         <tr>
-          <td class="fw-semibold">#{{ r.id }}</td>
-          <td>{{ r.requester.get_full_name|default:r.requester.username }}</td>
-          <td>{{ r.category.name }}</td>
-          <td>{{ r.unit.name|default:"Unallocated/Core" }}</td>
-          <td class="text-muted">{{ r.justification|default:"-"|truncatechars:80 }}</td>
-          <td class="text-end">
-            <form method="post" class="d-inline">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="approve_request">
-              <input type="hidden" name="request_id" value="{{ r.id }}">
-              <button class="btn btn-sm btn-success">
+          <th style="width:36px;"></th>
+          <th>ID</th>
+          <th>Requester</th>
+          <th>Category</th>
+          <th>Unit</th>
+          <th>Justification</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in pending_approvals %}
+          <tr>
+            <td>
+              <input class="form-check-input request-checkbox" type="checkbox"
+                     name="request_ids" value="{{ r.id }}"
+                     id="chk_req_{{ r.id }}">
+            </td>
+            <td class="fw-semibold">
+              <label for="chk_req_{{ r.id }}" class="mb-0">#{{ r.id }}</label>
+            </td>
+            <td>{{ r.requester.get_full_name|default:r.requester.username }}</td>
+            <td>{{ r.category.name }}</td>
+            <td>{{ r.unit.name|default:"Unallocated/Core" }}</td>
+            <td class="text-muted">{{ r.justification|default:"-"|truncatechars:80 }}</td>
+            <td class="text-end">
+              {# Single approve — submits just this one request #}
+              <button type="button" class="btn btn-sm btn-success"
+                      onclick="approveSingle('{{ r.id }}')">
                 <i class="bi bi-check-lg me-1"></i> Approve
               </button>
-            </form>
 
-            <button class="btn btn-sm btn-outline-danger"
-                    data-bs-toggle="modal" data-bs-target="#modalReject"
-                    data-request-id="{{ r.id }}">
-              <i class="bi bi-x-lg me-1"></i> Reject
-            </button>
-          </td>
-        </tr>
-      {% empty %}
-        <tr>
-          <td colspan="6" class="text-center text-muted py-4">
-            No pending approvals for you right now.
-          </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+              <button class="btn btn-sm btn-outline-danger" type="button"
+                      data-bs-toggle="modal" data-bs-target="#modalReject"
+                      data-request-id="{{ r.id }}">
+                <i class="bi bi-x-lg me-1"></i> Reject
+              </button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+
+{% else %}
+<div class="text-center text-muted py-4">
+  <i class="bi bi-clipboard-check fs-2 d-block mb-2 opacity-25"></i>
+  <p class="mb-0">No pending approvals for you right now.</p>
 </div>
+{% endif %}
+
+<script>
+(function () {
+  const selectAll  = document.getElementById('selectAllRequests');
+  const checkboxes = document.querySelectorAll('.request-checkbox');
+  const approveBtn = document.getElementById('bulkApproveBtn');
+  const countLabel = document.getElementById('selectedCount');
+
+  function updateState() {
+    const checked = document.querySelectorAll('.request-checkbox:checked');
+    const n = checked.length;
+    approveBtn.disabled = n === 0;
+    countLabel.textContent = n === 0 ? '0 selected' : n + ' selected';
+    selectAll.indeterminate = n > 0 && n < checkboxes.length;
+    selectAll.checked = n === checkboxes.length && checkboxes.length > 0;
+  }
+
+  if (selectAll) {
+    selectAll.addEventListener('change', function () {
+      checkboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+      updateState();
+    });
+  }
+
+  checkboxes.forEach(function (cb) {
+    cb.addEventListener('change', updateState);
+  });
+
+  // Single approve: tick just that checkbox and submit
+  window.approveSingle = function (reqId) {
+    checkboxes.forEach(function (cb) { cb.checked = cb.value === reqId; });
+    document.getElementById('bulkApproveForm').submit();
+  };
+})();
+</script>
+
 {% else %}
 <div class="text-center text-muted py-5">
   <i class="bi bi-lock fs-2 d-block mb-2"></i>

@@ -346,7 +346,55 @@ def view_asset_management(request):
             messages.success(request, f"Request #{req_obj.id} cancelled.")
             return redirect("accounts:asset_management")
 
-        # ── Create asset request (multi-item) ────────────────────────
+        # ── Bulk approve asset requests ───────────────────────────────
+        if action == "bulk_approve_requests":
+            if not is_manager:
+                messages.error(request, "Only managers can approve requests.")
+                return redirect("accounts:asset_management")
+
+            request_ids = request.POST.getlist("request_ids")
+            if not request_ids:
+                messages.warning(request, "No requests selected.")
+                return redirect("accounts:asset_management")
+
+            approved_count = 0
+            skipped = []
+
+            for req_id in request_ids:
+                try:
+                    req_obj = AssetRequest.objects.get(id=req_id, agency=agency)
+                except AssetRequest.DoesNotExist:
+                    continue
+
+                if req_obj.status != "pending_manager":
+                    skipped.append(f"#{req_obj.id}")
+                    continue
+
+                if not (user.is_superuser or req_obj.can_user_approve_as_manager(user)):
+                    skipped.append(f"#{req_obj.id}")
+                    continue
+
+                req_obj.approve(user)
+                approved_count += 1
+
+                _notify_local(
+                    subject=f"Asset Request #{req_obj.id} — Approved",
+                    to_emails=[getattr(req_obj.requester, "email", None)],
+                    html_template="emails/assets/request_approved.html",
+                    ctx={"req": req_obj, "approved_by": user.get_full_name() or user.username},
+                )
+                _notify_local(
+                    subject=f"Asset Request #{req_obj.id} — Pending ICT Assignment",
+                    to_emails=get_ict_custodian_emails(req_obj),
+                    html_template="emails/assets/request_approved.html",
+                    ctx={"req": req_obj, "approved_by": user.get_full_name() or user.username},
+                )
+
+            if approved_count:
+                messages.success(request, f"{approved_count} request(s) approved successfully.")
+            if skipped:
+                messages.warning(request, f"Skipped {len(skipped)} request(s) (already processed or no permission): {', '.join(skipped)}")
+            return redirect("accounts:asset_management")
         if action == "create_request":
             # The new modal submits items[0][category_id], items[0][qty],
             # items[0][note], items[1][category_id], … for multiple items.
@@ -1511,6 +1559,33 @@ def view_asset_management(request):
             .order_by("consumable_item__name")
         )
 
+    # ── Build JSON payload for the assign-asset modal ────────────────
+    # Pre-filter to only available assets so the modal JS always gets
+    # valid JSON regardless of how many assets are in the queryset.
+    _available_assets = Asset.objects.filter(
+        agency=agency, status="available"
+    ).select_related("category", "unit").order_by("category__name", "name")
+
+    _available_assets_list = [
+        {
+            "id": a.id,
+            "name": a.name,
+            "category_id": a.category_id,
+            "category_name": a.category.name if a.category else "",
+            "unit_id": a.unit_id,
+            "unit_name": a.unit.name if a.unit else "",
+            "serial_number": a.serial_number or "",
+            "asset_tag": a.asset_tag or "",
+        }
+        for a in _available_assets
+    ]
+    # Use Django's json_script-safe approach: embed as a <script> tag
+    available_assets_json = (
+        '<script id="availableAssetsData" type="application/json">'
+        + json.dumps(_available_assets_list)
+        + '</script>'
+    )
+
     return render(request, "accounts/assets/asset_management.html", {
         "svc": svc,
         "roles": roles,
@@ -1549,6 +1624,7 @@ def view_asset_management(request):
             Asset.objects.filter(agency=agency).order_by("name")
             if (is_ict or is_ops) else []
         ),
+        "available_assets_json": available_assets_json,
     })
 
 

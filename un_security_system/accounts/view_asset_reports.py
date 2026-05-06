@@ -43,16 +43,28 @@ from .models import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _require_manager(user, agency):
-    """Return True if the user may view reports."""
+    """Return True if the user may view reports (ICT, Operations Manager, or superuser)."""
     if user.is_superuser:
         return True
+    # ICT focal point role flag
+    if getattr(user, "role", "") == "ict_focal":
+        return True
     roles = getattr(agency, "asset_roles", None)
+    if not roles:
+        # Fallback: try fetching roles from DB
+        try:
+            from .models import AgencyAssetRoles as _Roles
+            roles = _Roles.objects.filter(agency=agency).first()
+        except Exception:
+            pass
     if roles:
+        # ICT custodian
         if roles.ict_custodian.filter(id=user.id).exists():
             return True
-        if roles.operations_manager_id == user.id:
+        # Operations Manager
+        if roles.operations_manager_id and roles.operations_manager_id == user.id:
             return True
-    return getattr(user, "role", "") in ("ict_focal",)
+    return False
 
 
 def _months_range(n=12):

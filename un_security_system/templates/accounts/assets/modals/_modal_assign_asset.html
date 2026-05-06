@@ -23,26 +23,9 @@
             </div>
           </div>
 
-          {# ── Asset JSON payload (rendered server-side) ────────────── #}
-          {# Build a JSON list of all available assets for JS filtering #}
-          <script id="availableAssetsData" type="application/json">
-            [
-              {% for a in assets %}
-              {% if a.status == "available" %}
-              {
-                "id": {{ a.id }},
-                "name": "{{ a.name|escapejs }}",
-                "category_id": {{ a.category_id }},
-                "category_name": "{{ a.category.name|escapejs }}",
-                "unit_id": {% if a.unit_id %}{{ a.unit_id }}{% else %}null{% endif %},
-                "unit_name": "{% if a.unit %}{{ a.unit.name|escapejs }}{% endif %}",
-                "serial_number": "{{ a.serial_number|default:''|escapejs }}",
-                "asset_tag": "{{ a.asset_tag|default:''|escapejs }}"
-              }{% if not forloop.last %},{% endif %}
-              {% endif %}
-              {% endfor %}
-            ]
-          </script>
+          {# ── Asset data: serialised server-side so JSON is always valid ── #}
+          {# The view passes `available_assets_json` via json_script tag.    #}
+          {{ available_assets_json|safe }}
 
           <label class="form-label fw-semibold">Select an available asset</label>
           <select class="form-select" name="asset_id" id="assignAssetSelect" required>
