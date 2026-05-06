@@ -1,0 +1,960 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Asset Management Report | UN PASS{% endblock %}
+
+
+{% block extra_css %}
+<style>
+  /* ══════════════════════════════════════════════════════════════════
+     REPORT PAGE STYLES
+     All classes are prefixed rpt- / kpi- / chart- to minimise
+     collision with base.html globals.  Where base overrides are
+     unavoidable, !important is used with a comment explaining why.
+  ══════════════════════════════════════════════════════════════════ */
+  :root {
+    --rpt-blue:       #1F3864;
+    --rpt-blue-mid:   #2E74B5;
+    --rpt-blue-light: #D6E4F0;
+    --rpt-green:      #145A32;
+    --rpt-amber:      #856404;
+    --rpt-red:        #721C24;
+    --rpt-teal:       #145369;
+    --rpt-grey:       #F8F9FA;
+    --rpt-border:     #DEE2E6;
+    --rpt-radius:     10px;
+  }
+
+  /* ── Page wrapper ───────────────────────────────────────────────── */
+  .rpt-page {
+    max-width: 1380px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+  }
+
+  /* ── Header banner ──────────────────────────────────────────────── */
+  .rpt-header {
+    background: linear-gradient(135deg, var(--rpt-blue), var(--rpt-blue-mid));
+    color: #fff;
+    border-radius: var(--rpt-radius);
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .rpt-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0;
+    color: #fff !important;
+  }
+  .rpt-header .rpt-meta { font-size: 0.82rem; opacity: .78; color: #fff; }
+  .rpt-download-bar { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .rpt-download-bar .btn { font-size: 0.83rem; }
+
+  /* ── Section heading ────────────────────────────────────────────── */
+  .rpt-section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--rpt-blue);
+    border-left: 4px solid var(--rpt-blue);
+    padding-left: .65rem;
+    margin: 1.75rem 0 .85rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  /* ── KPI cards ──────────────────────────────────────────────────── */
+  .kpi-grid {
+    display: grid;
+    gap: .85rem;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  }
+  /* !important beats base .card which sets border, shadow, hover */
+  .kpi-card {
+    background: #fff !important;
+    border: 1px solid var(--rpt-border) !important;
+    border-radius: var(--rpt-radius) !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
+    padding: 1rem 1.1rem;
+    text-align: center;
+    transition: box-shadow .15s;
+  }
+  .kpi-card:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,.1) !important;
+    transform: none !important;   /* cancel base .btn:hover transform */
+  }
+  .kpi-card .kpi-val  { font-size: 1.9rem; font-weight: 800; line-height: 1.1; }
+  .kpi-card .kpi-label {
+    font-size: 0.72rem; color: #6c757d;
+    margin-top: .2rem; text-transform: uppercase; letter-spacing: .05em;
+  }
+  /* !important beats base .card .bi { opacity: 0.3 } */
+  .kpi-card .bi { opacity: 1 !important; }
+  .kpi-blue  .kpi-val { color: #0d6efd; }
+  .kpi-green .kpi-val { color: #198754; }
+  .kpi-amber .kpi-val { color: #fd7e14; }
+  .kpi-red   .kpi-val { color: #dc3545; }
+  .kpi-grey  .kpi-val { color: #6c757d; }
+  .kpi-teal  .kpi-val { color: #0b9dba; }
+
+  /* ── Chart cards ────────────────────────────────────────────────── */
+  /* !important beats base .card hover/shadow and .card-header bg */
+  .chart-card {
+    background: #fff !important;
+    border: 1px solid var(--rpt-border) !important;
+    border-radius: var(--rpt-radius) !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
+    padding: 1.25rem;
+  }
+  .chart-card:hover {
+    box-shadow: 0 3px 10px rgba(0,0,0,.09) !important;
+    transform: none !important;
+  }
+  /* .chart-title is a plain div, not a .card-header,
+     but base has .card-header { background:#f8f9fa; padding:0.75rem 1rem }
+     which would match if we used that class. We do not. */
+  .chart-title {
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    color: var(--rpt-blue) !important;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: .85rem;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+  /* base.html sets canvas { max-height: 300px } — override for report charts */
+  .chart-card canvas { max-height: none !important; }
+
+  /* ── Report tables ──────────────────────────────────────────────── */
+  .rpt-table-wrapper {
+    background: #fff;
+    border: 1px solid var(--rpt-border);
+    border-radius: var(--rpt-radius);
+    overflow: hidden;
+  }
+  /* !important beats base global .table thead th rules */
+  .rpt-table thead th {
+    background-color: var(--rpt-blue) !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    padding: .55rem .8rem !important;
+    white-space: nowrap;
+    border: none !important;
+    text-transform: none !important;
+    font-size: 0.82rem !important;
+    letter-spacing: normal !important;
+    position: static !important;      /* base makes thead sticky */
+  }
+  .rpt-table tbody tr:nth-child(even) { background: var(--rpt-grey) !important; }
+  .rpt-table tbody tr:nth-child(odd)  { background: #fff !important; }
+  .rpt-table tbody tr:hover           { background: rgba(31,56,100,.05) !important; }
+  .rpt-table tbody td {
+    padding: .45rem .8rem !important;
+    border-top: 1px solid var(--rpt-border) !important;
+    vertical-align: middle;
+    font-size: 0.83rem;
+  }
+
+  /* ── Status badges ──────────────────────────────────────────────── */
+  /* !important beats base .badge padding/border-radius overrides */
+  .status-badge {
+    display: inline-block;
+    padding: .18rem .55rem !important;
+    border-radius: 50px !important;
+    font-size: 0.72rem !important;
+    font-weight: 600;
+    text-transform: capitalize;
+    border: none !important;
+  }
+  .badge-available { background: #d4edda !important; color: #145A32 !important; }
+  .badge-assigned  { background: #cce5ff !important; color: #004085 !important; }
+  .badge-retired   { background: #f8d7da !important; color: #721c24 !important; }
+  .badge-suspended { background: #fff3cd !important; color: #856404 !important; }
+  .badge-ok        { background: #d4edda !important; color: #145A32 !important; }
+  .badge-low       { background: #fff3cd !important; color: #856404 !important; }
+  .badge-out       { background: #f8d7da !important; color: #721c24 !important; }
+
+  /* ── Tab strip ──────────────────────────────────────────────────── */
+  .rpt-tabs {
+    border-bottom: 2px solid var(--rpt-border);
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  /* !important beats base .nav-link global + 1400px media query */
+  .rpt-tabs .nav-link {
+    color: #495057 !important;
+    font-size: 0.83rem !important;
+    font-weight: 600 !important;
+    padding: .55rem 1rem !important;
+    border: none !important;
+    border-bottom: 3px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    transition: color .15s, border-color .15s;
+    display: inline-flex !important;  /* keep icon+label always visible */
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
+  }
+  .rpt-tabs .nav-link:hover {
+    color: var(--rpt-blue) !important;
+    transform: none !important;
+  }
+  .rpt-tabs .nav-link.active {
+    color: var(--rpt-blue) !important;
+    border-bottom-color: var(--rpt-blue) !important;
+    background: transparent !important;
+  }
+
+  /* ── Responsive ─────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .rpt-header  { flex-direction: column; }
+    .kpi-grid    { grid-template-columns: repeat(2, 1fr); }
+    .rpt-tabs .nav-link { padding: .4rem .6rem !important; font-size: 0.74rem !important; }
+  }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="rpt-page">
+
+  {# ── Header ─────────────────────────────────────────────────────── #}
+  <div class="rpt-header">
+    <div>
+      <h1><i class="bi bi-bar-chart-fill me-2"></i>Asset Management Report</h1>
+      <div class="rpt-meta">
+        {{ agency }} &nbsp;·&nbsp; Generated: {{ generated_at|date:"d M Y, H:i" }}
+      </div>
+    </div>
+    <div class="rpt-download-bar">
+      <a href="{% url 'accounts:asset_reports_excel' %}" class="btn btn-success">
+        <i class="bi bi-file-earmark-excel me-1"></i> Download Excel
+      </a>
+      <a href="{% url 'accounts:asset_reports_word' %}" class="btn btn-primary">
+        <i class="bi bi-file-earmark-word me-1"></i> Download Word
+      </a>
+      <a href="{% url 'accounts:asset_management' %}" class="btn btn-outline-light">
+        <i class="bi bi-arrow-left me-1"></i> Back
+      </a>
+    </div>
+  </div>
+
+  {# ── Tab navigation ─────────────────────────────────────────────── #}
+  <ul class="nav rpt-tabs" id="reportTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-assets" type="button">
+        <i class="bi bi-hdd-stack"></i> Assets
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-requests" type="button">
+        <i class="bi bi-send"></i> Requests
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-issued" type="button">
+        <i class="bi bi-person-check"></i> Issued
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-lines" type="button">
+        <i class="bi bi-phone"></i> Lines
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-supplies" type="button">
+        <i class="bi bi-box-seam"></i> Supplies
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-allocation" type="button">
+        <i class="bi bi-diagram-3"></i> Allocation
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="reportTabContent">
+
+    {# ══════════════════════════════════════════════════════════════ #}
+    {# TAB 1: ASSETS                                                  #}
+    {# ══════════════════════════════════════════════════════════════ #}
+    <div class="tab-pane fade show active" id="tab-assets" role="tabpanel">
+
+      <div class="kpi-grid mb-4">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ total_assets }}</div>
+          <div class="kpi-label">Total Assets</div>
+        </div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-val">{{ available_assets }}</div>
+          <div class="kpi-label">Available</div>
+        </div>
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ assigned_assets }}</div>
+          <div class="kpi-label">Assigned</div>
+        </div>
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-val">{{ maintenance_assets }}</div>
+          <div class="kpi-label">Maintenance</div>
+        </div>
+        <div class="kpi-card kpi-grey">
+          <div class="kpi-val">{{ retired_assets }}</div>
+          <div class="kpi-label">Retired</div>
+        </div>
+        <div class="kpi-card kpi-red">
+          <div class="kpi-val">{{ eol_assets|length }}</div>
+          <div class="kpi-label">EOL / Due Replacement</div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <div class="chart-card" style="height:280px;">
+            <div class="chart-title">Status Distribution</div>
+            <canvas id="chartAssetStatus" style="height:215px;"></canvas>
+          </div>
+        </div>
+        <div class="col-md-8">
+          <div class="chart-card" style="height:280px;">
+            <div class="chart-title">Assets by Category (Top 10)</div>
+            <canvas id="chartAssetsByCat" style="height:215px;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-12">
+          <div class="chart-card" style="height:260px;">
+            <div class="chart-title">Assets by Unit (Top 10)</div>
+            <canvas id="chartAssetsByUnit" style="height:200px;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="rpt-section-title">Inventory by Category</div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-center">Total</th>
+              <th class="text-center">Available</th>
+              <th class="text-center">Assigned</th>
+              <th class="text-center">Retired</th>
+              <th class="text-center">Utilisation %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in assets_by_cat %}
+            <tr>
+              <td class="fw-semibold">{{ r.category__name|default:"Uncategorised" }}</td>
+              <td class="text-center">{{ r.total }}</td>
+              <td class="text-center"><span class="status-badge badge-available">{{ r.available }}</span></td>
+              <td class="text-center"><span class="status-badge badge-assigned">{{ r.assigned }}</span></td>
+              <td class="text-center"><span class="status-badge badge-retired">{{ r.retired }}</span></td>
+              <td class="text-center">
+                {% if r.total %}{% widthratio r.assigned r.total 100 %}%{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">No assets registered yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if eol_assets %}
+      <div class="rpt-section-title" style="color:#721C24; border-color:#721C24;">
+        ⚠ Assets Due for Replacement (EOL)
+      </div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead style="background:#721C24 !important;">
+            <tr>
+              <th>Asset</th><th>Category</th><th>Unit</th><th>Current Holder</th><th>Tag</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in eol_assets %}
+            <tr>
+              <td class="fw-semibold">{{ a.name }}</td>
+              <td>{{ a.category.name|default:"—" }}</td>
+              <td>{{ a.unit.name|default:"Unallocated" }}</td>
+              <td>{{ a.current_holder.get_full_name|default:"—" }}</td>
+              <td><code>{{ a.asset_tag|default:"—" }}</code></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+    </div>{# /tab-assets #}
+
+
+    {# ══════════════════════════════════════════════════════════════ #}
+    {# TAB 2: REQUESTS                                                #}
+    {# ══════════════════════════════════════════════════════════════ #}
+    <div class="tab-pane fade" id="tab-requests" role="tabpanel">
+
+      <div class="kpi-grid mb-4">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ total_requests }}</div>
+          <div class="kpi-label">Total Requests</div>
+        </div>
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-val">{{ req_status_counts.pending_manager|default:0 }}</div>
+          <div class="kpi-label">Pending Manager</div>
+        </div>
+        <div class="kpi-card kpi-teal">
+          <div class="kpi-val">{{ req_status_counts.pending_ict|default:0 }}</div>
+          <div class="kpi-label">Pending ICT</div>
+        </div>
+        {# AssetRequest terminal status = "received" (requester verified receipt) #}
+        <div class="kpi-card kpi-green">
+          <div class="kpi-val">{{ req_status_counts.received|default:0 }}</div>
+          <div class="kpi-label">Received &amp; Verified</div>
+        </div>
+        <div class="kpi-card kpi-red">
+          <div class="kpi-val">{{ req_status_counts.rejected|default:0 }}</div>
+          <div class="kpi-label">Rejected</div>
+        </div>
+        <div class="kpi-card kpi-grey">
+          <div class="kpi-val">{{ req_status_counts.cancelled|default:0 }}</div>
+          <div class="kpi-label">Cancelled</div>
+        </div>
+        {% if avg_fulfillment_days %}
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ avg_fulfillment_days }}</div>
+          <div class="kpi-label">Avg. Days to Receive</div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <div class="chart-card" style="height:280px;">
+            <div class="chart-title">Request Status Breakdown</div>
+            <canvas id="chartReqStatus" style="height:215px;"></canvas>
+          </div>
+        </div>
+        <div class="col-md-8">
+          <div class="chart-card" style="height:280px;">
+            <div class="chart-title">Monthly Request Trend (12 months)</div>
+            <canvas id="chartMonthlyReq" style="height:215px;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="rpt-section-title">Requests by Category</div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-center">Total</th>
+              <th class="text-center">Pending</th>
+              <th class="text-center">Received</th>
+              <th class="text-center">Rejected</th>
+              <th class="text-center">Cancelled</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in requests_by_cat %}
+            <tr>
+              <td class="fw-semibold">{{ r.category__name|default:"Uncategorised" }}</td>
+              <td class="text-center">{{ r.total }}</td>
+              <td class="text-center"><span class="status-badge badge-suspended">{{ r.pending }}</span></td>
+              <td class="text-center"><span class="status-badge badge-available">{{ r.fulfilled }}</span></td>
+              <td class="text-center"><span class="status-badge badge-retired">{{ r.rejected }}</span></td>
+              <td class="text-center"><span class="status-badge badge-retired">{{ r.cancelled }}</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">No requests yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>{# /tab-requests #}
+
+
+    {# ══════════════════════════════════════════════════════════════ #}
+    {# TAB 3: ASSETS ISSUED                                           #}
+    {# ══════════════════════════════════════════════════════════════ #}
+    <div class="tab-pane fade" id="tab-issued" role="tabpanel">
+
+      <div class="kpi-grid mb-4">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ issued_assets|length }}</div>
+          <div class="kpi-label">Assets in Use</div>
+        </div>
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-val">{{ pending_returns|length }}</div>
+          <div class="kpi-label">Pending Returns</div>
+        </div>
+      </div>
+
+      <div class="rpt-section-title">Currently Issued Assets</div>
+      <div class="mb-2">
+        <input type="text" class="form-control form-control-sm" id="issuedSearch"
+               style="max-width:320px;" placeholder="🔍 Filter by name, holder, unit…">
+      </div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table" id="issuedTable">
+          <thead>
+            <tr>
+              <th>Asset</th><th>Category</th><th>Unit</th>
+              <th>Current Holder</th><th>Tag</th><th>Serial</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in issued_assets %}
+            <tr>
+              <td class="fw-semibold">{{ a.name }}</td>
+              <td>{{ a.category.name|default:"—" }}</td>
+              <td>{{ a.unit.name|default:"Unallocated" }}</td>
+              <td>{{ a.current_holder.get_full_name|default:"—" }}</td>
+              <td><code>{{ a.asset_tag|default:"—" }}</code></td>
+              <td><code>{{ a.serial_number|default:"—" }}</code></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">No assets currently issued.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if pending_returns %}
+      <div class="rpt-section-title" style="color:#8B4513; border-color:#8B4513;">Pending Returns</div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead style="background:#8B4513 !important;">
+            <tr>
+              <th>Return #</th><th>Asset</th><th>Category</th><th>Returned By</th><th>Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rr in pending_returns %}
+            <tr>
+              <td>#{{ rr.id }}</td>
+              <td class="fw-semibold">{{ rr.asset.name }}</td>
+              <td>{{ rr.asset.category.name|default:"—" }}</td>
+              <td>{{ rr.requested_by.get_full_name|default:"—" }}</td>
+              <td>{{ rr.created_at|date:"d M Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+    </div>{# /tab-issued #}
+
+
+    {# ══════════════════════════════════════════════════════════════ #}
+    {# TAB 4: MOBILE LINES                                            #}
+    {# ══════════════════════════════════════════════════════════════ #}
+    <div class="tab-pane fade" id="tab-lines" role="tabpanel">
+
+      <div class="kpi-grid mb-4">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ total_lines }}</div>
+          <div class="kpi-label">Total Lines</div>
+        </div>
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ line_status_counts.assigned|default:0 }}</div>
+          <div class="kpi-label">Assigned</div>
+        </div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-val">{{ line_status_counts.available|default:0 }}</div>
+          <div class="kpi-label">Available</div>
+        </div>
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-val">{{ line_status_counts.suspended|default:0 }}</div>
+          <div class="kpi-label">Suspended</div>
+        </div>
+        <div class="kpi-card kpi-grey">
+          <div class="kpi-val">{{ line_status_counts.retired|default:0 }}</div>
+          <div class="kpi-label">Retired</div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <div class="chart-card" style="height:260px;">
+            <div class="chart-title">Line Status Distribution</div>
+            <canvas id="chartLineStatus" style="height:200px;"></canvas>
+          </div>
+        </div>
+        <div class="col-md-8">
+          <div class="chart-card">
+            <div class="chart-title">Lines by Type</div>
+            <table class="table rpt-table mb-0">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th class="text-center">Total</th>
+                  <th class="text-center">Assigned</th>
+                  <th class="text-center">Available</th>
+                  <th class="text-center">Suspended</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in lines_by_type %}
+                <tr>
+                  <td class="fw-semibold">{{ r.line_type|title }}</td>
+                  <td class="text-center">{{ r.total }}</td>
+                  <td class="text-center"><span class="status-badge badge-assigned">{{ r.assigned }}</span></td>
+                  <td class="text-center"><span class="status-badge badge-available">{{ r.available }}</span></td>
+                  <td class="text-center"><span class="status-badge badge-suspended">{{ r.suspended }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center text-muted py-2">No lines registered.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="rpt-section-title">Lines Allocated by Unit</div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead>
+            <tr><th>Unit</th><th class="text-center">Lines Assigned</th></tr>
+          </thead>
+          <tbody>
+            {% for r in line_by_unit %}
+            <tr>
+              <td>{{ r.assigned_to__unit__name|default:"Unallocated" }}</td>
+              <td class="text-center"><strong>{{ r.count }}</strong></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2" class="text-center text-muted py-3">No lines assigned yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rpt-section-title">All Mobile Lines</div>
+      <div class="mb-2">
+        <input type="text" class="form-control form-control-sm" id="linesSearch"
+               style="max-width:320px;" placeholder="🔍 Filter by MSISDN, holder…">
+      </div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table" id="linesTable">
+          <thead>
+            <tr>
+              <th>MSISDN</th><th>Type</th><th>Provider</th><th>Status</th>
+              <th>Assigned To</th><th>Unit</th><th>SIM Serial</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in all_lines %}
+            <tr>
+              <td class="fw-semibold"><code>{{ line.msisdn }}</code></td>
+              <td>{{ line.get_line_type_display|default:line.line_type }}</td>
+              <td>{{ line.provider|default:"—" }}</td>
+              <td>
+                <span class="status-badge
+                  {% if line.status == 'assigned' %}badge-assigned
+                  {% elif line.status == 'available' %}badge-available
+                  {% elif line.status == 'suspended' %}badge-suspended
+                  {% else %}badge-retired{% endif %}">
+                  {{ line.status|title }}
+                </span>
+              </td>
+              <td>{{ line.assigned_to.get_full_name|default:"—" }}</td>
+              <td>{{ line.assigned_to.unit.name|default:"—" }}</td>
+              <td><code>{{ line.sim_serial|default:"—" }}</code></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-3">No lines registered.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>{# /tab-lines #}
+
+
+    {# ══════════════════════════════════════════════════════════════ #}
+    {# TAB 5: SUPPLIES                                                #}
+    {# ══════════════════════════════════════════════════════════════ #}
+    <div class="tab-pane fade" id="tab-supplies" role="tabpanel">
+
+      <div class="kpi-grid mb-4">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ total_creqs }}</div>
+          <div class="kpi-label">Supply Requests</div>
+        </div>
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-val">{{ creq_status_counts.pending|default:0 }}</div>
+          <div class="kpi-label">Pending Approval</div>
+        </div>
+        {# ConsumableRequest has no "dispatched" — "approved" means awaiting dispatch #}
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-val">{{ creq_status_counts.approved|default:0 }}</div>
+          <div class="kpi-label">Approved / Awaiting Dispatch</div>
+        </div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-val">{{ creq_status_counts.fulfilled|default:0 }}</div>
+          <div class="kpi-label">Fulfilled</div>
+        </div>
+        <div class="kpi-card kpi-grey">
+          <div class="kpi-val">{{ creq_status_counts.cancelled|default:0 }}</div>
+          <div class="kpi-label">Cancelled</div>
+        </div>
+        <div class="kpi-card kpi-teal">
+          <div class="kpi-val">{{ all_consumables|length }}</div>
+          <div class="kpi-label">Consumable SKUs</div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-12">
+          <div class="chart-card" style="height:240px;">
+            <div class="chart-title">Monthly Supply Request Trend (12 months)</div>
+            <canvas id="chartMonthlyCreq" style="height:180px;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="rpt-section-title">Stock Levels</div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead>
+            <tr>
+              <th>Item</th><th>Category</th>
+              <th class="text-center">Stock Qty</th>
+              <th class="text-center">Threshold</th>
+              <th>UoM</th>
+              <th class="text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in all_consumables %}
+            <tr>
+              <td class="fw-semibold">{{ item.name }}</td>
+              <td>{{ item.category.name|default:"—" }}</td>
+              <td class="text-center">{{ item.stock_qty }}</td>
+              <td class="text-center text-muted">{{ item.low_stock_threshold }}</td>
+              <td>{{ item.unit_of_measure|default:"—" }}</td>
+              <td class="text-center">
+                {% if item.is_out_of_stock %}
+                  <span class="status-badge badge-out">Out of Stock</span>
+                {% elif item.is_low_stock %}
+                  <span class="status-badge badge-low">Low Stock</span>
+                {% else %}
+                  <span class="status-badge badge-ok">OK</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">No consumables registered.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rpt-section-title">Top Requested Items</div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead>
+            <tr>
+              <th>Item</th><th>Category</th>
+              <th class="text-center">Total Qty Requested</th>
+              <th class="text-center"># Requests</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in top_consumables %}
+            <tr>
+              <td class="fw-semibold">{{ r.item__name }}</td>
+              <td>{{ r.item__category__name|default:"—" }}</td>
+              <td class="text-center"><strong>{{ r.total_qty }}</strong></td>
+              <td class="text-center">{{ r.request_count }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-3">No fulfilled supply requests yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rpt-section-title">Recent Stock Activity</div>
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead>
+            <tr>
+              <th>Date</th><th>Item</th><th>Event</th>
+              <th class="text-center">Before</th>
+              <th class="text-center">Change</th>
+              <th class="text-center">After</th>
+              <th>By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in recent_stock_logs %}
+            <tr>
+              <td>{{ log.created_at|date:"d M Y H:i" }}</td>
+              <td class="fw-semibold">{{ log.item.name }}</td>
+              <td>
+                <span class="status-badge
+                  {% if log.event == 'restocked' %}badge-available
+                  {% elif log.event == 'dispatched' %}badge-assigned
+                  {% else %}badge-suspended{% endif %}">
+                  {{ log.event|title }}
+                </span>
+              </td>
+              <td class="text-center">{{ log.quantity_before }}</td>
+              <td class="text-center {% if log.quantity_change < 0 %}text-danger{% else %}text-success{% endif %}">
+                {% if log.quantity_change > 0 %}+{% endif %}{{ log.quantity_change }}
+              </td>
+              <td class="text-center"><strong>{{ log.quantity_after }}</strong></td>
+              <td>{{ log.actor.get_full_name|default:"System" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-3">No stock activity recorded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>{# /tab-supplies #}
+
+
+    {# ══════════════════════════════════════════════════════════════ #}
+    {# TAB 6: ALLOCATION                                              #}
+    {# ══════════════════════════════════════════════════════════════ #}
+    <div class="tab-pane fade" id="tab-allocation" role="tabpanel">
+
+      <p class="text-muted mb-3">
+        Consolidated view of assets and lines allocated per organisational unit.
+      </p>
+
+      <div class="rpt-table-wrapper mb-4">
+        <table class="table rpt-table">
+          <thead>
+            <tr>
+              <th>Unit</th>
+              <th class="text-center">Core</th>
+              <th class="text-center">Assets (Total)</th>
+              <th class="text-center">Assets Assigned</th>
+              <th class="text-center">Assets Available</th>
+              <th class="text-center">Lines Assigned</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in allocation_by_unit %}
+            <tr {% if r.is_core %}style="background:rgba(0,158,219,.07);"{% endif %}>
+              <td class="fw-semibold">{{ r.unit }}</td>
+              <td class="text-center">
+                {% if r.is_core %}<i class="bi bi-star-fill text-warning"></i>{% else %}—{% endif %}
+              </td>
+              <td class="text-center">{{ r.assets_total }}</td>
+              <td class="text-center"><span class="status-badge badge-assigned">{{ r.assets_assigned }}</span></td>
+              <td class="text-center"><span class="status-badge badge-available">{{ r.assets_available }}</span></td>
+              <td class="text-center">{{ r.lines_assigned }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">No units configured.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>{# /tab-allocation #}
+
+  </div>{# /tab-content #}
+
+</div>{# /rpt-page #}
+{% endblock %}
+
+
+{% block extra_js %}
+{# Chart.js is already loaded by base.html (both chart.min.js and chart.umd.min.js) #}
+{# Do NOT add another script tag — it causes the Chart variable to be re-declared   #}
+{# and breaks all charts with "Chart is not a constructor" in some browsers.         #}
+<script>
+(function () {
+  'use strict';
+
+  // ── Chart.js global defaults ─────────────────────────────────────
+  Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+  Chart.defaults.font.size   = 11;
+  Chart.defaults.plugins.legend.position = 'bottom';
+
+  function makeDoughnut(id, data) {
+    var ctx = document.getElementById(id);
+    if (!ctx) return;
+    new Chart(ctx, {
+      type: 'doughnut', data: data,
+      options: {
+        cutout: '60%',
+        plugins: { legend: { position: 'right' } },
+        maintainAspectRatio: false,
+      }
+    });
+  }
+
+  function makeBar(id, data, horizontal, stacked) {
+    var ctx = document.getElementById(id);
+    if (!ctx) return;
+    new Chart(ctx, {
+      type: 'bar', data: data,
+      options: {
+        indexAxis: horizontal ? 'y' : 'x',
+        plugins:   { legend: { display: data.datasets.length > 1 } },
+        scales:    { x: { stacked: !!stacked }, y: { stacked: !!stacked } },
+        maintainAspectRatio: false,
+      }
+    });
+  }
+
+  function makeLine(id, data) {
+    var ctx = document.getElementById(id);
+    if (!ctx) return;
+    new Chart(ctx, {
+      type: 'line', data: data,
+      options: {
+        plugins: { legend: { display: false } },
+        scales:  { y: { beginAtZero: true } },
+        maintainAspectRatio: false,
+      }
+    });
+  }
+
+  makeDoughnut('chartAssetStatus',  {{ chart_asset_status|safe }});
+  makeDoughnut('chartReqStatus',    {{ chart_req_status|safe }});
+  makeLine(    'chartMonthlyReq',   {{ chart_monthly_requests|safe }});
+  makeBar(     'chartAssetsByCat',  {{ chart_assets_by_cat|safe }},  false, true);
+  makeBar(     'chartAssetsByUnit', {{ chart_assets_by_unit|safe }}, true,  false);
+  makeDoughnut('chartLineStatus',   {{ chart_line_status|safe }});
+  makeLine(    'chartMonthlyCreq',  {{ chart_monthly_creqs|safe }});
+
+  // ── Live table filter ─────────────────────────────────────────────
+  function liveSearch(inputId, tableId) {
+    var input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      document.querySelectorAll('#' + tableId + ' tbody tr').forEach(function (tr) {
+        tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
+  liveSearch('issuedSearch', 'issuedTable');
+  liveSearch('linesSearch',  'linesTable');
+
+})();
+</script>
+{% endblock %}

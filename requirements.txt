@@ -16,3 +16,4 @@ qrcode[pil]
 reportlab
 icalendar
 openpyxl
+python-docx

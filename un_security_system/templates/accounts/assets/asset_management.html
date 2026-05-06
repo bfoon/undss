@@ -119,9 +119,11 @@
               </ul>
             </div>
           {% endif %}
-            <a class="btn btn-outline-primary" href="{% url 'accounts:asset_report' %}">
-              <i class="bi bi-file-earmark-spreadsheet me-1"></i> Reports
+            {% if is_ict or is_ops %}
+            <a class="btn btn-outline-info" href="{% url 'accounts:asset_reports' %}">
+              <i class="bi bi-bar-chart-line me-1"></i> Reports
             </a>
+            {% endif %}
           </div>
         </div>
 
@@ -378,14 +380,17 @@
     if (input) input.value = reqId || "";
   });
 
-  // Attach request id into Assign modal
-  const assignModal = document.getElementById("modalAssignAsset");
-  assignModal?.addEventListener("show.bs.modal", (event) => {
-    const btn = event.relatedTarget;
-    const reqId = btn?.getAttribute("data-request-id");
-    const input = assignModal.querySelector("input[name='request_id']");
-    if (input) input.value = reqId || "";
-  });
+  // Assign modal — triggered by openAssignModal(ctx) from the ICT queue table.
+  // Each "Assign" button in _ict_queue_table.html should call:
+  //   openAssignModal({
+  //     req_id:        '{{ req.id }}',
+  //     category_id:   '{{ req.category_id }}',
+  //     category_name: '{{ req.category.name }}',
+  //     unit_id:       '{{ req.unit_id|default:"" }}',
+  //     unit_name:     '{{ req.unit.name|default:"" }}',
+  //     requester:     '{{ req.requester.get_full_name }}'
+  //   })
+  // The openAssignModal function is defined inside _modal_assign_asset.html.
 
   // Attach asset id/name into Return modal (if present)
   const returnModal = document.getElementById("modalReturnAsset");

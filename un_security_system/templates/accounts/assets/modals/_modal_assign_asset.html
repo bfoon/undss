@@ -6,31 +6,64 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
 
-      <form method="post">
+      <form method="post" id="assignAssetForm">
         {% csrf_token %}
         <input type="hidden" name="action" value="assign_asset">
-        <input type="hidden" name="request_id" value="">
+        <input type="hidden" name="request_id" id="assignRequestId" value="">
 
         <div class="modal-body">
-          <label class="form-label">Select an available asset</label>
-          <select class="form-select" name="asset_id" required>
-            <option value="">Choose asset…</option>
-            {% for a in assets %}
-              {% if a.status == "available" %}
-                <option value="{{ a.id }}">
-                  {{ a.name }} — {{ a.category.name }} | SN: {{ a.serial_number|default:"-" }} | Tag: {{ a.asset_tag|default:"-" }}
-                </option>
-              {% endif %}
-            {% endfor %}
-          </select>
-          <div class="form-text">
-            Only <b>available</b> assets can be assigned. Category must match the request.
+
+          {# ── Context card shown when modal opens ─────────────────── #}
+          <div id="assignContextCard" class="alert alert-info d-none py-2 mb-3 small">
+            <div class="d-flex gap-3">
+              <div><span class="text-muted">Request&nbsp;#</span> <strong id="ctx_req_id">—</strong></div>
+              <div><span class="text-muted">Category:</span> <strong id="ctx_category">—</strong></div>
+              <div><span class="text-muted">Unit:</span> <strong id="ctx_unit">—</strong></div>
+              <div><span class="text-muted">Requester:</span> <strong id="ctx_requester">—</strong></div>
+            </div>
           </div>
+
+          {# ── Asset JSON payload (rendered server-side) ────────────── #}
+          {# Build a JSON list of all available assets for JS filtering #}
+          <script id="availableAssetsData" type="application/json">
+            [
+              {% for a in assets %}
+              {% if a.status == "available" %}
+              {
+                "id": {{ a.id }},
+                "name": "{{ a.name|escapejs }}",
+                "category_id": {{ a.category_id }},
+                "category_name": "{{ a.category.name|escapejs }}",
+                "unit_id": {% if a.unit_id %}{{ a.unit_id }}{% else %}null{% endif %},
+                "unit_name": "{% if a.unit %}{{ a.unit.name|escapejs }}{% endif %}",
+                "serial_number": "{{ a.serial_number|default:''|escapejs }}",
+                "asset_tag": "{{ a.asset_tag|default:''|escapejs }}"
+              }{% if not forloop.last %},{% endif %}
+              {% endif %}
+              {% endfor %}
+            ]
+          </script>
+
+          <label class="form-label fw-semibold">Select an available asset</label>
+          <select class="form-select" name="asset_id" id="assignAssetSelect" required>
+            <option value="">Choose asset…</option>
+          </select>
+
+          <div class="form-text mt-1" id="assignAssetHint">
+            Only <b>available</b> assets matching the request category are shown.
+            Assets from the request's unit appear first.
+          </div>
+
+          <div class="alert alert-warning d-none mt-2 py-2 small" id="assignNoMatchWarn">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            No available assets found for this category. Register a new asset or check existing ones.
+          </div>
+
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary">
+          <button class="btn btn-primary" id="assignSubmitBtn">
             <i class="bi bi-check2-square me-1"></i> Assign
           </button>
         </div>
@@ -38,3 +71,82 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  const allAssets = JSON.parse(document.getElementById('availableAssetsData').textContent);
+
+  // Called from the parent page when "Assign" button is clicked on a request row.
+  // Usage: openAssignModal({ req_id, category_id, category_name, unit_id, unit_name, requester })
+  window.openAssignModal = function (ctx) {
+    // Populate hidden field
+    document.getElementById('assignRequestId').value = ctx.req_id || '';
+
+    // Populate context card
+    document.getElementById('ctx_req_id').textContent = ctx.req_id || '—';
+    document.getElementById('ctx_category').textContent = ctx.category_name || '—';
+    document.getElementById('ctx_unit').textContent = ctx.unit_name || 'Unallocated';
+    document.getElementById('ctx_requester').textContent = ctx.requester || '—';
+    document.getElementById('assignContextCard').classList.remove('d-none');
+
+    // Filter assets by matching category
+    const catId = parseInt(ctx.category_id, 10);
+    const unitId = ctx.unit_id ? parseInt(ctx.unit_id, 10) : null;
+
+    // Sort: unit-matching assets first, then rest — both groups alphabetical
+    const matching = allAssets.filter(a => a.category_id === catId);
+    const unitAssets = matching.filter(a => unitId && a.unit_id === unitId);
+    const otherAssets = matching.filter(a => !(unitId && a.unit_id === unitId));
+    const sorted = [...unitAssets, ...otherAssets];
+
+    const sel = document.getElementById('assignAssetSelect');
+    const warn = document.getElementById('assignNoMatchWarn');
+    sel.innerHTML = '<option value="">Choose asset…</option>';
+
+    if (sorted.length === 0) {
+      warn.classList.remove('d-none');
+      document.getElementById('assignSubmitBtn').disabled = true;
+    } else {
+      warn.classList.add('d-none');
+      document.getElementById('assignSubmitBtn').disabled = false;
+
+      // Add unit group label if we have unit assets
+      if (unitAssets.length > 0 && otherAssets.length > 0) {
+        const grp1 = document.createElement('optgroup');
+        grp1.label = `\uD83D\uDCCC ${ctx.unit_name || 'Request Unit'} — ${unitAssets.length} asset(s)`;
+        unitAssets.forEach(a => grp1.appendChild(_makeOption(a)));
+        sel.appendChild(grp1);
+
+        const grp2 = document.createElement('optgroup');
+        grp2.label = `Other Available — ${otherAssets.length} asset(s)`;
+        otherAssets.forEach(a => grp2.appendChild(_makeOption(a)));
+        sel.appendChild(grp2);
+      } else {
+        sorted.forEach(a => sel.appendChild(_makeOption(a)));
+      }
+    }
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAssignAsset'));
+    modal.show();
+  };
+
+  function _makeOption(a) {
+    const opt = document.createElement('option');
+    opt.value = a.id;
+    const sn = a.serial_number ? `SN: ${a.serial_number}` : '';
+    const tag = a.asset_tag ? `Tag: ${a.asset_tag}` : '';
+    const meta = [sn, tag].filter(Boolean).join(' | ');
+    opt.textContent = `${a.name}${meta ? ' — ' + meta : ''}${a.unit_name ? ' [' + a.unit_name + ']' : ''}`;
+    return opt;
+  }
+
+  // Clean up on close
+  document.getElementById('modalAssignAsset').addEventListener('hidden.bs.modal', function () {
+    document.getElementById('assignAssetSelect').innerHTML = '<option value="">Choose asset…</option>';
+    document.getElementById('assignContextCard').classList.add('d-none');
+    document.getElementById('assignNoMatchWarn').classList.add('d-none');
+    document.getElementById('assignSubmitBtn').disabled = false;
+    document.getElementById('assignRequestId').value = '';
+  });
+})();
+</script>

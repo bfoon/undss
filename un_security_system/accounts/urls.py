@@ -1,6 +1,6 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
-from . import views, views_ict, view_asset_management, views_batch
+from . import views, views_ict, view_asset_management, views_batch, view_asset_reports
 from .hr import views_hr
 from .views_room_booking import (
     RoomListView, RoomDetailView, RoomCreateView, RoomUpdateView,
@@ -275,6 +275,9 @@ urlpatterns = [
     path("booking/<int:pk>/attendance/export/excel/", booking_attendance_export_excel, name="booking_attendance_export_excel"),
     path("booking/<int:pk>/toggle-option/", toggle_booking_option_view, name="toggle_booking_option"),
 
+    path("asset-reports/", view_asset_reports.asset_reports, name="asset_reports"),
+    path("asset-reports/download/excel/", view_asset_reports.asset_reports_excel, name="asset_reports_excel"),
+    path("asset-reports/download/word/", view_asset_reports.asset_reports_word, name="asset_reports_word"),
     # # ----- Requests workflow -----
     # path(
     #     "assets/requests/",

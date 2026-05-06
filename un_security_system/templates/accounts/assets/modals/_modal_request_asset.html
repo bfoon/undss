@@ -1,47 +1,107 @@
 <div class="modal fade" id="modalRequestAsset" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title"><i class="bi bi-send-check me-2"></i>New Asset Request</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
 
-      <form method="post">
+      <form method="post" id="assetRequestForm">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_request">
 
         <div class="modal-body">
-          <div class="row g-3">
 
+          {# ── Shared justification & unit ──────────────────────────── #}
+          <div class="row g-3 mb-3">
             <div class="col-md-6">
-              <label class="form-label">Category</label>
-              <select class="form-select" name="category_id" required>
-                <option value="">Select category…</option>
-                {% for c in categories %}
-                  <option value="{{ c.id }}">{{ c.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label">Unit (optional)</label>
-              <select class="form-select" name="unit_id">
+              <label class="form-label fw-semibold">Unit <span class="text-muted fw-normal">(optional)</span></label>
+              <select class="form-select" name="unit_id" id="req_unit_id">
                 <option value="">Auto / Unallocated</option>
                 {% for u in units %}
                   <option value="{{ u.id }}">{{ u.name }}{% if u.is_core_unit %} (Core){% endif %}</option>
                 {% endfor %}
               </select>
-              <div class="form-text">If empty, your unit (if set) or Operations Manager handles it.</div>
+              <div class="form-text">Leave empty to use your assigned unit, or Operations Manager.</div>
             </div>
-
-            <div class="col-12">
-              <label class="form-label">Justification</label>
-              <textarea class="form-control" name="justification" rows="3"
-                        placeholder="Briefly explain why you need this asset (assignment, role needs, replacement, etc.)"></textarea>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Overall Justification</label>
+              <textarea class="form-control" name="justification" rows="2"
+                        placeholder="Briefly explain why these assets are needed…"></textarea>
             </div>
-
           </div>
-        </div>
+
+          {# ── Item rows container ──────────────────────────────────── #}
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="fw-semibold text-muted small text-uppercase ls-1">
+              <i class="bi bi-list-check me-1"></i>Requested Items
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-un-primary" id="addRequestItem">
+              <i class="bi bi-plus-circle me-1"></i>Add Another Item
+            </button>
+          </div>
+
+          <div id="requestItemsContainer">
+            {# First row (always visible) #}
+            <div class="request-item-row card card-body bg-light mb-2 p-3" data-index="0">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-5">
+                  <label class="form-label form-label-sm">Category <span class="text-danger">*</span></label>
+                  <select class="form-select form-select-sm" name="items[0][category_id]" required>
+                    <option value="">Select category…</option>
+                    {% for c in categories %}
+                      <option value="{{ c.id }}">{{ c.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm">Quantity</label>
+                  <input type="number" class="form-control form-control-sm" name="items[0][qty]"
+                         value="1" min="1" max="50">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label form-label-sm">Item Note <span class="text-muted">(optional)</span></label>
+                  <input type="text" class="form-control form-control-sm" name="items[0][note]"
+                         placeholder="e.g. replacement, new joiner…">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# ── Category template (cloned by JS) ─────────────────────── #}
+          <template id="requestItemTemplate">
+            <div class="request-item-row card card-body bg-light mb-2 p-3" data-index="__IDX__">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-5">
+                  <label class="form-label form-label-sm">Category <span class="text-danger">*</span></label>
+                  <select class="form-select form-select-sm" name="items[__IDX__][category_id]" required>
+                    <option value="">Select category…</option>
+                    {% for c in categories %}
+                      <option value="{{ c.id }}">{{ c.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm">Quantity</label>
+                  <input type="number" class="form-control form-control-sm" name="items[__IDX__][qty]"
+                         value="1" min="1" max="50">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm">Item Note <span class="text-muted">(optional)</span></label>
+                  <input type="text" class="form-control form-control-sm" name="items[__IDX__][note]"
+                         placeholder="e.g. replacement, new joiner…">
+                </div>
+                <div class="col-md-1 d-flex align-items-end justify-content-end">
+                  <button type="button" class="btn btn-sm btn-outline-danger remove-item-btn"
+                          title="Remove this item">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+
+        </div>{# /modal-body #}
 
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -54,3 +114,26 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  let itemIdx = 1;
+
+  document.getElementById('addRequestItem').addEventListener('click', function () {
+    const template = document.getElementById('requestItemTemplate').innerHTML
+      .replaceAll('__IDX__', itemIdx++);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = template;
+    document.getElementById('requestItemsContainer').appendChild(wrapper.firstElementChild);
+  });
+
+  document.getElementById('requestItemsContainer').addEventListener('click', function (e) {
+    if (e.target.closest('.remove-item-btn')) {
+      const rows = document.querySelectorAll('.request-item-row');
+      if (rows.length > 1) {
+        e.target.closest('.request-item-row').remove();
+      }
+    }
+  });
+})();
+</script>

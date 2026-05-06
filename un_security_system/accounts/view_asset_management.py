@@ -346,47 +346,104 @@ def view_asset_management(request):
             messages.success(request, f"Request #{req_obj.id} cancelled.")
             return redirect("accounts:asset_management")
 
-        # ── Create asset request ──────────────────────────────────────
+        # ── Create asset request (multi-item) ────────────────────────
         if action == "create_request":
-            category_id = request.POST.get("category_id")
-            unit_id = request.POST.get("unit_id")
+            # The new modal submits items[0][category_id], items[0][qty],
+            # items[0][note], items[1][category_id], … for multiple items.
+            # A shared unit_id and justification apply to all rows.
+
+            unit_id      = request.POST.get("unit_id", "").strip()
             justification = (request.POST.get("justification") or "").strip()
 
-            category = get_object_or_404(AssetCategory, id=category_id, agency=agency)
-
+            # Resolve unit once — fall back to user's own unit if blank
             unit = None
             if unit_id:
-                unit = get_object_or_404(Unit, id=unit_id, agency=agency)
-            else:
+                try:
+                    unit = Unit.objects.get(id=unit_id, agency=agency)
+                except Unit.DoesNotExist:
+                    messages.error(request, "Selected unit not found.")
+                    return redirect("accounts:asset_management")
+            if unit is None:
                 unit = getattr(user, "unit", None)
 
-            req = AssetRequest.objects.create(
-                agency=agency,
-                requester=user,
-                unit=unit,
-                category=category,
-                justification=justification,
-                status="pending_manager" if svc.require_manager_approval else "pending_ict",
-            )
+            created_ids = []
+            row_errors  = []
+            idx = 0
 
-            manager_emails = get_manager_emails_for_request(req)
-            _notify_local(
-                subject=f"Asset Request #{req.id} — Approval Required",
-                to_emails=manager_emails,
-                html_template="emails/assets/request_submitted.html",
-                ctx={"req": req},
-            )
+            while idx <= 50:  # hard safety cap
+                cat_id = request.POST.get(f"items[{idx}][category_id]")
+                if cat_id is None:
+                    # No more rows
+                    break
 
-            if req.status == "pending_ict":
-                ict_emails = get_ict_custodian_emails(req)
-                _notify_local(
-                    subject=f"Asset Request #{req.id} — Pending ICT Assignment",
-                    to_emails=ict_emails,
-                    html_template="emails/assets/request_approved.html",
-                    ctx={"req": req, "approved_by": "System (Auto)"},
+                cat_id = cat_id.strip()
+                qty_str = request.POST.get(f"items[{idx}][qty]", "1").strip()
+                note    = (request.POST.get(f"items[{idx}][note]") or "").strip()
+
+                if not cat_id:
+                    # Row was left blank — skip silently
+                    idx += 1
+                    continue
+
+                try:
+                    category = AssetCategory.objects.get(id=cat_id, agency=agency)
+                except AssetCategory.DoesNotExist:
+                    row_errors.append(f"Row {idx + 1}: category not found.")
+                    idx += 1
+                    continue
+
+                try:
+                    qty = max(1, int(qty_str))
+                except (ValueError, TypeError):
+                    qty = 1
+
+                item_justification = justification
+                if note:
+                    item_justification = f"{justification}\n[Note: {note}]".strip()
+
+                # Create one AssetRequest per unit of quantity
+                for _ in range(qty):
+                    req = AssetRequest.objects.create(
+                        agency=agency,
+                        requester=user,
+                        unit=unit,
+                        category=category,
+                        justification=item_justification,
+                        status="pending_manager" if svc.require_manager_approval else "pending_ict",
+                    )
+                    created_ids.append(req.id)
+
+                    manager_emails = get_manager_emails_for_request(req)
+                    _notify_local(
+                        subject=f"Asset Request #{req.id} — Approval Required",
+                        to_emails=manager_emails,
+                        html_template="emails/assets/request_submitted.html",
+                        ctx={"req": req},
+                    )
+                    if req.status == "pending_ict":
+                        ict_emails = get_ict_custodian_emails(req)
+                        _notify_local(
+                            subject=f"Asset Request #{req.id} — Pending ICT Assignment",
+                            to_emails=ict_emails,
+                            html_template="emails/assets/request_approved.html",
+                            ctx={"req": req, "approved_by": "System (Auto)"},
+                        )
+
+                idx += 1
+
+            for err in row_errors:
+                messages.error(request, err)
+
+            if created_ids:
+                ids_str = ", ".join(f"#{i}" for i in created_ids)
+                count   = len(created_ids)
+                messages.success(
+                    request,
+                    f"{count} asset request{'s' if count != 1 else ''} submitted: {ids_str}",
                 )
+            elif not row_errors:
+                messages.warning(request, "No valid items found in your request. Please select at least one category.")
 
-            messages.success(request, f"Asset request #{req.id} submitted.")
             return redirect("accounts:asset_management")
 
         # ── Manager approve / reject asset request ────────────────────
