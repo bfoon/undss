@@ -43,27 +43,43 @@ from .models import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _require_manager(user, agency):
-    """Return True if the user may view reports (ICT, Operations Manager, or superuser)."""
+    """
+    Return True if the user may view reports.
+    Allowed: superuser, ict_focal role, ICT custodian (via AgencyAssetRoles),
+             Operations Manager (via AgencyAssetRoles), unit heads / asset managers.
+    """
+    if not user.is_authenticated:
+        return False
+
+    # Superuser always allowed
     if user.is_superuser:
         return True
-    # ICT focal point role flag
+
+    # Role-based shortcut (ict_focal flag on the user)
     if getattr(user, "role", "") == "ict_focal":
         return True
-    roles = getattr(agency, "asset_roles", None)
-    if not roles:
-        # Fallback: try fetching roles from DB
-        try:
-            from .models import AgencyAssetRoles as _Roles
-            roles = _Roles.objects.filter(agency=agency).first()
-        except Exception:
-            pass
+
+    # Fetch roles directly from DB — never rely on the cached reverse relation
+    try:
+        roles = AgencyAssetRoles.objects.get(agency=agency)
+    except AgencyAssetRoles.DoesNotExist:
+        roles = None
+
     if roles:
-        # ICT custodian
+        # ICT custodian M2M
         if roles.ict_custodian.filter(id=user.id).exists():
             return True
-        # Operations Manager
+        # Operations Manager FK
         if roles.operations_manager_id and roles.operations_manager_id == user.id:
             return True
+
+    # Unit head or asset manager for any unit in this agency
+    from .models import Unit as _Unit
+    if _Unit.objects.filter(agency=agency).filter(
+        Q(unit_head=user) | Q(asset_managers=user)
+    ).exists():
+        return True
+
     return False
 
 
@@ -454,8 +470,15 @@ def asset_reports(request):
         messages.warning(request, "Asset Management is not enabled for your agency.")
         return redirect("accounts:profile")
 
+    # Ensure AgencyAssetRoles exists so _require_manager can query it
+    AgencyAssetRoles.objects.get_or_create(agency=agency)
+
     if not _require_manager(user, agency):
-        messages.error(request, "Only ICT or Operations Manager can access reports.")
+        messages.error(
+            request,
+            "Access restricted. Reports are available to ICT custodians, "
+            "Operations Managers, unit heads, and administrators."
+        )
         return redirect("accounts:asset_management")
 
     data = _build_report_data(agency)
@@ -472,7 +495,13 @@ def asset_reports_excel(request):
     user = request.user
     agency = getattr(user, "agency", None)
 
-    if not agency or not _require_manager(user, agency):
+    if not agency:
+        messages.error(request, "Access denied.")
+        return redirect("accounts:asset_management")
+
+    AgencyAssetRoles.objects.get_or_create(agency=agency)
+
+    if not _require_manager(user, agency):
         messages.error(request, "Access denied.")
         return redirect("accounts:asset_management")
 
@@ -885,7 +914,13 @@ def asset_reports_word(request):
     user = request.user
     agency = getattr(user, "agency", None)
 
-    if not agency or not _require_manager(user, agency):
+    if not agency:
+        messages.error(request, "Access denied.")
+        return redirect("accounts:asset_management")
+
+    AgencyAssetRoles.objects.get_or_create(agency=agency)
+
+    if not _require_manager(user, agency):
         messages.error(request, "Access denied.")
         return redirect("accounts:asset_management")
 
