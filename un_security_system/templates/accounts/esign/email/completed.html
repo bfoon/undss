@@ -1,0 +1,34 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}Completed — all parties have signed{% endblock %}
+{% block body %}
+  <p style="margin:0 0 12px;font-size:15px;">Hello{% if recipient %} {{ recipient.name }}{% endif %},</p>
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    <b>{{ subject_line }}</b> is complete. Everyone has signed and the final document is ready.
+  </p>
+  <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-size:13px;color:#065F46;font-weight:700;margin-bottom:6px;">Signed by</div>
+    {% for s in envelope.signers %}
+      <div style="font-size:13px;color:#047857;">
+        {{ s.name }} — {{ s.signed_at|date:"d M Y H:i" }}{% if s.signed_ip %} · {{ s.signed_ip }}{% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  <div style="text-align:center;margin:20px 0;">
+    <a href="{{ action_url }}"
+       style="display:inline-block;background:#10B981;color:#ffffff;text-decoration:none;
+              padding:13px 30px;border-radius:8px;font-weight:700;font-size:15px;">
+      Download signed document
+    </a>
+  </div>
+  <p style="font-size:12px;color:#6B7280;margin:0;">
+    The Certificate of Completion — containing the full audit trail, IP addresses and timestamps —
+    is available from the same page.
+  </p>
+{% endblock %}
+{% block footer_note %}
+  {% if is_bcc %}
+  <div style="margin-top:8px;color:#92400E;">
+    You received this as a blind copy. Other parties have not been informed that you have a copy.
+  </div>
+  {% endif %}
+{% endblock %}

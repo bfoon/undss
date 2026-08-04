@@ -1,0 +1,463 @@
+{% extends "accounts/esign/base_public.html" %}
+{% block title %}Sign: {{ envelope.subject }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .es-shell{ display:flex; gap:0; height:calc(100vh - 58px); }
+  .es-viewer{ flex:1; overflow:auto; padding:1.25rem; background:#E9EEF3; }
+  .es-side{ width:330px; background:#fff; border-left:1px solid #E5E7EB; overflow:auto; }
+  @media (max-width: 991px){
+    .es-shell{ flex-direction:column; height:auto; }
+    .es-side{ width:100%; border-left:0; border-top:1px solid #E5E7EB; }
+  }
+  .es-page{ position:relative; margin:0 auto 1.25rem; box-shadow:0 4px 18px rgba(15,23,42,.14); background:#fff; }
+  .es-page canvas{ display:block; width:100%; height:auto; }
+  .es-field{
+    position:absolute; border:2px dashed #F59E0B; background:rgba(245,158,11,.12);
+    border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    font-size:.72rem; font-weight:600; color:#92400E; text-align:center; overflow:hidden;
+    transition:box-shadow .12s ease, background .12s ease;
+  }
+  .es-field:hover{ background:rgba(245,158,11,.22); }
+  .es-field.es-current{ box-shadow:0 0 0 3px rgba(245,158,11,.45); animation:esPulse 1.6s infinite; }
+  .es-field.es-done{ border:2px solid #10B981; background:rgba(16,185,129,.07); color:#065F46; cursor:pointer; }
+  .es-field.es-other{ border:1.5px dotted #CBD5E1; background:rgba(148,163,184,.10); color:#94A3B8;
+    cursor:default; font-size:.66rem; }
+  .es-field img{ max-width:100%; max-height:100%; object-fit:contain; }
+  .es-field input, .es-field textarea{
+    width:100%; height:100%; border:0; background:transparent; font-size:.85rem; padding:2px 4px; outline:none; color:#0b2540;
+  }
+  @keyframes esPulse{ 0%,100%{ box-shadow:0 0 0 3px rgba(245,158,11,.45);} 50%{ box-shadow:0 0 0 7px rgba(245,158,11,.18);} }
+  .es-jump{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:20px; z-index:1050;
+    box-shadow:0 8px 26px rgba(0,0,0,.2); border-radius:999px;
+  }
+  .es-doc-stamp{
+    position:absolute; top:6px; left:10px; font-size:.6rem; color:#94A3B8;
+    font-family:ui-monospace,Menlo,monospace; pointer-events:none;
+  }
+  .es-progress{ height:6px; border-radius:99px; }
+  .es-step{ display:flex; gap:.6rem; align-items:flex-start; padding:.45rem .1rem; font-size:.83rem; }
+  .es-step .bi{ color:#009EDB; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#declineModal">
+    <i class="bi bi-x-circle me-1"></i> Decline
+  </button>
+  <button class="btn btn-sm btn-un-primary px-3" id="esFinishTop">
+    <i class="bi bi-check2-circle me-1"></i> Finish
+  </button>
+{% endblock %}
+
+{% block content %}
+<div class="es-shell">
+
+  <!-- ── document ─────────────────────────────────────────────── -->
+  <div class="es-viewer" id="esViewer">
+    <div id="esPages"></div>
+    <div class="text-center text-muted small py-3" id="esLoading">
+      <div class="spinner-border spinner-border-sm me-2"></div> Loading document…
+    </div>
+  </div>
+
+  <!-- ── side panel ───────────────────────────────────────────── -->
+  <div class="es-side p-3">
+    <div class="mb-3">
+      <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing:.06em">Please sign</div>
+      <h6 class="fw-bold mb-1">{{ envelope.subject }}</h6>
+      <div class="small text-muted">
+        From {{ envelope.created_by.get_full_name|default:envelope.created_by.username }}
+        {% if envelope.reference %} · Ref {{ envelope.reference }}{% endif %}
+      </div>
+    </div>
+
+    {% if envelope.message %}
+    <div class="es-card p-2 mb-3 small" style="background:#F8FAFC">
+      <i class="bi bi-chat-left-text me-1 text-muted"></i>{{ envelope.message|linebreaksbr }}
+    </div>
+    {% endif %}
+
+    <div class="mb-3">
+      <div class="d-flex justify-content-between small mb-1">
+        <span class="fw-semibold">Required fields</span>
+        <span><span id="esDone">0</span> of <span id="esTotal">0</span></span>
+      </div>
+      <div class="progress es-progress"><div class="progress-bar bg-success" id="esBar" style="width:0%"></div></div>
+    </div>
+
+    <div class="d-grid gap-2 mb-3">
+      <button class="btn btn-un-primary" id="esStart">
+        <i class="bi bi-arrow-right-circle me-1"></i> Start
+      </button>
+      <button class="btn btn-outline-primary btn-sm" id="esAdoptFirst">
+        <i class="bi bi-pen me-1"></i> Set up my signature
+      </button>
+    </div>
+
+    {% if saved_signatures %}
+    <div class="mb-3">
+      <div class="small fw-semibold text-muted mb-1">Saved signatures</div>
+      {% for s in saved_signatures %}
+        <div class="es-card p-2 mb-2 d-flex align-items-center gap-2">
+          <img src="{{ s.url }}" alt="{{ s.label }}" style="height:34px;max-width:150px;object-fit:contain">
+          <button class="btn btn-sm btn-outline-success ms-auto es-use-saved"
+                  data-sig="{{ s.url }}" data-init="{{ s.initials }}">Use</button>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="es-card p-2 mb-3">
+      <div class="small fw-semibold mb-1 text-muted">How it works</div>
+      <div class="es-step"><i class="bi bi-1-circle-fill"></i><div>Tap <b>Start</b> — we jump you to the first field.</div></div>
+      <div class="es-step"><i class="bi bi-2-circle-fill"></i><div>Adopt a signature once; reuse it on every field.</div></div>
+      <div class="es-step"><i class="bi bi-3-circle-fill"></i><div>Tap <b>Finish</b>. Everyone gets the signed copy and the audit trail.</div></div>
+    </div>
+
+    <div class="es-card p-2 small text-muted">
+      <div class="fw-semibold text-un-primary mb-1"><i class="bi bi-hash"></i> Document token</div>
+      <div class="es-token d-block mb-1" style="white-space:normal">{{ envelope.envelope_id }}</div>
+      <div>Your recipient token: <b>{{ recipient.short_token }}</b></div>
+      <div class="mt-1">Both are printed on the signed document.</div>
+    </div>
+  </div>
+</div>
+
+<button class="btn btn-warning fw-semibold es-jump d-none" id="esJump">
+  <i class="bi bi-arrow-down-circle me-1"></i> <span id="esJumpLabel">Next field</span>
+</button>
+
+<!-- Finish / consent modal -->
+<div class="modal fade" id="finishModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" id="esForm">
+      {% csrf_token %}
+      <input type="hidden" name="fields_payload" id="esPayload">
+      <input type="hidden" name="signature_data" id="esSigData">
+      <input type="hidden" name="initials_data" id="esInitData">
+      <input type="hidden" name="signature_kind" id="esSigKind" value="drawn">
+      <input type="hidden" name="font_key" id="esFontKey" value="dancing">
+      <input type="hidden" name="typed_text" id="esTypedText">
+      <input type="hidden" name="typed_initials" id="esTypedInitials">
+      <input type="hidden" name="save_signature" id="esSaveFlag" value="">
+      <div class="modal-content border-0" style="border-radius:16px">
+        <div class="modal-header border-0 pb-1">
+          <h5 class="modal-title fw-bold text-un-primary"><i class="bi bi-check2-circle me-2"></i>Complete signing</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small mb-3">
+            You are about to sign <b>{{ envelope.subject }}</b> as
+            <b>{{ recipient.name }}</b> ({{ recipient.email }}).
+          </p>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="consent" id="esConsent" value="1" required>
+            <label class="form-check-label small" for="esConsent">
+              I agree to use electronic records and signatures, and I confirm that the signature applied
+              is mine and legally binding. My name, email, IP address and timestamp will be recorded in
+              the audit trail and printed on the document.
+            </label>
+          </div>
+          <div class="alert alert-light border mt-3 mb-0 small text-muted">
+            Envelope ID <b>{{ envelope.envelope_id }}</b> · Recipient token <b>{{ recipient.short_token }}</b>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Back</button>
+          <button type="submit" class="btn btn-un-primary px-4" id="esSubmitBtn">
+            <i class="bi bi-pen me-1"></i> Finish and sign
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Decline modal -->
+<div class="modal fade" id="declineModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_decline' recipient.token %}">
+      {% csrf_token %}
+      <div class="modal-content border-0" style="border-radius:16px">
+        <div class="modal-header border-0 pb-1">
+          <h5 class="modal-title fw-bold text-danger"><i class="bi bi-x-octagon me-2"></i>Decline to sign</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small">The sender and anyone who already signed will be notified, and the envelope will stop.</p>
+          <label class="form-label small fw-semibold">Reason (shared with the sender)</label>
+          <textarea name="reason" class="form-control" rows="3" required
+                    placeholder="e.g. The asset serial number is incorrect."></textarea>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Decline</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% include "accounts/esign/_signature_pad.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+
+const DOCS   = {{ documents_json|safe }};
+const FIELDS = {{ fields_json|safe }};
+const OTHERS = {{ others_json|safe }};
+const ENVELOPE_ID = "{{ envelope.envelope_id }}";
+
+const values = {};          // field id -> value / data URL
+let adopted = { signature:'', initials:'', meta:null };
+let orderedFields = [], cursor = -1;
+
+const KIND_LABEL = {
+  signature:'Sign here', initials:'Initials', date_signed:'Date',
+  full_name:'Full name', job_title:'Title', email:'Email',
+  text:'Text', checkbox:'Check'
+};
+
+// ── render documents ────────────────────────────────────────────
+async function renderAll() {
+  const host = document.getElementById('esPages');
+  for (const doc of DOCS) {
+    const pdf = await pdfjsLib.getDocument(doc.url).promise;
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const base = page.getViewport({ scale: 1 });
+      const maxW = Math.min(document.getElementById('esViewer').clientWidth - 40, 960);
+      const viewport = page.getViewport({ scale: maxW / base.width });
+
+      const wrap = document.createElement('div');
+      wrap.className = 'es-page';
+      wrap.style.width = viewport.width + 'px';
+      wrap.dataset.doc = doc.id; wrap.dataset.page = p;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      wrap.appendChild(canvas);
+
+      const stamp = document.createElement('div');
+      stamp.className = 'es-doc-stamp';
+      stamp.textContent = 'Envelope ID: ' + ENVELOPE_ID;
+      wrap.appendChild(stamp);
+
+      host.appendChild(wrap);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+      placeFields(wrap, doc.id, p);
+    }
+  }
+  document.getElementById('esLoading').remove();
+  buildOrder();
+  updateProgress();
+}
+
+function placeFields(wrap, docId, pageNo) {
+  OTHERS.filter(f => f.document_id === docId && f.page === pageNo).forEach(f => {
+    const el = box(f); el.classList.add('es-other');
+    el.textContent = 'Other signer';
+    wrap.appendChild(el);
+  });
+
+  FIELDS.filter(f => f.document_id === docId && f.page === pageNo).forEach(f => {
+    const el = box(f);
+    el.id = 'field-' + f.id;
+    el.dataset.fieldId = f.id;
+    el.dataset.kind = f.kind;
+    el.dataset.required = f.required ? '1' : '';
+    paintField(el, f);
+    el.addEventListener('click', () => activateField(f, el));
+    wrap.appendChild(el);
+  });
+}
+
+function box(f) {
+  const el = document.createElement('div');
+  el.className = 'es-field';
+  el.style.left   = (f.x * 100) + '%';
+  el.style.top    = (f.y * 100) + '%';
+  el.style.width  = (f.w * 100) + '%';
+  el.style.height = (f.h * 100) + '%';
+  return el;
+}
+
+function paintField(el, f) {
+  const v = values[f.id];
+  if (f.kind === 'signature' || f.kind === 'initials') {
+    if (v) { el.innerHTML = '<img src="' + v + '" alt="signature">'; el.classList.add('es-done'); }
+    else   { el.innerHTML = '<span>' + (f.label || KIND_LABEL[f.kind]) + '</span>'; el.classList.remove('es-done'); }
+    return;
+  }
+  if (f.kind === 'checkbox') {
+    el.innerHTML = v === '1' ? '<i class="bi bi-check-lg" style="font-size:1.1rem"></i>' : '<span>Check</span>';
+    el.classList.toggle('es-done', v === '1');
+    return;
+  }
+  if (v) { el.innerHTML = '<span style="font-size:.8rem;color:#0b2540">' + escapeHtml(v) + '</span>';
+           el.classList.add('es-done'); }
+  else   { el.innerHTML = '<span>' + (f.label || KIND_LABEL[f.kind] || 'Fill') + '</span>';
+           el.classList.remove('es-done'); }
+}
+
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// ── interaction ────────────────────────────────────────────────
+function activateField(f, el) {
+  if (f.kind === 'signature' || f.kind === 'initials') {
+    const ready = f.kind === 'initials' ? adopted.initials : adopted.signature;
+    if (ready) { values[f.id] = ready; paintField(el, f); afterFill(f); return; }
+    EsignPad.open({
+      mode: f.kind === 'initials' ? 'initials' : 'signature',
+      onAdopt: (dataUrl, meta) => {
+        adopted.signature = meta.signature || dataUrl;
+        adopted.initials  = meta.initials  || dataUrl;
+        adopted.meta = meta;
+        values[f.id] = f.kind === 'initials' ? adopted.initials : adopted.signature;
+        paintField(el, f); afterFill(f);
+      }
+    });
+    return;
+  }
+
+  if (f.kind === 'checkbox') {
+    values[f.id] = values[f.id] === '1' ? '' : '1';
+    paintField(el, f); afterFill(f); return;
+  }
+
+  if (f.kind === 'date_signed') {
+    values[f.id] = new Date().toLocaleDateString('en-GB',
+      { day:'2-digit', month:'short', year:'numeric' });
+    paintField(el, f); afterFill(f); return;
+  }
+
+  if (f.kind === 'full_name') { values[f.id] = "{{ recipient.name|escapejs }}"; paintField(el, f); afterFill(f); return; }
+  if (f.kind === 'email')     { values[f.id] = "{{ recipient.email|escapejs }}"; paintField(el, f); afterFill(f); return; }
+  if (f.kind === 'job_title' && !values[f.id] && "{{ recipient.title|escapejs }}") {
+    values[f.id] = "{{ recipient.title|escapejs }}"; paintField(el, f); afterFill(f); return;
+  }
+
+  // free text / title -> inline input
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = values[f.id] || '';
+  el.innerHTML = ''; el.appendChild(input); input.focus();
+  input.addEventListener('blur', () => {
+    values[f.id] = input.value.trim();
+    paintField(el, f); afterFill(f);
+  });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+}
+
+function afterFill(f) {
+  updateProgress();
+  const idx = orderedFields.findIndex(x => x.id === f.id);
+  if (idx >= 0) cursor = idx;
+  setTimeout(nextField, 220);
+}
+
+function buildOrder() {
+  const nodes = Array.from(document.querySelectorAll('.es-field[data-field-id]'));
+  orderedFields = nodes.map(n => FIELDS.find(f => String(f.id) === n.dataset.fieldId)).filter(Boolean);
+}
+
+function pendingFields() {
+  return orderedFields.filter(f => f.required && !isFilled(f));
+}
+function isFilled(f) {
+  const v = values[f.id];
+  return f.kind === 'checkbox' ? v === '1' : !!(v && String(v).trim());
+}
+
+function nextField() {
+  document.querySelectorAll('.es-field').forEach(e => e.classList.remove('es-current'));
+  const pending = pendingFields();
+  const jump = document.getElementById('esJump');
+  if (!pending.length) {
+    jump.classList.remove('d-none');
+    document.getElementById('esJumpLabel').textContent = 'All done — Finish';
+    jump.className = 'btn btn-success fw-semibold es-jump';
+    jump.onclick = openFinish;
+    return;
+  }
+  const f = pending[0];
+  const el = document.getElementById('field-' + f.id);
+  if (el) {
+    el.classList.add('es-current');
+    el.scrollIntoView({ behavior:'smooth', block:'center' });
+  }
+  jump.className = 'btn btn-warning fw-semibold es-jump';
+  jump.classList.remove('d-none');
+  document.getElementById('esJumpLabel').textContent =
+    (KIND_LABEL[f.kind] || 'Next field') + ' — ' + pending.length + ' left';
+  jump.onclick = () => { if (el) { el.classList.add('es-current'); el.click(); } };
+}
+
+function updateProgress() {
+  const req = orderedFields.filter(f => f.required);
+  const done = req.filter(isFilled).length;
+  document.getElementById('esDone').textContent = done;
+  document.getElementById('esTotal').textContent = req.length;
+  document.getElementById('esBar').style.width = req.length ? (done / req.length * 100) + '%' : '0%';
+}
+
+// ── buttons ────────────────────────────────────────────────────
+document.getElementById('esStart').onclick = nextField;
+
+document.getElementById('esAdoptFirst').onclick = () => EsignPad.open({
+  mode: 'signature',
+  onAdopt: (dataUrl, meta) => {
+    adopted.signature = meta.signature || dataUrl;
+    adopted.initials  = meta.initials  || dataUrl;
+    adopted.meta = meta;
+    nextField();
+  }
+});
+
+document.querySelectorAll('.es-use-saved').forEach(b => b.onclick = () => {
+  adopted.signature = b.dataset.sig;
+  adopted.initials  = b.dataset.init || b.dataset.sig;
+  adopted.meta = { kind:'saved', save:false };
+  nextField();
+});
+
+function openFinish() {
+  const pending = pendingFields();
+  if (pending.length) {
+    alert(pending.length + ' required field(s) still need your attention.');
+    nextField();
+    return;
+  }
+  document.getElementById('esPayload').value  = JSON.stringify(values);
+  document.getElementById('esSigData').value  = adopted.signature || '';
+  document.getElementById('esInitData').value = adopted.initials || '';
+  if (adopted.meta) {
+    document.getElementById('esSigKind').value       = adopted.meta.kind === 'saved' ? 'drawn' : adopted.meta.kind;
+    document.getElementById('esFontKey').value       = adopted.meta.font_key || 'dancing';
+    document.getElementById('esTypedText').value     = adopted.meta.typed_text || '';
+    document.getElementById('esTypedInitials').value = adopted.meta.typed_initials || '';
+    document.getElementById('esSaveFlag').value      = adopted.meta.save ? '1' : '';
+  }
+  new bootstrap.Modal(document.getElementById('finishModal')).show();
+}
+document.getElementById('esFinishTop').onclick = openFinish;
+
+document.getElementById('esForm').addEventListener('submit', () => {
+  const b = document.getElementById('esSubmitBtn');
+  b.disabled = true;
+  b.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Applying signature…';
+});
+
+renderAll().catch(err => {
+  console.error(err);
+  document.getElementById('esLoading').innerHTML =
+    '<div class="alert alert-danger">The document could not be displayed. Please contact the sender.</div>';
+});
+</script>
+{% endblock %}

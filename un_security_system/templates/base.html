@@ -1145,6 +1145,27 @@ canvas {
 
                     <li><hr class="dropdown-divider"></li>
 
+                    <li><hr class="dropdown-divider"></li>
+
+                    <li class="dropdown-header">eSign</li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:esign_dashboard' %}">
+                        <i class="bi bi-pen-fill me-2"></i> eSign Portal
+                      </a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:esign_new' %}">
+                        <i class="bi bi-envelope-plus me-2"></i> Send for Signature
+                      </a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:esign_signatures' %}">
+                        <i class="bi bi-vector-pen me-2"></i> My Signature
+                      </a>
+                    </li>
+
+                    <li><hr class="dropdown-divider"></li>
+
                     <li class="dropdown-header">Quick Actions</li>
                     <li>
                       <a class="dropdown-item" href="{% url 'accounts:asset_management' %}#request">

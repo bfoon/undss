@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Place fields | eSign{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ep-shell{ display:flex; gap:0; min-height:calc(100vh - 150px); border:1px solid #E5E7EB; border-radius:14px; overflow:hidden; }
+  .ep-tools{ width:250px; background:#fff; border-right:1px solid #E5E7EB; padding:1rem; }
+  .ep-canvas{ flex:1; background:#E9EEF3; overflow:auto; padding:1.25rem; }
+  .ep-tool{ border:1px solid #E5E7EB; border-radius:10px; padding:.5rem .65rem; margin-bottom:.4rem;
+            cursor:grab; background:#fff; font-size:.85rem; display:flex; align-items:center; gap:.5rem; }
+  .ep-tool:hover{ border-color:var(--un-blue); background:rgba(0,158,219,.05); }
+  .ep-page{ position:relative; margin:0 auto 1.25rem; background:#fff; box-shadow:0 4px 18px rgba(15,23,42,.14); }
+  .ep-page canvas{ display:block; width:100%; height:auto; }
+  .ep-fld{ position:absolute; border:2px solid #009EDB; background:rgba(0,158,219,.12); border-radius:6px;
+           font-size:.7rem; font-weight:600; color:#005A8B; display:flex; align-items:center;
+           justify-content:center; cursor:move; user-select:none; }
+  .ep-fld .ep-x{ position:absolute; top:-9px; right:-9px; width:18px; height:18px; border-radius:50%;
+                 background:#EF4444; color:#fff; font-size:.6rem; display:flex; align-items:center;
+                 justify-content:center; cursor:pointer; }
+  .ep-fld .ep-rs{ position:absolute; right:-4px; bottom:-4px; width:12px; height:12px;
+                  background:#009EDB; border-radius:2px; cursor:nwse-resize; }
+  .ep-signer-dot{ width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:.35rem }
+  .ep-hint{ font-size:.75rem;color:var(--un-gray) }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <div>
+    <h5 class="fw-bold text-un-primary mb-0"><i class="bi bi-crosshair me-2"></i>Place fields</h5>
+    <div class="text-muted small">
+      {{ envelope.subject }} ·
+      <span style="font-family:ui-monospace,Menlo,monospace">{{ envelope.envelope_id }}</span>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-secondary" id="epSave"><i class="bi bi-save me-1"></i> Save draft</button>
+    <a class="btn btn-outline-primary" href="{% url 'accounts:esign_preview' envelope.pk %}" target="_blank">
+      <i class="bi bi-eye me-1"></i> Preview stamp
+    </a>
+    <form method="post" action="{% url 'accounts:esign_send' envelope.pk %}" id="epSendForm" class="d-inline">
+      {% csrf_token %}
+      <button class="btn btn-un-primary px-4" id="epSend"><i class="bi bi-send me-1"></i> Send</button>
+    </form>
+  </div>
+</div>
+
+<div class="ep-shell">
+  <div class="ep-tools">
+    <div class="small fw-semibold text-muted mb-2">1. Choose the signer</div>
+    <select class="form-select form-select-sm mb-3" id="epSigner"></select>
+
+    <div class="small fw-semibold text-muted mb-2">2. Drag a field onto the page</div>
+    {% for value, label in field_kinds %}
+      <div class="ep-tool" draggable="true" data-kind="{{ value }}">
+        <i class="bi bi-plus-square"></i> {{ label }}
+      </div>
+    {% endfor %}
+
+    <hr>
+    <div class="ep-hint">
+      Drag to move, use the corner handle to resize, click ✕ to delete.
+      Every signer needs at least one field before you can send.
+    </div>
+    <div class="mt-3 small">
+      <div class="fw-semibold text-muted mb-1">Fields per signer</div>
+      <div id="epCounts"></div>
+    </div>
+  </div>
+
+  <div class="ep-canvas" id="epCanvas">
+    <div id="epPages"></div>
+    <div class="text-center text-muted small py-3" id="epLoading">
+      <div class="spinner-border spinner-border-sm me-2"></div> Loading document…
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+
+const DOCS    = {{ documents_json|safe }};
+const SIGNERS = {{ signers_json|safe }};
+const EXISTING= {{ fields_json|safe }};
+const SAVE_URL = "{% url 'accounts:esign_fields_save' envelope.pk %}";
+const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+const COLORS = ['#009EDB','#7C3AED','#059669','#D97706','#DC2626','#0891B2'];
+const DEFAULT_SIZE = {
+  signature:{w:.24,h:.055}, initials:{w:.09,h:.05}, date_signed:{w:.16,h:.032},
+  full_name:{w:.22,h:.032}, job_title:{w:.20,h:.032}, email:{w:.24,h:.032},
+  text:{w:.22,h:.038}, checkbox:{w:.03,h:.022}
+};
+const KIND_LABEL = {
+  signature:'Signature', initials:'Initials', date_signed:'Date signed',
+  full_name:'Full name', job_title:'Title', email:'Email', text:'Text', checkbox:'Checkbox'
+};
+
+let fields = EXISTING.map(f => ({...f}));
+let nextTmpId = -1;
+
+// signer picker
+const sel = document.getElementById('epSigner');
+SIGNERS.forEach((s, i) => {
+  const o = document.createElement('option');
+  o.value = s.id; o.textContent = `${s.order}. ${s.name} (${s.role})`;
+  o.dataset.color = COLORS[i % COLORS.length];
+  sel.appendChild(o);
+});
+function currentSigner(){ return parseInt(sel.value); }
+function signerColor(id){
+  const i = SIGNERS.findIndex(s => s.id === id);
+  return COLORS[(i < 0 ? 0 : i) % COLORS.length];
+}
+
+// drag from toolbox
+let dragKind = null;
+document.querySelectorAll('.ep-tool').forEach(t => {
+  t.addEventListener('dragstart', e => {
+    dragKind = t.dataset.kind;
+    e.dataTransfer.setData('text/plain', dragKind);
+  });
+});
+
+async function render() {
+  const host = document.getElementById('epPages');
+  for (const doc of DOCS) {
+    const pdf = await pdfjsLib.getDocument(doc.url).promise;
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const base = page.getViewport({scale:1});
+      const maxW = Math.min(document.getElementById('epCanvas').clientWidth - 40, 900);
+      const viewport = page.getViewport({scale: maxW / base.width});
+
+      const wrap = document.createElement('div');
+      wrap.className = 'ep-page';
+      wrap.style.width = viewport.width + 'px';
+      wrap.dataset.doc = doc.id; wrap.dataset.page = p;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      wrap.appendChild(canvas);
+      host.appendChild(wrap);
+      await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+
+      wrap.addEventListener('dragover', e => e.preventDefault());
+      wrap.addEventListener('drop', e => {
+        e.preventDefault();
+        if (!dragKind) return;
+        const r = wrap.getBoundingClientRect();
+        const size = DEFAULT_SIZE[dragKind] || {w:.2,h:.04};
+        const f = {
+          id: nextTmpId--, document_id: doc.id, recipient_id: currentSigner(),
+          kind: dragKind, page: p,
+          x: Math.max(0, (e.clientX - r.left) / r.width - size.w/2),
+          y: Math.max(0, (e.clientY - r.top) / r.height - size.h/2),
+          w: size.w, h: size.h, required: true, label: ''
+        };
+        fields.push(f);
+        drawField(wrap, f);
+        dragKind = null;
+        updateCounts();
+      });
+
+      fields.filter(f => f.document_id === doc.id && f.page === p)
+            .forEach(f => drawField(wrap, f));
+    }
+  }
+  document.getElementById('epLoading').remove();
+  updateCounts();
+}
+
+function drawField(wrap, f) {
+  const el = document.createElement('div');
+  el.className = 'ep-fld';
+  el.dataset.id = f.id;
+  const c = signerColor(f.recipient_id);
+  el.style.borderColor = c;
+  el.style.background = c + '22';
+  el.style.color = c;
+  el.style.left = (f.x*100)+'%'; el.style.top = (f.y*100)+'%';
+  el.style.width = (f.w*100)+'%'; el.style.height = (f.h*100)+'%';
+  el.innerHTML = '<span>' + (KIND_LABEL[f.kind] || f.kind) + '</span>' +
+                 '<span class="ep-x">✕</span><span class="ep-rs"></span>';
+  wrap.appendChild(el);
+
+  el.querySelector('.ep-x').onclick = (e) => {
+    e.stopPropagation();
+    fields = fields.filter(x => x.id !== f.id);
+    el.remove(); updateCounts();
+  };
+
+  // move
+  el.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('ep-rs') || e.target.classList.contains('ep-x')) return;
+    e.preventDefault();
+    const r = wrap.getBoundingClientRect();
+    const ox = e.clientX - (f.x * r.width), oy = e.clientY - (f.y * r.height);
+    function mv(ev){
+      f.x = Math.min(Math.max((ev.clientX - ox) / r.width, 0), 1 - f.w);
+      f.y = Math.min(Math.max((ev.clientY - oy) / r.height, 0), 1 - f.h);
+      el.style.left = (f.x*100)+'%'; el.style.top = (f.y*100)+'%';
+    }
+    function up(){ document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); }
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+  });
+
+  // resize
+  el.querySelector('.ep-rs').addEventListener('mousedown', e => {
+    e.preventDefault(); e.stopPropagation();
+    const r = wrap.getBoundingClientRect();
+    function mv(ev){
+      f.w = Math.min(Math.max((ev.clientX - r.left)/r.width - f.x, 0.02), 1 - f.x);
+      f.h = Math.min(Math.max((ev.clientY - r.top)/r.height - f.y, 0.012), 1 - f.y);
+      el.style.width = (f.w*100)+'%'; el.style.height = (f.h*100)+'%';
+    }
+    function up(){ document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); }
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+  });
+}
+
+function updateCounts() {
+  const host = document.getElementById('epCounts');
+  host.innerHTML = '';
+  SIGNERS.forEach(s => {
+    const n = fields.filter(f => f.recipient_id === s.id).length;
+    const row = document.createElement('div');
+    row.className = 'd-flex justify-content-between';
+    row.innerHTML = '<span><span class="ep-signer-dot" style="background:' + signerColor(s.id) +
+      '"></span>' + s.name + '</span><span class="' + (n ? 'text-success' : 'text-danger') +
+      ' fw-semibold">' + n + '</span>';
+    host.appendChild(row);
+  });
+}
+
+async function save(silent) {
+  const payload = { fields: fields.map(f => ({
+    document_id:f.document_id, recipient_id:f.recipient_id, kind:f.kind, page:f.page,
+    x:f.x, y:f.y, w:f.w, h:f.h, required:f.required !== false, label:f.label || ''
+  }))};
+  const res = await fetch(SAVE_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!silent) {
+    if (data.ok) alert(data.count + ' field(s) saved.');
+    else alert(data.error || 'Could not save.');
+  }
+  return data.ok;
+}
+
+document.getElementById('epSave').onclick = () => save(false);
+
+document.getElementById('epSendForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const missing = SIGNERS.filter(s => !fields.some(f => f.recipient_id === s.id));
+  if (missing.length) {
+    alert('These signers still have no fields: ' + missing.map(s => s.name).join(', '));
+    return;
+  }
+  const ok = await save(true);
+  if (ok) e.target.submit();
+});
+
+render().catch(err => {
+  console.error(err);
+  document.getElementById('epLoading').innerHTML =
+    '<div class="alert alert-danger">Could not render the document.</div>';
+});
+</script>
+{% endblock %}

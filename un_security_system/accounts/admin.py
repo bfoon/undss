@@ -1006,3 +1006,5 @@ class ConsumableStockLogAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # Prevent deletion to preserve audit trail
         return False
+
+from .admin_esign import *  # noqa: F401,F403

@@ -1,0 +1,16 @@
+{% extends "accounts/esign/base_public.html" %}
+{% block title %}Waiting for earlier signers{% endblock %}
+{% block content %}
+<div class="container" style="max-width:560px">
+  <div class="es-card p-4 mt-5 text-center">
+    <i class="bi bi-hourglass-split fs-1 text-warning"></i>
+    <h5 class="fw-bold mt-2">It isn't your turn yet</h5>
+    <p class="small text-muted">
+      <b>{{ envelope.subject }}</b> is being signed in order.
+      {% if next_signer %}We're currently waiting on <b>{{ next_signer.name }}</b>.{% endif %}
+      You'll get an email the moment it reaches you — this same link will then open the document.
+    </p>
+    <div class="es-token d-inline-block">Envelope ID: {{ envelope.envelope_id }}</div>
+  </div>
+</div>
+{% endblock %}

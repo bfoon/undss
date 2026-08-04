@@ -1061,6 +1061,7 @@
     </div>
 </div>
 {% endif %}
+<script>
 (function(){
     var BID     = {{ booking.pk }};
     var CAP     = {{ booking.room.capacity|default:"null" }};
@@ -1460,3 +1461,4 @@ window.removeRegistration = function(pk, rowId){
     };
 })();
 </script>
+{% endblock %}

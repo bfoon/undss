@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ envelope.subject }} | eSign{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ed-token{ font-family:ui-monospace,Menlo,monospace; font-size:.75rem; color:var(--un-gray);
+             background:#F8FAFC; border:1px solid #E5E7EB; border-radius:6px; padding:.2rem .55rem; }
+  .ed-timeline{ position:relative; padding-left:1.6rem; }
+  .ed-timeline::before{ content:''; position:absolute; left:.55rem; top:.3rem; bottom:.3rem;
+                        width:2px; background:#E5E7EB; }
+  .ed-ev{ position:relative; padding:.45rem 0; }
+  .ed-ev::before{ content:''; position:absolute; left:-1.32rem; top:.85rem; width:10px; height:10px;
+                  border-radius:50%; background:#fff; border:2px solid var(--un-blue); }
+  .ed-ev.done::before{ background:#10B981; border-color:#10B981; }
+  .ed-ev.bad::before{ background:#EF4444; border-color:#EF4444; }
+  .ed-meta{ font-size:.74rem; color:var(--un-gray); }
+  .ed-rec{ border:1px solid #E5E7EB; border-radius:12px; padding:.7rem .85rem; margin-bottom:.55rem; background:#fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-3 gap-2">
+  <div>
+    <a class="small text-muted text-decoration-none" href="{% url 'accounts:esign_dashboard' %}">
+      <i class="bi bi-arrow-left"></i> All envelopes</a>
+    <h5 class="fw-bold text-un-primary mb-1 mt-1">{{ envelope.subject }}</h5>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <span class="badge bg-{{ envelope.status_color }}">{{ envelope.get_status_display }}</span>
+      <span class="ed-token">Envelope ID: {{ envelope.envelope_id }}</span>
+      {% if envelope.reference %}<span class="small text-muted">Ref {{ envelope.reference }}</span>{% endif %}
+      {% if envelope.asset %}
+        <a class="small" href="{% url 'accounts:asset_detail' envelope.asset.id %}">
+          <i class="bi bi-box-seam me-1"></i>{{ envelope.asset.name }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 flex-wrap">
+    {% if can_sign_now %}
+      <a class="btn btn-un-primary" href="{% url 'accounts:esign_sign' my_recipient.token %}">
+        <i class="bi bi-pen me-1"></i> Sign now</a>
+    {% endif %}
+    {% if envelope.status == 'completed' %}
+      <a class="btn btn-success" href="{% url 'accounts:esign_download' envelope.pk 'signed' %}">
+        <i class="bi bi-download me-1"></i> Signed document</a>
+      <a class="btn btn-outline-success" href="{% url 'accounts:esign_download' envelope.pk 'certificate' %}">
+        <i class="bi bi-patch-check me-1"></i> Certificate</a>
+    {% else %}
+      <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_preview' envelope.pk %}" target="_blank">
+        <i class="bi bi-eye me-1"></i> Preview</a>
+    {% endif %}
+    {% if is_sender and envelope.status == 'sent' %}
+      <form method="post" action="{% url 'accounts:esign_remind' envelope.pk %}">{% csrf_token %}
+        <button class="btn btn-outline-warning"><i class="bi bi-bell me-1"></i> Remind</button>
+      </form>
+    {% endif %}
+    {% if is_sender and envelope.is_open %}
+      <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#voidModal">
+        <i class="bi bi-slash-circle me-1"></i> Void</button>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- left column -->
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-people me-2"></i>Signers
+        <span class="float-end small text-muted">{{ progress.done }}/{{ progress.total }} signed</span>
+      </div>
+      <div class="card-body">
+        <div class="progress mb-3" style="height:6px">
+          <div class="progress-bar bg-success" style="width:{{ progress.percent }}%"></div>
+        </div>
+        {% for r in signers %}
+          <div class="ed-rec">
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-light text-dark">{{ r.order }}</span>
+              <div class="flex-grow-1">
+                <div class="fw-semibold small">{{ r.name }}</div>
+                <div class="ed-meta">{{ r.email }}{% if r.title %} · {{ r.title }}{% endif %}</div>
+              </div>
+              <span class="badge bg-{{ r.status_color }}">{{ r.get_status_display }}</span>
+            </div>
+            <div class="ed-meta mt-1">
+              Token {{ r.short_token }}
+              {% if r.signed_at %} · signed {{ r.signed_at|date:"d M Y H:i" }}
+                {% if r.signed_ip %} from {{ r.signed_ip }}{% endif %}
+              {% elif r.viewed_at %} · viewed {{ r.viewed_at|date:"d M Y H:i" }}
+              {% elif r.sent_at %} · sent {{ r.sent_at|date:"d M Y H:i" }}{% endif %}
+              {% if r.access_code %} · <i class="bi bi-lock-fill"></i> access code{% endif %}
+            </div>
+            {% if r.decline_reason %}
+              <div class="alert alert-danger py-1 px-2 mt-2 mb-0 small">
+                Declined: {{ r.decline_reason }}</div>
+            {% endif %}
+            {% if is_sender and envelope.status == 'sent' and r.status != 'signed' %}
+              <form method="post" action="{% url 'accounts:esign_resend' envelope.pk r.pk %}" class="mt-2">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-outline-primary py-0">
+                  <i class="bi bi-arrow-repeat"></i> Resend link</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if observers %}
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-eye me-2"></i>Copies & viewers
+      </div>
+      <div class="card-body">
+        {% for r in observers %}
+          <div class="ed-rec d-flex align-items-center gap-2">
+            <div class="flex-grow-1">
+              <div class="fw-semibold small">{{ r.name }}
+                <span class="badge bg-light text-muted ms-1">{{ r.get_role_display }}</span>
+              </div>
+              <div class="ed-meta">{{ r.email }}
+                {% if r.role == 'bcc' %} · <i class="bi bi-incognito"></i> hidden from other parties{% endif %}
+              </div>
+            </div>
+            <span class="badge bg-{{ r.status_color }}">{{ r.get_status_display }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-files me-2"></i>Documents</div>
+      <div class="list-group list-group-flush">
+        {% for d in documents %}
+          <a class="list-group-item list-group-item-action small"
+             href="{% url 'accounts:esign_document_file' envelope.pk d.id %}" target="_blank">
+            <i class="bi bi-file-earmark-pdf text-danger me-2"></i>{{ d }}
+            <span class="text-muted">· {{ d.page_count }} page{{ d.page_count|pluralize }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- right column: audit trail -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-clock-history me-2"></i>Audit trail
+        <span class="float-end small text-muted">{{ events|length }} event{{ events|length|pluralize }}</span>
+      </div>
+      <div class="card-body">
+        <div class="ed-timeline">
+          {% for e in events %}
+            <div class="ed-ev {% if e.event == 'completed' or e.event == 'signed' %}done{% elif e.event == 'declined' or e.event == 'voided' %}bad{% endif %}">
+              <div class="small fw-semibold">
+                <i class="bi {{ e.icon }} me-1"></i>{{ e.get_event_display }}
+                {% if e.recipient %}<span class="text-muted fw-normal">— {{ e.recipient.name }}</span>
+                {% elif e.actor %}<span class="text-muted fw-normal">— {{ e.actor.get_full_name|default:e.actor.username }}</span>{% endif %}
+              </div>
+              {% if e.note %}<div class="small">{{ e.note }}</div>{% endif %}
+              <div class="ed-meta">
+                {{ e.at|date:"d M Y H:i:s" }}
+                {% if e.ip %} · IP {{ e.ip }}{% endif %}
+                {% if e.user_agent %} · <span title="{{ e.user_agent }}">{{ e.user_agent|truncatechars:44 }}</span>{% endif %}
+              </div>
+            </div>
+          {% empty %}
+            <div class="text-muted small">No events recorded yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-footer bg-white small text-muted">
+        Every entry is immutable and reproduced in the Certificate of Completion.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="voidModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_void' envelope.pk %}">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title text-danger">Void envelope</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <p class="small">All pending links stop working immediately and every party is notified.</p>
+          <textarea name="reason" class="form-control" rows="3" required
+                    placeholder="Reason for voiding"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-danger">Void envelope</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "accounts/esign/base_public.html" %}
+{% block title %}Document unavailable{% endblock %}
+{% block content %}
+<div class="container" style="max-width:560px">
+  <div class="es-card p-4 mt-5 text-center">
+    {% if declined %}
+      <i class="bi bi-x-octagon fs-1 text-danger"></i>
+      <h5 class="fw-bold mt-2">This envelope was declined</h5>
+      <p class="small text-muted">
+        {{ recipient.name }} declined to sign <b>{{ envelope.subject }}</b>.
+        {% if recipient.decline_reason %}<br><span class="fst-italic">"{{ recipient.decline_reason }}"</span>{% endif %}
+        <br>The sender has been notified and no further signatures can be collected.
+      </p>
+    {% elif envelope.status == 'voided' %}
+      <i class="bi bi-slash-circle fs-1 text-secondary"></i>
+      <h5 class="fw-bold mt-2">This envelope was voided</h5>
+      <p class="small text-muted">
+        {% if envelope.void_reason %}Reason: {{ envelope.void_reason }}<br>{% endif %}
+        Please contact the sender if you believe this is an error.
+      </p>
+    {% else %}
+      <i class="bi bi-calendar-x fs-1 text-secondary"></i>
+      <h5 class="fw-bold mt-2">This envelope has expired</h5>
+      <p class="small text-muted">The signing period ended on {{ envelope.expires_at|date:"d M Y" }}.</p>
+    {% endif %}
+    <div class="es-token d-inline-block">Envelope ID: {{ envelope.envelope_id }}</div>
+  </div>
+</div>
+{% endblock %}

@@ -1712,3 +1712,6 @@ class ConsumableAssetLink(models.Model):
     def __str__(self):
         target = self.asset or self.asset_category
         return f"{self.consumable_item.name} ↔ {target}"
+
+
+from .models_esign import *  # noqa: F401,F403

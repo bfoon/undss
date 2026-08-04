@@ -1,0 +1,21 @@
+{% extends "accounts/esign/base_public.html" %}
+{% block title %}Access code required{% endblock %}
+{% block content %}
+<div class="container" style="max-width:460px">
+  <div class="es-card p-4 mt-5 text-center">
+    <i class="bi bi-lock-fill fs-1 text-un-primary"></i>
+    <h5 class="fw-bold mt-2">Access code required</h5>
+    <p class="small text-muted mb-3">
+      {{ envelope.created_by.get_full_name|default:"The sender" }} protected
+      <b>{{ envelope.subject }}</b> with an access code. It was shared with you separately.
+    </p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="text" name="access_code" class="form-control form-control-lg text-center mb-3"
+             placeholder="Access code" autocomplete="off" required autofocus>
+      <button class="btn btn-un-primary w-100">Continue</button>
+    </form>
+    <div class="es-token d-inline-block mt-3">{{ envelope.short_id }}</div>
+  </div>
+</div>
+{% endblock %}

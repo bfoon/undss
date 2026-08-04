@@ -1,0 +1,17 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}Document opened{% endblock %}
+{% block body %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    <b>{{ recipient.name }}</b> ({{ recipient.email }}) has opened <b>{{ subject_line }}</b>.
+  </p>
+  <p style="font-size:13px;color:#6B7280;margin:0 0 18px;">
+    Recorded in the audit trail at {{ now|date:"d M Y H:i" }}.
+  </p>
+  <div style="text-align:center;">
+    <a href="{{ action_url }}"
+       style="display:inline-block;background:#005A8B;color:#ffffff;text-decoration:none;
+              padding:11px 24px;border-radius:8px;font-weight:600;font-size:14px;">
+      Track envelope
+    </a>
+  </div>
+{% endblock %}

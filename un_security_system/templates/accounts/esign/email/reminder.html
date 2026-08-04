@@ -1,0 +1,19 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}Reminder — signature still needed{% endblock %}
+{% block body %}
+  <p style="margin:0 0 12px;font-size:15px;">Hello {{ recipient.name }},</p>
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    A gentle reminder that <b>{{ subject_line }}</b> is still waiting for your signature
+    {% if envelope.sent_at %}(sent {{ envelope.sent_at|date:"d M Y" }}){% endif %}.
+  </p>
+  <div style="text-align:center;margin:22px 0;">
+    <a href="{{ action_url }}"
+       style="display:inline-block;background:#F59E0B;color:#ffffff;text-decoration:none;
+              padding:13px 30px;border-radius:8px;font-weight:700;font-size:15px;">
+      Sign now
+    </a>
+  </div>
+  {% if envelope.expires_at %}
+  <p style="font-size:13px;color:#92400E;margin:0;">This envelope expires on {{ envelope.expires_at|date:"d M Y" }}.</p>
+  {% endif %}
+{% endblock %}

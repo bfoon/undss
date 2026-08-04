@@ -1,0 +1,16 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}Envelope declined{% endblock %}
+{% block body %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    <b>{{ recipient.name }}</b> ({{ recipient.email }}) declined to sign <b>{{ subject_line }}</b>.
+  </p>
+  {% if reason %}
+  <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:12px;margin-bottom:14px;">
+    <div style="font-size:12px;color:#991B1B;font-weight:700;margin-bottom:4px;">Reason given</div>
+    <div style="font-size:13px;color:#7F1D1D;white-space:pre-line;">{{ reason }}</div>
+  </div>
+  {% endif %}
+  <p style="font-size:13px;color:#6B7280;margin:0;">
+    No further signatures can be collected on this envelope. Correct the document and send a new one.
+  </p>
+{% endblock %}

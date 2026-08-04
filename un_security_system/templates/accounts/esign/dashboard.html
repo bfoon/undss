@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}eSign | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .es-hero{ background:linear-gradient(135deg, rgba(0,158,219,.10), rgba(0,90,139,.08));
+            border:1px solid rgba(0,158,219,.15); }
+  .es-kpi{ border-left:4px solid var(--un-blue); background:#fff; }
+  .es-kpi.warn{ border-left-color:#F59E0B; }
+  .es-kpi.ok{ border-left-color:#10B981; }
+  .es-row{ transition:background .12s ease; }
+  .es-row:hover{ background:rgba(0,158,219,.04); }
+  .es-token{ font-family:ui-monospace,Menlo,monospace; font-size:.7rem; color:var(--un-gray); }
+  .es-avatars .es-av{ width:26px;height:26px;border-radius:50%;background:#E2E8F0;color:#475569;
+    font-size:.65rem;display:inline-flex;align-items:center;justify-content:center;
+    margin-left:-6px;border:2px solid #fff;font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card es-hero">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+          <div>
+            <h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-pen-fill me-2"></i>eSign</h4>
+            <div class="text-muted">
+              Send any document for legally-binding electronic signature — with routing, CC/BCC,
+              viewers, reminders and a full audit trail on every envelope.
+            </div>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-un-primary" href="{% url 'accounts:esign_new' %}">
+              <i class="bi bi-plus-circle me-1"></i> New envelope
+            </a>
+            <a class="btn btn-outline-primary" href="{% url 'accounts:esign_signatures' %}">
+              <i class="bi bi-pen me-1"></i> My signature
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="col-6 col-lg-3">
+    <div class="card es-kpi warn h-100"><div class="card-body">
+      <div class="text-muted small">Waiting on me</div>
+      <div class="h3 fw-bold mb-0">{{ stats.action_required }}</div></div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card es-kpi h-100"><div class="card-body">
+      <div class="text-muted small">Out for signature</div>
+      <div class="h3 fw-bold mb-0">{{ stats.sent }}</div></div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card es-kpi ok h-100"><div class="card-body">
+      <div class="text-muted small">Completed</div>
+      <div class="h3 fw-bold mb-0">{{ stats.completed }}</div></div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card es-kpi h-100" style="border-left-color:#94A3B8"><div class="card-body">
+      <div class="text-muted small">My drafts</div>
+      <div class="h3 fw-bold mb-0">{{ stats.drafts }}</div></div></div>
+  </div>
+
+  <!-- Action required -->
+  {% if action_required %}
+  <div class="col-12">
+    <div class="card border-warning">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-exclamation-circle text-warning me-2"></i>Needs your signature
+      </div>
+      <div class="list-group list-group-flush">
+        {% for r in action_required %}
+        <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+          <div class="flex-grow-1">
+            <div class="fw-semibold">{{ r.envelope.subject }}</div>
+            <div class="small text-muted">
+              From {{ r.envelope.created_by.get_full_name|default:r.envelope.created_by.username }}
+              · sent {{ r.envelope.sent_at|date:"d M Y H:i" }}
+              · <span class="es-token">{{ r.envelope.short_id }}</span>
+            </div>
+          </div>
+          <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_sign' r.token %}">
+            <i class="bi bi-pen me-1"></i> Review & sign
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if waiting_on_others %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-hourglass-split me-2"></i>Queued for you (waiting on earlier signers)
+      </div>
+      <div class="list-group list-group-flush">
+        {% for r in waiting_on_others %}
+        <div class="list-group-item small d-flex justify-content-between align-items-center">
+          <span>{{ r.envelope.subject }}
+            <span class="text-muted">· you are signer #{{ r.order }}</span></span>
+          <span class="badge bg-light text-muted">Waiting</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- All envelopes -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-white d-flex flex-wrap gap-2 align-items-center">
+        <span class="fw-bold text-un-primary"><i class="bi bi-inboxes me-2"></i>Envelopes</span>
+        <form class="ms-auto d-flex gap-2" method="get">
+          <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm"
+                 placeholder="Subject, envelope ID, recipient…" style="min-width:230px">
+          <select name="status" class="form-select form-select-sm" style="width:auto">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-sm btn-outline-primary">Filter</button>
+        </form>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Subject</th><th>Envelope ID</th><th>Recipients</th>
+              <th>Status</th><th>Progress</th><th>Updated</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for e in envelopes %}
+            <tr class="es-row">
+              <td>
+                <div class="fw-semibold">{{ e.subject }}</div>
+                <div class="small text-muted">
+                  {% if e.reference %}Ref {{ e.reference }} · {% endif %}
+                  by {{ e.created_by.get_full_name|default:e.created_by.username }}
+                </div>
+              </td>
+              <td><span class="es-token">{{ e.short_id }}</span></td>
+              <td>
+                <span class="es-avatars">
+                  {% for r in e.recipients.all|slice:":5" %}
+                    <span class="es-av" title="{{ r.name }} — {{ r.get_role_display }}">
+                      {{ r.name|slice:":1"|upper }}</span>
+                  {% endfor %}
+                </span>
+                <span class="small text-muted ms-2">{{ e.recipients.count }}</span>
+              </td>
+              <td><span class="badge bg-{{ e.status_color }}">{{ e.get_status_display }}</span></td>
+              <td style="min-width:120px">
+                {% with p=e.progress %}
+                  <div class="progress" style="height:6px">
+                    <div class="progress-bar bg-success" style="width:{{ p.percent }}%"></div>
+                  </div>
+                  <div class="small text-muted">{{ p.done }}/{{ p.total }} signed</div>
+                {% endwith %}
+              </td>
+              <td class="small text-muted">{{ e.sent_at|default:e.created_at|date:"d M Y H:i" }}</td>
+              <td class="text-end">
+                {% if e.status == 'draft' %}
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_prepare' e.pk %}">
+                    <i class="bi bi-crosshair"></i> Prepare</a>
+                {% else %}
+                  <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_envelope_detail' e.pk %}">
+                    <i class="bi bi-eye"></i> Open</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-5">
+              <i class="bi bi-inbox fs-2 d-block mb-2 opacity-50"></i>
+              No envelopes yet. Start with <a href="{% url 'accounts:esign_new' %}">New envelope</a>.
+            </td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

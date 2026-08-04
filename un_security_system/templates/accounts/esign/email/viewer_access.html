@@ -1,0 +1,17 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}A document has been shared with you{% endblock %}
+{% block body %}
+  <p style="margin:0 0 12px;font-size:15px;">Hello {{ recipient.name }},</p>
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    <b>{{ sender_name }}</b> has given you <b>{{ recipient.get_role_display|lower }}</b> access to
+    <b>{{ subject_line }}</b>. No action is required from you — you'll also receive the final signed
+    copy once everyone has signed.
+  </p>
+  <div style="text-align:center;margin:22px 0;">
+    <a href="{{ action_url }}"
+       style="display:inline-block;background:#005A8B;color:#ffffff;text-decoration:none;
+              padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;">
+      View document
+    </a>
+  </div>
+{% endblock %}

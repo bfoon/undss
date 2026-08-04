@@ -15,6 +15,7 @@ from .views_room_booking import (
     series_detail_view, reschedule_booking,
 )
 from .views_asset_verify import asset_verify, asset_verification_history
+from . import views_esign
 
 app_name = 'accounts'
 
@@ -254,6 +255,37 @@ urlpatterns = [
     # -------- Batch upload -----------
     path("batch/template/<str:kind>/", views_batch.download_csv_template, name="batch_template"),
     path("batch/upload/<str:kind>/", views_batch.batch_upload_csv, name="batch_upload"),
+
+    # ------------------------------------------------------------------
+    # eSign — DocuSign-style electronic signature (ICT & Assets)
+    # ------------------------------------------------------------------
+
+    # Sender side (login required)
+    path("esign/", views_esign.esign_dashboard, name="esign_dashboard"),
+    path("esign/new/", views_esign.esign_new, name="esign_new"),
+    path("esign/<int:pk>/", views_esign.esign_envelope_detail, name="esign_envelope_detail"),
+    path("esign/<int:pk>/prepare/", views_esign.esign_prepare, name="esign_prepare"),
+    path("esign/<int:pk>/fields/", views_esign.esign_fields_save, name="esign_fields_save"),
+    path("esign/<int:pk>/send/", views_esign.esign_send, name="esign_send"),
+    path("esign/<int:pk>/remind/", views_esign.esign_remind, name="esign_remind"),
+    path("esign/<int:pk>/void/", views_esign.esign_void, name="esign_void"),
+    path("esign/<int:pk>/resend/<int:recipient_id>/", views_esign.esign_resend, name="esign_resend"),
+    path("esign/<int:pk>/preview/", views_esign.esign_preview, name="esign_preview"),
+    path("esign/<int:pk>/document/<int:doc_id>/", views_esign.esign_document_file, name="esign_document_file"),
+    path("esign/<int:pk>/download/<str:kind>/", views_esign.esign_download, name="esign_download"),
+
+    # Saved signatures ("My signature" studio)
+    path("esign/signatures/", views_esign.esign_signatures, name="esign_signatures"),
+    path("esign/signatures/save/", views_esign.esign_signature_save, name="esign_signature_save"),
+    path("esign/signatures/<int:pk>/delete/", views_esign.esign_signature_delete, name="esign_signature_delete"),
+    path("esign/signatures/<int:pk>/default/", views_esign.esign_signature_default, name="esign_signature_default"),
+
+    # Recipient side (tokenized, no login — signers, CC/BCC and viewers)
+    path("esign/s/<str:token>/", views_esign.esign_sign, name="esign_sign"),
+    path("esign/s/<str:token>/decline/", views_esign.esign_decline, name="esign_decline"),
+    path("esign/s/<str:token>/review/", views_esign.esign_review, name="esign_review"),
+    path("esign/s/<str:token>/document/<int:doc_id>/", views_esign.esign_token_document, name="esign_token_document"),
+    path("esign/s/<str:token>/download/<str:kind>/", views_esign.esign_token_download, name="esign_token_download"),
 
     # --- NEW URLs ---
     path('booking/<int:pk>/', booking_detail_view, name='booking_detail'),

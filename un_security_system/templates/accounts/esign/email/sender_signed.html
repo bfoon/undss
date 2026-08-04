@@ -1,0 +1,23 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}A signature has been collected{% endblock %}
+{% block body %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    <b>{{ recipient.name }}</b> has signed <b>{{ subject_line }}</b>.
+  </p>
+  <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-bottom:16px;">
+    <div style="font-size:14px;font-weight:700;color:#065F46;">
+      {{ progress.done }} of {{ progress.total }} signatures collected
+    </div>
+    <div style="font-size:12px;color:#047857;margin-top:2px;">
+      {% if progress.done == progress.total %}All signers are done — the completed copy is on its way.
+      {% else %}The next signer has been notified automatically.{% endif %}
+    </div>
+  </div>
+  <div style="text-align:center;">
+    <a href="{{ action_url }}"
+       style="display:inline-block;background:#005A8B;color:#ffffff;text-decoration:none;
+              padding:11px 24px;border-radius:8px;font-weight:600;font-size:14px;">
+      Track envelope
+    </a>
+  </div>
+{% endblock %}

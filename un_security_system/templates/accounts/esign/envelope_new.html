@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}New envelope | eSign{% endblock %}
+
+{% block extra_css %}
+<style>
+  .es-drop{ border:2px dashed #CBD5E1; border-radius:14px; padding:1.6rem; text-align:center;
+            background:#F8FAFC; cursor:pointer; transition:.15s; }
+  .es-drop:hover, .es-drop.drag{ border-color:var(--un-blue); background:rgba(0,158,219,.06); }
+  .es-recipient{ border:1px solid #E5E7EB; border-radius:12px; background:#fff; padding:.85rem;
+                 margin-bottom:.65rem; position:relative; }
+  .es-handle{ cursor:grab; color:#94A3B8; }
+  .es-order-pill{ width:26px;height:26px;border-radius:50%;background:var(--un-blue);color:#fff;
+                  display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700; }
+  .es-role-hint{ font-size:.74rem; color:var(--un-gray); }
+  .es-filechip{ display:inline-flex;align-items:center;gap:.4rem;background:#EAF6FC;color:#005A8B;
+                border-radius:999px;padding:.25rem .7rem;font-size:.8rem;margin:.2rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" id="esNewForm">
+  {% csrf_token %}
+  <input type="hidden" name="asset_id" value="{{ asset.id|default:'' }}">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+      <h4 class="fw-bold text-un-primary mb-0"><i class="bi bi-envelope-plus me-2"></i>New envelope</h4>
+      <div class="text-muted small">Add documents, choose who signs and who just gets a copy.</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-light" href="{% url 'accounts:esign_dashboard' %}">Cancel</a>
+      <button class="btn btn-un-primary px-4"><i class="bi bi-arrow-right me-1"></i> Continue to fields</button>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Left: details + documents -->
+    <div class="col-lg-7">
+      <div class="card mb-3">
+        <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-card-text me-2"></i>Details</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Subject <span class="text-danger">*</span></label>
+            <input type="text" name="subject" class="form-control" required maxlength="200"
+                   value="{% if asset %}Asset handover — {{ asset.name }} ({{ asset.asset_tag }}){% endif %}"
+                   placeholder="e.g. ICT Asset Handover Form — HP EliteBook 840">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Message to recipients</label>
+            <textarea name="message" rows="3" class="form-control"
+                      placeholder="Shown in the email and on the signing page."></textarea>
+          </div>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Reference / document number</label>
+              <input type="text" name="reference" class="form-control" maxlength="120"
+                     value="{% if asset %}{{ asset.asset_tag }}{% endif %}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Expires on</label>
+              <input type="date" name="expires_at" class="form-control">
+            </div>
+          </div>
+          {% if asset %}
+          <div class="alert alert-light border mt-3 mb-0 small">
+            <i class="bi bi-link-45deg me-1 text-primary"></i>
+            Linked to asset <b>{{ asset.name }}</b> ({{ asset.asset_tag }}) — the completed envelope
+            will show on the asset record.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-paperclip me-2"></i>Documents</div>
+        <div class="card-body">
+          <div class="es-drop" id="esDrop">
+            <i class="bi bi-cloud-arrow-up fs-2 text-primary"></i>
+            <div class="fw-semibold mt-1">Drop files here or click to browse</div>
+            <div class="small text-muted">PDF, PNG or JPG · up to 25 MB each · multiple files allowed</div>
+            <input type="file" name="documents" id="esFiles" class="d-none" multiple
+                   accept=".pdf,.png,.jpg,.jpeg">
+          </div>
+          <div id="esFileList" class="mt-2"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-sliders me-2"></i>Options</div>
+        <div class="card-body">
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" name="enforce_order" id="optOrder" checked>
+            <label class="form-check-label small" for="optOrder">
+              <b>Sign in order</b> — each signer is invited only after the one before has signed
+            </label>
+          </div>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" name="reminders_enabled" id="optRemind" checked>
+            <label class="form-check-label small" for="optRemind"><b>Automatic reminders</b></label>
+          </div>
+          <div class="row g-2 align-items-center">
+            <div class="col-auto small text-muted">Remind every</div>
+            <div class="col-auto">
+              <input type="number" name="reminder_days" class="form-control form-control-sm"
+                     value="3" min="1" max="30" style="width:80px">
+            </div>
+            <div class="col-auto small text-muted">day(s)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: recipients -->
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header bg-white d-flex align-items-center">
+          <span class="fw-bold text-un-primary"><i class="bi bi-people me-2"></i>Recipients</span>
+          <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="esAddRecipient">
+            <i class="bi bi-plus-lg"></i> Add
+          </button>
+        </div>
+        <div class="card-body">
+          <div id="esRecipients"></div>
+          <div class="es-role-hint mt-2">
+            <div><b>Needs to sign</b> — places fields and signs.</div>
+            <div><b>Needs to approve</b> — signs as approver, same flow.</div>
+            <div><b>CC</b> — gets the completed copy, visible to everyone.</div>
+            <div><b>BCC</b> — gets the completed copy privately; never shown to other parties.</div>
+            <div><b>Viewer</b> — read-only link immediately, plus the completed copy.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<template id="esRecipientTpl">
+  <div class="es-recipient">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="es-order-pill es-num">1</span>
+      <span class="small fw-semibold es-role-label">Needs to sign</span>
+      <button type="button" class="btn btn-sm btn-link text-danger ms-auto p-0 es-remove">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="row g-2">
+      <div class="col-12">
+        <input type="email" name="recipient_email" class="form-control form-control-sm es-email"
+               placeholder="email@agency.org" list="esColleagues" required>
+      </div>
+      <div class="col-7">
+        <input type="text" name="recipient_name" class="form-control form-control-sm"
+               placeholder="Full name">
+      </div>
+      <div class="col-5">
+        <input type="text" name="recipient_title" class="form-control form-control-sm"
+               placeholder="Title">
+      </div>
+      <div class="col-7">
+        <select name="recipient_role" class="form-select form-select-sm es-role">
+          {% for value, label in role_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-5">
+        <input type="text" name="recipient_access_code" class="form-control form-control-sm"
+               placeholder="Access code" title="Optional — recipient must enter this to open the document">
+      </div>
+    </div>
+  </div>
+</template>
+
+<datalist id="esColleagues">
+  {% for c in colleagues %}
+    <option value="{{ c.email }}">{{ c.get_full_name|default:c.username }}{% if c.email %} — {{ c.email }}{% endif %}</option>
+  {% endfor %}
+</datalist>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const COLLEAGUES = {
+  {% for c in colleagues %}"{{ c.email|escapejs }}": "{{ c.get_full_name|default:c.username|escapejs }}",{% endfor %}
+};
+
+// ---- documents ----
+const drop = document.getElementById('esDrop');
+const input = document.getElementById('esFiles');
+const list = document.getElementById('esFileList');
+
+drop.onclick = () => input.click();
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('drag');
+}));
+drop.addEventListener('drop', e => { input.files = e.dataTransfer.files; renderFiles(); });
+input.addEventListener('change', renderFiles);
+
+function renderFiles() {
+  list.innerHTML = '';
+  Array.from(input.files).forEach(f => {
+    const chip = document.createElement('span');
+    chip.className = 'es-filechip';
+    chip.innerHTML = '<i class="bi bi-file-earmark-pdf"></i>' + f.name +
+                     ' <span class="text-muted">(' + Math.round(f.size/1024) + ' KB)</span>';
+    list.appendChild(chip);
+  });
+}
+
+// ---- recipients ----
+const host = document.getElementById('esRecipients');
+const tpl  = document.getElementById('esRecipientTpl');
+
+function addRecipient() {
+  const node = tpl.content.cloneNode(true);
+  host.appendChild(node);
+  const row = host.lastElementChild;
+  row.querySelector('.es-remove').onclick = () => { row.remove(); renumber(); };
+  row.querySelector('.es-role').onchange = (e) => {
+    row.querySelector('.es-role-label').textContent =
+      e.target.options[e.target.selectedIndex].text;
+    renumber();
+  };
+  row.querySelector('.es-email').addEventListener('change', (e) => {
+    const nameField = row.querySelector('[name="recipient_name"]');
+    const match = COLLEAGUES[e.target.value.trim().toLowerCase()] || COLLEAGUES[e.target.value.trim()];
+    if (match && !nameField.value) nameField.value = match;
+  });
+  renumber();
+}
+
+function renumber() {
+  let n = 0;
+  host.querySelectorAll('.es-recipient').forEach(r => {
+    const role = r.querySelector('.es-role').value;
+    const pill = r.querySelector('.es-num');
+    if (role === 'signer' || role === 'approver') {
+      n += 1; pill.textContent = n; pill.style.background = 'var(--un-blue)'; pill.style.visibility='visible';
+    } else {
+      pill.textContent = '·'; pill.style.background = '#94A3B8';
+    }
+  });
+}
+
+document.getElementById('esAddRecipient').onclick = addRecipient;
+addRecipient();
+
+document.getElementById('esNewForm').addEventListener('submit', (e) => {
+  if (!input.files.length) { e.preventDefault(); alert('Please attach at least one document.'); return; }
+  const roles = Array.from(document.querySelectorAll('.es-role')).map(s => s.value);
+  if (!roles.some(r => r === 'signer' || r === 'approver')) {
+    e.preventDefault(); alert('Add at least one recipient who needs to sign or approve.');
+  }
+});
+</script>
+{% endblock %}

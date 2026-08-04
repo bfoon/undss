@@ -119,6 +119,32 @@
               </ul>
             </div>
           {% endif %}
+            <div class="btn-group">
+              <a class="btn btn-outline-dark" href="{% url 'accounts:esign_dashboard' %}">
+                <i class="bi bi-pen-fill me-1"></i> eSign
+              </a>
+              <button type="button" class="btn btn-outline-dark dropdown-toggle dropdown-toggle-split"
+                      data-bs-toggle="dropdown"></button>
+              <ul class="dropdown-menu dropdown-menu-end shadow">
+                <li>
+                  <a class="dropdown-item" href="{% url 'accounts:esign_new' %}">
+                    <i class="bi bi-envelope-plus me-2 text-primary"></i> Send a document for signature
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="{% url 'accounts:esign_dashboard' %}">
+                    <i class="bi bi-inboxes me-2 text-primary"></i> Envelopes &amp; audit trail
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <a class="dropdown-item" href="{% url 'accounts:esign_signatures' %}">
+                    <i class="bi bi-vector-pen me-2 text-success"></i> My saved signature
+                  </a>
+                </li>
+              </ul>
+            </div>
+
             {% if is_ict or is_ops %}
             <a class="btn btn-outline-info" href="{% url 'accounts:asset_reports' %}">
               <i class="bi bi-bar-chart-line me-1"></i> Reports
