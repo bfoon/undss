@@ -16,6 +16,7 @@ esign_signatures (+ save/delete/default)
 
 import io
 import json
+import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -38,10 +39,11 @@ from .models_esign import (
     SignatureField,
     SignatureProfile,
 )
+from .converters_esign import conversion_backend_available, supported_upload_ext
 from .utils_esign import (
     build_final_pdf,
     decode_signature_data_url,
-    ensure_pdf_bytes,
+    document_pdf_bytes,
     envelope_is_expired,
     finalize_envelope,
     log_event,
@@ -51,9 +53,15 @@ from .utils_esign import (
 from .view_asset_management import _is_ict, _is_ops_manager, _managed_unit_ids
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 MAX_DOC_BYTES = 25 * 1024 * 1024
-ALLOWED_DOC_EXT = (".pdf", ".png", ".jpg", ".jpeg")
+BASE_DOC_EXT = (".pdf", ".png", ".jpg", ".jpeg")
+
+
+def allowed_doc_ext() -> tuple:
+    """PDF/images always, plus whatever the installed converter can handle."""
+    return BASE_DOC_EXT + tuple(supported_upload_ext())
 
 # Keep in sync with SignatureProfile.FONT_CHOICES and the CSS in sign.html
 ESIGN_FONTS = [
@@ -204,11 +212,18 @@ def esign_new(request):
         asset = Asset.objects.filter(agency=agency, id=asset_id).first()
 
     if request.method == "GET":
+        converter_ok, converter_note = conversion_backend_available()
         return render(
             request,
             "accounts/esign/envelope_new.html",
             {
                 "asset": asset,
+                "converter_ok": converter_ok,
+                "converter_note": converter_note,
+                "office_ext": ", ".join(
+                    e.lstrip(".").upper() for e in supported_upload_ext()
+                ),
+                "accept_attr": ",".join(allowed_doc_ext()),
                 "colleagues": User.objects.filter(agency=agency, is_active=True)
                 .order_by("first_name", "username")[:500],
                 "role_choices": EnvelopeRecipient.ROLE_CHOICES,
@@ -283,14 +298,26 @@ def esign_new(request):
         for order, f in enumerate(files):
             if f.size > MAX_DOC_BYTES:
                 raise ValueError(f"{f.name} is larger than 25 MB.")
-            if not f.name.lower().endswith(ALLOWED_DOC_EXT):
-                raise ValueError(f"{f.name}: only PDF, PNG and JPG are supported.")
+            if not f.name.lower().endswith(allowed_doc_ext()):
+                raise ValueError(
+                    f"{f.name}: supported types here are "
+                    + ", ".join(e.lstrip(".").upper() for e in allowed_doc_ext())
+                    + "."
+                )
             doc = EnvelopeDocument.objects.create(
                 envelope=envelope, file=f, name=f.name[:200], order=order
             )
-            doc.page_count = pdf_page_count(doc.file)
+            # Convert now, once — never on the signer's request.
+            doc.page_count = pdf_page_count(doc)
             doc.save(update_fields=["page_count"])
-            log_event(envelope, "document_added", request=request, actor=request.user, note=doc.name)
+            log_event(
+                envelope,
+                "document_added",
+                request=request,
+                actor=request.user,
+                note=f"{doc.name}"
+                + (" (converted to PDF)" if doc.was_converted else ""),
+            )
 
         for order, p in enumerate(parsed, start=1):
             matched = User.objects.filter(agency=agency, email__iexact=p["email"]).first()
@@ -341,7 +368,7 @@ def esign_prepare(request, pk):
                 "id": d.id,
                 "name": str(d),
                 "page_count": d.page_count or 1,
-                "sizes": pdf_page_sizes(d.file),
+                "sizes": pdf_page_sizes(d),
                 "url": reverse("accounts:esign_document_file", args=[envelope.pk, d.id]),
             }
         )
@@ -585,10 +612,32 @@ def esign_download(request, pk, kind):
 
 
 def _pdf_response(doc, filename):
+    """Serve a document as PDF. Failures return a readable reason, not a bare 404."""
     try:
-        raw = ensure_pdf_bytes(doc.file)
-    except Exception:
-        raise Http404("Document unavailable.")
+        raw = document_pdf_bytes(doc)
+    except ValueError as exc:
+        # Conversion refused the file (unsupported type, no converter installed)
+        logger.warning("eSign: cannot render document %s: %s", doc.pk, exc)
+        return HttpResponse(str(exc), status=415, content_type="text/plain")
+    except FileNotFoundError:
+        logger.error("eSign: file missing on disk for document %s (%s)", doc.pk, doc.file)
+        return HttpResponse(
+            "The stored file is missing from the media volume.",
+            status=404,
+            content_type="text/plain",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("eSign: unexpected error rendering document %s", doc.pk)
+        return HttpResponse(
+            f"The document could not be prepared: {type(exc).__name__}: {exc}",
+            status=500,
+            content_type="text/plain",
+        )
+
+    if not raw or raw[:5] != b"%PDF-":
+        return HttpResponse(
+            "The stored file is not a valid PDF.", status=422, content_type="text/plain"
+        )
     resp = FileResponse(io.BytesIO(raw), content_type="application/pdf")
     resp["Content-Disposition"] = f'inline; filename="{filename}"'
     resp["X-Content-Type-Options"] = "nosniff"

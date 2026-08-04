@@ -96,17 +96,15 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+{% include "accounts/esign/_pdf_loader.html" %}
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
 const DOCS = {{ documents_json|safe }};
 
 (async function () {
   const host = document.getElementById('rvPages');
   try {
     for (const doc of DOCS) {
-      const pdf = await pdfjsLib.getDocument(doc.url).promise;
+      const pdf = await EsignPdf.load(doc.url);
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const base = page.getViewport({scale:1});
@@ -121,8 +119,12 @@ const DOCS = {{ documents_json|safe }};
       }
       if (DOCS.length && "{{ envelope.status }}" === "completed") break; // completed = single merged PDF
     }
-  } catch (e) { console.error(e); }
-  document.getElementById('rvLoading').remove();
+  } catch (e) {
+    const box = document.getElementById('rvLoading');
+    if (box) { EsignPdf.showError(box, e, (DOCS[0] || {}).url); return; }
+  }
+  const box = document.getElementById('rvLoading');
+  if (box) box.remove();
 })();
 </script>
 {% endblock %}

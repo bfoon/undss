@@ -77,11 +77,28 @@
           <div class="es-drop" id="esDrop">
             <i class="bi bi-cloud-arrow-up fs-2 text-primary"></i>
             <div class="fw-semibold mt-1">Drop files here or click to browse</div>
-            <div class="small text-muted">PDF, PNG or JPG · up to 25 MB each · multiple files allowed</div>
+            <div class="small text-muted">
+              PDF{% if office_ext %}, {{ office_ext }}{% endif %} or an image ·
+              up to 25 MB each · multiple files allowed
+            </div>
             <input type="file" name="documents" id="esFiles" class="d-none" multiple
-                   accept=".pdf,.png,.jpg,.jpeg">
+                   accept="{{ accept_attr }}">
           </div>
           <div id="esFileList" class="mt-2"></div>
+
+          {% if converter_ok %}
+            <div class="small text-muted mt-2">
+              <i class="bi bi-arrow-repeat me-1 text-success"></i>
+              Office files ({{ office_ext }}) are converted to PDF automatically on upload —
+              the signed copy is always a PDF. The original upload is kept unchanged.
+            </div>
+          {% else %}
+            <div class="alert alert-warning small mt-2 mb-0">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              <b>Office conversion is unavailable</b> — only PDF and image uploads will work right now.
+              <div class="text-muted mt-1">{{ converter_note }}</div>
+            </div>
+          {% endif %}
         </div>
       </div>
 
@@ -202,7 +219,13 @@ function renderFiles() {
   Array.from(input.files).forEach(f => {
     const chip = document.createElement('span');
     chip.className = 'es-filechip';
-    chip.innerHTML = '<i class="bi bi-file-earmark-pdf"></i>' + f.name +
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    const icon = ext === 'pdf' ? 'bi-file-earmark-pdf'
+      : ['doc','docx','odt','rtf','txt'].includes(ext) ? 'bi-file-earmark-word'
+      : ['xls','xlsx','ods','csv'].includes(ext) ? 'bi-file-earmark-excel'
+      : ['ppt','pptx','odp'].includes(ext) ? 'bi-file-earmark-slides'
+      : 'bi-file-earmark-image';
+    chip.innerHTML = '<i class="bi ' + icon + '"></i>' + f.name +
                      ' <span class="text-muted">(' + Math.round(f.size/1024) + ' KB)</span>';
     list.appendChild(chip);
   });

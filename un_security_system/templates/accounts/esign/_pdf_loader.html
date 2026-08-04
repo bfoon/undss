@@ -1,0 +1,155 @@
+{% comment %}
+Shared PDF.js bootstrap + diagnostic loader.
+
+Include ONCE per page, before any script that renders a document:
+    {% include "accounts/esign/_pdf_loader.html" %}
+
+Exposes window.EsignPdf:
+    await EsignPdf.ready()               – resolves when pdf.js is usable
+    await EsignPdf.load(url)             – returns a PDFDocumentProxy
+    EsignPdf.showError(el, err, url)     – renders an actionable error panel
+
+Why not just call pdfjsLib.getDocument(url)?
+  • getDocument(url) issues HTTP Range requests, which nginx/Django can answer
+    in ways pdf.js rejects. We fetch the bytes ourselves and hand over an
+    ArrayBuffer, which removes that whole class of failure.
+  • A plain fetch surfaces the real problem — 403, 404, a login redirect, or an
+    HTML error page — instead of collapsing everything into "could not render".
+  • If the worker script is blocked (CSP, offline, proxy) we retry with the
+    worker disabled rather than failing outright.
+
+Self-hosting: set ESIGN_PDFJS_BASE in settings.py to a static prefix, e.g.
+    ESIGN_PDFJS_BASE = "/static/vendor/pdfjs"
+and place pdf.min.js + pdf.worker.min.js there.
+{% endcomment %}
+
+<script>
+window.ESIGN_PDFJS_BASE = "{{ esign_pdfjs_base|default:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build' }}";
+</script>
+<script src="{{ esign_pdfjs_base|default:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build' }}/pdf.min.js"></script>
+
+<script>
+(function () {
+  const BASE = window.ESIGN_PDFJS_BASE;
+  let workerDisabled = false;
+
+  function libLoaded() {
+    return typeof window.pdfjsLib !== "undefined" && window.pdfjsLib.getDocument;
+  }
+
+  if (libLoaded()) {
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = BASE + "/pdf.worker.min.js";
+    } catch (e) { /* set below on retry */ }
+  }
+
+  async function ready() {
+    if (!libLoaded()) {
+      throw new Error(
+        "PDF.js did not load from " + BASE + ". If this server has no internet " +
+        "access, or a Content-Security-Policy blocks the CDN, host PDF.js " +
+        "locally and set ESIGN_PDFJS_BASE in settings.py."
+      );
+    }
+    return true;
+  }
+
+  async function fetchBytes(url) {
+    let res;
+    try {
+      res = await fetch(url, {
+        credentials: "same-origin",
+        headers: { "Accept": "application/pdf" },
+        redirect: "follow",
+      });
+    } catch (e) {
+      throw new Error("Network error fetching the document (" + e.message + ").");
+    }
+
+    if (res.redirected && /\/login/i.test(res.url)) {
+      throw new Error("Your session expired — the server redirected to the login page. Sign in again and reload.");
+    }
+    if (res.status === 403) {
+      throw new Error("HTTP 403 — you don't have permission to open this document.");
+    }
+    if (res.status === 404) {
+      throw new Error("HTTP 404 — the server has no file for this document. It may have failed to convert on upload.");
+    }
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const t = (await res.clone().text()).trim();
+        if (t && t.length < 300 && !/^\s*</.test(t)) detail = " — " + t;
+      } catch (e) { /* body already consumed or binary */ }
+      throw new Error("HTTP " + res.status + " " + res.statusText + detail);
+    }
+
+    const buf = await res.arrayBuffer();
+    if (!buf.byteLength) {
+      throw new Error("The server returned an empty file (0 bytes).");
+    }
+
+    const head = new TextDecoder("latin1").decode(new Uint8Array(buf.slice(0, 5)));
+    if (head !== "%PDF-") {
+      const ctype = res.headers.get("content-type") || "unknown type";
+      throw new Error(
+        "The server returned " + ctype + " (" + buf.byteLength + " bytes), not a PDF. " +
+        "Open the document link below to see what came back."
+      );
+    }
+    return buf;
+  }
+
+  async function load(url) {
+    await ready();
+    const data = await fetchBytes(url);
+
+    try {
+      return await pdfjsLib.getDocument({ data: data.slice(0) }).promise;
+    } catch (e) {
+      const msg = String(e && e.message || e);
+      // Worker blocked by CSP / offline / proxy → retry inline, once.
+      if (!workerDisabled && /worker|fake worker|importScripts|dynamically imported/i.test(msg)) {
+        workerDisabled = true;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+        pdfjsLib.disableWorker = true;
+        console.warn("[eSign] PDF.js worker unavailable — rendering on the main thread.");
+        return await pdfjsLib.getDocument({ data: data.slice(0), disableWorker: true }).promise;
+      }
+      if (/InvalidPDF|structure/i.test(msg)) {
+        throw new Error("This file is not a readable PDF (it may be corrupt or password-protected).");
+      }
+      if (/Password/i.test(msg)) {
+        throw new Error("This PDF is password-protected. Remove the password and upload it again.");
+      }
+      throw e;
+    }
+  }
+
+  function showError(container, err, url) {
+    const msg = (err && err.message) ? err.message : String(err);
+    console.error("[eSign] document render failed:", err);
+    container.innerHTML =
+      '<div class="alert alert-danger text-start mb-0">' +
+        '<div class="fw-semibold mb-1">' +
+          '<i class="bi bi-exclamation-triangle me-1"></i>The document could not be displayed' +
+        '</div>' +
+        '<div class="small mb-2">' + escapeHtml(msg) + '</div>' +
+        (url
+          ? '<a class="btn btn-sm btn-outline-danger" href="' + url + '" target="_blank" rel="noopener">' +
+            '<i class="bi bi-box-arrow-up-right me-1"></i>Open the file directly</a> ' +
+            '<span class="small text-muted ms-2">' +
+            'If it opens fine in a new tab, the problem is PDF.js loading, not the file.</span>'
+          : '') +
+      '</div>';
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  window.EsignPdf = { ready, load, showError, fetchBytes };
+})();
+</script>

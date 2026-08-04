@@ -204,11 +204,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+{% include "accounts/esign/_pdf_loader.html" %}
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-
 const DOCS   = {{ documents_json|safe }};
 const FIELDS = {{ fields_json|safe }};
 const OTHERS = {{ others_json|safe }};
@@ -228,7 +225,7 @@ const KIND_LABEL = {
 async function renderAll() {
   const host = document.getElementById('esPages');
   for (const doc of DOCS) {
-    const pdf = await pdfjsLib.getDocument(doc.url).promise;
+    const pdf = await EsignPdf.load(doc.url);
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);
       const base = page.getViewport({ scale: 1 });
@@ -455,9 +452,8 @@ document.getElementById('esForm').addEventListener('submit', () => {
 });
 
 renderAll().catch(err => {
-  console.error(err);
-  document.getElementById('esLoading').innerHTML =
-    '<div class="alert alert-danger">The document could not be displayed. Please contact the sender.</div>';
+  const box = document.getElementById('esLoading');
+  if (box) EsignPdf.showError(box, err, (DOCS[0] || {}).url);
 });
 </script>
 {% endblock %}

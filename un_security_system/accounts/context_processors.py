@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db.models import Q
 
 from .models import AgencyServiceConfig
@@ -51,4 +52,12 @@ def agency_service_flags(request):
         "asset_mgmt_enabled": enabled,
         "esign_enabled": esign_enabled,
         "esign_pending_count": pending,
+        # Where the eSign viewers load PDF.js from. Point this at a static
+        # folder (e.g. "/static/vendor/pdfjs") on a server without internet
+        # access or behind a strict Content-Security-Policy.
+        "esign_pdfjs_base": getattr(
+            settings,
+            "ESIGN_PDFJS_BASE",
+            "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build",
+        ),
     }
