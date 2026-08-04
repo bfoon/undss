@@ -32,6 +32,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from .converters_esign import ConversionError, convert_to_pdf, is_office_file
 from .models_esign import Envelope, EnvelopeEvent, EnvelopeRecipient, SignatureField
 
 UN_BLUE = colors.HexColor("#009EDB")
@@ -179,10 +180,17 @@ def _trim_transparent(img: Image.Image, pad: int = 6) -> Image.Image:
 # Document intake
 # ─────────────────────────────────────────────────────────────────────────────
 
-def ensure_pdf_bytes(django_file) -> bytes:
+def ensure_pdf_bytes(django_file, filename: str = "") -> bytes:
     """
-    Returns PDF bytes for a document. PDFs pass through; images are wrapped into
-    a single A4 page so the whole pipeline only ever deals with PDF.
+    Returns PDF bytes for any supported upload.
+
+      • PDF                     → passed through untouched
+      • PNG / JPG               → wrapped into a single A4 page by Pillow
+      • DOCX/DOC/ODT/XLSX/PPTX… → handed to headless LibreOffice by
+                                  converters_esign (optional — see INSTALL §10)
+
+    Prefer `document_pdf_bytes(doc)` on an EnvelopeDocument — it caches the
+    result so a document is only ever converted once.
     """
     django_file.seek(0)
     raw = django_file.read()
@@ -191,11 +199,20 @@ def ensure_pdf_bytes(django_file) -> bytes:
     if raw[:5] == b"%PDF-":
         return raw
 
+    name = filename or getattr(django_file, "name", "") or ""
+
+    if is_office_file(name):
+        try:
+            return convert_to_pdf(raw, name)
+        except ConversionError as exc:
+            raise ValueError(str(exc))
+
     try:
         img = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception:
         raise ValueError(
-            "Unsupported document type. Upload a PDF, or a PNG/JPG image."
+            "Unsupported document type. Upload a PDF, an Office document "
+            "(DOCX, XLSX, PPTX, ODT) or a PNG/JPG image."
         )
 
     buf = io.BytesIO()
@@ -214,18 +231,55 @@ def ensure_pdf_bytes(django_file) -> bytes:
     return buf.getvalue()
 
 
-def pdf_page_count(django_file) -> int:
+def document_pdf_bytes(doc, force: bool = False) -> bytes:
+    """
+    PDF bytes for an EnvelopeDocument, converting once and caching the result
+    in `doc.converted_pdf`. Every consumer (viewer, placement UI, stamping,
+    page counting) goes through here, so LibreOffice runs a single time per
+    uploaded file rather than on every request.
+    """
+    if doc.converted_pdf and not force:
+        try:
+            doc.converted_pdf.open("rb")
+            raw = doc.converted_pdf.read()
+            doc.converted_pdf.close()
+            if raw[:5] == b"%PDF-":
+                return raw
+        except Exception:
+            pass
+
+    raw = ensure_pdf_bytes(doc.file, filename=doc.name or "")
+
+    source_is_pdf = False
     try:
-        raw = ensure_pdf_bytes(django_file)
+        doc.file.seek(0)
+        source_is_pdf = doc.file.read(5) == b"%PDF-"
+        doc.file.seek(0)
+    except Exception:
+        pass
+
+    if not source_is_pdf:
+        try:
+            stem = (doc.name or "document").rsplit(".", 1)[0][:120]
+            doc.converted_pdf.save(f"{stem}.pdf", ContentFile(raw), save=True)
+        except Exception:
+            pass
+
+    return raw
+
+
+def pdf_page_count(doc_or_file) -> int:
+    try:
+        raw = _bytes_for(doc_or_file)
         return len(PdfReader(io.BytesIO(raw)).pages)
     except Exception:
         return 1
 
 
-def pdf_page_sizes(django_file):
+def pdf_page_sizes(doc_or_file):
     """Returns [(width_pt, height_pt), ...] used by the placement UI."""
     try:
-        raw = ensure_pdf_bytes(django_file)
+        raw = _bytes_for(doc_or_file)
         sizes = []
         for p in PdfReader(io.BytesIO(raw)).pages:
             box = p.mediabox
@@ -233,6 +287,13 @@ def pdf_page_sizes(django_file):
         return sizes
     except Exception:
         return [(float(A4[0]), float(A4[1]))]
+
+
+def _bytes_for(doc_or_file) -> bytes:
+    """Accepts either an EnvelopeDocument or a raw Django file."""
+    if hasattr(doc_or_file, "converted_pdf"):
+        return document_pdf_bytes(doc_or_file)
+    return ensure_pdf_bytes(doc_or_file)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -373,7 +434,7 @@ def build_final_pdf(envelope: Envelope) -> bytes:
     )
 
     for doc in envelope.documents.all():
-        raw = ensure_pdf_bytes(doc.file)
+        raw = document_pdf_bytes(doc)
         reader = PdfReader(io.BytesIO(raw))
 
         for page_index, page in enumerate(reader.pages, start=1):
