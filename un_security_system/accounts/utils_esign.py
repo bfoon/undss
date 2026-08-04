@@ -8,6 +8,7 @@ Requires: reportlab, pypdf, Pillow  (all already used elsewhere in the project)
 
 import base64
 import io
+import logging
 import re
 from datetime import timedelta
 
@@ -238,11 +239,12 @@ def document_pdf_bytes(doc, force: bool = False) -> bytes:
     page counting) goes through here, so LibreOffice runs a single time per
     uploaded file rather than on every request.
     """
-    if doc.converted_pdf and not force:
+    cached = getattr(doc, "converted_pdf", None)
+    if cached and not force:
         try:
-            doc.converted_pdf.open("rb")
-            raw = doc.converted_pdf.read()
-            doc.converted_pdf.close()
+            cached.open("rb")
+            raw = cached.read()
+            cached.close()
             if raw[:5] == b"%PDF-":
                 return raw
         except Exception:
@@ -258,12 +260,16 @@ def document_pdf_bytes(doc, force: bool = False) -> bytes:
     except Exception:
         pass
 
-    if not source_is_pdf:
+    if not source_is_pdf and hasattr(doc, "converted_pdf"):
         try:
             stem = (doc.name or "document").rsplit(".", 1)[0][:120]
             doc.converted_pdf.save(f"{stem}.pdf", ContentFile(raw), save=True)
         except Exception:
-            pass
+            # Cache write failed (missing column, read-only media). Not fatal —
+            # we already have the bytes; we just reconvert next time.
+            logging.getLogger(__name__).warning(
+                "eSign: could not cache converted PDF for document %s", getattr(doc, "pk", "?")
+            )
 
     return raw
 

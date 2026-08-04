@@ -22,7 +22,8 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.conf import settings
+from django.db import OperationalError, ProgrammingError, transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -39,7 +40,25 @@ from .models_esign import (
     SignatureField,
     SignatureProfile,
 )
-from .converters_esign import conversion_backend_available, supported_upload_ext
+try:
+    from .converters_esign import conversion_backend_available, supported_upload_ext
+except ImportError:  # older converters_esign.py — degrade instead of breaking the URLconf
+    import logging as _logging
+
+    _logging.getLogger(__name__).warning(
+        "accounts.converters_esign is out of date — Office uploads disabled. "
+        "Replace it with the current version to restore DOCX support."
+    )
+
+    def supported_upload_ext():
+        return ()
+
+    def conversion_backend_available():
+        return False, (
+            "accounts/converters_esign.py is an older version and does not "
+            "expose supported_upload_ext(). Replace the file to enable Office "
+            "uploads. PDF and image uploads are unaffected."
+        )
 from .utils_esign import (
     build_final_pdf,
     decode_signature_data_url,
@@ -316,7 +335,7 @@ def esign_new(request):
                 request=request,
                 actor=request.user,
                 note=f"{doc.name}"
-                + (" (converted to PDF)" if doc.was_converted else ""),
+                + (" (converted to PDF)" if getattr(doc, "was_converted", False) else ""),
             )
 
         for order, p in enumerate(parsed, start=1):
@@ -340,10 +359,33 @@ def esign_new(request):
             note=f"Envelope created with {len(files)} document(s) and {len(parsed)} recipient(s).",
         )
     except ValueError as exc:
+        # Expected, actionable problems: unsupported type, oversize, no converter
         messages.error(request, str(exc))
         return redirect(request.get_full_path())
-    except Exception:
-        messages.error(request, "The envelope could not be created. Please check the files and try again.")
+
+    except (ProgrammingError, OperationalError) as exc:
+        # Almost always a missing migration for the eSign tables/columns
+        logger.exception("eSign: database schema error creating envelope")
+        first = str(exc).strip().splitlines()[0][:200]
+        messages.error(
+            request,
+            "The eSign database schema is out of date. Run "
+            "`python manage.py makemigrations accounts && python manage.py migrate` "
+            f"and try again. Database said: {first}",
+        )
+        return redirect(request.get_full_path())
+
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("eSign: envelope creation failed")
+        detail = f"{type(exc).__name__}: {exc}"[:300]
+        if settings.DEBUG or request.user.is_superuser or request.user.is_staff:
+            messages.error(request, f"The envelope could not be created — {detail}")
+        else:
+            messages.error(
+                request,
+                "The envelope could not be created. The error has been logged — "
+                "please ask ICT to check the server log.",
+            )
         return redirect(request.get_full_path())
 
     messages.success(request, "Draft created. Now place the fields on the document.")
