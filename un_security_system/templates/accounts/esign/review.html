@@ -3,8 +3,11 @@
 
 {% block extra_css %}
 <style>
-  .rv-page{ position:relative; margin:0 auto 1.1rem; background:#fff; box-shadow:0 4px 18px rgba(15,23,42,.14); }
-  .rv-page canvas{ display:block; width:100%; height:auto; }
+  .rv-page{ margin:0 auto 1.1rem; background:#fff; box-shadow:0 4px 18px rgba(15,23,42,.14); }
+  .rv-pane{ height:calc(100vh - 210px); min-height:380px; overflow:auto;
+            background:#E9EEF3; border:1px solid #E5E7EB; border-radius:14px;
+            padding:1rem 1rem 2rem; }
+  @media (max-width: 991px){ .rv-pane{ height:70vh; } }
   .rv-tl{ position:relative; padding-left:1.4rem; }
   .rv-tl::before{ content:''; position:absolute; left:.45rem; top:.2rem; bottom:.2rem; width:2px; background:#E5E7EB; }
   .rv-ev{ position:relative; padding:.35rem 0; font-size:.82rem; }
@@ -48,9 +51,11 @@
 
   <div class="row g-3">
     <div class="col-lg-8">
-      <div id="rvPages"></div>
-      <div class="text-center text-muted small py-3" id="rvLoading">
-        <div class="spinner-border spinner-border-sm me-2"></div> Loading document…
+      <div class="rv-pane" id="rvPane">
+        <div id="rvPages"></div>
+        <div class="text-center text-muted small py-3" id="rvLoading">
+          <div class="spinner-border spinner-border-sm me-2"></div> Loading document…
+        </div>
       </div>
     </div>
 
@@ -101,30 +106,30 @@
 const DOCS = {{ documents_json|safe }};
 
 (async function () {
+  const pane = document.getElementById('rvPane');
   const host = document.getElementById('rvPages');
+
   try {
+    const viewer = EsignPdf.createViewer({
+      pane: pane,
+      host: host,
+      pageClass: 'rv-page',
+      maxWidth: 900,
+    });
+
     for (const doc of DOCS) {
-      const pdf = await EsignPdf.load(doc.url);
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const base = page.getViewport({scale:1});
-        const maxW = Math.min(host.clientWidth, 900);
-        const vp = page.getViewport({scale: maxW / base.width});
-        const wrap = document.createElement('div');
-        wrap.className = 'rv-page'; wrap.style.width = vp.width + 'px';
-        const c = document.createElement('canvas');
-        c.width = vp.width; c.height = vp.height;
-        wrap.appendChild(c); host.appendChild(wrap);
-        await page.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
-      }
-      if (DOCS.length && "{{ envelope.status }}" === "completed") break; // completed = single merged PDF
+      viewer.addDocument(await EsignPdf.load(doc), doc.id);
     }
+
+    const loading = document.getElementById('rvLoading');
+    if (loading) loading.remove();
+
+    await viewer.draw();
+    viewer.mountToolbar(pane);
   } catch (e) {
     const box = document.getElementById('rvLoading');
-    if (box) { EsignPdf.showError(box, e, (DOCS[0] || {}).url); return; }
+    if (box) EsignPdf.showError(box, e, (DOCS[0] || {}).url);
   }
-  const box = document.getElementById('rvLoading');
-  if (box) box.remove();
 })();
 </script>
 {% endblock %}

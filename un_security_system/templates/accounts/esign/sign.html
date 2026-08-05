@@ -8,10 +8,10 @@
   .es-side{ width:330px; background:#fff; border-left:1px solid #E5E7EB; overflow:auto; }
   @media (max-width: 991px){
     .es-shell{ flex-direction:column; height:auto; }
+    .es-viewer{ height:62vh; }
     .es-side{ width:100%; border-left:0; border-top:1px solid #E5E7EB; }
   }
-  .es-page{ position:relative; margin:0 auto 1.25rem; box-shadow:0 4px 18px rgba(15,23,42,.14); background:#fff; }
-  .es-page canvas{ display:block; width:100%; height:auto; }
+  .es-page{ margin:0 auto 1.25rem; box-shadow:0 4px 18px rgba(15,23,42,.14); background:#fff; }
   .es-field{
     position:absolute; border:2px dashed #F59E0B; background:rgba(245,158,11,.12);
     border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -222,37 +222,40 @@ const KIND_LABEL = {
 };
 
 // ── render documents ────────────────────────────────────────────
+let viewer = null;
+
+function decoratePage(wrap, docId, pageNo) {
+  const stamp = document.createElement('div');
+  stamp.className = 'es-doc-stamp';
+  stamp.textContent = 'Envelope ID: ' + ENVELOPE_ID;
+  wrap.appendChild(stamp);
+
+  // Runs again after every zoom/resize redraw; values[] keeps what's filled in.
+  placeFields(wrap, docId, pageNo);
+}
+
 async function renderAll() {
+  const pane = document.getElementById('esViewer');
   const host = document.getElementById('esPages');
+
+  viewer = EsignPdf.createViewer({
+    pane: pane,
+    host: host,
+    pageClass: 'es-page',
+    maxWidth: 960,
+    onPage: decoratePage,
+  });
+
   for (const doc of DOCS) {
-    const pdf = await EsignPdf.load(doc.url);
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const base = page.getViewport({ scale: 1 });
-      const maxW = Math.min(document.getElementById('esViewer').clientWidth - 40, 960);
-      const viewport = page.getViewport({ scale: maxW / base.width });
-
-      const wrap = document.createElement('div');
-      wrap.className = 'es-page';
-      wrap.style.width = viewport.width + 'px';
-      wrap.dataset.doc = doc.id; wrap.dataset.page = p;
-
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width; canvas.height = viewport.height;
-      wrap.appendChild(canvas);
-
-      const stamp = document.createElement('div');
-      stamp.className = 'es-doc-stamp';
-      stamp.textContent = 'Envelope ID: ' + ENVELOPE_ID;
-      wrap.appendChild(stamp);
-
-      host.appendChild(wrap);
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-
-      placeFields(wrap, doc.id, p);
-    }
+    viewer.addDocument(await EsignPdf.load(doc), doc.id);
   }
-  document.getElementById('esLoading').remove();
+
+  const loading = document.getElementById('esLoading');
+  if (loading) loading.remove();
+
+  await viewer.draw();
+  viewer.mountToolbar(pane);
+
   buildOrder();
   updateProgress();
 }
@@ -311,7 +314,7 @@ function activateField(f, el) {
   if (f.kind === 'signature' || f.kind === 'initials') {
     const ready = f.kind === 'initials' ? adopted.initials : adopted.signature;
     if (ready) { values[f.id] = ready; paintField(el, f); afterFill(f); return; }
-    EsignPad.open({
+    openPad({
       mode: f.kind === 'initials' ? 'initials' : 'signature',
       onAdopt: (dataUrl, meta) => {
         adopted.signature = meta.signature || dataUrl;
@@ -353,6 +356,7 @@ function activateField(f, el) {
 }
 
 function afterFill(f) {
+  buildOrder();
   updateProgress();
   const idx = orderedFields.findIndex(x => x.id === f.id);
   if (idx >= 0) cursor = idx;
@@ -407,7 +411,16 @@ function updateProgress() {
 // ── buttons ────────────────────────────────────────────────────
 document.getElementById('esStart').onclick = nextField;
 
-document.getElementById('esAdoptFirst').onclick = () => EsignPad.open({
+function openPad(opts) {
+  if (!window.EsignPad || typeof EsignPad.open !== 'function') {
+    alert('The signature tool failed to load. Please refresh the page.');
+    console.error('[eSign] EsignPad is not available — check for a script error above.');
+    return;
+  }
+  EsignPad.open(opts);
+}
+
+document.getElementById('esAdoptFirst').onclick = () => openPad({
   mode: 'signature',
   onAdopt: (dataUrl, meta) => {
     adopted.signature = meta.signature || dataUrl;

@@ -155,6 +155,11 @@ Exposes window.EsignPad:
 </div>
 
 <script>
+window.EsignPad = window.EsignPad || {
+  lastSignature: '', lastInitials: '',
+  open: function () { alert('The signature tool is still loading — please try again in a moment.'); }
+};
+
 (function () {
   const W = 900, H = 260;          // export canvas size
   let mode = 'signature';
@@ -166,13 +171,52 @@ Exposes window.EsignPad:
   let activeTab = 'type';
 
   const modalEl   = document.getElementById('esignPadModal');
-  const bsModal   = new bootstrap.Modal(modalEl);
   const nameInput = document.getElementById('esTypeName');
   const initInput = document.getElementById('esTypeInitials');
   const previewImg   = document.getElementById('esPadPreviewImg');
   const initialsImg  = document.getElementById('esPadInitialsImg');
   const canvas    = document.getElementById('esDrawCanvas');
   const ctx       = canvas.getContext('2d');
+
+  // Bootstrap's JS loads at the END of the public base template, i.e. AFTER
+  // this include. Resolving the modal lazily means this script can never throw
+  // at parse time — which would leave window.EsignPad undefined and every
+  // "Set up my signature" click dead.
+  let bsModal = null;
+  let manualBackdrop = null;
+
+  function getModal() {
+    if (bsModal) return bsModal;
+    if (window.bootstrap && window.bootstrap.Modal) {
+      bsModal = new window.bootstrap.Modal(modalEl);
+    }
+    return bsModal;
+  }
+
+  function showModal() {
+    const m = getModal();
+    if (m) { m.show(); return; }
+    // Bootstrap genuinely unavailable — drive the modal by hand.
+    modalEl.classList.add('show');
+    modalEl.style.display = 'block';
+    modalEl.removeAttribute('aria-hidden');
+    document.body.classList.add('modal-open');
+    manualBackdrop = document.createElement('div');
+    manualBackdrop.className = 'modal-backdrop fade show';
+    document.body.appendChild(manualBackdrop);
+    modalEl.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => {
+      b.addEventListener('click', hideModal, { once: true });
+    });
+  }
+
+  function hideModal() {
+    const m = getModal();
+    if (m) { m.hide(); return; }
+    modalEl.classList.remove('show');
+    modalEl.style.display = 'none';
+    document.body.classList.remove('modal-open');
+    if (manualBackdrop) { manualBackdrop.remove(); manualBackdrop = null; }
+  }
 
   let fontCss = document.querySelector('.es-font-card.active')?.dataset.fontCss || "'Dancing Script', cursive";
   let fontKey = document.querySelector('.es-font-card.active')?.dataset.fontKey || 'dancing';
@@ -327,7 +371,7 @@ Exposes window.EsignPad:
       save: document.getElementById('esSaveToAccount').checked
     };
     if (typeof onAdopt === 'function') onAdopt(data, meta);
-    bsModal.hide();
+    hideModal();
   };
 
   window.EsignPad = {
@@ -339,7 +383,7 @@ Exposes window.EsignPad:
       document.getElementById('esPadTitle').textContent =
         mode === 'initials' ? 'Adopt your initials' : 'Adopt your signature';
       document.getElementById('esSaveWrap').style.display = opts.allowSave === false ? 'none' : '';
-      bsModal.show();
+      showModal();
       setTimeout(() => { if (activeTab === 'draw') sizeCanvas(); refresh(); }, 250);
     }
   };

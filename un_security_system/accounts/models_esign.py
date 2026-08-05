@@ -32,6 +32,7 @@ __all__ = [
     "EnvelopeEvent",
     "esign_signature_upload_to",
     "esign_document_upload_to",
+    "esign_converted_upload_to",
     "esign_completed_upload_to",
 ]
 
@@ -58,6 +59,12 @@ def esign_document_upload_to(instance, filename):
     env = getattr(instance, "envelope", None)
     eid = getattr(env, "envelope_id", "unassigned")
     return f"esign/envelopes/{eid}/source/{filename}"
+
+
+def esign_converted_upload_to(instance, filename):
+    env = getattr(instance, "envelope", None)
+    eid = getattr(env, "envelope_id", "unassigned")
+    return f"esign/envelopes/{eid}/converted/{filename}"
 
 
 def esign_completed_upload_to(instance, filename):
@@ -275,6 +282,13 @@ class EnvelopeDocument(models.Model):
         Envelope, on_delete=models.CASCADE, related_name="documents"
     )
     file = models.FileField(upload_to=esign_document_upload_to)
+    # Cached PDF produced from DOCX/XLSX/PPTX/images. utils_esign.document_pdf_bytes()
+    # already reads and writes this field; it was missing from the model.
+    converted_pdf = models.FileField(
+        upload_to=esign_converted_upload_to,
+        blank=True,
+        null=True,
+    )
     name = models.CharField(max_length=200, blank=True, default="")
     order = models.PositiveSmallIntegerField(default=0)
     page_count = models.PositiveSmallIntegerField(default=0)
@@ -285,6 +299,10 @@ class EnvelopeDocument(models.Model):
 
     def __str__(self):
         return self.name or (self.file.name.rsplit("/", 1)[-1] if self.file else "Document")
+
+    @property
+    def was_converted(self):
+        return bool(self.converted_pdf)
 
 
 class EnvelopeRecipient(models.Model):

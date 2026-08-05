@@ -14,6 +14,7 @@ esign_document_file / esign_download
 esign_signatures (+ save/delete/default)
 """
 
+import base64
 import io
 import json
 import logging
@@ -22,6 +23,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.core.files.base import ContentFile
 from django.conf import settings
 from django.db import OperationalError, ProgrammingError, transaction
 from django.db.models import Q
@@ -98,6 +100,47 @@ ESIGN_FONTS = [
 # ─────────────────────────────────────────────────────────────────────────────
 # Guards
 # ─────────────────────────────────────────────────────────────────────────────
+
+#: Documents at or under this size are embedded in the page as base64 so the
+#: browser never makes a second request for them. Set ESIGN_INLINE_MAX_BYTES=0
+#: to disable and always fetch by URL.
+def _inline_limit() -> int:
+    return int(getattr(settings, "ESIGN_INLINE_MAX_BYTES", 8 * 1024 * 1024))
+
+
+def _document_payload(doc, url, raw=None):
+    """
+    Build the JSON entry the viewers consume. Includes the PDF bytes inline
+    when they're small enough — that removes the separate HTTP request, which
+    is the single most fragile part of rendering (CSP connect-src, proxies,
+    browser extensions, aborted streaming responses).
+    """
+    entry = {
+        "id": doc.id,
+        "name": str(doc),
+        "page_count": doc.page_count or 1,
+        "url": url,
+    }
+
+    limit = _inline_limit()
+    if limit <= 0:
+        return entry
+
+    try:
+        if raw is None:
+            raw = document_pdf_bytes(doc)
+        if raw and raw[:5] == b"%PDF-" and len(raw) <= limit:
+            entry["data"] = base64.b64encode(raw).decode("ascii")
+        elif raw:
+            logger.info(
+                "eSign: document %s is %d bytes — above the inline limit, "
+                "the viewer will fetch it by URL.", doc.pk, len(raw)
+            )
+    except Exception:
+        logger.exception("eSign: could not inline document %s", getattr(doc, "pk", "?"))
+
+    return entry
+
 
 def _agency_or_redirect(request):
     agency = getattr(request.user, "agency", None)
@@ -405,15 +448,11 @@ def esign_prepare(request, pk):
 
     documents = []
     for d in envelope.documents.all():
-        documents.append(
-            {
-                "id": d.id,
-                "name": str(d),
-                "page_count": d.page_count or 1,
-                "sizes": pdf_page_sizes(d),
-                "url": reverse("accounts:esign_document_file", args=[envelope.pk, d.id]),
-            }
+        entry = _document_payload(
+            d, reverse("accounts:esign_document_file", args=[envelope.pk, d.id])
         )
+        entry["sizes"] = pdf_page_sizes(d)
+        documents.append(entry)
 
     signers = list(envelope.signers().values("id", "name", "email", "role", "order"))
     existing = list(
@@ -422,11 +461,15 @@ def esign_prepare(request, pk):
         )
     )
 
+    from .converters_esign import conversion_backend_available as _cba
+
     return render(
         request,
         "accounts/esign/envelope_prepare.html",
         {
             "envelope": envelope,
+            "accept_attr": ",".join(allowed_doc_ext()),
+            "converter_ok": _cba()[0],
             "documents_json": json.dumps(documents),
             "signers_json": json.dumps(signers, default=str),
             "fields_json": json.dumps(existing, default=str),
@@ -491,6 +534,212 @@ def _clamp(v, lo=0.0, hi=1.0):
         return max(lo, min(hi, float(v)))
     except Exception:
         return lo
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Document page editing (draft only): rotate, delete, reorder, add, remove
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _rotate_field_coords(f, deg):
+    """
+    Rotate a field's normalised box to follow a page rotation.
+
+    Coordinates are fractions of the page with the origin at the top-left,
+    x running right and y running down. Rotating the page clockwise moves the
+    box and swaps its width and height.
+    """
+    deg = deg % 360
+    if deg == 0:
+        return
+
+    x, y, w, h = f.x, f.y, f.w, f.h
+    if deg == 90:
+        f.x, f.y, f.w, f.h = 1.0 - (y + h), x, h, w
+    elif deg == 180:
+        f.x, f.y = 1.0 - (x + w), 1.0 - (y + h)
+    elif deg == 270:
+        f.x, f.y, f.w, f.h = y, 1.0 - (x + w), h, w
+
+    f.x = max(0.0, min(1.0, f.x))
+    f.y = max(0.0, min(1.0, f.y))
+
+
+def _editable_draft(request, pk):
+    envelope = _get_envelope_for_user(request, pk, editable=True)
+    if envelope.status != Envelope.STATUS_DRAFT:
+        raise PermissionDenied("Documents can only be edited while the envelope is a draft.")
+    return envelope
+
+
+@login_required
+@require_POST
+def esign_document_pages(request, pk, doc_id):
+    """
+    Apply a whole page plan to one document in a single atomic operation.
+
+    Body: {"pages": [{"src": 0, "rotate": 90}, {"src": 2, "rotate": 0}, ...]}
+
+    `src` is the zero-based page index in the document as it stands now. Pages
+    left out of the list are deleted; the order of the list becomes the new page
+    order. Signature fields follow their page — fields on a deleted page are
+    removed, and rotated pages carry their fields around with them.
+    """
+    from pypdf import PdfReader, PdfWriter
+
+    envelope = _editable_draft(request, pk)
+    doc = get_object_or_404(EnvelopeDocument, pk=doc_id, envelope=envelope)
+
+    try:
+        plan = json.loads(request.body.decode("utf-8")).get("pages", [])
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Malformed payload."}, status=400)
+
+    if not isinstance(plan, list) or not plan:
+        return JsonResponse(
+            {"ok": False, "error": "A document must keep at least one page."}, status=400
+        )
+
+    try:
+        raw = document_pdf_bytes(doc)
+        reader = PdfReader(io.BytesIO(raw))
+    except Exception as exc:
+        logger.exception("eSign: cannot read document %s for editing", doc.pk)
+        return JsonResponse({"ok": False, "error": str(exc)}, status=500)
+
+    total = len(reader.pages)
+    writer = PdfWriter()
+
+    # src page index (0-based) -> new page number (1-based), plus its rotation
+    mapping = {}
+    for new_index, entry in enumerate(plan, start=1):
+        try:
+            src = int(entry.get("src"))
+            rotate = int(entry.get("rotate") or 0) % 360
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "error": "Invalid page entry."}, status=400)
+
+        if src < 0 or src >= total:
+            return JsonResponse(
+                {"ok": False, "error": f"Page {src + 1} does not exist."}, status=400
+            )
+        if rotate not in (0, 90, 180, 270):
+            return JsonResponse({"ok": False, "error": "Rotation must be 0/90/180/270."}, status=400)
+
+        page = reader.pages[src]
+        if rotate:
+            page.rotate(rotate)
+        writer.add_page(page)
+        mapping.setdefault(src, (new_index, rotate))
+
+    out = io.BytesIO()
+    writer.write(out)
+    new_bytes = out.getvalue()
+
+    with transaction.atomic():
+        stem = (doc.name or "document").rsplit(".", 1)[0][:120]
+        doc.converted_pdf.save(f"{stem}.pdf", ContentFile(new_bytes), save=False)
+        doc.page_count = len(plan)
+        doc.save(update_fields=["converted_pdf", "page_count"])
+
+        removed = 0
+        for f in list(doc.fields.all()):
+            entry = mapping.get(f.page - 1)
+            if entry is None:
+                f.delete()
+                removed += 1
+                continue
+            new_page, rotate = entry
+            f.page = new_page
+            _rotate_field_coords(f, rotate)
+            f.save(update_fields=["page", "x", "y", "w", "h"])
+
+    log_event(
+        envelope,
+        "document_added",
+        request=request,
+        actor=request.user,
+        note=(
+            f"Pages edited on {doc}: {total} → {len(plan)} page(s)"
+            + (f", {removed} field(s) removed with deleted pages" if removed else "")
+        ),
+    )
+
+    return JsonResponse({"ok": True, "page_count": len(plan), "fields_removed": removed})
+
+
+@login_required
+@require_POST
+def esign_document_add(request, pk):
+    """Append more documents to a draft envelope."""
+    envelope = _editable_draft(request, pk)
+
+    files = request.FILES.getlist("documents")
+    if not files:
+        messages.error(request, "Choose at least one file to add.")
+        return redirect("accounts:esign_prepare", pk=envelope.pk)
+
+    start = (envelope.documents.count() or 0)
+    added = 0
+
+    for offset, f in enumerate(files):
+        if f.size > MAX_DOC_BYTES:
+            messages.error(request, f"{f.name} is larger than 25 MB.")
+            continue
+        if not f.name.lower().endswith(allowed_doc_ext()):
+            messages.error(
+                request,
+                f"{f.name}: supported types here are "
+                + ", ".join(e.lstrip(".").upper() for e in allowed_doc_ext())
+                + ".",
+            )
+            continue
+        try:
+            doc = EnvelopeDocument.objects.create(
+                envelope=envelope, file=f, name=f.name[:200], order=start + offset
+            )
+            doc.page_count = pdf_page_count(doc)
+            doc.save(update_fields=["page_count"])
+            added += 1
+            log_event(
+                envelope, "document_added", request=request, actor=request.user,
+                note=f"Added {doc.name} ({doc.page_count} page(s))",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("eSign: failed to add document to envelope %s", envelope.pk)
+            messages.error(request, f"{f.name}: {exc}")
+
+    if added:
+        messages.success(request, f"{added} document(s) added.")
+    return redirect("accounts:esign_prepare", pk=envelope.pk)
+
+
+@login_required
+@require_POST
+def esign_document_remove(request, pk, doc_id):
+    """Remove a whole document (and its fields) from a draft envelope."""
+    envelope = _editable_draft(request, pk)
+    doc = get_object_or_404(EnvelopeDocument, pk=doc_id, envelope=envelope)
+
+    if envelope.documents.count() <= 1:
+        messages.error(request, "An envelope must keep at least one document.")
+        return redirect("accounts:esign_prepare", pk=envelope.pk)
+
+    name = str(doc)
+    field_count = doc.fields.count()
+    doc.delete()
+
+    for order, d in enumerate(envelope.documents.all()):
+        if d.order != order:
+            d.order = order
+            d.save(update_fields=["order"])
+
+    log_event(
+        envelope, "document_added", request=request, actor=request.user,
+        note=f"Removed {name}" + (f" and {field_count} field(s) on it" if field_count else ""),
+    )
+    messages.success(request, f"Removed {name}.")
+    return redirect("accounts:esign_prepare", pk=envelope.pk)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -775,12 +1024,9 @@ def esign_sign(request, token):
         esign_notify.notify_sender_viewed(request, recipient)
 
     documents = [
-        {
-            "id": d.id,
-            "name": str(d),
-            "page_count": d.page_count or 1,
-            "url": reverse("accounts:esign_token_document", args=[token, d.id]),
-        }
+        _document_payload(
+            d, reverse("accounts:esign_token_document", args=[token, d.id])
+        )
         for d in envelope.documents.all()
     ]
     fields = list(
@@ -982,11 +1228,32 @@ def esign_review(request, token):
         log_event(envelope, "viewed", request=request, recipient=recipient,
                   note=f"{recipient.name} ({recipient.get_role_display()}) opened the document.")
 
-    documents = [
-        {"id": d.id, "name": str(d), "page_count": d.page_count or 1,
-         "url": reverse("accounts:esign_token_document", args=[token, d.id])}
-        for d in envelope.documents.all()
-    ]
+    documents = []
+    if envelope.status == Envelope.STATUS_COMPLETED and envelope.completed_pdf:
+        # One merged, stamped PDF replaces the individual source documents.
+        first = envelope.documents.first()
+        if first:
+            raw = None
+            try:
+                envelope.completed_pdf.open("rb")
+                raw = envelope.completed_pdf.read()
+                envelope.completed_pdf.close()
+            except Exception:
+                logger.exception("eSign: could not read completed PDF for %s", envelope.pk)
+            documents = [
+                _document_payload(
+                    first,
+                    reverse("accounts:esign_token_document", args=[token, first.id]),
+                    raw=raw,
+                )
+            ]
+    if not documents:
+        documents = [
+            _document_payload(
+                d, reverse("accounts:esign_token_document", args=[token, d.id])
+            )
+            for d in envelope.documents.all()
+        ]
 
     return render(
         request,

@@ -3,14 +3,52 @@
 
 {% block extra_css %}
 <style>
-  .ep-shell{ display:flex; gap:0; min-height:calc(100vh - 150px); border:1px solid #E5E7EB; border-radius:14px; overflow:hidden; }
-  .ep-tools{ width:250px; background:#fff; border-right:1px solid #E5E7EB; padding:1rem; }
-  .ep-canvas{ flex:1; background:#E9EEF3; overflow:auto; padding:1.25rem; }
+  .ep-shell{ display:flex; gap:0; height:calc(100vh - 172px); min-height:420px;
+             border:1px solid #E5E7EB; border-radius:14px; overflow:hidden; }
+  .ep-tools{ width:250px; flex:0 0 250px; background:#fff; border-right:1px solid #E5E7EB;
+             padding:1rem; overflow:auto; }
+  .ep-canvas{ flex:1; min-width:0; background:#E9EEF3; overflow:auto; padding:1rem 1.25rem 2rem; }
+  .ep-side{ width:236px; flex:0 0 236px; background:#fff; border-left:1px solid #E5E7EB;
+            display:flex; flex-direction:column; min-height:0; }
+  .ep-side-head{ padding:.7rem .8rem .5rem; border-bottom:1px solid #E5E7EB; }
+  .ep-thumbs{ flex:1; overflow:auto; padding:.7rem .6rem 1rem; }
+  .ep-doc-head{ font-size:.72rem; font-weight:700; color:var(--un-dark); text-transform:uppercase;
+                letter-spacing:.04em; margin:.5rem .2rem .4rem; display:flex; align-items:center; gap:.3rem; }
+  .ep-thumb{ position:relative; border:2px solid #E5E7EB; border-radius:8px; background:#fff;
+             margin-bottom:.55rem; overflow:hidden; cursor:pointer; transition:.12s; }
+  .ep-thumb:hover{ border-color:var(--un-blue); }
+  .ep-thumb.active{ border-color:var(--un-blue); box-shadow:0 0 0 3px rgba(0,158,219,.16); }
+  .ep-thumb.pending{ border-style:dashed; border-color:#F59E0B; }
+  .ep-thumb.removed{ opacity:.35; border-color:#EF4444; border-style:dashed; }
+  .ep-thumb-canvas{ display:flex; align-items:center; justify-content:center; padding:.3rem;
+                    min-height:70px; background:#F8FAFC; }
+  .ep-thumb-canvas canvas{ max-width:100%; height:auto !important; width:auto !important;
+                           box-shadow:0 1px 4px rgba(15,23,42,.14); transition:transform .15s ease; }
+  .ep-thumb-bar{ display:flex; align-items:center; gap:.05rem; padding:.15rem .25rem;
+                 border-top:1px solid #F1F5F9; background:#fff; }
+  .ep-thumb-no{ font-size:.68rem; color:#64748B; font-weight:700; min-width:18px; text-align:center; }
+  .ep-mini{ border:0; background:transparent; color:#64748B; padding:.1rem .22rem;
+            border-radius:5px; font-size:.72rem; line-height:1; cursor:pointer; }
+  .ep-mini:hover{ background:#EAF6FC; color:#005A8B; }
+  .ep-mini.danger:hover{ background:#FEE2E2; color:#B91C1C; }
+  .ep-mini:disabled{ opacity:.3; cursor:default; }
+  .ep-side-foot{ border-top:1px solid #E5E7EB; padding:.6rem; background:#F8FAFC; }
+  .ep-badge-dirty{ font-size:.68rem; background:#FEF3C7; color:#92400E;
+                   border-radius:999px; padding:.1rem .45rem; }
+  @media (max-width: 1199px){ .ep-side{ width:200px; flex:0 0 200px; } }
+  @media (max-width: 991px){
+    .ep-shell{ flex-direction:column; height:auto; }
+    .ep-tools{ width:100%; flex:0 0 auto; border-right:0; border-bottom:1px solid #E5E7EB; }
+    .ep-canvas{ height:60vh; }
+    .ep-side{ width:100%; flex:0 0 auto; border-left:0; border-top:1px solid #E5E7EB; max-height:44vh; }
+    .ep-thumbs{ display:flex; flex-wrap:wrap; gap:.5rem; }
+    .ep-thumb{ width:120px; }
+    .ep-doc-head{ width:100%; }
+  }
   .ep-tool{ border:1px solid #E5E7EB; border-radius:10px; padding:.5rem .65rem; margin-bottom:.4rem;
             cursor:grab; background:#fff; font-size:.85rem; display:flex; align-items:center; gap:.5rem; }
   .ep-tool:hover{ border-color:var(--un-blue); background:rgba(0,158,219,.05); }
-  .ep-page{ position:relative; margin:0 auto 1.25rem; background:#fff; box-shadow:0 4px 18px rgba(15,23,42,.14); }
-  .ep-page canvas{ display:block; width:100%; height:auto; }
+  .ep-page{ margin:0 auto 1.25rem; background:#fff; box-shadow:0 4px 18px rgba(15,23,42,.14); }
   .ep-fld{ position:absolute; border:2px solid #009EDB; background:rgba(0,158,219,.12); border-radius:6px;
            font-size:.7rem; font-weight:600; color:#005A8B; display:flex; align-items:center;
            justify-content:center; cursor:move; user-select:none; }
@@ -74,7 +112,43 @@
       <div class="spinner-border spinner-border-sm me-2"></div> Loading document…
     </div>
   </div>
+
+  <!-- right rail: page thumbnails + page tools -->
+  <div class="ep-side">
+    <div class="ep-side-head d-flex align-items-center gap-2">
+      <span class="small fw-bold text-un-primary"><i class="bi bi-files me-1"></i>Pages</span>
+      <span class="ep-badge-dirty d-none" id="epDirty">unsaved</span>
+      <div class="ms-auto btn-group btn-group-sm">
+        <button type="button" class="btn btn-outline-secondary py-0 px-2" id="epRotateAll"
+                title="Rotate every page 90° clockwise"><i class="bi bi-arrow-clockwise"></i></button>
+        <button type="button" class="btn btn-outline-secondary py-0 px-2" id="epUndo"
+                title="Discard unsaved page changes"><i class="bi bi-arrow-counterclockwise"></i></button>
+      </div>
+    </div>
+
+    <div class="ep-thumbs" id="epThumbs">
+      <div class="text-muted small text-center py-3">Loading pages…</div>
+    </div>
+
+    <div class="ep-side-foot d-grid gap-2">
+      <button type="button" class="btn btn-sm btn-un-primary" id="epApply" disabled>
+        <i class="bi bi-check2 me-1"></i> Apply page changes
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="epAddDocs">
+        <i class="bi bi-plus-lg me-1"></i> Add pages
+      </button>
+      <div class="text-muted" style="font-size:.68rem">
+        Rotating or deleting a page moves its fields with it. Deleted pages lose their fields.
+      </div>
+    </div>
+  </div>
 </div>
+
+<form method="post" action="{% url 'accounts:esign_document_add' envelope.pk %}"
+      enctype="multipart/form-data" id="epAddForm" class="d-none">
+  {% csrf_token %}
+  <input type="file" name="documents" id="epAddInput" multiple accept="{{ accept_attr }}">
+</form>
 {% endblock %}
 
 {% block extra_js %}
@@ -123,52 +197,285 @@ document.querySelectorAll('.ep-tool').forEach(t => {
   });
 });
 
+let viewer = null;
+const LOADED = [];
+
+function wirePage(wrap, docId, pageNo) {
+  wrap.addEventListener('dragover', e => e.preventDefault());
+  wrap.addEventListener('drop', e => {
+    e.preventDefault();
+    if (!dragKind) return;
+    const r = wrap.getBoundingClientRect();
+    const size = DEFAULT_SIZE[dragKind] || {w:.2,h:.04};
+    const f = {
+      id: nextTmpId--, document_id: docId, recipient_id: currentSigner(),
+      kind: dragKind, page: pageNo,
+      x: Math.max(0, (e.clientX - r.left) / r.width - size.w/2),
+      y: Math.max(0, (e.clientY - r.top) / r.height - size.h/2),
+      w: size.w, h: size.h, required: true, label: ''
+    };
+    fields.push(f);
+    drawField(wrap, f);
+    dragKind = null;
+    updateCounts();
+  });
+
+  // Re-attach existing fields — this runs again after every zoom/resize redraw.
+  fields.filter(f => f.document_id === docId && f.page === pageNo)
+        .forEach(f => drawField(wrap, f));
+}
+
 async function render() {
+  const pane = document.getElementById('epCanvas');
   const host = document.getElementById('epPages');
+
+  viewer = EsignPdf.createViewer({
+    pane: pane,
+    host: host,
+    pageClass: 'ep-page',
+    maxWidth: 900,
+    onPage: wirePage,
+  });
+
   for (const doc of DOCS) {
-    const pdf = await EsignPdf.load(doc.url);
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const base = page.getViewport({scale:1});
-      const maxW = Math.min(document.getElementById('epCanvas').clientWidth - 40, 900);
-      const viewport = page.getViewport({scale: maxW / base.width});
+    const pdf = await EsignPdf.load(doc);
+    LOADED.push({ id: doc.id, name: doc.name, pdf: pdf });
+    viewer.addDocument(pdf, doc.id);
+  }
 
-      const wrap = document.createElement('div');
-      wrap.className = 'ep-page';
-      wrap.style.width = viewport.width + 'px';
-      wrap.dataset.doc = doc.id; wrap.dataset.page = p;
+  const loading = document.getElementById('epLoading');
+  if (loading) loading.remove();
 
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width; canvas.height = viewport.height;
-      wrap.appendChild(canvas);
-      host.appendChild(wrap);
-      await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+  await viewer.draw();
+  viewer.mountToolbar(pane);
+  updateCounts();
+  await buildThumbs();
+}
 
-      wrap.addEventListener('dragover', e => e.preventDefault());
-      wrap.addEventListener('drop', e => {
-        e.preventDefault();
-        if (!dragKind) return;
-        const r = wrap.getBoundingClientRect();
-        const size = DEFAULT_SIZE[dragKind] || {w:.2,h:.04};
-        const f = {
-          id: nextTmpId--, document_id: doc.id, recipient_id: currentSigner(),
-          kind: dragKind, page: p,
-          x: Math.max(0, (e.clientX - r.left) / r.width - size.w/2),
-          y: Math.max(0, (e.clientY - r.top) / r.height - size.h/2),
-          w: size.w, h: size.h, required: true, label: ''
-        };
-        fields.push(f);
-        drawField(wrap, f);
-        dragKind = null;
-        updateCounts();
+/* ═══════════════════════════════════════════════════════════════════════════
+   Page tools — rotate / delete / reorder, staged locally then applied
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const PAGE_URL = "{% url 'accounts:esign_document_pages' envelope.pk 0 %}";
+let plans = {};   // docId -> [{src, rotate, removed}]
+let dirty = false;
+
+function pageUrlFor(docId) { return PAGE_URL.replace(/\/0\/pages\/$/, '/' + docId + '/pages/'); }
+
+function initPlans() {
+  plans = {};
+  LOADED.forEach(d => {
+    plans[d.id] = [];
+    for (let i = 0; i < d.pdf.numPages; i++) {
+      plans[d.id].push({ src: i, rotate: 0, removed: false });
+    }
+  });
+}
+
+function markDirty(state) {
+  dirty = state;
+  document.getElementById('epDirty').classList.toggle('d-none', !state);
+  document.getElementById('epApply').disabled = !state;
+}
+
+async function buildThumbs() {
+  const host = document.getElementById('epThumbs');
+  host.innerHTML = '';
+  initPlans();
+
+  for (const d of LOADED) {
+    if (LOADED.length > 1) {
+      const head = document.createElement('div');
+      head.className = 'ep-doc-head';
+      head.innerHTML = '<i class="bi bi-file-earmark-pdf"></i>' +
+        '<span class="text-truncate">' + (d.name || 'Document') + '</span>' +
+        (LOADED.length > 1
+          ? '<button type="button" class="ep-mini danger ms-auto" data-rmdoc="' + d.id +
+            '" title="Remove this document"><i class="bi bi-trash"></i></button>'
+          : '');
+      host.appendChild(head);
+    }
+
+    for (let p = 1; p <= d.pdf.numPages; p++) {
+      const page = await d.pdf.getPage(p);
+      const vp = page.getViewport({ scale: 1 });
+      const scale = 120 / vp.width;
+      const tvp = page.getViewport({ scale: scale });
+
+      const item = document.createElement('div');
+      item.className = 'ep-thumb';
+      item.dataset.doc = d.id;
+      item.dataset.index = p - 1;
+
+      const box = document.createElement('div');
+      box.className = 'ep-thumb-canvas';
+      const c = document.createElement('canvas');
+      c.width = tvp.width; c.height = tvp.height;
+      box.appendChild(c);
+      item.appendChild(box);
+
+      const bar = document.createElement('div');
+      bar.className = 'ep-thumb-bar';
+      bar.innerHTML =
+        '<span class="ep-thumb-no">' + p + '</span>' +
+        '<button type="button" class="ep-mini" data-act="ccw" title="Rotate left"><i class="bi bi-arrow-counterclockwise"></i></button>' +
+        '<button type="button" class="ep-mini" data-act="cw" title="Rotate right"><i class="bi bi-arrow-clockwise"></i></button>' +
+        '<button type="button" class="ep-mini" data-act="up" title="Move up"><i class="bi bi-chevron-up"></i></button>' +
+        '<button type="button" class="ep-mini" data-act="down" title="Move down"><i class="bi bi-chevron-down"></i></button>' +
+        '<button type="button" class="ep-mini danger ms-auto" data-act="del" title="Delete page"><i class="bi bi-trash"></i></button>';
+      item.appendChild(bar);
+
+      host.appendChild(item);
+      await page.render({ canvasContext: c.getContext('2d'), viewport: tvp }).promise;
+
+      item.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-act]');
+        if (!btn) { jumpToPage(d.id, item); return; }
+        e.stopPropagation();
+        applyOp(d.id, item, btn.dataset.act);
       });
-
-      fields.filter(f => f.document_id === doc.id && f.page === p)
-            .forEach(f => drawField(wrap, f));
     }
   }
-  document.getElementById('epLoading').remove();
-  updateCounts();
+
+  host.querySelectorAll('[data-rmdoc]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm('Remove this document and every field placed on it?')) return;
+      postForm("{% url 'accounts:esign_document_remove' envelope.pk 0 %}"
+                 .replace(/\/0\/remove\/$/, '/' + b.dataset.rmdoc + '/remove/'));
+    });
+  });
+
+  markDirty(false);
+  refreshThumbState();
+}
+
+function planFor(docId) { return plans[docId] || []; }
+
+function entryFor(docId, item) {
+  const idx = parseInt(item.dataset.index, 10);
+  return planFor(docId).find(e => e.src === idx);
+}
+
+function applyOp(docId, item, act) {
+  const plan = planFor(docId);
+  const entry = entryFor(docId, item);
+  if (!entry) return;
+  const pos = plan.indexOf(entry);
+
+  if (act === 'cw')       entry.rotate = (entry.rotate + 90) % 360;
+  else if (act === 'ccw') entry.rotate = (entry.rotate + 270) % 360;
+  else if (act === 'del') {
+    const alive = plan.filter(e => !e.removed).length;
+    if (!entry.removed && alive <= 1) {
+      alert('A document must keep at least one page. Remove the whole document instead.');
+      return;
+    }
+    entry.removed = !entry.removed;
+  }
+  else if (act === 'up' && pos > 0)                 plan.splice(pos - 1, 0, plan.splice(pos, 1)[0]);
+  else if (act === 'down' && pos < plan.length - 1) plan.splice(pos + 1, 0, plan.splice(pos, 1)[0]);
+
+  markDirty(true);
+  refreshThumbState();
+}
+
+function refreshThumbState() {
+  document.querySelectorAll('.ep-thumb').forEach(item => {
+    const docId = parseInt(item.dataset.doc, 10);
+    const entry = entryFor(docId, item);
+    if (!entry) return;
+    const canvas = item.querySelector('canvas');
+    if (canvas) canvas.style.transform = 'rotate(' + entry.rotate + 'deg)';
+    item.classList.toggle('removed', entry.removed);
+    item.classList.toggle('pending', !entry.removed && entry.rotate !== 0);
+  });
+
+  // renumber in the staged order
+  Object.keys(plans).forEach(docId => {
+    let n = 0;
+    planFor(docId).forEach(entry => {
+      const item = document.querySelector(
+        '.ep-thumb[data-doc="' + docId + '"][data-index="' + entry.src + '"]');
+      if (!item) return;
+      const label = item.querySelector('.ep-thumb-no');
+      if (entry.removed) { label.textContent = '—'; }
+      else { n += 1; label.textContent = n; }
+    });
+  });
+}
+
+function jumpToPage(docId, item) {
+  const idx = parseInt(item.dataset.index, 10);
+  let n = 0;
+  for (const d of LOADED) {
+    if (d.id === docId) { n += idx + 1; break; }
+    n += d.pdf.numPages;
+  }
+  document.querySelectorAll('.ep-thumb').forEach(t => t.classList.remove('active'));
+  item.classList.add('active');
+  if (viewer) viewer.goTo(n);
+}
+
+document.getElementById('epRotateAll').onclick = () => {
+  Object.keys(plans).forEach(docId =>
+    planFor(docId).forEach(e => { if (!e.removed) e.rotate = (e.rotate + 90) % 360; }));
+  markDirty(true);
+  refreshThumbState();
+};
+
+document.getElementById('epUndo').onclick = () => {
+  if (dirty && !confirm('Discard your unsaved page changes?')) return;
+  initPlans();
+  markDirty(false);
+  refreshThumbState();
+};
+
+document.getElementById('epApply').onclick = async () => {
+  const btn = document.getElementById('epApply');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Applying…';
+
+  try {
+    for (const d of LOADED) {
+      const pages = planFor(d.id)
+        .filter(e => !e.removed)
+        .map(e => ({ src: e.src, rotate: e.rotate }));
+
+      const unchanged = pages.length === d.pdf.numPages &&
+        pages.every((e, i) => e.src === i && e.rotate === 0);
+      if (unchanged) continue;
+
+      const res = await fetch(pageUrlFor(d.id), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ pages: pages })
+      });
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || 'Could not apply page changes.'); btn.disabled = false; return; }
+    }
+    // Field coordinates changed server-side — reload so everything is consistent.
+    location.reload();
+  } catch (err) {
+    alert('Could not apply page changes: ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check2 me-1"></i> Apply page changes';
+  }
+};
+
+document.getElementById('epAddDocs').onclick = () => document.getElementById('epAddInput').click();
+document.getElementById('epAddInput').addEventListener('change', () => {
+  if (document.getElementById('epAddInput').files.length) {
+    document.getElementById('epAddForm').submit();
+  }
+});
+
+function postForm(action) {
+  const f = document.createElement('form');
+  f.method = 'post'; f.action = action;
+  f.innerHTML = '<input type="hidden" name="csrfmiddlewaretoken" value="' + CSRF + '">';
+  document.body.appendChild(f);
+  f.submit();
 }
 
 function drawField(wrap, f) {
@@ -263,6 +570,10 @@ document.getElementById('epSendForm').addEventListener('submit', async (e) => {
   }
   const ok = await save(true);
   if (ok) e.target.submit();
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (dirty) { e.preventDefault(); e.returnValue = ''; }
 });
 
 render().catch(err => {

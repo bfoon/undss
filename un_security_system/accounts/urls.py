@@ -272,6 +272,9 @@ urlpatterns = [
     path("esign/<int:pk>/resend/<int:recipient_id>/", views_esign.esign_resend, name="esign_resend"),
     path("esign/<int:pk>/preview/", views_esign.esign_preview, name="esign_preview"),
     path("esign/<int:pk>/document/<int:doc_id>/", views_esign.esign_document_file, name="esign_document_file"),
+    path("esign/<int:pk>/document/<int:doc_id>/pages/", views_esign.esign_document_pages, name="esign_document_pages"),
+    path("esign/<int:pk>/document/<int:doc_id>/remove/", views_esign.esign_document_remove, name="esign_document_remove"),
+    path("esign/<int:pk>/documents/add/", views_esign.esign_document_add, name="esign_document_add"),
     path("esign/<int:pk>/download/<str:kind>/", views_esign.esign_download, name="esign_download"),
 
     # Saved signatures ("My signature" studio)
