@@ -36,6 +36,12 @@ from reportlab.platypus import (
 from .converters_esign import ConversionError, convert_to_pdf, is_office_file
 from .models_esign import Envelope, EnvelopeEvent, EnvelopeRecipient, SignatureField
 
+def esign_brand() -> str:
+    """Wordmark printed down the page border and in the certificate header.
+    Override with ESIGN_BRAND in settings.py (e.g. "UNDP SoftSign")."""
+    return getattr(settings, "ESIGN_BRAND", "UNDP eSign")
+
+
 UN_BLUE = colors.HexColor("#009EDB")
 UN_DARK = colors.HexColor("#005A8B")
 GREY = colors.HexColor("#6B7280")
@@ -146,16 +152,34 @@ def decode_signature_data_url(data_url: str, max_width: int = 900):
     return ContentFile(buf.getvalue())
 
 
-def _make_background_transparent(img: Image.Image, threshold: int = 238) -> Image.Image:
-    """Knock out a near-white background so scanned/photographed signatures blend in."""
+def _make_background_transparent(img: Image.Image) -> Image.Image:
+    """
+    Make the paper disappear so a signature sits on the document with no white
+    box behind it — the same result whether it was typed, drawn, or photographed.
+
+    Fully transparent above `cut`, fully opaque below `keep`, and a linear
+    alpha ramp between the two so edges feather instead of showing a hard
+    jagged outline. Tunable with ESIGN_SIGNATURE_CUT / _KEEP.
+    """
+    cut = int(getattr(settings, "ESIGN_SIGNATURE_CUT", 232))   # >= this -> gone
+    keep = int(getattr(settings, "ESIGN_SIGNATURE_KEEP", 150))  # <= this -> solid
+    span = max(1, cut - keep)
+
     try:
-        px = img.getdata()
+        px = list(img.getdata())
         out = []
         for r, g, b, a in px:
-            if a > 0 and r >= threshold and g >= threshold and b >= threshold:
+            if a == 0:
                 out.append((r, g, b, 0))
-            else:
+                continue
+            lum = (r * 299 + g * 587 + b * 114) // 1000
+            if lum >= cut:
+                out.append((r, g, b, 0))
+            elif lum <= keep:
                 out.append((r, g, b, a))
+            else:
+                ramp = int(a * (cut - lum) / span)
+                out.append((r, g, b, max(0, min(a, ramp))))
         img.putdata(out)
     except Exception:
         pass
@@ -274,6 +298,27 @@ def document_pdf_bytes(doc, force: bool = False) -> bytes:
     return raw
 
 
+def prepare_document(doc) -> int:
+    """
+    Convert an uploaded document to PDF NOW, cache it, and record the page count.
+
+    Deliberately lets failures propagate. `pdf_page_count` swallows errors and
+    returns 1, which meant a Word file that failed to convert still produced a
+    perfectly normal-looking envelope — and the first person to discover it was
+    the signer, staring at an error. Conversion problems belong to the sender,
+    at upload time, while they can still do something about them.
+    """
+    raw = document_pdf_bytes(doc)
+    if not raw or raw[:5] != b"%PDF-":
+        raise ValueError(
+            f"{doc.name or 'The document'} could not be converted to PDF."
+        )
+
+    doc.page_count = len(PdfReader(io.BytesIO(raw)).pages)
+    doc.save(update_fields=["page_count"])
+    return doc.page_count
+
+
 def pdf_page_count(doc_or_file) -> int:
     try:
         raw = _bytes_for(doc_or_file)
@@ -308,32 +353,35 @@ def _bytes_for(doc_or_file) -> bytes:
 
 def _draw_envelope_token(c, width, height, envelope):
     """
-    DocuSign-parity token marks:
-      • a light grey banner across the top of every page, and
-      • the full envelope ID printed vertically down the left margin.
+    Branded page marks, in the style DocuSign uses:
+      • the wordmark and full envelope ID printed vertically down the left
+        border of every page, and
+      • a light grey line across the top carrying the same ID.
     """
-    label = f"Envelope ID: {envelope.envelope_id}"
+    brand = esign_brand()
+    border_label = f"{brand} Envelope ID: {envelope.envelope_id}"
 
     c.saveState()
     c.setFont("Helvetica", 6.5)
     c.setFillColor(LIGHT)
-    c.drawString(12 * mm, height - 8 * mm, label)
-    c.drawRightString(
-        width - 12 * mm,
-        height - 8 * mm,
-        f"{getattr(settings, 'SITE_NAME', 'UN PASS')} eSign",
-    )
+    c.drawString(12 * mm, height - 8 * mm, f"Envelope ID: {envelope.envelope_id}")
+    c.drawRightString(width - 12 * mm, height - 8 * mm, brand)
     c.setStrokeColor(colors.HexColor("#E5E7EB"))
     c.setLineWidth(0.4)
     c.line(12 * mm, height - 9.6 * mm, width - 12 * mm, height - 9.6 * mm)
     c.restoreState()
 
+    # Vertical border stamp: brand in a slightly stronger weight, ID after it.
     c.saveState()
+    c.translate(6.5 * mm, 20 * mm)
+    c.rotate(90)
+    c.setFont("Helvetica-Bold", 6.5)
+    c.setFillColor(GREY)
+    c.drawString(0, 0, brand)
+    brand_w = c.stringWidth(brand, "Helvetica-Bold", 6.5)
     c.setFont("Helvetica", 6.5)
     c.setFillColor(LIGHT)
-    c.translate(6.5 * mm, 22 * mm)
-    c.rotate(90)
-    c.drawString(0, 0, label)
+    c.drawString(brand_w + 4, 0, f"Envelope ID: {envelope.envelope_id}")
     c.restoreState()
 
 
@@ -501,7 +549,7 @@ def build_certificate_pdf(envelope: Envelope) -> bytes:
     story.append(Paragraph("Certificate of Completion", h1))
     story.append(
         Paragraph(
-            f"{getattr(settings, 'SITE_NAME', 'UN PASS')} eSign — tamper-evident audit trail",
+            f"{esign_brand()} — tamper-evident audit trail",
             sub,
         )
     )
@@ -604,7 +652,7 @@ def build_certificate_pdf(envelope: Envelope) -> bytes:
         c.saveState()
         c.setFont("Helvetica", 6.5)
         c.setFillColor(LIGHT)
-        c.drawString(16 * mm, 10 * mm, f"Envelope ID: {envelope.envelope_id}")
+        c.drawString(16 * mm, 10 * mm, f"{esign_brand()} Envelope ID: {envelope.envelope_id}")
         c.drawRightString(A4[0] - 16 * mm, 10 * mm, f"Page {c.getPageNumber()}")
         c.restoreState()
 

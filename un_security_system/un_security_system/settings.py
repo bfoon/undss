@@ -188,3 +188,19 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
+
+# ---- Office → PDF conversion (optional) --------------------------------
+# Nothing is required here. These two only matter if you install LibreOffice
+# and it lives somewhere unusual.
+ESIGN_SOFFICE_BIN = "soffice"
+ESIGN_CONVERT_TIMEOUT = 120     # seconds per document
+
+# ---- Branding -----------------------------------------------------------
+# Wordmark shown in the UI and printed down the border of every stamped page.
+ESIGN_BRAND = "UNDP eSign"       # or "UNDP SoftSign"
+
+# ---- Signature transparency --------------------------------------------
+# Luminance thresholds used to remove paper from a photographed signature.
+# Raise CUT if a grey background survives; lower it if pale ink is eaten.
+ESIGN_SIGNATURE_CUT = 232        # at/above this brightness -> fully transparent
+ESIGN_SIGNATURE_KEEP = 150       # at/below this            -> fully opaque

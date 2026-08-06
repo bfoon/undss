@@ -32,7 +32,7 @@
 <div class="es-topbar">
   <div class="container-fluid px-3 py-2 d-flex flex-wrap align-items-center gap-2">
     <div class="fw-bold text-un-primary">
-      <i class="bi bi-pen-fill me-1"></i> {{ brand|default:"UN PASS" }} eSign
+      <i class="bi bi-pen-fill me-1"></i> {{ esign_brand|default:"UNDP eSign" }}
     </div>
     {% if envelope %}
       <span class="es-token d-none d-sm-inline" title="Envelope ID — printed on every page of this document">
@@ -61,7 +61,7 @@
 
 <footer class="es-foot text-center py-4">
   {% if envelope %}<div class="mb-1">Envelope ID: {{ envelope.envelope_id }}</div>{% endif %}
-  <div>Electronic signatures collected by {{ brand|default:"UN PASS" }} eSign — every action is recorded in the audit trail.</div>
+  <div>Electronic signatures collected by {{ esign_brand|default:"UNDP eSign" }} — every action is recorded in the audit trail.</div>
 </footer>
 
 {% block extra_js %}{% endblock %}

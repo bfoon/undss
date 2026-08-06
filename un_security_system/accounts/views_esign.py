@@ -63,6 +63,7 @@ except ImportError:  # older converters_esign.py — degrade instead of breaking
         )
 from .utils_esign import (
     build_final_pdf,
+    prepare_document,
     decode_signature_data_url,
     document_pdf_bytes,
     envelope_is_expired,
@@ -369,9 +370,10 @@ def esign_new(request):
             doc = EnvelopeDocument.objects.create(
                 envelope=envelope, file=f, name=f.name[:200], order=order
             )
-            # Convert now, once — never on the signer's request.
-            doc.page_count = pdf_page_count(doc)
-            doc.save(update_fields=["page_count"])
+            # Convert now, once. Raises if it fails, so the whole envelope is
+            # rolled back and the sender is told why — rather than the signer
+            # meeting the error later.
+            prepare_document(doc)
             log_event(
                 envelope,
                 "document_added",
@@ -698,8 +700,11 @@ def esign_document_add(request, pk):
             doc = EnvelopeDocument.objects.create(
                 envelope=envelope, file=f, name=f.name[:200], order=start + offset
             )
-            doc.page_count = pdf_page_count(doc)
-            doc.save(update_fields=["page_count"])
+            try:
+                prepare_document(doc)
+            except Exception:
+                doc.delete()          # don't leave an unreadable document behind
+                raise
             added += 1
             log_event(
                 envelope, "document_added", request=request, actor=request.user,
@@ -757,6 +762,25 @@ def esign_send(request, pk):
     signers = list(envelope.signers())
     if not signers:
         messages.error(request, "Add at least one signer before sending.")
+        return redirect("accounts:esign_prepare", pk=envelope.pk)
+
+    unreadable = []
+    for d in envelope.documents.all():
+        try:
+            raw = document_pdf_bytes(d)
+            if not raw or raw[:5] != b"%PDF-":
+                unreadable.append(str(d))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("eSign: document %s unreadable at send time: %s", d.pk, exc)
+            unreadable.append(f"{d} — {exc}")
+
+    if unreadable:
+        messages.error(
+            request,
+            "These documents can't be prepared for signature yet: "
+            + "; ".join(unreadable[:3])
+            + ". Fix or re-upload them before sending.",
+        )
         return redirect("accounts:esign_prepare", pk=envelope.pk)
 
     missing = [s.name for s in signers if not envelope.fields.filter(recipient=s).exists()]
@@ -1072,6 +1096,48 @@ def _initials_from(name: str) -> str:
     return "".join(p[0].upper() for p in parts[:3]) or "NA"
 
 
+SAVED_REF = "saved:"
+
+
+def _saved_signature_content(ref: str, recipient, want_initials=False):
+    """
+    Resolve a `saved:<profile_id>` reference to real PNG bytes.
+
+    A saved signature reaches the browser as a media URL, not a data: URL, so it
+    can't be decoded like a freshly drawn one. The client sends this reference
+    instead and we read the stored file — which also means a signer can never
+    apply someone else's saved signature by editing the payload.
+    """
+    try:
+        profile_id = int(str(ref)[len(SAVED_REF):].split(":")[0])
+    except (TypeError, ValueError):
+        return None
+
+    if not recipient.user_id:
+        return None
+
+    prof = SignatureProfile.objects.filter(id=profile_id, user_id=recipient.user_id).first()
+    if not prof:
+        logger.warning(
+            "eSign: recipient %s referenced signature %s that isn't theirs",
+            recipient.pk, profile_id,
+        )
+        return None
+
+    src = prof.initials_image if (want_initials and prof.initials_image) else prof.image
+    if not src:
+        return None
+
+    try:
+        src.open("rb")
+        data = src.read()
+        src.close()
+        return ContentFile(data) if data else None
+    except Exception:
+        logger.exception("eSign: could not read saved signature %s", profile_id)
+        return None
+
+
 @transaction.atomic
 def _handle_sign_submit(request, recipient):
     envelope = recipient.envelope
@@ -1093,6 +1159,7 @@ def _handle_sign_submit(request, recipient):
     init_data = request.POST.get("initials_data") or ""
 
     missing = []
+    signature_errors = []
     now = timezone.now()
 
     for fid, raw in payload.items():
@@ -1101,14 +1168,28 @@ def _handle_sign_submit(request, recipient):
             continue
 
         if f.kind in (SignatureField.KIND_SIGNATURE, SignatureField.KIND_INITIALS):
-            data_url = raw if isinstance(raw, str) else ""
-            if not data_url:
-                data_url = sig_data if f.kind == SignatureField.KIND_SIGNATURE else init_data
-            content = decode_signature_data_url(data_url)
+            wants_initials = f.kind == SignatureField.KIND_INITIALS
+            ref = raw if isinstance(raw, str) else ""
+            if not ref:
+                ref = init_data if wants_initials else sig_data
+
+            if ref.startswith(SAVED_REF):
+                content = _saved_signature_content(ref, recipient, wants_initials)
+            else:
+                content = decode_signature_data_url(ref)
+
             if content:
                 f.image.save(f"field-{f.id}.png", content, save=False)
                 f.filled_at = now
                 f.save()
+            else:
+                # Don't fail silently — this used to loop the signer back with
+                # a generic "complete all required fields" and no way forward.
+                signature_errors.append(f.label or f.get_kind_display())
+                logger.warning(
+                    "eSign: unusable signature payload for field %s (recipient %s, ref %r)",
+                    f.id, recipient.pk, (ref or "")[:40],
+                )
             continue
 
         if f.kind == SignatureField.KIND_CHECKBOX:
@@ -1117,6 +1198,15 @@ def _handle_sign_submit(request, recipient):
             f.value = str(raw or "")[:2000]
         f.filled_at = now if f.value else None
         f.save(update_fields=["value", "filled_at"])
+
+    if signature_errors:
+        messages.error(
+            request,
+            "Your signature image could not be read for: "
+            + ", ".join(signature_errors[:4])
+            + ". Please adopt the signature again and re-apply it.",
+        )
+        return redirect("accounts:esign_sign", token=recipient.token)
 
     for f in envelope.fields.filter(recipient=recipient):
         if f.required and not f.is_filled:
@@ -1147,7 +1237,7 @@ def _handle_sign_submit(request, recipient):
     )
 
     # Persist the signature for re-use
-    if save_signature and recipient.user_id:
+    if save_signature and recipient.user_id and not sig_data.startswith(SAVED_REF):
         content = decode_signature_data_url(sig_data)
         if content:
             prof = SignatureProfile(
@@ -1312,11 +1402,25 @@ def esign_preview(request, pk):
 
 @login_required
 def esign_signatures(request):
+    profiles = SignatureProfile.objects.filter(user=request.user)
+
     return render(
         request,
         "accounts/esign/signature_studio.html",
         {
-            "signatures": SignatureProfile.objects.filter(user=request.user),
+            "signatures": profiles,
+            # same shape the signing page uses, so the pad's "Saved" tab works here too
+            "saved_signatures": [
+                {
+                    "id": p.id,
+                    "label": p.label or p.get_kind_display(),
+                    "url": p.image.url if p.image else "",
+                    "initials": p.initials_image.url if p.initials_image else "",
+                    "is_default": p.is_default,
+                }
+                for p in profiles
+                if p.image
+            ],
             "fonts": ESIGN_FONTS,
             "default_name": request.user.get_full_name() or request.user.username,
             "default_initials": _initials_from(request.user.get_full_name() or request.user.username),

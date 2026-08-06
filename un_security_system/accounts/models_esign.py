@@ -282,12 +282,11 @@ class EnvelopeDocument(models.Model):
         Envelope, on_delete=models.CASCADE, related_name="documents"
     )
     file = models.FileField(upload_to=esign_document_upload_to)
-    # Cached PDF produced from DOCX/XLSX/PPTX/images. utils_esign.document_pdf_bytes()
-    # already reads and writes this field; it was missing from the model.
+    #: PDF rendition of `file`, produced once at upload time for anything that
+    #: isn't already a PDF (DOCX/XLSX/PPTX via LibreOffice, images via Pillow).
+    #: Everything downstream — viewer, field placement, stamping — reads this.
     converted_pdf = models.FileField(
-        upload_to=esign_converted_upload_to,
-        blank=True,
-        null=True,
+        upload_to=esign_converted_upload_to, blank=True, null=True
     )
     name = models.CharField(max_length=200, blank=True, default="")
     order = models.PositiveSmallIntegerField(default=0)
@@ -301,7 +300,12 @@ class EnvelopeDocument(models.Model):
         return self.name or (self.file.name.rsplit("/", 1)[-1] if self.file else "Document")
 
     @property
-    def was_converted(self):
+    def source_ext(self) -> str:
+        base = self.name or (self.file.name if self.file else "")
+        return ("." + base.rsplit(".", 1)[-1].lower()) if "." in base else ""
+
+    @property
+    def was_converted(self) -> bool:
         return bool(self.converted_pdf)
 
 

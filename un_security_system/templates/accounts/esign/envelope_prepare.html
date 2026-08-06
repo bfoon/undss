@@ -72,6 +72,8 @@
     </div>
   </div>
   <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_signatures' %}"
+       title="Manage my saved signatures"><i class="bi bi-vector-pen me-1"></i> My signature</a>
     <button class="btn btn-outline-secondary" id="epSave"><i class="bi bi-save me-1"></i> Save draft</button>
     <a class="btn btn-outline-primary" href="{% url 'accounts:esign_preview' envelope.pk %}" target="_blank">
       <i class="bi bi-eye me-1"></i> Preview stamp
@@ -160,7 +162,7 @@ const EXISTING= {{ fields_json|safe }};
 const SAVE_URL = "{% url 'accounts:esign_fields_save' envelope.pk %}";
 const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-const COLORS = ['#009EDB','#7C3AED','#059669','#D97706','#DC2626','#0891B2'];
+const COLORS = ['#009EDB','#7C3AED','#0284C7','#D97706','#DC2626','#0891B2'];
 const DEFAULT_SIZE = {
   signature:{w:.24,h:.055}, initials:{w:.09,h:.05}, date_signed:{w:.16,h:.032},
   full_name:{w:.22,h:.032}, job_title:{w:.20,h:.032}, email:{w:.24,h:.032},
@@ -535,7 +537,7 @@ function updateCounts() {
     const row = document.createElement('div');
     row.className = 'd-flex justify-content-between';
     row.innerHTML = '<span><span class="ep-signer-dot" style="background:' + signerColor(s.id) +
-      '"></span>' + s.name + '</span><span class="' + (n ? 'text-success' : 'text-danger') +
+      '"></span>' + s.name + '</span><span class="' + (n ? 'text-un-primary' : 'text-danger') +
       ' fw-semibold">' + n + '</span>';
     host.appendChild(row);
   });

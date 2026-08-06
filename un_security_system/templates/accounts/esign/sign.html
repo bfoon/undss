@@ -20,7 +20,12 @@
   }
   .es-field:hover{ background:rgba(245,158,11,.22); }
   .es-field.es-current{ box-shadow:0 0 0 3px rgba(245,158,11,.45); animation:esPulse 1.6s infinite; }
-  .es-field.es-done{ border:2px solid #10B981; background:rgba(16,185,129,.07); color:#065F46; cursor:pointer; }
+  /* Once signed the field must look like part of the document: no fill,
+     no coloured block behind the signature — only a hairline guide. */
+  .es-field.es-done{ border:1px dashed rgba(0,158,219,.40); background:transparent;
+                     color:#005A8B; cursor:pointer; }
+  .es-field.es-done:hover{ border-color:rgba(0,158,219,.85); background:rgba(0,158,219,.05); }
+  .es-field.es-done img{ mix-blend-mode:multiply; }
   .es-field.es-other{ border:1.5px dotted #CBD5E1; background:rgba(148,163,184,.10); color:#94A3B8;
     cursor:default; font-size:.66rem; }
   .es-field img{ max-width:100%; max-height:100%; object-fit:contain; }
@@ -32,6 +37,7 @@
     position:fixed; left:50%; transform:translateX(-50%); bottom:20px; z-index:1050;
     box-shadow:0 8px 26px rgba(0,0,0,.2); border-radius:999px;
   }
+  .es-page{ position:relative; }
   .es-doc-stamp{
     position:absolute; top:6px; left:10px; font-size:.6rem; color:#94A3B8;
     font-family:ui-monospace,Menlo,monospace; pointer-events:none;
@@ -84,7 +90,7 @@
         <span class="fw-semibold">Required fields</span>
         <span><span id="esDone">0</span> of <span id="esTotal">0</span></span>
       </div>
-      <div class="progress es-progress"><div class="progress-bar bg-success" id="esBar" style="width:0%"></div></div>
+      <div class="progress es-progress"><div class="progress-bar bg-primary" id="esBar" style="width:0%"></div></div>
     </div>
 
     <div class="d-grid gap-2 mb-3">
@@ -92,8 +98,23 @@
         <i class="bi bi-arrow-right-circle me-1"></i> Start
       </button>
       <button class="btn btn-outline-primary btn-sm" id="esAdoptFirst">
-        <i class="bi bi-pen me-1"></i> Set up my signature
+        <i class="bi bi-pen me-1"></i> <span id="esAdoptLabel">Set up my signature</span>
       </button>
+      <button class="btn btn-outline-secondary btn-sm d-none" id="esReapply"
+              title="Re-apply the current signature to every signature field">
+        <i class="bi bi-arrow-repeat me-1"></i> Re-apply to all fields
+      </button>
+    </div>
+
+    <div class="es-card p-2 mb-3 d-none" id="esCurrentSig">
+      <div class="small fw-semibold text-muted mb-1">Your signature</div>
+      <div class="text-center" style="background:
+           repeating-conic-gradient(#F1F5F9 0% 25%, #fff 0% 50%) 50%/12px 12px;
+           border-radius:8px; padding:.35rem">
+        <img id="esCurrentSigImg" alt="current signature"
+             style="max-height:46px;max-width:100%;object-fit:contain">
+      </div>
+      <button class="btn btn-link btn-sm p-0 mt-1" id="esChangeSig">Change signature</button>
     </div>
 
     {% if saved_signatures %}
@@ -102,8 +123,8 @@
       {% for s in saved_signatures %}
         <div class="es-card p-2 mb-2 d-flex align-items-center gap-2">
           <img src="{{ s.url }}" alt="{{ s.label }}" style="height:34px;max-width:150px;object-fit:contain">
-          <button class="btn btn-sm btn-outline-success ms-auto es-use-saved"
-                  data-sig="{{ s.url }}" data-init="{{ s.initials }}">Use</button>
+          <button class="btn btn-sm btn-outline-primary ms-auto es-use-saved"
+                  data-id="{{ s.id }}" data-sig="{{ s.url }}" data-init="{{ s.initials }}">Use</button>
         </div>
       {% endfor %}
     </div>
@@ -210,9 +231,21 @@ const DOCS   = {{ documents_json|safe }};
 const FIELDS = {{ fields_json|safe }};
 const OTHERS = {{ others_json|safe }};
 const ENVELOPE_ID = "{{ envelope.envelope_id }}";
+const BRAND = "{{ esign_brand|default:'UNDP eSign' }}";
 
-const values = {};          // field id -> value / data URL
-let adopted = { signature:'', initials:'', meta:null };
+const values = {};          // field id -> what is DISPLAYED in the field
+const refs   = {};          // field id -> what is SENT to the server
+let adopted = { signature:'', initials:'', sigRef:'', initRef:'', meta:null };
+
+// A saved signature arrives as a media URL, which the server cannot decode.
+// We show the URL but submit a "saved:<id>" reference it can resolve safely.
+function setAdopted(sig, init, meta, savedId) {
+  adopted.signature = sig || '';
+  adopted.initials  = init || sig || '';
+  adopted.sigRef    = savedId ? ('saved:' + savedId) : adopted.signature;
+  adopted.initRef   = savedId ? ('saved:' + savedId + ':initials') : adopted.initials;
+  adopted.meta      = meta || null;
+}
 let orderedFields = [], cursor = -1;
 
 const KIND_LABEL = {
@@ -227,7 +260,7 @@ let viewer = null;
 function decoratePage(wrap, docId, pageNo) {
   const stamp = document.createElement('div');
   stamp.className = 'es-doc-stamp';
-  stamp.textContent = 'Envelope ID: ' + ENVELOPE_ID;
+  stamp.textContent = BRAND + ' Envelope ID: ' + ENVELOPE_ID;
   wrap.appendChild(stamp);
 
   // Runs again after every zoom/resize redraw; values[] keeps what's filled in.
@@ -313,15 +346,13 @@ function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; 
 function activateField(f, el) {
   if (f.kind === 'signature' || f.kind === 'initials') {
     const ready = f.kind === 'initials' ? adopted.initials : adopted.signature;
-    if (ready) { values[f.id] = ready; paintField(el, f); afterFill(f); return; }
+    if (ready) { applyAdoptedTo(f, el); afterFill(f); return; }
     openPad({
       mode: f.kind === 'initials' ? 'initials' : 'signature',
       onAdopt: (dataUrl, meta) => {
-        adopted.signature = meta.signature || dataUrl;
-        adopted.initials  = meta.initials  || dataUrl;
-        adopted.meta = meta;
-        values[f.id] = f.kind === 'initials' ? adopted.initials : adopted.signature;
-        paintField(el, f); afterFill(f);
+        setAdopted(meta.signature || dataUrl, meta.initials || dataUrl, meta, meta.savedId);
+        applyAdoptedTo(f, el);
+        showAdopted(); afterFill(f);
       }
     });
     return;
@@ -355,6 +386,31 @@ function activateField(f, el) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
 }
 
+function showAdopted() {
+  if (!adopted.signature) return;
+  document.getElementById('esCurrentSig').classList.remove('d-none');
+  document.getElementById('esCurrentSigImg').src = adopted.signature;
+  document.getElementById('esAdoptLabel').textContent = 'Change my signature';
+  document.getElementById('esReapply').classList.remove('d-none');
+}
+
+function applyAdoptedTo(f, el) {
+  const isInit = f.kind === 'initials';
+  values[f.id] = isInit ? (adopted.initials || adopted.signature) : adopted.signature;
+  refs[f.id]   = isInit ? (adopted.initRef  || adopted.sigRef)    : adopted.sigRef;
+  if (el) paintField(el, f);
+}
+
+function reapplyAll() {
+  if (!adopted.signature) return;
+  FIELDS.forEach(f => {
+    if (f.kind !== 'signature' && f.kind !== 'initials') return;
+    applyAdoptedTo(f, document.getElementById('field-' + f.id));
+  });
+  buildOrder();
+  updateProgress();
+}
+
 function afterFill(f) {
   buildOrder();
   updateProgress();
@@ -383,7 +439,7 @@ function nextField() {
   if (!pending.length) {
     jump.classList.remove('d-none');
     document.getElementById('esJumpLabel').textContent = 'All done — Finish';
-    jump.className = 'btn btn-success fw-semibold es-jump';
+    jump.className = 'btn btn-un-primary fw-semibold es-jump';
     jump.onclick = openFinish;
     return;
   }
@@ -423,17 +479,23 @@ function openPad(opts) {
 document.getElementById('esAdoptFirst').onclick = () => openPad({
   mode: 'signature',
   onAdopt: (dataUrl, meta) => {
-    adopted.signature = meta.signature || dataUrl;
-    adopted.initials  = meta.initials  || dataUrl;
-    adopted.meta = meta;
+    setAdopted(meta.signature || dataUrl, meta.initials || dataUrl, meta, meta.savedId);
+    showAdopted();
+    reapplyAll();
     nextField();
   }
 });
 
+document.getElementById('esChangeSig').onclick = () =>
+  document.getElementById('esAdoptFirst').click();
+
+document.getElementById('esReapply').onclick = reapplyAll;
+
 document.querySelectorAll('.es-use-saved').forEach(b => b.onclick = () => {
-  adopted.signature = b.dataset.sig;
-  adopted.initials  = b.dataset.init || b.dataset.sig;
-  adopted.meta = { kind:'saved', save:false };
+  setAdopted(b.dataset.sig, b.dataset.init || b.dataset.sig,
+             { kind:'saved', save:false }, b.dataset.id);
+  showAdopted();
+  reapplyAll();
   nextField();
 });
 
@@ -444,9 +506,12 @@ function openFinish() {
     nextField();
     return;
   }
-  document.getElementById('esPayload').value  = JSON.stringify(values);
-  document.getElementById('esSigData').value  = adopted.signature || '';
-  document.getElementById('esInitData').value = adopted.initials || '';
+  const payload = {};
+  Object.keys(values).forEach(id => { payload[id] = (id in refs) ? refs[id] : values[id]; });
+
+  document.getElementById('esPayload').value  = JSON.stringify(payload);
+  document.getElementById('esSigData').value  = adopted.sigRef || adopted.signature || '';
+  document.getElementById('esInitData').value = adopted.initRef || adopted.initials || '';
   if (adopted.meta) {
     document.getElementById('esSigKind').value       = adopted.meta.kind === 'saved' ? 'drawn' : adopted.meta.kind;
     document.getElementById('esFontKey').value       = adopted.meta.font_key || 'dancing';

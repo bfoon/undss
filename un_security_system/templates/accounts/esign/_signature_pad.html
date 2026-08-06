@@ -27,11 +27,22 @@ Exposes window.EsignPad:
   .es-baseline{position:absolute;left:24px;right:24px;bottom:52px;border-bottom:1.5px solid #CBD5E1;pointer-events:none}
   .es-baseline::before{content:"×";position:absolute;left:-16px;bottom:2px;color:#94A3B8;font-size:1.1rem}
   .es-pad-tabs .nav-link{font-weight:600;font-size:.9rem}
-  .es-pad-preview{border:1px solid #E5E7EB;border-radius:10px;background:#fff;padding:.5rem;
+  /* Checkerboard, so you can see the signature really is transparent —
+     what you preview here is exactly what gets stamped on the PDF. */
+  .es-pad-preview{border:1px solid #E5E7EB;border-radius:10px;padding:.5rem;
+    background:repeating-conic-gradient(#F1F5F9 0% 25%, #fff 0% 50%) 50%/14px 14px;
     min-height:90px;display:flex;align-items:center;justify-content:center}
   .es-pad-preview img{max-height:76px;max-width:100%}
   .es-swatch{width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px #CBD5E1;cursor:pointer}
   .es-swatch.active{box-shadow:0 0 0 2.5px #009EDB}
+  .es-saved-card{border:1.5px solid #E5E7EB;border-radius:12px;background:
+    repeating-conic-gradient(#F1F5F9 0% 25%, #fff 0% 50%) 50%/12px 12px;
+    padding:.4rem;cursor:pointer;transition:.12s;text-align:center}
+  .es-saved-card:hover{border-color:#009EDB}
+  .es-saved-card.active{border-color:#009EDB;box-shadow:0 0 0 3px rgba(0,158,219,.16)}
+  .es-saved-card img{max-height:54px;max-width:100%;object-fit:contain;display:block;margin:0 auto}
+  .es-saved-label{font-size:.68rem;color:#64748B;margin-top:.25rem;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 
 <div class="modal fade" id="esignPadModal" tabindex="-1" aria-hidden="true">
@@ -55,6 +66,10 @@ Exposes window.EsignPad:
             <i class="bi bi-vector-pen me-1"></i> Draw</button></li>
           <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#esPadUpload" type="button">
             <i class="bi bi-image me-1"></i> Upload</button></li>
+          {% if saved_signatures %}
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#esPadSaved" type="button">
+            <i class="bi bi-bookmark-star me-1"></i> Saved</button></li>
+          {% endif %}
         </ul>
 
         <div class="tab-content">
@@ -116,6 +131,32 @@ Exposes window.EsignPad:
               <span class="text-muted small">No picture chosen</span>
             </div>
           </div>
+
+          <!-- SAVED ------------------------------------------------------->
+          {% if saved_signatures %}
+          <div class="tab-pane fade" id="esPadSaved">
+            <div class="small text-muted mb-2">
+              Pick one of your saved signatures — you can switch back to any of them at any time.
+            </div>
+            <div class="row g-2">
+              {% for sig in saved_signatures %}
+              <div class="col-6 col-md-4">
+                <div class="es-saved-card{% if sig.is_default %} active{% endif %}"
+                     data-id="{{ sig.id }}" data-sig="{{ sig.url }}" data-init="{{ sig.initials }}">
+                  <img src="{{ sig.url }}" alt="{{ sig.label }}">
+                  <div class="es-saved-label">
+                    {{ sig.label }}{% if sig.is_default %} · default{% endif %}
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <a class="btn btn-sm btn-outline-primary mt-3" href="{% url 'accounts:esign_signatures' %}"
+               target="_blank" rel="noopener">
+              <i class="bi bi-gear me-1"></i> Manage my signatures
+            </a>
+          </div>
+          {% endif %}
         </div>
 
         <hr class="my-3">
@@ -138,7 +179,7 @@ Exposes window.EsignPad:
         </div>
 
         <div class="alert alert-light border mt-3 mb-0 small text-muted">
-          <i class="bi bi-shield-check me-1 text-success"></i>
+          <i class="bi bi-shield-check me-1 text-un-primary"></i>
           By adopting a signature you agree that it is the electronic representation of your
           signature and is legally binding for this document.
         </div>
@@ -168,6 +209,7 @@ window.EsignPad = window.EsignPad || {
   let inkWidth = 3;
   let strokes = [], current = null;
   let uploadedDataUrl = '';
+  let savedSig = '', savedInit = '', savedId = '';
   let activeTab = 'type';
 
   const modalEl   = document.getElementById('esignPadModal');
@@ -299,7 +341,18 @@ window.EsignPad = window.EsignPad || {
     r.readAsDataURL(f);
   });
 
-  document.querySelectorAll('[data-bs-target="#esPadType"],[data-bs-target="#esPadDraw"],[data-bs-target="#esPadUpload"]')
+  document.querySelectorAll('.es-saved-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.es-saved-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      savedSig = card.dataset.sig || '';
+      savedInit = card.dataset.init || savedSig;
+      savedId = card.dataset.id || '';
+      refresh();
+    });
+  });
+
+  document.querySelectorAll('[data-bs-target="#esPadType"],[data-bs-target="#esPadDraw"],[data-bs-target="#esPadUpload"],[data-bs-target="#esPadSaved"]')
     .forEach(btn => btn.addEventListener('shown.bs.tab', () => {
       activeTab = btn.dataset.bsTarget.replace('#esPad', '').toLowerCase();
       if (activeTab === 'draw') sizeCanvas();
@@ -337,12 +390,14 @@ window.EsignPad = window.EsignPad || {
   }
 
   function currentSignature() {
+    if (activeTab === 'saved')  return savedSig;
     if (activeTab === 'draw')   return renderDrawn();
     if (activeTab === 'upload') return uploadedDataUrl;
     return (nameInput.value || '').trim() ? renderTyped(nameInput.value.trim(), true) : '';
   }
   function currentInitials() {
     const t = (initInput.value || '').trim();
+    if (activeTab === 'saved')     return savedInit || savedSig;
     if (activeTab === 'type' && t) return renderTyped(t, false);
     if (activeTab === 'draw')      return renderDrawn();
     if (activeTab === 'upload')    return uploadedDataUrl;
@@ -362,13 +417,16 @@ window.EsignPad = window.EsignPad || {
     const data = mode === 'initials' ? EsignPad.lastInitials : EsignPad.lastSignature;
     if (!data) { alert('Please type, draw or upload a signature first.'); return; }
     const meta = {
-      kind: activeTab === 'type' ? 'typed' : (activeTab === 'draw' ? 'drawn' : 'uploaded'),
+      kind: activeTab === 'type' ? 'typed'
+          : activeTab === 'draw' ? 'drawn'
+          : activeTab === 'saved' ? 'saved' : 'uploaded',
       font_key: fontKey,
       typed_text: nameInput.value.trim(),
       typed_initials: initInput.value.trim(),
       signature: EsignPad.lastSignature,
       initials: EsignPad.lastInitials,
-      save: document.getElementById('esSaveToAccount').checked
+      savedId: activeTab === 'saved' ? savedId : '',
+      save: activeTab !== 'saved' && document.getElementById('esSaveToAccount').checked
     };
     if (typeof onAdopt === 'function') onAdopt(data, meta);
     hideModal();
@@ -378,11 +436,20 @@ window.EsignPad = window.EsignPad || {
     lastSignature: '', lastInitials: '',
     open(opts) {
       opts = opts || {};
+      const firstSaved = document.querySelector('.es-saved-card.active') ||
+                         document.querySelector('.es-saved-card');
+      if (firstSaved && !savedSig) {
+        savedSig = firstSaved.dataset.sig || '';
+        savedInit = firstSaved.dataset.init || savedSig;
+        savedId = firstSaved.dataset.id || '';
+      }
       mode = opts.mode || 'signature';
       onAdopt = opts.onAdopt || null;
       document.getElementById('esPadTitle').textContent =
         mode === 'initials' ? 'Adopt your initials' : 'Adopt your signature';
-      document.getElementById('esSaveWrap').style.display = opts.allowSave === false ? 'none' : '';
+      const saveWrap = document.getElementById('esSaveWrap');
+      saveWrap.style.display =
+        (opts.allowSave === false || activeTab === 'saved') ? 'none' : '';
       showModal();
       setTimeout(() => { if (activeTab === 'draw') sizeCanvas(); refresh(); }, 250);
     }

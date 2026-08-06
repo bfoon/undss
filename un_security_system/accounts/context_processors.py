@@ -55,6 +55,9 @@ def agency_service_flags(request):
         # Where the eSign viewers load PDF.js from. Point this at a static
         # folder (e.g. "/static/vendor/pdfjs") on a server without internet
         # access or behind a strict Content-Security-Policy.
+        # Wordmark shown in the UI and printed down the border of every
+        # stamped page. Set ESIGN_BRAND = "UNDP SoftSign" to switch.
+        "esign_brand": getattr(settings, "ESIGN_BRAND", "UNDP eSign"),
         "esign_pdfjs_base": getattr(
             settings,
             "ESIGN_PDFJS_BASE",

@@ -7,7 +7,7 @@
             border:1px solid rgba(0,158,219,.15); }
   .es-kpi{ border-left:4px solid var(--un-blue); background:#fff; }
   .es-kpi.warn{ border-left-color:#F59E0B; }
-  .es-kpi.ok{ border-left-color:#10B981; }
+  .es-kpi.ok{ border-left-color:#009EDB; }
   .es-row{ transition:background .12s ease; }
   .es-row:hover{ background:rgba(0,158,219,.04); }
   .es-token{ font-family:ui-monospace,Menlo,monospace; font-size:.7rem; color:var(--un-gray); }
@@ -162,7 +162,7 @@
               <td style="min-width:120px">
                 {% with p=e.progress %}
                   <div class="progress" style="height:6px">
-                    <div class="progress-bar bg-success" style="width:{{ p.percent }}%"></div>
+                    <div class="progress-bar bg-primary" style="width:{{ p.percent }}%"></div>
                   </div>
                   <div class="small text-muted">{{ p.done }}/{{ p.total }} signed</div>
                 {% endwith %}

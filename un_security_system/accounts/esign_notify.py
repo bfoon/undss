@@ -23,7 +23,9 @@ TPL = "accounts/esign/email/{}.html"
 
 
 def _brand():
-    return getattr(settings, "SITE_NAME", "UN PASS")
+    """Wordmark used in every eSign email. Matches the page border stamp and
+    the certificate — one setting, ESIGN_BRAND, drives all three."""
+    return getattr(settings, "ESIGN_BRAND", "UNDP eSign")
 
 
 def _ctx(envelope, **extra):

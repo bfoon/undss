@@ -11,7 +11,7 @@
   .ed-ev{ position:relative; padding:.45rem 0; }
   .ed-ev::before{ content:''; position:absolute; left:-1.32rem; top:.85rem; width:10px; height:10px;
                   border-radius:50%; background:#fff; border:2px solid var(--un-blue); }
-  .ed-ev.done::before{ background:#10B981; border-color:#10B981; }
+  .ed-ev.done::before{ background:#009EDB; border-color:#009EDB; }
   .ed-ev.bad::before{ background:#EF4444; border-color:#EF4444; }
   .ed-meta{ font-size:.74rem; color:var(--un-gray); }
   .ed-rec{ border:1px solid #E5E7EB; border-radius:12px; padding:.7rem .85rem; margin-bottom:.55rem; background:#fff; }
@@ -21,8 +21,12 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start mb-3 gap-2">
   <div>
-    <a class="small text-muted text-decoration-none" href="{% url 'accounts:esign_dashboard' %}">
-      <i class="bi bi-arrow-left"></i> All envelopes</a>
+    <div class="d-flex gap-3 align-items-center">
+      <a class="small text-muted text-decoration-none" href="{% url 'accounts:esign_dashboard' %}">
+        <i class="bi bi-arrow-left"></i> All envelopes</a>
+      <a class="small text-muted text-decoration-none" href="{% url 'accounts:esign_signatures' %}">
+        <i class="bi bi-vector-pen"></i> My signature</a>
+    </div>
     <h5 class="fw-bold text-un-primary mb-1 mt-1">{{ envelope.subject }}</h5>
     <div class="d-flex flex-wrap gap-2 align-items-center">
       <span class="badge bg-{{ envelope.status_color }}">{{ envelope.get_status_display }}</span>
@@ -41,9 +45,9 @@
         <i class="bi bi-pen me-1"></i> Sign now</a>
     {% endif %}
     {% if envelope.status == 'completed' %}
-      <a class="btn btn-success" href="{% url 'accounts:esign_download' envelope.pk 'signed' %}">
+      <a class="btn btn-un-primary" href="{% url 'accounts:esign_download' envelope.pk 'signed' %}">
         <i class="bi bi-download me-1"></i> Signed document</a>
-      <a class="btn btn-outline-success" href="{% url 'accounts:esign_download' envelope.pk 'certificate' %}">
+      <a class="btn btn-outline-primary" href="{% url 'accounts:esign_download' envelope.pk 'certificate' %}">
         <i class="bi bi-patch-check me-1"></i> Certificate</a>
     {% else %}
       <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_preview' envelope.pk %}" target="_blank">
@@ -71,7 +75,7 @@
       </div>
       <div class="card-body">
         <div class="progress mb-3" style="height:6px">
-          <div class="progress-bar bg-success" style="width:{{ progress.percent }}%"></div>
+          <div class="progress-bar bg-primary" style="width:{{ progress.percent }}%"></div>
         </div>
         {% for r in signers %}
           <div class="ed-rec">
@@ -138,6 +142,12 @@
              href="{% url 'accounts:esign_document_file' envelope.pk d.id %}" target="_blank">
             <i class="bi bi-file-earmark-pdf text-danger me-2"></i>{{ d }}
             <span class="text-muted">· {{ d.page_count }} page{{ d.page_count|pluralize }}</span>
+            {% if d.was_converted %}
+              <span class="badge bg-light text-muted ms-1"
+                    title="Converted to PDF on upload; the original is kept unchanged">
+                <i class="bi bi-arrow-repeat"></i> from {{ d.source_ext|cut:"."|upper }}
+              </span>
+            {% endif %}
           </a>
         {% endfor %}
       </div>

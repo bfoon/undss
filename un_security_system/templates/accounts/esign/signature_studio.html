@@ -4,7 +4,7 @@
 {% block extra_css %}
 <style>
   .sg-card{ border:1px solid #E5E7EB; border-radius:14px; background:#fff; padding:1rem; height:100%; }
-  .sg-card.default{ border-color:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+  .sg-card.default{ border-color:#009EDB; box-shadow:0 0 0 3px rgba(0,158,219,.12); }
   .sg-preview{ height:110px; display:flex; align-items:center; justify-content:center;
                background:repeating-conic-gradient(#F8FAFC 0% 25%, #fff 0% 50%) 50%/16px 16px;
                border-radius:10px; }
@@ -32,7 +32,7 @@
       <div class="sg-card {% if s.is_default %}default{% endif %}">
         <div class="d-flex align-items-center mb-2">
           <span class="fw-semibold small">{{ s.label|default:s.get_kind_display }}</span>
-          {% if s.is_default %}<span class="badge bg-success ms-2">Default</span>{% endif %}
+          {% if s.is_default %}<span class="badge bg-primary ms-2">Default</span>{% endif %}
           <span class="ms-auto small text-muted">{{ s.get_kind_display }}</span>
         </div>
         <div class="sg-preview mb-2"><img src="{{ s.image.url }}" alt="{{ s.label }}"></div>
@@ -46,7 +46,7 @@
           {% if not s.is_default %}
             <form method="post" action="{% url 'accounts:esign_signature_default' s.pk %}">
               {% csrf_token %}
-              <button class="btn btn-sm btn-outline-success">Make default</button>
+              <button class="btn btn-sm btn-outline-primary">Make default</button>
             </form>
           {% endif %}
           <form method="post" action="{% url 'accounts:esign_signature_delete' s.pk %}" class="ms-auto"

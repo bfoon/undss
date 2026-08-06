@@ -18,9 +18,9 @@
 
 {% block topbar_actions %}
   {% if envelope.status == 'completed' %}
-    <a class="btn btn-sm btn-success" href="{% url 'accounts:esign_token_download' recipient.token 'signed' %}">
+    <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_token_download' recipient.token 'signed' %}">
       <i class="bi bi-download me-1"></i> Signed PDF</a>
-    <a class="btn btn-sm btn-outline-success" href="{% url 'accounts:esign_token_download' recipient.token 'certificate' %}">
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_token_download' recipient.token 'certificate' %}">
       <i class="bi bi-patch-check me-1"></i> Certificate</a>
   {% endif %}
 {% endblock %}
@@ -28,7 +28,7 @@
 {% block content %}
 <div class="container-fluid px-3 py-3">
   {% if envelope.status == 'completed' %}
-    <div class="alert alert-success d-flex align-items-center gap-2">
+    <div class="alert alert-primary d-flex align-items-center gap-2">
       <i class="bi bi-check2-circle fs-4"></i>
       <div>
         <div class="fw-semibold">This envelope is complete.</div>
