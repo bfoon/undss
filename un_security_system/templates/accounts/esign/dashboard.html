@@ -1,5 +1,36 @@
 {% extends "base.html" %}
-{% block title %}eSign | UN PASS<div class="modal fade" id="delModal" tabindex="-1">
+{% block title %}eSign | UN PASS<div class="modal fade" id="dupModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" id="dupForm">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-un-primary"><i class="bi bi-files me-2"></i>Duplicate flow</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">
+            Copies the recipients, signing order and options into a new draft.
+          </p>
+          <label class="form-label small fw-semibold">Subject</label>
+          <input type="text" name="subject" id="dupSubject" class="form-control mb-3" maxlength="200">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="include_documents" id="dupDocsD">
+            <label class="form-check-label small" for="dupDocsD">
+              Also copy the documents and the field layout
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-un-primary">Create duplicate</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="delModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <form method="post" id="delForm">
       {% csrf_token %}
@@ -28,6 +59,15 @@
 {% block extra_js %}
 <script>
 const DEL_URL = "{% url 'accounts:esign_envelope_delete' 0 %}";
+const DUP_URL = "{% url 'accounts:esign_duplicate' 0 %}";
+
+document.querySelectorAll('.es-dup').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('dupSubject').value = 'Copy of ' + btn.dataset.subject;
+    document.getElementById('dupForm').action = DUP_URL.replace(/\/0\/duplicate\/$/, '/' + btn.dataset.pk + '/duplicate/');
+    new bootstrap.Modal(document.getElementById('dupModal')).show();
+  });
+});
 document.querySelectorAll('.es-del').forEach(btn => {
   btn.addEventListener('click', () => {
     document.getElementById('delSubject').textContent = btn.dataset.subject;
@@ -209,6 +249,9 @@ document.querySelectorAll('.es-del').forEach(btn => {
                 {% if e.status == 'draft' %}
                   <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_prepare' e.pk %}">
                     <i class="bi bi-crosshair"></i> Prepare</a>
+                  <button type="button" class="btn btn-sm btn-outline-primary es-dup"
+                          data-pk="{{ e.pk }}" data-subject="{{ e.subject|escapejs }}"
+                          title="Duplicate this flow"><i class="bi bi-files"></i></button>
                   <button type="button" class="btn btn-sm btn-outline-danger es-del"
                           data-pk="{{ e.pk }}" data-subject="{{ e.subject|escapejs }}"
                           title="Delete this draft">
@@ -217,6 +260,9 @@ document.querySelectorAll('.es-del').forEach(btn => {
                 {% else %}
                   <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_envelope_detail' e.pk %}">
                     <i class="bi bi-eye"></i> Open</a>
+                  <button type="button" class="btn btn-sm btn-outline-primary es-dup"
+                          data-pk="{{ e.pk }}" data-subject="{{ e.subject|escapejs }}"
+                          title="Duplicate this flow"><i class="bi bi-files"></i></button>
                 {% endif %}
               </td>
             </tr>

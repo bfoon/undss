@@ -578,6 +578,7 @@ def build_certificate_pdf(envelope: Envelope) -> bytes:
             else "—",
         ],
         ["Signing order", "Sequential" if envelope.enforce_order else "Parallel"],
+        ["Revision", str(getattr(envelope, "revision", 1))],
         ["Documents", ", ".join(str(d) for d in envelope.documents.all()) or "—"],
     ]
     t = Table(summary, colWidths=[34 * mm, 130 * mm])
@@ -633,6 +634,26 @@ def build_certificate_pdf(envelope: Envelope) -> bytes:
     at = Table(rows, colWidths=[30 * mm, 30 * mm, 34 * mm, 22 * mm, 58 * mm], repeatRows=1)
     at.setStyle(_table_style())
     story.append(at)
+
+    # -- comments -------------------------------------------------------
+    try:
+        comments = list(envelope.comments.filter(is_internal=False))
+    except Exception:
+        comments = []
+
+    if comments:
+        story.append(Paragraph("Comments", h2))
+        rows = [["Timestamp", "Author", "Role", "Comment"]]
+        for c in comments:
+            rows.append([
+                timezone.localtime(c.created_at).strftime("%d %b %Y %H:%M"),
+                Paragraph(_esc(c.display_name), small),
+                c.role_label,
+                Paragraph(_esc(c.text), small),
+            ])
+        ct = Table(rows, colWidths=[26 * mm, 34 * mm, 22 * mm, 82 * mm], repeatRows=1)
+        ct.setStyle(_table_style())
+        story.append(ct)
 
     story.append(Spacer(1, 10))
     story.append(

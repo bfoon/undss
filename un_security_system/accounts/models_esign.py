@@ -29,6 +29,7 @@ __all__ = [
     "EnvelopeDocument",
     "EnvelopeRecipient",
     "SignatureField",
+    "EnvelopeComment",
     "EnvelopeEvent",
     "esign_signature_upload_to",
     "esign_document_upload_to",
@@ -147,6 +148,7 @@ class SignatureProfile(models.Model):
 class Envelope(models.Model):
     STATUS_DRAFT = "draft"
     STATUS_SENT = "sent"
+    STATUS_RETURNED = "returned"
     STATUS_COMPLETED = "completed"
     STATUS_DECLINED = "declined"
     STATUS_VOIDED = "voided"
@@ -154,6 +156,7 @@ class Envelope(models.Model):
     STATUS_CHOICES = [
         (STATUS_DRAFT, "Draft"),
         (STATUS_SENT, "Out for signature"),
+        (STATUS_RETURNED, "Returned for changes"),
         (STATUS_COMPLETED, "Completed"),
         (STATUS_DECLINED, "Declined"),
         (STATUS_VOIDED, "Voided"),
@@ -214,6 +217,23 @@ class Envelope(models.Model):
     void_reason = models.TextField(blank=True, default="")
     last_reminded_at = models.DateTimeField(null=True, blank=True)
 
+    # Return-for-changes / rework
+    returned_at = models.DateTimeField(null=True, blank=True)
+    return_reason = models.TextField(blank=True, default="")
+    returned_by = models.ForeignKey(
+        "accounts.EnvelopeRecipient",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="returned_envelopes",
+    )
+    #: Bumped every time the sender reworks and re-sends. Signatures collected
+    #: against an earlier revision are cleared, because they attested to a
+    #: document that no longer exists.
+    revision = models.PositiveSmallIntegerField(default=1)
+    duplicated_from = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="duplicates"
+    )
+
     class Meta:
         ordering = ["-created_at"]
 
@@ -228,13 +248,19 @@ class Envelope(models.Model):
 
     @property
     def is_open(self) -> bool:
-        return self.status in (self.STATUS_DRAFT, self.STATUS_SENT)
+        return self.status in (self.STATUS_DRAFT, self.STATUS_SENT, self.STATUS_RETURNED)
+
+    @property
+    def is_editable(self) -> bool:
+        """Documents, fields and recipients can be changed in these states."""
+        return self.status in (self.STATUS_DRAFT, self.STATUS_RETURNED)
 
     @property
     def status_color(self) -> str:
         return {
             self.STATUS_DRAFT: "secondary",
             self.STATUS_SENT: "warning",
+            self.STATUS_RETURNED: "warning",
             self.STATUS_COMPLETED: "success",
             self.STATUS_DECLINED: "danger",
             self.STATUS_VOIDED: "dark",
@@ -261,6 +287,7 @@ class Envelope(models.Model):
             status__in=[
                 EnvelopeRecipient.STATUS_SIGNED,
                 EnvelopeRecipient.STATUS_DECLINED,
+                EnvelopeRecipient.STATUS_RETURNED,
             ]
         ).first()
 
@@ -328,6 +355,7 @@ class EnvelopeRecipient(models.Model):
     STATUS_VIEWED = "viewed"
     STATUS_SIGNED = "signed"
     STATUS_DECLINED = "declined"
+    STATUS_RETURNED = "returned"
     STATUS_DELIVERED = "delivered"
     STATUS_CHOICES = [
         (STATUS_PENDING, "Waiting"),
@@ -335,6 +363,7 @@ class EnvelopeRecipient(models.Model):
         (STATUS_VIEWED, "Viewed"),
         (STATUS_SIGNED, "Signed"),
         (STATUS_DECLINED, "Declined"),
+        (STATUS_RETURNED, "Returned for changes"),
         (STATUS_DELIVERED, "Copy delivered"),
     ]
 
@@ -395,7 +424,8 @@ class EnvelopeRecipient(models.Model):
             self.STATUS_VIEWED: "primary",
             self.STATUS_SIGNED: "success",
             self.STATUS_DECLINED: "danger",
-            self.STATUS_DELIVERED: "success",
+            self.STATUS_RETURNED: "warning",
+            self.STATUS_DELIVERED: "primary",
         }.get(self.status, "secondary")
 
     def can_sign_now(self) -> bool:
@@ -474,6 +504,67 @@ class SignatureField(models.Model):
         return bool((self.value or "").strip())
 
 
+class EnvelopeComment(models.Model):
+    """
+    A note on the envelope. Signers can leave one while reviewing — asking a
+    question or flagging a problem — without declining or returning.
+
+    Internal comments are visible only to the sender and the ICT/Ops team;
+    recipients never see them.
+    """
+
+    envelope = models.ForeignKey(Envelope, on_delete=models.CASCADE, related_name="comments")
+    recipient = models.ForeignKey(
+        EnvelopeRecipient, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="comments",
+    )
+    author_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="esign_comments",
+    )
+    author_name = models.CharField(max_length=150, blank=True, default="")
+
+    text = models.TextField()
+    #: Optional anchor, so a comment can point at a specific page
+    document = models.ForeignKey(
+        EnvelopeDocument, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="comments",
+    )
+    page = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    is_internal = models.BooleanField(
+        default=False, help_text="Visible to the sender's team only."
+    )
+    revision = models.PositiveSmallIntegerField(default=1)
+
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return f"{self.display_name}: {self.text[:40]}"
+
+    @property
+    def display_name(self) -> str:
+        if self.author_name:
+            return self.author_name
+        if self.recipient:
+            return self.recipient.name
+        if self.author_user:
+            return self.author_user.get_full_name() or self.author_user.username
+        return "Unknown"
+
+    @property
+    def role_label(self) -> str:
+        if self.is_internal:
+            return "Internal"
+        if self.recipient:
+            return self.recipient.get_role_display()
+        return "Sender"
+
+
 class EnvelopeEvent(models.Model):
     """Immutable audit trail. One row per action, rendered into the certificate."""
 
@@ -488,6 +579,10 @@ class EnvelopeEvent(models.Model):
         ("signed", "Signed"),
         ("approved", "Approved"),
         ("declined", "Declined"),
+        ("returned", "Returned for changes"),
+        ("reworked", "Reworked and re-sent"),
+        ("commented", "Comment added"),
+        ("duplicated", "Duplicated"),
         ("reminder_sent", "Reminder sent"),
         ("completed", "Completed"),
         ("copy_delivered", "Copy delivered"),
@@ -534,6 +629,10 @@ class EnvelopeEvent(models.Model):
             "signed": "bi-pen",
             "approved": "bi-patch-check",
             "declined": "bi-x-octagon",
+            "returned": "bi-arrow-return-left",
+            "reworked": "bi-tools",
+            "commented": "bi-chat-left-text",
+            "duplicated": "bi-files",
             "reminder_sent": "bi-bell",
             "completed": "bi-check2-circle",
             "copy_delivered": "bi-mailbox",

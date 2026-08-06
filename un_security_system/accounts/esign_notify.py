@@ -263,6 +263,41 @@ def notify_declined(request, recipient: EnvelopeRecipient):
     )
 
 
+def notify_returned(request, recipient: EnvelopeRecipient):
+    """Signer sent it back — the sender needs to act."""
+    env = recipient.envelope
+    _send(
+        f"Returned for changes by {recipient.name}: {env.subject}",
+        _sender_email(env),
+        "returned",
+        _ctx(env, recipient=recipient, reason=env.return_reason,
+             action_url=_detail_url(request, env)),
+    )
+    # Anyone who already signed should know the round is paused.
+    others = [
+        r.email for r in env.signers()
+        if r.status == EnvelopeRecipient.STATUS_SIGNED and r.email != recipient.email
+    ]
+    if others:
+        _send(
+            f"Paused — returned for changes: {env.subject}",
+            others,
+            "returned",
+            _ctx(env, recipient=recipient, reason=env.return_reason,
+                 action_url=_detail_url(request, env), is_copy=True),
+        )
+
+
+def notify_comment(request, envelope: Envelope, author: str, text: str):
+    _send(
+        f"Comment from {author}: {envelope.subject}",
+        _sender_email(envelope),
+        "comment",
+        _ctx(envelope, author=author, comment=text,
+             action_url=_detail_url(request, envelope)),
+    )
+
+
 def notify_voided(request, envelope: Envelope):
     subject = f"Voided: {envelope.subject}"
     to = {r.email for r in envelope.recipients.all()} | set(_sender_email(envelope))

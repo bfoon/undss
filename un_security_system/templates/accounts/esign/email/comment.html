@@ -1,0 +1,17 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}New comment{% endblock %}
+{% block body %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    <b>{{ author }}</b> left a comment on <b>{{ subject_line }}</b>.
+  </p>
+  <div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin-bottom:16px;">
+    <div style="font-size:13px;color:#374151;white-space:pre-line;">{{ comment }}</div>
+  </div>
+  <div style="text-align:center;">
+    <a href="{{ action_url }}"
+       style="display:inline-block;background:#005A8B;color:#ffffff;text-decoration:none;
+              padding:11px 24px;border-radius:8px;font-weight:600;font-size:14px;">
+      Open envelope
+    </a>
+  </div>
+{% endblock %}

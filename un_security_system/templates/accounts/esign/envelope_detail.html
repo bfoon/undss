@@ -30,6 +30,9 @@
     <h5 class="fw-bold text-un-primary mb-1 mt-1">{{ envelope.subject }}</h5>
     <div class="d-flex flex-wrap gap-2 align-items-center">
       <span class="badge bg-{{ envelope.status_color }}">{{ envelope.get_status_display }}</span>
+      {% if envelope.revision > 1 %}
+        <span class="badge bg-light text-muted">Revision {{ envelope.revision }}</span>
+      {% endif %}
       <span class="ed-token">Envelope ID: {{ envelope.envelope_id }}</span>
       {% if envelope.reference %}<span class="small text-muted">Ref {{ envelope.reference }}</span>{% endif %}
       {% if envelope.asset %}
@@ -58,6 +61,14 @@
         <button class="btn btn-outline-warning"><i class="bi bi-bell me-1"></i> Remind</button>
       </form>
     {% endif %}
+    {% if can_rework %}
+      <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#reworkModal">
+        <i class="bi bi-tools me-1"></i> Rework</button>
+    {% endif %}
+    {% if is_sender %}
+      <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#dupModal">
+        <i class="bi bi-files me-1"></i> Duplicate</button>
+    {% endif %}
     {% if is_sender and envelope.status == 'draft' %}
       <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
         <i class="bi bi-trash me-1"></i> Delete draft</button>
@@ -67,6 +78,22 @@
     {% endif %}
   </div>
 </div>
+
+{% if envelope.status == 'returned' %}
+<div class="alert alert-warning d-flex gap-2 align-items-start">
+  <i class="bi bi-arrow-return-left fs-5"></i>
+  <div class="flex-grow-1">
+    <div class="fw-semibold">
+      Returned for changes{% if envelope.returned_by %} by {{ envelope.returned_by.name }}{% endif %}
+      {% if envelope.returned_at %}· {{ envelope.returned_at|date:"d M Y H:i" }}{% endif %}
+    </div>
+    {% if envelope.return_reason %}<div class="small">{{ envelope.return_reason|linebreaksbr }}</div>{% endif %}
+    <div class="small text-muted mt-1">
+      Use <b>Rework</b> to reopen it for editing, then send again.
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="row g-3">
   <!-- left column -->
@@ -137,6 +164,44 @@
     </div>
     {% endif %}
 
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-chat-left-text me-2"></i>Comments
+        <span class="float-end small text-muted">{{ comments|length }}</span>
+      </div>
+      <div class="card-body">
+        {% for c in comments %}
+          <div class="ed-rec {% if c.is_internal %}bg-light{% endif %}">
+            <div class="d-flex align-items-center gap-2">
+              <span class="fw-semibold small">{{ c.display_name }}</span>
+              <span class="badge bg-light text-muted">{{ c.role_label }}</span>
+              {% if c.revision < envelope.revision %}
+                <span class="badge bg-light text-muted">rev {{ c.revision }}</span>
+              {% endif %}
+              <span class="ed-meta ms-auto">{{ c.created_at|date:"d M Y H:i" }}</span>
+            </div>
+            <div class="small mt-1">{{ c.text|linebreaksbr }}</div>
+          </div>
+        {% empty %}
+          <div class="small text-muted mb-2">No comments yet.</div>
+        {% endfor %}
+
+        <form method="post" action="{% url 'accounts:esign_comment_internal' envelope.pk %}" class="mt-2">
+          {% csrf_token %}
+          <textarea name="text" class="form-control form-control-sm mb-2" rows="2" required
+                    placeholder="Add a comment…"></textarea>
+          <div class="d-flex align-items-center gap-2">
+            <div class="form-check form-check-inline small mb-0">
+              <input class="form-check-input" type="checkbox" name="internal" id="cInternal" checked>
+              <label class="form-check-label" for="cInternal">Internal only</label>
+            </div>
+            <button class="btn btn-sm btn-outline-primary ms-auto">Post</button>
+          </div>
+          <div class="ed-meta mt-1">Internal comments are never shown to recipients.</div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-files me-2"></i>Documents</div>
       <div class="list-group list-group-flush">
@@ -189,6 +254,74 @@
         Every entry is immutable and reproduced in the Certificate of Completion.
       </div>
     </div>
+  </div>
+</div>
+
+<div class="modal fade" id="reworkModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_rework' envelope.pk %}">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title text-warning">
+          <i class="bi bi-tools me-2"></i>Rework this envelope</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <p class="small mb-2">
+            Reopens the envelope for editing as <b>revision {{ envelope.revision|add:1 }}</b>.
+            You can change the document, the pages, the fields and the recipients, then send again.
+          </p>
+          {% if progress.done %}
+          <div class="alert alert-warning small">
+            <b>{{ progress.done }} signature(s) already collected will be cleared.</b>
+            They were given against the current version of the document, so they can't
+            carry over to a changed one. The audit trail keeps the record that they happened.
+          </div>
+          {% endif %}
+          <label class="form-label small fw-semibold">Note for the recipients (optional)</label>
+          <textarea name="note" class="form-control" rows="2"
+                    placeholder="e.g. Serial number corrected in Section B."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-warning">Reopen for editing</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="dupModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_duplicate' envelope.pk %}">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title text-un-primary">
+          <i class="bi bi-files me-2"></i>Duplicate</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <p class="small text-muted">
+            Copies the recipients, signing order, reminders and options into a new draft —
+            the reusable part of the flow.
+          </p>
+          <label class="form-label small fw-semibold">Subject</label>
+          <input type="text" name="subject" class="form-control mb-3" maxlength="200"
+                 value="{{ envelope.subject }}">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="include_documents" id="dupDocs">
+            <label class="form-check-label small" for="dupDocs">
+              Also copy the documents and the field layout
+            </label>
+            <div class="ed-meta mt-1">
+              Leave this clear to attach a different document and place fields yourself.
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-un-primary">Create duplicate</button>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 

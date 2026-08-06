@@ -37,6 +37,7 @@ from . import esign_notify
 from .models import AgencyServiceConfig, Asset
 from .models_esign import (
     Envelope,
+    EnvelopeComment,
     EnvelopeDocument,
     EnvelopeRecipient,
     SignatureField,
@@ -63,6 +64,7 @@ except ImportError:  # older converters_esign.py — degrade instead of breaking
         )
 from .utils_esign import (
     build_final_pdf,
+    client_ip,
     prepare_document,
     decode_signature_data_url,
     document_pdf_bytes,
@@ -444,8 +446,12 @@ def esign_new(request):
 @login_required
 def esign_prepare(request, pk):
     envelope = _get_envelope_for_user(request, pk, editable=True)
-    if envelope.status != Envelope.STATUS_DRAFT:
-        messages.info(request, "This envelope has already been sent — fields are locked.")
+    if not envelope.is_editable:
+        messages.info(
+            request,
+            "This envelope has already been sent — fields are locked. "
+            "Use Rework if you need to change it.",
+        )
         return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
     documents = []
@@ -484,7 +490,7 @@ def esign_prepare(request, pk):
 @require_POST
 def esign_fields_save(request, pk):
     envelope = _get_envelope_for_user(request, pk, editable=True)
-    if envelope.status != Envelope.STATUS_DRAFT:
+    if not envelope.is_editable:
         return JsonResponse({"ok": False, "error": "Envelope is locked."}, status=400)
 
     try:
@@ -569,8 +575,11 @@ def _rotate_field_coords(f, deg):
 
 def _editable_draft(request, pk):
     envelope = _get_envelope_for_user(request, pk, editable=True)
-    if envelope.status != Envelope.STATUS_DRAFT:
-        raise PermissionDenied("Documents can only be edited while the envelope is a draft.")
+    if not envelope.is_editable:
+        raise PermissionDenied(
+            "Documents can only be edited while the envelope is a draft or has "
+            "been returned for changes."
+        )
     return envelope
 
 
@@ -755,7 +764,7 @@ def esign_document_remove(request, pk, doc_id):
 @require_POST
 def esign_send(request, pk):
     envelope = _get_envelope_for_user(request, pk, editable=True)
-    if envelope.status != Envelope.STATUS_DRAFT:
+    if not envelope.is_editable:
         messages.info(request, "This envelope has already been sent.")
         return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
@@ -797,8 +806,9 @@ def esign_send(request, pk):
 
     log_event(
         envelope, "sent", request=request, actor=request.user,
-        note=f"Sent to {len(signers)} signer(s); "
-             f"{envelope.observers().count()} copy recipient(s).",
+        note=(f"Sent to {len(signers)} signer(s); "
+              f"{envelope.observers().count()} copy recipient(s)"
+              + (f" — revision {envelope.revision}." if envelope.revision > 1 else ".")),
     )
 
     for i, s in enumerate(signers):
@@ -842,7 +852,14 @@ def esign_envelope_detail(request, pk):
             "signers": envelope.signers(),
             "observers": envelope.observers(),
             "events": envelope.events.select_related("recipient", "actor").all(),
+            "comments": envelope.comments.select_related("recipient", "author_user").all(),
             "progress": envelope.progress(),
+            "can_rework": (
+                envelope.created_by_id == request.user.id or request.user.is_superuser
+            ) and envelope.status in (
+                Envelope.STATUS_SENT, Envelope.STATUS_RETURNED,
+                Envelope.STATUS_DECLINED, Envelope.STATUS_EXPIRED,
+            ),
             "is_sender": envelope.created_by_id == request.user.id or request.user.is_superuser,
             "my_recipient": me,
             "can_sign_now": bool(me and me.can_sign_now()),
@@ -961,6 +978,308 @@ def esign_envelope_delete(request, pk):
     return redirect("accounts:esign_dashboard")
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Return for changes · rework · comments · duplicate
+# ─────────────────────────────────────────────────────────────────────────────
+
+@require_POST
+def esign_return(request, token):
+    """
+    A signer sends the envelope BACK to the sender instead of declining.
+
+    Declining kills the envelope; returning parks it so the sender can fix the
+    document and send it round again — the normal outcome when a serial number
+    is wrong or a clause needs changing.
+    """
+    recipient = _recipient_or_404(token)
+    envelope = recipient.envelope
+
+    if recipient.access_code and not _access_ok(request, recipient):
+        raise Http404()
+    if not recipient.is_signing_role or envelope.status != Envelope.STATUS_SENT:
+        raise Http404()
+
+    reason = (request.POST.get("reason") or "").strip()
+    if not reason:
+        messages.error(request, "Please say what needs changing.")
+        return redirect("accounts:esign_sign", token=token)
+
+    with transaction.atomic():
+        recipient.status = EnvelopeRecipient.STATUS_RETURNED
+        recipient.save(update_fields=["status"])
+
+        envelope.status = Envelope.STATUS_RETURNED
+        envelope.returned_at = timezone.now()
+        envelope.return_reason = reason
+        envelope.returned_by = recipient
+        envelope.save(update_fields=["status", "returned_at", "return_reason", "returned_by"])
+
+        EnvelopeComment.objects.create(
+            envelope=envelope,
+            recipient=recipient,
+            author_name=recipient.name,
+            text=reason,
+            revision=envelope.revision,
+            ip=client_ip(request),
+        )
+
+    log_event(
+        envelope, "returned", request=request, recipient=recipient,
+        note=f"{recipient.name} returned the document for changes: {reason[:160]}",
+    )
+    esign_notify.notify_returned(request, recipient)
+
+    messages.success(request, "Returned to the sender. They will be notified.")
+    return render(request, "accounts/esign/returned.html",
+                  {"envelope": envelope, "recipient": recipient, "reason": reason})
+
+
+@login_required
+@require_POST
+def esign_rework(request, pk):
+    """
+    Reopen a sent / returned / declined envelope for editing.
+
+    Signatures already collected are cleared, deliberately: they attested to a
+    document that is about to change. The audit trail keeps the record that they
+    happened, and the revision number goes up so the history stays readable.
+    """
+    envelope = _get_envelope_for_user(request, pk, editable=True)
+
+    if envelope.status not in (
+        Envelope.STATUS_SENT, Envelope.STATUS_RETURNED,
+        Envelope.STATUS_DECLINED, Envelope.STATUS_EXPIRED,
+    ):
+        messages.error(request, "Only an envelope that is out, returned, declined or expired can be reworked.")
+        return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
+
+    note = (request.POST.get("note") or "").strip()
+    cleared = 0
+
+    with transaction.atomic():
+        for f in envelope.fields.all():
+            if f.is_filled:
+                cleared += 1
+            if f.image:
+                f.image.delete(save=False)
+            f.value = ""
+            f.filled_at = None
+            f.save(update_fields=["image", "value", "filled_at"])
+
+        for r in envelope.recipients.all():
+            r.status = EnvelopeRecipient.STATUS_PENDING
+            r.signed_at = None
+            r.viewed_at = None
+            r.declined_at = None
+            r.decline_reason = ""
+            r.sent_at = None
+            r.signed_ip = None
+            r.consent_accepted = False
+            r.save()
+
+        envelope.revision += 1
+        envelope.status = Envelope.STATUS_DRAFT
+        envelope.sent_at = None
+        envelope.completed_at = None
+        envelope.returned_at = None
+        envelope.save(update_fields=[
+            "revision", "status", "sent_at", "completed_at", "returned_at",
+        ])
+
+        if note:
+            EnvelopeComment.objects.create(
+                envelope=envelope, author_user=request.user,
+                author_name=request.user.get_full_name() or request.user.username,
+                text=note, is_internal=False, revision=envelope.revision,
+                ip=client_ip(request),
+            )
+
+    log_event(
+        envelope, "reworked", request=request, actor=request.user,
+        note=(f"Reopened as revision {envelope.revision}; {cleared} signature(s)/value(s) cleared."
+              + (f" Note: {note[:120]}" if note else "")),
+        meta={"revision": envelope.revision, "cleared": cleared},
+    )
+
+    messages.success(
+        request,
+        f"Envelope reopened as revision {envelope.revision}. "
+        + (f"{cleared} previously collected entry(ies) were cleared. " if cleared else "")
+        + "Edit the document or fields, then send again.",
+    )
+    return redirect("accounts:esign_prepare", pk=envelope.pk)
+
+
+@require_POST
+def esign_comment(request, token):
+    """A recipient leaves a comment without signing, declining or returning."""
+    recipient = _recipient_or_404(token)
+    envelope = recipient.envelope
+
+    if recipient.access_code and not _access_ok(request, recipient):
+        raise Http404()
+
+    text = (request.POST.get("text") or "").strip()
+    if not text:
+        messages.error(request, "Please write a comment first.")
+        return redirect("accounts:esign_sign", token=token)
+
+    EnvelopeComment.objects.create(
+        envelope=envelope,
+        recipient=recipient,
+        author_name=recipient.name,
+        text=text[:4000],
+        revision=envelope.revision,
+        ip=client_ip(request),
+    )
+    log_event(
+        envelope, "commented", request=request, recipient=recipient,
+        note=f"{recipient.name}: {text[:160]}",
+    )
+    esign_notify.notify_comment(request, envelope, recipient.name, text)
+
+    messages.success(request, "Comment sent to the sender.")
+    return redirect(
+        "accounts:esign_sign" if recipient.can_sign_now() else "accounts:esign_review",
+        token=token,
+    )
+
+
+@login_required
+@require_POST
+def esign_comment_internal(request, pk):
+    """Sender-side comment. Internal ones are never shown to recipients."""
+    envelope = _get_envelope_for_user(request, pk)
+
+    text = (request.POST.get("text") or "").strip()
+    if not text:
+        messages.error(request, "Please write a comment first.")
+        return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
+
+    internal = bool(request.POST.get("internal"))
+    EnvelopeComment.objects.create(
+        envelope=envelope,
+        author_user=request.user,
+        author_name=request.user.get_full_name() or request.user.username,
+        text=text[:4000],
+        is_internal=internal,
+        revision=envelope.revision,
+        ip=client_ip(request),
+    )
+    log_event(
+        envelope, "commented", request=request, actor=request.user,
+        note=("[internal] " if internal else "") + text[:160],
+    )
+    messages.success(request, "Comment added." if internal else "Comment added and shared with recipients.")
+    return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
+
+
+@login_required
+@require_POST
+def esign_duplicate(request, pk):
+    """
+    Copy an envelope into a fresh draft.
+
+    Recipients, routing and options always come across — that is the reusable
+    part, the "flow". Documents and their field layout are optional: tick the
+    box to reuse the same form, leave it clear to attach a new document and
+    place fields yourself.
+    """
+    source = _get_envelope_for_user(request, pk)
+    agency = getattr(request.user, "agency", None)
+    if not agency:
+        messages.error(request, "You are not assigned to an agency.")
+        return redirect("accounts:esign_dashboard")
+
+    include_docs = bool(request.POST.get("include_documents"))
+    subject = (request.POST.get("subject") or "").strip() or f"Copy of {source.subject}"
+
+    with transaction.atomic():
+        new = Envelope.objects.create(
+            agency=agency,
+            subject=subject[:200],
+            message=source.message,
+            created_by=request.user,
+            enforce_order=source.enforce_order,
+            reminders_enabled=source.reminders_enabled,
+            reminder_days=source.reminder_days,
+            reference=source.reference,
+            asset=source.asset,
+            duplicated_from=source,
+        )
+
+        recipient_map = {}
+        for r in source.recipients.all().order_by("order", "id"):
+            copy = EnvelopeRecipient.objects.create(
+                envelope=new,
+                user=r.user,
+                name=r.name,
+                email=r.email,
+                title=r.title,
+                role=r.role,
+                order=r.order,
+                access_code=r.access_code,
+            )
+            recipient_map[r.id] = copy
+
+        copied_docs = 0
+        copied_fields = 0
+        if include_docs:
+            for d in source.documents.all():
+                new_doc = EnvelopeDocument(
+                    envelope=new, name=d.name, order=d.order, page_count=d.page_count
+                )
+                try:
+                    d.file.open("rb")
+                    new_doc.file.save(
+                        d.file.name.rsplit("/", 1)[-1], ContentFile(d.file.read()), save=False
+                    )
+                    d.file.close()
+                except Exception:
+                    logger.exception("eSign: could not copy document %s", d.pk)
+                    continue
+                new_doc.save()
+                copied_docs += 1
+
+                for f in d.fields.all():
+                    target = recipient_map.get(f.recipient_id)
+                    if not target:
+                        continue
+                    SignatureField.objects.create(
+                        envelope=new, document=new_doc, recipient=target,
+                        kind=f.kind, label=f.label, page=f.page,
+                        x=f.x, y=f.y, w=f.w, h=f.h, required=f.required,
+                    )
+                    copied_fields += 1
+
+    log_event(
+        new, "duplicated", request=request, actor=request.user,
+        note=(f"Duplicated from {source.short_id} — "
+              f"{len(recipient_map)} recipient(s), {copied_docs} document(s), "
+              f"{copied_fields} field(s) copied."),
+        meta={"source": source.envelope_id},
+    )
+    log_event(
+        source, "duplicated", request=request, actor=request.user,
+        note=f"Used as the template for {new.short_id}",
+    )
+
+    if include_docs and copied_docs:
+        messages.success(
+            request,
+            f"Duplicated with {copied_docs} document(s) and {copied_fields} field(s). "
+            "Review and send.",
+        )
+        return redirect("accounts:esign_prepare", pk=new.pk)
+
+    messages.success(
+        request,
+        f"Flow duplicated with {len(recipient_map)} recipient(s). Add your document to continue.",
+    )
+    return redirect("accounts:esign_prepare", pk=new.pk)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Files (internal)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1076,6 +1395,11 @@ def esign_sign(request, token):
         return render(request, "accounts/esign/unavailable.html",
                       {"envelope": envelope, "recipient": recipient})
 
+    if envelope.status == Envelope.STATUS_RETURNED:
+        return render(request, "accounts/esign/returned.html",
+                      {"envelope": envelope, "recipient": recipient,
+                       "reason": envelope.return_reason})
+
     if recipient.status == EnvelopeRecipient.STATUS_SIGNED or envelope.status == Envelope.STATUS_COMPLETED:
         return redirect("accounts:esign_review", token=token)
 
@@ -1138,6 +1462,7 @@ def esign_sign(request, token):
             "fields_json": json.dumps(fields, default=str),
             "others_json": json.dumps(others, default=str),
             "saved_signatures": saved,
+            "comments": envelope.comments.filter(is_internal=False).select_related("recipient"),
             "fonts": ESIGN_FONTS,
             "default_name": recipient.name,
             "default_initials": _initials_from(recipient.name),
@@ -1408,7 +1733,8 @@ def esign_review(request, token):
             "documents_json": json.dumps(documents),
             "signers": envelope.signers(),
             "events": envelope.events.select_related("recipient").all(),
-            "show_audit": recipient.role != EnvelopeRecipient.ROLE_BCC or True,
+            "comments": envelope.comments.filter(is_internal=False).select_related("recipient"),
+            "show_audit": True,
         },
     )
 

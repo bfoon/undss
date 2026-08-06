@@ -1,0 +1,23 @@
+{% extends "accounts/esign/base_public.html" %}
+{% block title %}Returned for changes{% endblock %}
+{% block content %}
+<div class="container" style="max-width:560px">
+  <div class="es-card p-4 mt-5 text-center">
+    <i class="bi bi-arrow-return-left fs-1 text-warning"></i>
+    <h5 class="fw-bold mt-2">Returned to the sender</h5>
+    <p class="small text-muted">
+      <b>{{ envelope.subject }}</b> has been sent back for changes
+      {% if envelope.returned_by %}by {{ envelope.returned_by.name }}{% endif %}.
+      Signing is paused until it has been reworked and re-issued — you'll get a
+      fresh email when that happens.
+    </p>
+    {% if reason %}
+      <div class="alert alert-warning small text-start">
+        <div class="fw-semibold mb-1">What needs changing</div>
+        {{ reason|linebreaksbr }}
+      </div>
+    {% endif %}
+    <div class="es-token d-inline-block">Envelope ID: {{ envelope.envelope_id }}</div>
+  </div>
+</div>
+{% endblock %}

@@ -49,6 +49,12 @@
 {% endblock %}
 
 {% block topbar_actions %}
+  <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#commentModal">
+    <i class="bi bi-chat-left-text me-1"></i> Comment
+  </button>
+  <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#returnModal">
+    <i class="bi bi-arrow-return-left me-1"></i> Return for changes
+  </button>
   <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#declineModal">
     <i class="bi bi-x-circle me-1"></i> Decline
   </button>
@@ -137,6 +143,24 @@
       <div class="es-step"><i class="bi bi-3-circle-fill"></i><div>Tap <b>Finish</b>. Everyone gets the signed copy and the audit trail.</div></div>
     </div>
 
+    <div class="es-card p-2 mb-3">
+      <div class="small fw-semibold text-muted mb-2">
+        <i class="bi bi-chat-left-text me-1"></i>Comments
+        <button class="btn btn-link btn-sm p-0 float-end" data-bs-toggle="modal"
+                data-bs-target="#commentModal">Add</button>
+      </div>
+      {% for c in comments %}
+        <div class="border-start border-2 ps-2 mb-2" style="border-color:#009EDB !important">
+          <div class="small fw-semibold">{{ c.display_name }}
+            <span class="text-muted fw-normal">· {{ c.role_label }}</span></div>
+          <div class="small">{{ c.text|linebreaksbr }}</div>
+          <div class="text-muted" style="font-size:.7rem">{{ c.created_at|date:"d M Y H:i" }}</div>
+        </div>
+      {% empty %}
+        <div class="small text-muted">No comments yet.</div>
+      {% endfor %}
+    </div>
+
     <div class="es-card p-2 small text-muted">
       <div class="fw-semibold text-un-primary mb-1"><i class="bi bi-hash"></i> Document token</div>
       <div class="es-token d-block mb-1" style="white-space:normal">{{ envelope.envelope_id }}</div>
@@ -215,6 +239,63 @@
         <div class="modal-footer border-0">
           <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-danger">Decline</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Return for changes -->
+<div class="modal fade" id="returnModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_return' recipient.token %}">
+      {% csrf_token %}
+      <div class="modal-content border-0" style="border-radius:16px">
+        <div class="modal-header border-0 pb-1">
+          <h5 class="modal-title fw-bold text-warning">
+            <i class="bi bi-arrow-return-left me-2"></i>Return for changes</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small">
+            Sends the document back to the sender so they can correct it and re-issue —
+            unlike declining, which ends the envelope for everyone.
+          </p>
+          <label class="form-label small fw-semibold">What needs changing?</label>
+          <textarea name="reason" class="form-control" rows="3" required
+                    placeholder="e.g. The serial number in Section B should be SN-ABC-002."></textarea>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Return to sender</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Comment -->
+<div class="modal fade" id="commentModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_comment' recipient.token %}">
+      {% csrf_token %}
+      <div class="modal-content border-0" style="border-radius:16px">
+        <div class="modal-header border-0 pb-1">
+          <h5 class="modal-title fw-bold text-un-primary">
+            <i class="bi bi-chat-left-text me-2"></i>Add a comment</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">
+            Ask a question or note something without stopping the envelope.
+            The sender is notified; your comment is visible to the other parties.
+          </p>
+          <textarea name="text" class="form-control" rows="3" required
+                    placeholder="Your comment"></textarea>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-un-primary">Send comment</button>
         </div>
       </div>
     </form>
