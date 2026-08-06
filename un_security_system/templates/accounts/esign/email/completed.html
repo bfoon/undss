@@ -5,24 +5,50 @@
   <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
     <b>{{ subject_line }}</b> is complete. Everyone has signed and the final document is ready.
   </p>
-  <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:14px;margin-bottom:16px;">
-    <div style="font-size:13px;color:#065F46;font-weight:700;margin-bottom:6px;">Signed by</div>
+  <div style="background:#EFF9FE;border:1px solid #BAE6FD;border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-size:13px;color:#005A8B;font-weight:700;margin-bottom:6px;">Signed by</div>
     {% for s in envelope.signers %}
-      <div style="font-size:13px;color:#047857;">
+      <div style="font-size:13px;color:#0369A1;">
         {{ s.name }} — {{ s.signed_at|date:"d M Y H:i" }}{% if s.signed_ip %} · {{ s.signed_ip }}{% endif %}
       </div>
     {% endfor %}
   </div>
+  {% if attached %}
+  <div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="font-size:13px;font-weight:700;color:#005A8B;margin-bottom:6px;">
+      Attached to this email
+    </div>
+    {% for name in attached %}
+      <div style="font-size:13px;color:#374151;">&#128206; {{ name }}</div>
+    {% endfor %}
+    <div style="font-size:12px;color:#6B7280;margin-top:8px;">
+      Keep these for your records. The signed PDF carries the envelope identifier on
+      every page, and the Certificate of Completion holds the full audit trail —
+      every signer, timestamp, IP address and recipient token.
+    </div>
+  </div>
+  {% endif %}
+
+  {% if attach_note %}
+  <p style="font-size:13px;color:#92400E;background:#FEF3C7;border-radius:8px;padding:10px;margin:0 0 14px;">
+    {{ attach_note }}
+  </p>
+  {% endif %}
+
   <div style="text-align:center;margin:20px 0;">
     <a href="{{ action_url }}"
-       style="display:inline-block;background:#10B981;color:#ffffff;text-decoration:none;
+       style="display:inline-block;background:#009EDB;color:#ffffff;text-decoration:none;
               padding:13px 30px;border-radius:8px;font-weight:700;font-size:15px;">
-      Download signed document
+      {% if attached %}View online{% else %}Download signed document{% endif %}
     </a>
   </div>
   <p style="font-size:12px;color:#6B7280;margin:0;">
-    The Certificate of Completion — containing the full audit trail, IP addresses and timestamps —
-    is available from the same page.
+    {% if attached %}
+      The same files are always available from the link above.
+    {% else %}
+      The Certificate of Completion — containing the full audit trail, IP addresses and
+      timestamps — is available from the same page.
+    {% endif %}
   </p>
 {% endblock %}
 {% block footer_note %}

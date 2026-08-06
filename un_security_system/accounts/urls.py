@@ -269,6 +269,7 @@ urlpatterns = [
     path("esign/<int:pk>/send/", views_esign.esign_send, name="esign_send"),
     path("esign/<int:pk>/remind/", views_esign.esign_remind, name="esign_remind"),
     path("esign/<int:pk>/void/", views_esign.esign_void, name="esign_void"),
+    path("esign/<int:pk>/delete/", views_esign.esign_envelope_delete, name="esign_envelope_delete"),
     path("esign/<int:pk>/resend/<int:recipient_id>/", views_esign.esign_resend, name="esign_resend"),
     path("esign/<int:pk>/preview/", views_esign.esign_preview, name="esign_preview"),
     path("esign/<int:pk>/document/<int:doc_id>/", views_esign.esign_document_file, name="esign_document_file"),

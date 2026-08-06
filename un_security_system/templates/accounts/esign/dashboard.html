@@ -1,5 +1,42 @@
 {% extends "base.html" %}
-{% block title %}eSign | UN PASS{% endblock %}
+{% block title %}eSign | UN PASS<div class="modal fade" id="delModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" id="delForm">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger"><i class="bi bi-trash me-2"></i>Delete draft</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Permanently delete <b id="delSubject"></b>?</p>
+          <p class="small text-muted mb-0">
+            Its documents and any fields you've placed go with it. Nothing has been
+            sent, so no one else is affected. This cannot be undone.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-danger">Delete draft</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const DEL_URL = "{% url 'accounts:esign_envelope_delete' 0 %}";
+document.querySelectorAll('.es-del').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('delSubject').textContent = btn.dataset.subject;
+    document.getElementById('delForm').action = DEL_URL.replace(/\/0\/delete\/$/, '/' + btn.dataset.pk + '/delete/');
+    new bootstrap.Modal(document.getElementById('delModal')).show();
+  });
+});
+</script>
+{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -168,10 +205,15 @@
                 {% endwith %}
               </td>
               <td class="small text-muted">{{ e.sent_at|default:e.created_at|date:"d M Y H:i" }}</td>
-              <td class="text-end">
+              <td class="text-end text-nowrap">
                 {% if e.status == 'draft' %}
                   <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_prepare' e.pk %}">
                     <i class="bi bi-crosshair"></i> Prepare</a>
+                  <button type="button" class="btn btn-sm btn-outline-danger es-del"
+                          data-pk="{{ e.pk }}" data-subject="{{ e.subject|escapejs }}"
+                          title="Delete this draft">
+                    <i class="bi bi-trash"></i>
+                  </button>
                 {% else %}
                   <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_envelope_detail' e.pk %}">
                     <i class="bi bi-eye"></i> Open</a>

@@ -75,6 +75,10 @@
     <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_signatures' %}"
        title="Manage my saved signatures"><i class="bi bi-vector-pen me-1"></i> My signature</a>
     <button class="btn btn-outline-secondary" id="epSave"><i class="bi bi-save me-1"></i> Save draft</button>
+    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal"
+            data-bs-target="#epDeleteModal" title="Delete this draft envelope">
+      <i class="bi bi-trash"></i>
+    </button>
     <a class="btn btn-outline-primary" href="{% url 'accounts:esign_preview' envelope.pk %}" target="_blank">
       <i class="bi bi-eye me-1"></i> Preview stamp
     </a>
@@ -143,6 +147,30 @@
         Rotating or deleting a page moves its fields with it. Deleted pages lose their fields.
       </div>
     </div>
+  </div>
+</div>
+
+<div class="modal fade" id="epDeleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_envelope_delete' envelope.pk %}">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title text-danger">
+          <i class="bi bi-trash me-2"></i>Delete draft</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <p class="mb-2">Permanently delete <b>{{ envelope.subject }}</b>?</p>
+          <p class="small text-muted mb-0">
+            Its documents and every field you've placed go with it. Nothing has been sent,
+            so no recipient is affected. This cannot be undone.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-danger">Delete draft</button>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -574,8 +602,12 @@ document.getElementById('epSendForm').addEventListener('submit', async (e) => {
   if (ok) e.target.submit();
 });
 
+let leavingDeliberately = false;
+document.querySelectorAll('form').forEach(f =>
+  f.addEventListener('submit', () => { leavingDeliberately = true; }));
+
 window.addEventListener('beforeunload', (e) => {
-  if (dirty) { e.preventDefault(); e.returnValue = ''; }
+  if (dirty && !leavingDeliberately) { e.preventDefault(); e.returnValue = ''; }
 });
 
 render().catch(err => {

@@ -15,11 +15,15 @@ viewer   → read-only link at send time + completion copy
 from django.conf import settings
 from django.utils import timezone
 
+import logging
+import re
+
 from .asset_email import send_email_async
 from .models_esign import Envelope, EnvelopeRecipient
 from .utils_esign import log_event, review_url, sign_url
 
 TPL = "accounts/esign/email/{}.html"
+logger = logging.getLogger(__name__)
 
 
 def _brand():
@@ -47,7 +51,7 @@ def _ctx(envelope, **extra):
     return ctx
 
 
-def _send(subject, to_emails, template, ctx):
+def _send(subject, to_emails, template, ctx, attachments=None):
     to_emails = sorted({e for e in (to_emails or []) if e})
     if not to_emails:
         return
@@ -57,9 +61,78 @@ def _send(subject, to_emails, template, ctx):
             to_emails=to_emails,
             html_template=TPL.format(template),
             context={**ctx, "subject": subject},
+            attachments=attachments,
         )
     except Exception:
-        pass
+        logger.exception("eSign: could not queue '%s' to %s", template, to_emails)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Attachments
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _safe_filename(text: str, fallback: str) -> str:
+    """A readable filename a recipient can find later, not a 32-char hex blob."""
+    cleaned = re.sub(r"[^\w\s.-]", "", str(text or "")).strip()
+    cleaned = re.sub(r"\s+", "-", cleaned)[:60].strip("-.")
+    return cleaned or fallback
+
+
+def _read_file(handle) -> bytes | None:
+    """Read a FieldFile to bytes here, on the request thread — the email is sent
+    from a background thread where storage handles may already be closed."""
+    if not handle:
+        return None
+    try:
+        handle.open("rb")
+        data = handle.read()
+        handle.close()
+        return data or None
+    except Exception:
+        logger.exception("eSign: could not read %s for attachment", getattr(handle, "name", "?"))
+        return None
+
+
+def build_completed_attachments(envelope):
+    """
+    (attachments, note) for a completed envelope.
+
+    Signed PDF first, Certificate of Completion second. Skipped entirely if
+    the pair would exceed ESIGN_ATTACH_MAX_BYTES — plenty of mail gateways
+    silently drop oversized messages, and a recipient who receives nothing is
+    worse off than one who receives a link.
+    """
+    if not getattr(settings, "ESIGN_ATTACH_COMPLETED", True):
+        return [], ""
+
+    limit = int(getattr(settings, "ESIGN_ATTACH_MAX_BYTES", 10 * 1024 * 1024))
+    base = _safe_filename(envelope.reference or envelope.subject, envelope.envelope_id[:8])
+
+    items = []
+    signed = _read_file(envelope.completed_pdf)
+    if signed:
+        items.append((f"{base}-signed.pdf", signed, "application/pdf"))
+
+    if getattr(settings, "ESIGN_ATTACH_CERTIFICATE", True):
+        cert = _read_file(envelope.certificate_pdf)
+        if cert:
+            items.append((f"{base}-certificate-of-completion.pdf", cert, "application/pdf"))
+
+    total = sum(len(c) for _, c, _ in items)
+    if not items:
+        return [], ""
+
+    if total > limit:
+        logger.info(
+            "eSign: envelope %s attachments are %d bytes, over the %d limit — sending links only",
+            envelope.envelope_id, total, limit,
+        )
+        return [], (
+            "The signed document was too large to attach to this email. "
+            "Use the link above to download it."
+        )
+
+    return items, ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -201,18 +274,33 @@ def notify_voided(request, envelope: Envelope):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def notify_completed(request, envelope: Envelope):
+    """
+    Everyone who took part gets the signed PDF and the certificate as real
+    attachments, plus the link. Read once here and reused for every message.
+    """
     subject = f"Completed: {envelope.subject}"
+
+    attachments, attach_note = build_completed_attachments(envelope)
+    attached_names = [name for name, _, _ in attachments]
 
     open_recipients, blind_recipients = [], []
     for r in envelope.recipients.all():
         (blind_recipients if r.role == EnvelopeRecipient.ROLE_BCC else open_recipients).append(r)
+
+    if attachments:
+        log_event(
+            envelope, "copy_delivered", request=request,
+            note=f"Signed PDF attached to completion emails ({len(attachments)} file(s))",
+        )
 
     for r in open_recipients:
         _send(
             subject,
             [r.email],
             "completed",
-            _ctx(envelope, recipient=r, action_url=review_url(request, r)),
+            _ctx(envelope, recipient=r, action_url=review_url(request, r),
+                 attached=attached_names, attach_note=attach_note),
+            attachments=attachments,
         )
         if r.role in (EnvelopeRecipient.ROLE_CC, EnvelopeRecipient.ROLE_VIEWER):
             r.status = EnvelopeRecipient.STATUS_DELIVERED
@@ -230,7 +318,9 @@ def notify_completed(request, envelope: Envelope):
             subject,
             [r.email],
             "completed",
-            _ctx(envelope, recipient=r, action_url=review_url(request, r), is_bcc=True),
+            _ctx(envelope, recipient=r, action_url=review_url(request, r), is_bcc=True,
+                 attached=attached_names, attach_note=attach_note),
+            attachments=attachments,
         )
         r.status = EnvelopeRecipient.STATUS_DELIVERED
         r.save(update_fields=["status"])
@@ -248,7 +338,9 @@ def notify_completed(request, envelope: Envelope):
             subject,
             [sender],
             "completed",
-            _ctx(envelope, recipient=None, action_url=_detail_url(request, envelope)),
+            _ctx(envelope, recipient=None, action_url=_detail_url(request, envelope),
+                 attached=attached_names, attach_note=attach_note),
+            attachments=attachments,
         )
 
 

@@ -19,7 +19,9 @@ keep working and the envelope builder explains what's missing.
 """
 
 import io
+import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -35,6 +37,9 @@ __all__ = [
     "conversion_backend_available",
     "supported_upload_ext",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConversionError(Exception):
@@ -225,17 +230,24 @@ def _convert_docx_pure(raw: bytes) -> bytes:
 
     def runs_to_markup(paragraph) -> str:
         parts = []
-        for run in paragraph.runs:
+        try:
+            runs = paragraph.runs
+        except Exception:
+            return esc(getattr(paragraph, "text", ""))
+        for run in runs:
             text = esc(run.text)
             if not text:
                 # A page break lives inside an otherwise empty run.
                 continue
-            if run.bold:
-                text = f"<b>{text}</b>"
-            if run.italic:
-                text = f"<i>{text}</i>"
-            if run.underline:
-                text = f"<u>{text}</u>"
+            try:
+                if run.bold:
+                    text = f"<b>{text}</b>"
+                if run.italic:
+                    text = f"<i>{text}</i>"
+                if run.underline:
+                    text = f"<u>{text}</u>"
+            except Exception:
+                pass
             parts.append(text)
         return "".join(parts) or esc(paragraph.text)
 
@@ -243,34 +255,68 @@ def _convert_docx_pure(raw: bytes) -> bytes:
         xml = paragraph._p.xml
         return 'w:br' in xml and 'type="page"' in xml
 
+    def style_name_of(paragraph) -> str:
+        """
+        python-docx returns None for `.style` when the paragraph references a
+        style id that isn't defined in the file's styles.xml — which is common
+        in documents produced by other tools. Fall back to the raw w:pStyle
+        value so headings are still recognised.
+        """
+        try:
+            style = paragraph.style
+            if style is not None and getattr(style, "name", None):
+                return str(style.name).lower()
+        except Exception:
+            pass
+
+        try:
+            pPr = paragraph._p.pPr
+            if pPr is not None and pPr.pStyle is not None:
+                # "Heading2" / "Title" / "ListParagraph"
+                raw = str(pPr.pStyle.val or "")
+                return re.sub(r"(?<=[a-z])(?=[0-9])", " ", raw).lower()
+        except Exception:
+            pass
+
+        return ""
+
     def style_for(paragraph):
-        name = (paragraph.style.name or "").lower()
+        name = style_name_of(paragraph)
         if name.startswith("title"):
             return styles["h0"]
-        if name.startswith("heading 1"):
+        if name.startswith("heading 1") or name.startswith("heading1"):
             return styles["h1"]
-        if name.startswith("heading 2"):
+        if name.startswith("heading 2") or name.startswith("heading2"):
             return styles["h2"]
         if name.startswith("heading"):
             return styles["h3"]
         if "list" in name:
             return styles["bullet"]
+
         base = styles["body"]
         try:
             fmt = paragraph.paragraph_format.alignment
-            if fmt is not None and str(fmt).split(".")[-1].split(" ")[0] in align:
+            if fmt is not None:
                 key = str(fmt).split(".")[-1].split(" ")[0]
-                return ParagraphStyle(f"body-{key}", parent=base, alignment=align[key])
+                if key in align:
+                    return ParagraphStyle(f"body-{key}", parent=base, alignment=align[key])
         except Exception:
             pass
         return base
 
-    def render_table(tbl) -> Table:
+    def render_table(tbl):
         rows = []
-        for row in tbl.rows:
+        try:
+            tbl_rows = tbl.rows
+        except Exception:
+            return None
+        for row in tbl_rows:
             cells = []
             for cell in row.cells:
-                text = "<br/>".join(esc(p.text) for p in cell.paragraphs) or "&nbsp;"
+                try:
+                    text = "<br/>".join(esc(p.text) for p in cell.paragraphs) or "&nbsp;"
+                except Exception:
+                    text = "&nbsp;"
                 cells.append(Paragraph(text, styles["cell"]))
             rows.append(cells)
         if not rows:
@@ -295,29 +341,41 @@ def _convert_docx_pure(raw: bytes) -> bytes:
     story = []
     body = doc.element.body
 
+    skipped = 0
     for child in body.iterchildren():
         tag = child.tag.split("}")[-1]
 
-        if tag == "p":
-            paragraph = DocxParagraph(child, doc)
-            if has_page_break(paragraph):
-                story.append(PageBreak())
-            markup = runs_to_markup(paragraph)
-            if not markup.strip():
-                story.append(Spacer(1, 6))
-                continue
-            style = style_for(paragraph)
-            if style is styles["bullet"]:
-                story.append(Paragraph(markup, style, bulletText="•"))
-            else:
-                story.append(Paragraph(markup, style))
+        try:
+            if tag == "p":
+                paragraph = DocxParagraph(child, doc)
+                if has_page_break(paragraph):
+                    story.append(PageBreak())
+                markup = runs_to_markup(paragraph)
+                if not markup.strip():
+                    story.append(Spacer(1, 6))
+                    continue
+                style = style_for(paragraph)
+                if style is styles["bullet"]:
+                    story.append(Paragraph(markup, style, bulletText="\u2022"))
+                else:
+                    story.append(Paragraph(markup, style))
 
-        elif tag == "tbl":
-            table = render_table(DocxTable(child, doc))
-            if table is not None:
-                story.append(Spacer(1, 4))
-                story.append(table)
-                story.append(Spacer(1, 8))
+            elif tag == "tbl":
+                table = render_table(DocxTable(child, doc))
+                if table is not None:
+                    story.append(Spacer(1, 4))
+                    story.append(table)
+                    story.append(Spacer(1, 8))
+
+        except Exception:
+            # A single odd element (an unknown style, a chart, a content
+            # control) must not cost the whole document.
+            skipped += 1
+            logger.warning("eSign: skipped an unrenderable <%s> element", tag, exc_info=True)
+            continue
+
+    if skipped:
+        logger.info("eSign: DOCX rendered with %d element(s) skipped", skipped)
 
     if not story:
         story.append(Paragraph("(This document appears to be empty.)", styles["body"]))

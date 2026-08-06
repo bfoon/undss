@@ -195,6 +195,11 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
 ESIGN_SOFFICE_BIN = "soffice"
 ESIGN_CONVERT_TIMEOUT = 120     # seconds per document
 
+# ---- Completion email attachments --------------------------------------
+ESIGN_ATTACH_COMPLETED = True          # attach the signed PDF to completion emails
+ESIGN_ATTACH_CERTIFICATE = True        # also attach the Certificate of Completion
+ESIGN_ATTACH_MAX_BYTES = 10 * 1024 * 1024   # skip attaching above this; send links only
+
 # ---- Branding -----------------------------------------------------------
 # Wordmark shown in the UI and printed down the border of every stamped page.
 ESIGN_BRAND = "UNDP eSign"       # or "UNDP SoftSign"

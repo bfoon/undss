@@ -907,6 +907,60 @@ def esign_void(request, pk):
     return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
 
+
+@login_required
+@require_POST
+def esign_envelope_delete(request, pk):
+    """
+    Permanently delete a DRAFT envelope and everything attached to it.
+
+    Drafts only, on purpose. Once an envelope has been sent, recipients hold
+    links and have received emails — the audit trail is a record of what
+    happened, not a working file. Sent envelopes are voided (which notifies
+    everyone and keeps the history) rather than deleted.
+    """
+    envelope = _get_envelope_for_user(request, pk, editable=True)
+
+    if envelope.status != Envelope.STATUS_DRAFT:
+        messages.error(
+            request,
+            "Only drafts can be deleted. This envelope has already been sent — "
+            "void it instead, which notifies every party and preserves the audit trail.",
+        )
+        return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
+
+    subject = envelope.subject
+    doc_count = envelope.documents.count()
+
+    # Django removes the rows but never the files — clear them up explicitly.
+    stored_files = []
+    for d in envelope.documents.all():
+        for handle in (d.file, getattr(d, "converted_pdf", None)):
+            if handle:
+                stored_files.append(handle)
+    for f in envelope.fields.all():
+        if f.image:
+            stored_files.append(f.image)
+
+    with transaction.atomic():
+        envelope.delete()
+
+    removed = 0
+    for handle in stored_files:
+        try:
+            handle.delete(save=False)
+            removed += 1
+        except Exception:
+            logger.warning("eSign: could not delete stored file %s", getattr(handle, "name", "?"))
+
+    logger.info(
+        "eSign: %s deleted draft '%s' (%d document(s), %d file(s) removed)",
+        request.user, subject, doc_count, removed,
+    )
+    messages.success(request, f"Draft deleted: {subject}")
+    return redirect("accounts:esign_dashboard")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Files (internal)
 # ─────────────────────────────────────────────────────────────────────────────
