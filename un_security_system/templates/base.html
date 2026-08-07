@@ -297,6 +297,32 @@
                 display: inline;
             }
         }
+
+        /* ── Split nav item ─────────────────────────────────────────────
+           The label itself is a normal link that navigates straight to the
+           user's role-appropriate landing page; the caret beside it opens
+           the dropdown for everything else. */
+        .navbar-nav .nav-item.nav-split {
+            display: flex;
+            align-items: center;
+        }
+        .navbar-nav .nav-item.nav-split > .nav-split-main {
+            padding-right: 0.15rem;
+        }
+        .navbar-nav .nav-item.nav-split > .nav-split-caret {
+            padding-left: 0.15rem;
+            padding-right: 0.5rem;
+        }
+        .navbar-nav .nav-item.nav-split > .nav-split-caret::after {
+            margin-left: 0;
+        }
+        /* Collapsed (mobile/tablet) navbar: push the caret to the right edge
+           so it stays an easy tap target separate from the label. */
+        @media (max-width: 1399.98px) {
+            .navbar-nav .nav-item.nav-split {
+                justify-content: space-between;
+            }
+        }
       /* Optional CSS Enhancements for Asset Management Tables */
 /* Add this to your main CSS file for improved aesthetics */
 
@@ -1040,12 +1066,51 @@ canvas {
                 {% endif %}
 
                 {% if request.user.is_authenticated %}
-                  <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  {# Manager tools are visible to CSR managers and super admins. #}
+                  {% if is_csm or request.user.is_superuser %}
+                    {% url 'incidents:csr_dashboard' as cs_landing_url %}
+                  {% elif is_csr_fulfiller %}
+                    {% url 'incidents:csr_queue' as cs_landing_url %}
+                  {% else %}
+                    {% url 'incidents:my_csr' as cs_landing_url %}
+                  {% endif %}
+
+                  <li class="nav-item dropdown nav-split">
+                    {# Clicking the label goes straight to the landing page for this role. #}
+                    <a class="nav-link nav-split-main" href="{{ cs_landing_url }}">
                       <i class="bi bi-tools me-1"></i> <span class="nav-label">Common Services</span>
                     </a>
+                    {# The caret still opens the full menu. #}
+                    <a class="nav-link dropdown-toggle nav-split-caret" href="#" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false"
+                       aria-label="Open Common Services menu"></a>
 
                     <ul class="dropdown-menu">
+
+                      {% if is_csm or request.user.is_superuser %}
+                      <li class="dropdown-header text-muted small">
+                        <i class="bi bi-shield-check me-1"></i> MANAGER TOOLS
+                      </li>
+                      <li>
+                        <a class="dropdown-item fw-semibold text-primary" href="{% url 'incidents:csr_dashboard' %}">
+                          <i class="bi bi-speedometer2 me-2"></i> CSR Dashboard
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item fw-semibold text-primary" href="{% url 'incidents:csr_queue' %}?scope=all">
+                          <i class="bi bi-globe me-2"></i> All Agencies Queue
+                        </a>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      {% endif %}
+
+                      {% if is_csr_fulfiller or is_csm or request.user.is_superuser %}
+                      <li>
+                        <a class="dropdown-item" href="{% url 'incidents:csr_queue' %}">
+                          <i class="bi bi-inbox me-2"></i> My CSR Queue
+                        </a>
+                      </li>
+                      {% endif %}
 
                       <li>
                         <a class="dropdown-item" href="{% url 'incidents:cs_support' %}">
@@ -1058,32 +1123,6 @@ canvas {
                           <i class="bi bi-file-earmark-text me-2"></i> My Service Requests
                         </a>
                       </li>
-
-                      {% if is_csr_fulfiller or is_csm %}
-                      <li>
-                        <a class="dropdown-item" href="{% url 'incidents:csr_queue' %}">
-                          <i class="bi bi-inbox me-2"></i> My CSR Queue
-                        </a>
-                      </li>
-                      {% endif %}
-
-
-{% if is_csm %}
-<li><hr class="dropdown-divider"></li>
-<li class="dropdown-header text-muted small">
-  <i class="bi bi-shield-check me-1"></i> MANAGER TOOLS
-</li>
-<li>
-  <a class="dropdown-item fw-semibold text-primary" href="{% url 'incidents:csr_dashboard' %}">
-    <i class="bi bi-speedometer2 me-2"></i> CSR Dashboard
-  </a>
-</li>
-<li>
-  <a class="dropdown-item fw-semibold text-primary" href="{% url 'incidents:csr_queue' %}?scope=all">
-    <i class="bi bi-globe me-2"></i> All Agencies Queue
-  </a>
-</li>
-{% endif %}
 
                     </ul>
                   </li>
