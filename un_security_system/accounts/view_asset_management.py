@@ -1559,14 +1559,15 @@ def view_asset_management(request):
             .order_by("consumable_item__name")
         )
 
-    # ── Build JSON payload for the assign-asset modal ────────────────
-    # Pre-filter to only available assets so the modal JS always gets
-    # valid JSON regardless of how many assets are in the queryset.
+    # ── Build payload for the assign-asset modal ─────────────────────
+    # Only assets that are actually assignable. Serialised in the template
+    # via {{ available_assets|json_script:"availableAssetsData" }}, which
+    # escapes <, > and & so an asset name can never break out of the tag.
     _available_assets = Asset.objects.filter(
         agency=agency, status="available"
     ).select_related("category", "unit").order_by("category__name", "name")
 
-    _available_assets_list = [
+    available_assets = [
         {
             "id": a.id,
             "name": a.name,
@@ -1579,12 +1580,6 @@ def view_asset_management(request):
         }
         for a in _available_assets
     ]
-    # Use Django's json_script-safe approach: embed as a <script> tag
-    available_assets_json = (
-        '<script id="availableAssetsData" type="application/json">'
-        + json.dumps(_available_assets_list)
-        + '</script>'
-    )
 
     return render(request, "accounts/assets/asset_management.html", {
         "svc": svc,
@@ -1624,7 +1619,7 @@ def view_asset_management(request):
             Asset.objects.filter(agency=agency).order_by("name")
             if (is_ict or is_ops) else []
         ),
-        "available_assets_json": available_assets_json,
+        "available_assets": available_assets,
     })
 
 

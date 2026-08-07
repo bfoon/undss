@@ -15,7 +15,7 @@
 
           {# ── Context card shown when modal opens ─────────────────── #}
           <div id="assignContextCard" class="alert alert-info d-none py-2 mb-3 small">
-            <div class="d-flex gap-3">
+            <div class="d-flex gap-3 flex-wrap">
               <div><span class="text-muted">Request&nbsp;#</span> <strong id="ctx_req_id">—</strong></div>
               <div><span class="text-muted">Category:</span> <strong id="ctx_category">—</strong></div>
               <div><span class="text-muted">Unit:</span> <strong id="ctx_unit">—</strong></div>
@@ -23,11 +23,19 @@
             </div>
           </div>
 
-          {# ── Asset data: serialised server-side so JSON is always valid ── #}
-          {# The view passes `available_assets_json` via json_script tag.    #}
-          {{ available_assets_json|safe }}
+          {# ── Asset data ───────────────────────────────────────────── #}
+          {# Preferred: view passes `available_assets` (a plain list of dicts)  #}
+          {# and we serialise it with Django's json_script, which escapes       #}
+          {# <, > and & so an asset name can never break out of the tag.        #}
+          {# Fallback branch keeps the old `available_assets_json` context key  #}
+          {# working if the view has not been updated yet.                      #}
+          {% if available_assets_json %}
+            {{ available_assets_json|safe }}
+          {% else %}
+            {{ available_assets|json_script:"availableAssetsData" }}
+          {% endif %}
 
-          <label class="form-label fw-semibold">Select an available asset</label>
+          <label class="form-label fw-semibold" for="assignAssetSelect">Select an available asset</label>
           <select class="form-select" name="asset_id" id="assignAssetSelect" required>
             <option value="">Choose asset…</option>
           </select>
@@ -39,7 +47,9 @@
 
           <div class="alert alert-warning d-none mt-2 py-2 small" id="assignNoMatchWarn">
             <i class="bi bi-exclamation-triangle me-1"></i>
-            No available assets found for this category. Register a new asset or check existing ones.
+            <span id="assignNoMatchText">
+              No available assets found for this category. Register a new asset or check existing ones.
+            </span>
           </div>
 
         </div>
@@ -57,79 +67,182 @@
 
 <script>
 (function () {
-  const allAssets = JSON.parse(document.getElementById('availableAssetsData').textContent);
+  const modalEl = document.getElementById('modalAssignAsset');
+  if (!modalEl) return;
 
-  // Called from the parent page when "Assign" button is clicked on a request row.
-  // Usage: openAssignModal({ req_id, category_id, category_name, unit_id, unit_name, requester })
-  window.openAssignModal = function (ctx) {
-    // Populate hidden field
-    document.getElementById('assignRequestId').value = ctx.req_id || '';
+  const selEl     = document.getElementById('assignAssetSelect');
+  const warnEl    = document.getElementById('assignNoMatchWarn');
+  const warnTxtEl = document.getElementById('assignNoMatchText');
+  const hintEl    = document.getElementById('assignAssetHint');
+  const submitEl  = document.getElementById('assignSubmitBtn');
+  const reqIdEl   = document.getElementById('assignRequestId');
+  const cardEl    = document.getElementById('assignContextCard');
 
-    // Populate context card
-    document.getElementById('ctx_req_id').textContent = ctx.req_id || '—';
-    document.getElementById('ctx_category').textContent = ctx.category_name || '—';
-    document.getElementById('ctx_unit').textContent = ctx.unit_name || 'Unallocated';
-    document.getElementById('ctx_requester').textContent = ctx.requester || '—';
-    document.getElementById('assignContextCard').classList.remove('d-none');
+  // Set by openAssignModal() so the show.bs.modal handler can pick it up.
+  let pendingCtx = null;
 
-    // Filter assets by matching category
-    const catId = parseInt(ctx.category_id, 10);
-    const unitId = ctx.unit_id ? parseInt(ctx.unit_id, 10) : null;
-
-    // Sort: unit-matching assets first, then rest — both groups alphabetical
-    const matching = allAssets.filter(a => a.category_id === catId);
-    const unitAssets = matching.filter(a => unitId && a.unit_id === unitId);
-    const otherAssets = matching.filter(a => !(unitId && a.unit_id === unitId));
-    const sorted = [...unitAssets, ...otherAssets];
-
-    const sel = document.getElementById('assignAssetSelect');
-    const warn = document.getElementById('assignNoMatchWarn');
-    sel.innerHTML = '<option value="">Choose asset…</option>';
-
-    if (sorted.length === 0) {
-      warn.classList.remove('d-none');
-      document.getElementById('assignSubmitBtn').disabled = true;
-    } else {
-      warn.classList.add('d-none');
-      document.getElementById('assignSubmitBtn').disabled = false;
-
-      // Add unit group label if we have unit assets
-      if (unitAssets.length > 0 && otherAssets.length > 0) {
-        const grp1 = document.createElement('optgroup');
-        grp1.label = `\uD83D\uDCCC ${ctx.unit_name || 'Request Unit'} — ${unitAssets.length} asset(s)`;
-        unitAssets.forEach(a => grp1.appendChild(_makeOption(a)));
-        sel.appendChild(grp1);
-
-        const grp2 = document.createElement('optgroup');
-        grp2.label = `Other Available — ${otherAssets.length} asset(s)`;
-        otherAssets.forEach(a => grp2.appendChild(_makeOption(a)));
-        sel.appendChild(grp2);
-      } else {
-        sorted.forEach(a => sel.appendChild(_makeOption(a)));
-      }
+  // ── Data loading ────────────────────────────────────────────────────
+  // Read fresh on every open, and never throw: a missing or malformed
+  // payload degrades to an empty list with a console warning instead of
+  // killing this whole IIFE (which would leave openAssignModal undefined).
+  function loadAssets() {
+    const node = document.getElementById('availableAssetsData');
+    if (!node) {
+      console.warn('[assignAsset] #availableAssetsData not found. ' +
+                   'Check that the view passes `available_assets` in the template context.');
+      return [];
     }
+    try {
+      const data = JSON.parse(node.textContent || '[]');
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      console.error('[assignAsset] Could not parse asset payload:', err);
+      return [];
+    }
+  }
 
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAssignAsset'));
-    modal.show();
-  };
+  function toInt(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const n = parseInt(value, 10);
+    return Number.isNaN(n) ? null : n;
+  }
 
-  function _makeOption(a) {
+  function makeOption(a) {
     const opt = document.createElement('option');
     opt.value = a.id;
-    const sn = a.serial_number ? `SN: ${a.serial_number}` : '';
-    const tag = a.asset_tag ? `Tag: ${a.asset_tag}` : '';
+    const sn   = a.serial_number ? 'SN: ' + a.serial_number : '';
+    const tag  = a.asset_tag ? 'Tag: ' + a.asset_tag : '';
     const meta = [sn, tag].filter(Boolean).join(' | ');
-    opt.textContent = `${a.name}${meta ? ' — ' + meta : ''}${a.unit_name ? ' [' + a.unit_name + ']' : ''}`;
+    opt.textContent =
+      a.name +
+      (meta ? ' — ' + meta : '') +
+      (a.unit_name ? ' [' + a.unit_name + ']' : '');
     return opt;
   }
 
-  // Clean up on close
-  document.getElementById('modalAssignAsset').addEventListener('hidden.bs.modal', function () {
-    document.getElementById('assignAssetSelect').innerHTML = '<option value="">Choose asset…</option>';
-    document.getElementById('assignContextCard').classList.add('d-none');
-    document.getElementById('assignNoMatchWarn').classList.add('d-none');
-    document.getElementById('assignSubmitBtn').disabled = false;
-    document.getElementById('assignRequestId').value = '';
+  function showWarning(message) {
+    warnTxtEl.textContent = message;
+    warnEl.classList.remove('d-none');
+  }
+
+  function reset() {
+    selEl.innerHTML = '<option value="">Choose asset…</option>';
+    warnEl.classList.add('d-none');
+    cardEl.classList.add('d-none');
+    submitEl.disabled = false;
+    hintEl.textContent =
+      'Only available assets matching the request category are shown. ' +
+      "Assets from the request's unit appear first.";
+  }
+
+  // ── Population ──────────────────────────────────────────────────────
+  function populate(ctx) {
+    ctx = ctx || {};
+    reset();
+
+    const reqId = ctx.req_id || '';
+    reqIdEl.value = reqId;
+
+    document.getElementById('ctx_req_id').textContent    = reqId || '—';
+    document.getElementById('ctx_category').textContent  = ctx.category_name || '—';
+    document.getElementById('ctx_unit').textContent      = ctx.unit_name || 'Unallocated';
+    document.getElementById('ctx_requester').textContent = ctx.requester || '—';
+    cardEl.classList.remove('d-none');
+
+    if (!reqId) {
+      showWarning('Could not determine which request this is for. ' +
+                  'Close this dialog and click Assign from the ICT queue row again.');
+      submitEl.disabled = true;
+      return;
+    }
+
+    const allAssets = loadAssets();
+
+    if (allAssets.length === 0) {
+      showWarning('There are no assets with status "Available" in this agency. ' +
+                  'Register a new asset, or return/free up an existing one first.');
+      submitEl.disabled = true;
+      return;
+    }
+
+    const catId  = toInt(ctx.category_id);
+    const unitId = toInt(ctx.unit_id);
+
+    // When the category is unknown, show everything available rather than an
+    // empty list — the server still enforces the category match on submit.
+    let matching;
+    if (catId === null) {
+      matching = allAssets.slice();
+      hintEl.textContent =
+        'Request category could not be determined, so all available assets are listed. ' +
+        'The category must still match the request or the assignment will be rejected.';
+    } else {
+      matching = allAssets.filter(a => toInt(a.category_id) === catId);
+    }
+
+    if (matching.length === 0) {
+      showWarning('No available assets found for this category' +
+                  (ctx.category_name ? ' (' + ctx.category_name + ')' : '') +
+                  '. Register a new asset or check existing ones.');
+      submitEl.disabled = true;
+      return;
+    }
+
+    submitEl.disabled = false;
+
+    const unitAssets  = unitId === null ? [] : matching.filter(a => toInt(a.unit_id) === unitId);
+    const otherAssets = unitId === null ? matching : matching.filter(a => toInt(a.unit_id) !== unitId);
+
+    if (unitAssets.length > 0 && otherAssets.length > 0) {
+      const grp1 = document.createElement('optgroup');
+      grp1.label = '\uD83D\uDCCC ' + (ctx.unit_name || 'Request Unit') +
+                   ' — ' + unitAssets.length + ' asset(s)';
+      unitAssets.forEach(a => grp1.appendChild(makeOption(a)));
+      selEl.appendChild(grp1);
+
+      const grp2 = document.createElement('optgroup');
+      grp2.label = 'Other Available — ' + otherAssets.length + ' asset(s)';
+      otherAssets.forEach(a => grp2.appendChild(makeOption(a)));
+      selEl.appendChild(grp2);
+    } else {
+      [...unitAssets, ...otherAssets].forEach(a => selEl.appendChild(makeOption(a)));
+    }
+  }
+
+  // ── Wiring ──────────────────────────────────────────────────────────
+  // Primary path: standard Bootstrap data-attributes on the trigger button,
+  // matching how every other modal on this page works.
+  modalEl.addEventListener('show.bs.modal', function (event) {
+    let ctx = pendingCtx;
+    pendingCtx = null;
+
+    if (!ctx) {
+      const btn = event.relatedTarget;
+      if (btn) {
+        ctx = {
+          req_id:        btn.getAttribute('data-request-id'),
+          category_id:   btn.getAttribute('data-category-id'),
+          category_name: btn.getAttribute('data-category-name'),
+          unit_id:       btn.getAttribute('data-unit-id'),
+          unit_name:     btn.getAttribute('data-unit-name'),
+          requester:     btn.getAttribute('data-requester'),
+        };
+      }
+    }
+
+    populate(ctx);
+  });
+
+  // Secondary path: kept for any caller that still invokes this directly.
+  //   openAssignModal({ req_id, category_id, category_name, unit_id, unit_name, requester })
+  window.openAssignModal = function (ctx) {
+    pendingCtx = ctx || {};
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  };
+
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    reset();
+    reqIdEl.value = '';
   });
 })();
 </script>

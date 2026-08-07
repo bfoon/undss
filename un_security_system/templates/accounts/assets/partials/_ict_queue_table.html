@@ -25,9 +25,16 @@
           <td>{{ r.unit.name|default:"Unallocated/Core" }}</td>
           <td><span class="badge bg-info text-dark">{{ r.get_status_display }}</span></td>
           <td class="text-end">
-            <button class="btn btn-sm btn-primary"
-                    data-bs-toggle="modal" data-bs-target="#modalAssignAsset"
-                    data-request-id="{{ r.id }}">
+            <button type="button"
+                    class="btn btn-sm btn-primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalAssignAsset"
+                    data-request-id="{{ r.id }}"
+                    data-category-id="{{ r.category_id }}"
+                    data-category-name="{{ r.category.name }}"
+                    data-unit-id="{{ r.unit_id|default_if_none:'' }}"
+                    data-unit-name="{{ r.unit.name|default_if_none:'' }}"
+                    data-requester="{{ r.requester.get_full_name|default:r.requester.username }}">
               <i class="bi bi-link-45deg me-1"></i> Assign Asset
             </button>
           </td>
