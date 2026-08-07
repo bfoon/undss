@@ -7,8 +7,8 @@ Internal (login required)          Public / tokenized (no login)
 esign_dashboard                    esign_sign          <token>
 esign_new                          esign_decline       <token>
 esign_prepare / esign_fields_save  esign_review        <token>
-esign_recipients_reorder           esign_token_document<token>/<doc>
-esign_recipient_remove             esign_token_download<token>/<kind>
+esign_recipient_add / _remove      esign_token_document<token>/<doc>
+esign_recipients_reorder           esign_token_download<token>/<kind>
 esign_send / esign_void
 esign_remind / esign_resend
 esign_envelope_detail
@@ -24,8 +24,9 @@ import logging
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.base import ContentFile
+from django.core.validators import validate_email
 from django.conf import settings
 from django.db import OperationalError, ProgrammingError, transaction
 from django.db.models import Q
@@ -484,6 +485,13 @@ def esign_prepare(request, pk):
             "signers_json": json.dumps(signers, default=str),
             "fields_json": json.dumps(existing, default=str),
             "field_kinds": SignatureField.KIND_CHOICES,
+            "colleagues": User.objects.filter(
+                agency=envelope.agency, is_active=True
+            ).order_by("first_name", "username")[:500],
+            "signing_roles": [
+                (EnvelopeRecipient.ROLE_SIGNER, "Needs to sign"),
+                (EnvelopeRecipient.ROLE_APPROVER, "Needs to approve"),
+            ],
         },
     )
 
@@ -584,6 +592,83 @@ def _recipients_editable(envelope):
             "Use Rework if you need to change them."
         )
     return None
+
+
+@login_required
+@require_POST
+def esign_recipient_add(request, pk):
+    """
+    Add one signer or approver to a draft, at the end of the signing order.
+
+    Body: {"name": "...", "email": "...", "role": "signer",
+           "title": "...", "access_code": ""}
+
+    Kept to signing roles on purpose — this is driven from the field-placement
+    panel, and a CC has no fields to place. Copies and viewers are still set on
+    the new-envelope form.
+    """
+    envelope = _get_envelope_for_user(request, pk, editable=True)
+    locked = _recipients_editable(envelope)
+    if locked:
+        return JsonResponse({"ok": False, "error": locked}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Malformed payload."}, status=400)
+
+    email = (payload.get("email") or "").strip()
+    if not email:
+        return JsonResponse({"ok": False, "error": "An email address is required."}, status=400)
+    try:
+        validate_email(email)
+    except ValidationError:
+        return JsonResponse(
+            {"ok": False, "error": f"{email} is not a valid email address."}, status=400
+        )
+
+    if envelope.recipients.filter(email__iexact=email).exists():
+        return JsonResponse(
+            {"ok": False, "error": f"{email} is already on this envelope."}, status=400
+        )
+
+    role = payload.get("role") or EnvelopeRecipient.ROLE_SIGNER
+    if role not in (EnvelopeRecipient.ROLE_SIGNER, EnvelopeRecipient.ROLE_APPROVER):
+        role = EnvelopeRecipient.ROLE_SIGNER
+
+    matched = User.objects.filter(agency=envelope.agency, email__iexact=email).first()
+    name = (payload.get("name") or "").strip()
+    if not name:
+        name = (
+            (matched.get_full_name() or matched.username).strip()
+            if matched
+            else email.split("@")[0]
+        )
+    title = (payload.get("title") or "").strip() or (
+        getattr(matched, "job_title", "") or "" if matched else ""
+    )
+
+    with transaction.atomic():
+        recipient = EnvelopeRecipient.objects.create(
+            envelope=envelope,
+            user=matched,
+            name=name[:150],
+            email=email,
+            title=title[:120],
+            role=role,
+            order=envelope.recipients.count() + 1,
+            access_code=(payload.get("access_code") or "").strip()[:32],
+        )
+        _renumber_recipients(envelope)
+
+    log_event(
+        envelope, "recipient_changed", request=request, actor=request.user,
+        note=f"Added {recipient.name} <{recipient.email}> as {recipient.get_role_display().lower()}",
+    )
+    recipient.refresh_from_db(fields=["order"])
+    return JsonResponse(
+        {"ok": True, "added_id": recipient.pk, "signers": _signer_rows(envelope)}
+    )
 
 
 @login_required

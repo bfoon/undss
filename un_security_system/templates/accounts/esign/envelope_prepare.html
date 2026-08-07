@@ -71,6 +71,11 @@
   .ep-signer-count{ font-weight:600; font-size:.78rem; flex:0 0 auto; }
   .ep-signer-row .ep-mini{ visibility:hidden; }
   .ep-signer-row:hover .ep-mini{ visibility:visible; }
+  /* Deliberately not Bootstrap's .alert — base.html sweeps those away for the
+     Django messages auto-dismiss, which would take this box with them. */
+  .ep-err{ display:none; border:1px solid #FECACA; background:#FEF2F2; color:#B91C1C;
+           border-radius:8px; padding:.45rem .65rem; font-size:.8rem; margin-bottom:.75rem; }
+  .ep-err.show{ display:block; }
 </style>
 {% endblock %}
 
@@ -119,7 +124,14 @@
       Every signer needs at least one field before you can send.
     </div>
     <div class="mt-3 small">
-      <div class="fw-semibold text-muted mb-1">Fields per signer</div>
+      <div class="d-flex align-items-center mb-1">
+        <span class="fw-semibold text-muted">Fields per signer</span>
+        <button type="button" class="ep-mini ms-auto" id="epAddSigner"
+                data-bs-toggle="modal" data-bs-target="#epSignerModal"
+                title="Add another signer to this envelope">
+          <i class="bi bi-person-plus"></i>
+        </button>
+      </div>
       <div id="epCounts"></div>
       <div class="ep-hint mt-1" id="epSignerHint">
         Drag a row to change the signing order.
@@ -189,6 +201,70 @@
   </div>
 </div>
 
+<div class="modal fade" id="epSignerModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title text-un-primary"><i class="bi bi-person-plus me-2"></i>Add a signer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="ep-err" id="epSignerErr"></div>
+
+        <label class="form-label small fw-semibold">Email</label>
+        <input type="email" class="form-control mb-1" id="epSignerEmail"
+               list="epColleagues" placeholder="name@agency.org" autocomplete="off">
+        <datalist id="epColleagues">
+          {% for c in colleagues %}
+            {% if c.email %}
+              <option value="{{ c.email }}"
+                      label="{{ c.get_full_name|default:c.username }}"
+                      data-name="{{ c.get_full_name|default:c.username }}"></option>
+            {% endif %}
+          {% endfor %}
+        </datalist>
+        <div class="ep-hint mb-3">
+          Start typing to pick a colleague, or enter any address.
+        </div>
+
+        <div class="row g-2">
+          <div class="col-sm-7">
+            <label class="form-label small fw-semibold">Name</label>
+            <input type="text" class="form-control" id="epSignerName" maxlength="150"
+                   placeholder="Leave blank to use the address">
+          </div>
+          <div class="col-sm-5">
+            <label class="form-label small fw-semibold">Role</label>
+            <select class="form-select" id="epSignerRole">
+              {% for value, label in signing_roles %}
+                <option value="{{ value }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-7">
+            <label class="form-label small fw-semibold">Title <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" class="form-control" id="epSignerTitle" maxlength="120">
+          </div>
+          <div class="col-sm-5">
+            <label class="form-label small fw-semibold">Access code <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" class="form-control" id="epSignerCode" maxlength="32"
+                   placeholder="Shared secret">
+          </div>
+        </div>
+
+        <div class="ep-hint mt-3">
+          They join at the end of the signing order — drag them up the list afterwards
+          if they should go earlier. Nothing is emailed until you send.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-un-primary" id="epSignerSave">Add signer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <form method="post" action="{% url 'accounts:esign_document_add' envelope.pk %}"
       enctype="multipart/form-data" id="epAddForm" class="d-none">
   {% csrf_token %}
@@ -205,6 +281,7 @@ const EXISTING= {{ fields_json|safe }};
 const SAVE_URL = "{% url 'accounts:esign_fields_save' envelope.pk %}";
 const REORDER_URL = "{% url 'accounts:esign_recipients_reorder' envelope.pk %}";
 const RM_SIGNER_URL = "{% url 'accounts:esign_recipient_remove' envelope.pk 0 %}";
+const ADD_SIGNER_URL = "{% url 'accounts:esign_recipient_add' envelope.pk %}";
 const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
 function rmSignerUrl(id){ return RM_SIGNER_URL.replace(/\/0\/remove\/$/, '/' + id + '/remove/'); }
@@ -232,7 +309,14 @@ let nextTmpId = -1;
 // page under the sender's cursor.
 const sel = document.getElementById('epSigner');
 const COLOR_BY_ID = {};
-SIGNERS.forEach((s, i) => { COLOR_BY_ID[s.id] = COLORS[i % COLORS.length]; });
+function assignColors(){
+  SIGNERS.forEach(s => {
+    if (!COLOR_BY_ID[s.id]) {
+      COLOR_BY_ID[s.id] = COLORS[Object.keys(COLOR_BY_ID).length % COLORS.length];
+    }
+  });
+}
+assignColors();
 
 function rebuildSignerPicker(){
   const prev = sel.value;
@@ -717,6 +801,7 @@ async function persistSignerOrder(previous) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'The signing order could not be saved.');
     SIGNERS = data.signers;                 // server is the authority on numbering
+    assignColors();
   } catch (err) {
     SIGNERS = previous;                     // put the list back the way it was
     alert(err.message || 'The signing order could not be saved.');
@@ -753,12 +838,93 @@ async function removeSigner(id) {
     });
 
     SIGNERS = data.signers;
+    assignColors();
     rebuildSignerPicker();
     updateCounts();
   } catch (err) {
     alert('This signer could not be removed: ' + err.message);
   }
 }
+
+const signerModalEl = document.getElementById('epSignerModal');
+
+function signerErrBox() {
+  let box = document.getElementById('epSignerErr');
+  if (!box && signerModalEl) {
+    // Put it back if anything on the page has removed it.
+    box = document.createElement('div');
+    box.id = 'epSignerErr';
+    box.className = 'ep-err';
+    const body = signerModalEl.querySelector('.modal-body');
+    if (body) body.prepend(box);
+  }
+  return box;
+}
+
+function signerModalError(msg) {
+  const box = signerErrBox();
+  if (!box) { if (msg) alert(msg); return; }
+  box.textContent = msg || '';
+  box.classList.toggle('show', !!msg);
+}
+
+// Picking a colleague from the datalist fills the name for you.
+document.getElementById('epSignerEmail').addEventListener('input', (e) => {
+  const opt = document.querySelector('#epColleagues option[value="' + e.target.value.replace(/"/g, '\\"') + '"]');
+  const nameBox = document.getElementById('epSignerName');
+  if (opt && !nameBox.value) nameBox.value = opt.dataset.name || '';
+});
+
+signerModalEl.addEventListener('shown.bs.modal', () => {
+  signerModalError('');
+  document.getElementById('epSignerEmail').focus();
+});
+
+signerModalEl.addEventListener('hidden.bs.modal', () => {
+  ['epSignerEmail', 'epSignerName', 'epSignerTitle', 'epSignerCode']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  signerModalError('');
+});
+
+document.getElementById('epSignerSave').onclick = async () => {
+  const btn = document.getElementById('epSignerSave');
+  const email = document.getElementById('epSignerEmail').value.trim();
+  if (!email) { signerModalError('An email address is required.'); return; }
+
+  signerModalError('');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding…';
+
+  try {
+    const res = await fetch(ADD_SIGNER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({
+        email: email,
+        name: document.getElementById('epSignerName').value.trim(),
+        role: document.getElementById('epSignerRole').value,
+        title: document.getElementById('epSignerTitle').value.trim(),
+        access_code: document.getElementById('epSignerCode').value.trim()
+      })
+    });
+    const data = await res.json();
+    if (!data.ok) { signerModalError(data.error || 'This signer could not be added.'); return; }
+
+    SIGNERS = data.signers;
+    assignColors();
+    rebuildSignerPicker();
+    updateCounts();
+
+    // Select them straight away — the next field you drag is theirs.
+    if (data.added_id) sel.value = String(data.added_id);
+    bootstrap.Modal.getInstance(signerModalEl).hide();
+  } catch (err) {
+    signerModalError('This signer could not be added: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Add signer';
+  }
+};
 
 async function save(silent) {
   const payload = { fields: fields.map(f => ({
