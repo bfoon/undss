@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}eSign | UN PASS<div class="modal fade" id="dupModal" tabindex="-1">
+{% block title %}eSign | UN PASS {% endblock %}
+<div class="modal fade" id="dupModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <form method="post" id="dupForm">
       {% csrf_token %}
@@ -54,7 +55,6 @@
     </form>
   </div>
 </div>
-{% endblock %}
 
 {% block extra_js %}
 <script>
