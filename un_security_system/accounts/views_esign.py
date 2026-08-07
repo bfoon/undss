@@ -7,8 +7,10 @@ Internal (login required)          Public / tokenized (no login)
 esign_dashboard                    esign_sign          <token>
 esign_new                          esign_decline       <token>
 esign_prepare / esign_fields_save  esign_review        <token>
-esign_send / esign_void            esign_token_document<token>/<doc>
-esign_remind / esign_resend        esign_token_download<token>/<kind>
+esign_recipients_reorder           esign_token_document<token>/<doc>
+esign_recipient_remove             esign_token_download<token>/<kind>
+esign_send / esign_void
+esign_remind / esign_resend
 esign_envelope_detail
 esign_document_file / esign_download
 esign_signatures (+ save/delete/default)
@@ -543,6 +545,148 @@ def _clamp(v, lo=0.0, hi=1.0):
     except Exception:
         return lo
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Recipients on a draft: reorder / remove
+#
+# Both endpoints are JSON and draft-only. They are driven from the "Fields per
+# signer" panel on the prepare screen, so the sender can fix the party list
+# without going back to the new-envelope form.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _signer_rows(envelope):
+    """The same shape the prepare screen is seeded with, so the browser can
+    swap its signer list wholesale after a change."""
+    return list(envelope.signers().values("id", "name", "email", "role", "order"))
+
+
+def _renumber_recipients(envelope):
+    """Signers take 1..N in their current order; observers follow after them."""
+    n = 0
+    for r in envelope.signers():
+        n += 1
+        if r.order != n:
+            r.order = n
+            r.save(update_fields=["order"])
+    for r in envelope.observers():
+        n += 1
+        if r.order != n:
+            r.order = n
+            r.save(update_fields=["order"])
+
+
+def _recipients_editable(envelope):
+    """None if the recipient list may still be changed, else the reason why not."""
+    if not envelope.is_editable:
+        return (
+            "This envelope has already been sent — the recipients are locked. "
+            "Use Rework if you need to change them."
+        )
+    return None
+
+
+@login_required
+@require_POST
+def esign_recipients_reorder(request, pk):
+    """
+    Set the signing order from a list of recipient ids.
+
+    Body: {"order": [12, 9, 14]}
+
+    Ids that don't belong to this envelope are ignored; signers the browser
+    left out keep their place at the end, so a stale page can never silently
+    drop somebody.
+    """
+    envelope = _get_envelope_for_user(request, pk, editable=True)
+    locked = _recipients_editable(envelope)
+    if locked:
+        return JsonResponse({"ok": False, "error": locked}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+        wanted = [int(i) for i in payload.get("order", [])]
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Malformed payload."}, status=400)
+
+    current = list(envelope.signers())
+    by_id = {r.id: r for r in current}
+
+    seen, ordered = set(), []
+    for rid in wanted:
+        r = by_id.get(rid)
+        if r is not None and rid not in seen:
+            seen.add(rid)
+            ordered.append(r)
+    for r in current:
+        if r.id not in seen:
+            ordered.append(r)
+
+    if not ordered:
+        return JsonResponse(
+            {"ok": False, "error": "There are no signers to reorder."}, status=400
+        )
+
+    with transaction.atomic():
+        for i, r in enumerate(ordered, start=1):
+            if r.order != i:
+                r.order = i
+                r.save(update_fields=["order"])
+        _renumber_recipients(envelope)
+
+    log_event(
+        envelope, "recipient_changed", request=request, actor=request.user,
+        note="Signing order: "
+             + ", ".join(f"{i}. {r.name}" for i, r in enumerate(ordered, start=1)),
+    )
+    return JsonResponse({"ok": True, "signers": _signer_rows(envelope)})
+
+
+@login_required
+@require_POST
+def esign_recipient_remove(request, pk, recipient_id):
+    """
+    Drop one recipient from a draft. Any fields placed for them go too — they
+    would have nobody to fill them.
+    """
+    envelope = _get_envelope_for_user(request, pk, editable=True)
+    locked = _recipients_editable(envelope)
+    if locked:
+        return JsonResponse({"ok": False, "error": locked}, status=400)
+
+    recipient = get_object_or_404(EnvelopeRecipient, pk=recipient_id, envelope=envelope)
+
+    if recipient.is_signing_role and envelope.signers().count() <= 1:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "An envelope needs at least one person to sign or approve. "
+                         "Add another signer first, then remove this one.",
+            },
+            status=400,
+        )
+
+    name = recipient.name
+    role = recipient.get_role_display()
+    field_count = recipient.fields.count()
+
+    with transaction.atomic():
+        recipient.delete()
+        _renumber_recipients(envelope)
+
+    log_event(
+        envelope, "recipient_changed", request=request, actor=request.user,
+        note=f"Removed {name} ({role})"
+             + (f" and {field_count} field(s) placed for them" if field_count else ""),
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "removed_id": recipient.pk,
+            "fields_removed": field_count,
+            "signers": _signer_rows(envelope),
+        }
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -57,8 +57,20 @@
                  justify-content:center; cursor:pointer; }
   .ep-fld .ep-rs{ position:absolute; right:-4px; bottom:-4px; width:12px; height:12px;
                   background:#009EDB; border-radius:2px; cursor:nwse-resize; }
-  .ep-signer-dot{ width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:.35rem }
+  .ep-signer-dot{ width:10px;height:10px;border-radius:50%;display:inline-block;flex:0 0 auto }
   .ep-hint{ font-size:.75rem;color:var(--un-gray) }
+  .ep-signer-row{ display:flex; align-items:center; gap:.3rem; padding:.22rem .25rem;
+                  border:1px solid transparent; border-radius:7px; }
+  .ep-signer-row:hover{ background:#F8FAFC; border-color:#E5E7EB; }
+  .ep-signer-row.dragging{ opacity:.4; }
+  .ep-signer-row.drop-before{ border-top-color:#009EDB; }
+  .ep-signer-row.drop-after{ border-bottom-color:#009EDB; }
+  .ep-grip{ color:#CBD5E1; font-size:.8rem; cursor:grab; flex:0 0 auto; }
+  .ep-signer-row:hover .ep-grip{ color:#94A3B8; }
+  .ep-signer-name{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ep-signer-count{ font-weight:600; font-size:.78rem; flex:0 0 auto; }
+  .ep-signer-row .ep-mini{ visibility:hidden; }
+  .ep-signer-row:hover .ep-mini{ visibility:visible; }
 </style>
 {% endblock %}
 
@@ -109,6 +121,9 @@
     <div class="mt-3 small">
       <div class="fw-semibold text-muted mb-1">Fields per signer</div>
       <div id="epCounts"></div>
+      <div class="ep-hint mt-1" id="epSignerHint">
+        Drag a row to change the signing order.
+      </div>
     </div>
   </div>
 
@@ -185,10 +200,16 @@
 {% include "accounts/esign/_pdf_loader.html" %}
 <script>
 const DOCS    = {{ documents_json|safe }};
-const SIGNERS = {{ signers_json|safe }};
+let   SIGNERS = {{ signers_json|safe }};
 const EXISTING= {{ fields_json|safe }};
 const SAVE_URL = "{% url 'accounts:esign_fields_save' envelope.pk %}";
+const REORDER_URL = "{% url 'accounts:esign_recipients_reorder' envelope.pk %}";
+const RM_SIGNER_URL = "{% url 'accounts:esign_recipient_remove' envelope.pk 0 %}";
 const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+function rmSignerUrl(id){ return RM_SIGNER_URL.replace(/\/0\/remove\/$/, '/' + id + '/remove/'); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 const COLORS = ['#009EDB','#7C3AED','#0284C7','#D97706','#DC2626','#0891B2'];
 const DEFAULT_SIZE = {
@@ -205,18 +226,29 @@ let fields = EXISTING.map(f => ({...f}));
 let nextTmpId = -1;
 
 // signer picker
+//
+// Colours are pinned to the recipient id on first load, not to their position
+// in the list — so reordering the signers doesn't repaint every field on the
+// page under the sender's cursor.
 const sel = document.getElementById('epSigner');
-SIGNERS.forEach((s, i) => {
-  const o = document.createElement('option');
-  o.value = s.id; o.textContent = `${s.order}. ${s.name} (${s.role})`;
-  o.dataset.color = COLORS[i % COLORS.length];
-  sel.appendChild(o);
-});
-function currentSigner(){ return parseInt(sel.value); }
-function signerColor(id){
-  const i = SIGNERS.findIndex(s => s.id === id);
-  return COLORS[(i < 0 ? 0 : i) % COLORS.length];
+const COLOR_BY_ID = {};
+SIGNERS.forEach((s, i) => { COLOR_BY_ID[s.id] = COLORS[i % COLORS.length]; });
+
+function rebuildSignerPicker(){
+  const prev = sel.value;
+  sel.innerHTML = '';
+  SIGNERS.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = `${s.order}. ${s.name} (${s.role})`;
+    o.dataset.color = signerColor(s.id);
+    sel.appendChild(o);
+  });
+  if (SIGNERS.some(s => String(s.id) === prev)) sel.value = prev;
 }
+rebuildSignerPicker();
+
+function currentSigner(){ return parseInt(sel.value); }
+function signerColor(id){ return COLOR_BY_ID[id] || COLORS[0]; }
 
 // drag from toolbox
 let dragKind = null;
@@ -557,18 +589,175 @@ function drawField(wrap, f) {
   });
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Fields per signer — also where the party list is reordered and pruned
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let dragSignerId = null;
+
 function updateCounts() {
   const host = document.getElementById('epCounts');
   host.innerHTML = '';
+
   SIGNERS.forEach(s => {
     const n = fields.filter(f => f.recipient_id === s.id).length;
     const row = document.createElement('div');
-    row.className = 'd-flex justify-content-between';
-    row.innerHTML = '<span><span class="ep-signer-dot" style="background:' + signerColor(s.id) +
-      '"></span>' + s.name + '</span><span class="' + (n ? 'text-un-primary' : 'text-danger') +
-      ' fw-semibold">' + n + '</span>';
+    row.className = 'ep-signer-row';
+    row.dataset.id = s.id;
+    row.draggable = SIGNERS.length > 1;
+    row.innerHTML =
+      '<i class="bi bi-grip-vertical ep-grip"' +
+        (SIGNERS.length > 1 ? ' title="Drag to change the signing order"' : ' style="opacity:.35"') +
+      '></i>' +
+      '<span class="ep-signer-dot" style="background:' + signerColor(s.id) + '"></span>' +
+      '<span class="ep-signer-name flex-grow-1" title="' + esc(s.email) + '">' + esc(s.name) + '</span>' +
+      '<span class="ep-signer-count ' + (n ? 'text-un-primary' : 'text-danger') + '">' + n + '</span>' +
+      (SIGNERS.length > 1
+        ? '<button type="button" class="ep-mini danger" data-rmsigner="' + s.id +
+          '" title="Remove ' + esc(s.name) + ' from this envelope">✕</button>'
+        : '');
     host.appendChild(row);
   });
+
+  const hint = document.getElementById('epSignerHint');
+  if (hint) {
+    hint.textContent = SIGNERS.length > 1
+      ? 'Drag a row to change the signing order.'
+      : 'The last signer can\u2019t be removed — an envelope needs someone to sign it.';
+  }
+
+  wireSignerRows();
+}
+
+function wireSignerRows() {
+  const host = document.getElementById('epCounts');
+
+  host.querySelectorAll('[data-rmsigner]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      removeSigner(parseInt(btn.dataset.rmsigner, 10));
+    });
+  });
+
+  if (SIGNERS.length < 2) return;
+
+  host.querySelectorAll('.ep-signer-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragSignerId = parseInt(row.dataset.id, 10);
+      dragKind = null;                    // don't let the canvas think a field is in flight
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'signer:' + dragSignerId);
+    });
+
+    row.addEventListener('dragend', () => {
+      dragSignerId = null;
+      clearDropMarks();
+      host.querySelectorAll('.dragging').forEach(r => r.classList.remove('dragging'));
+    });
+
+    row.addEventListener('dragover', e => {
+      if (dragSignerId === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const r = row.getBoundingClientRect();
+      const after = e.clientY > r.top + r.height / 2;
+      clearDropMarks();
+      if (parseInt(row.dataset.id, 10) !== dragSignerId) {
+        row.classList.add(after ? 'drop-after' : 'drop-before');
+      }
+    });
+
+    row.addEventListener('dragleave', () => row.classList.remove('drop-before', 'drop-after'));
+
+    row.addEventListener('drop', e => {
+      if (dragSignerId === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const targetId = parseInt(row.dataset.id, 10);
+      const r = row.getBoundingClientRect();
+      const after = e.clientY > r.top + r.height / 2;
+      clearDropMarks();
+      moveSigner(dragSignerId, targetId, after);
+      dragSignerId = null;
+    });
+  });
+}
+
+function clearDropMarks() {
+  document.querySelectorAll('.ep-signer-row')
+          .forEach(r => r.classList.remove('drop-before', 'drop-after'));
+}
+
+function moveSigner(id, targetId, after) {
+  if (id === targetId) return;
+  const from = SIGNERS.findIndex(s => s.id === id);
+  if (from < 0) return;
+
+  const before = SIGNERS.map(s => ({ ...s }));   // snapshot, orders included
+  const [moved] = SIGNERS.splice(from, 1);
+  let to = SIGNERS.findIndex(s => s.id === targetId);
+  if (to < 0) { SIGNERS = before; return; }
+  SIGNERS.splice(after ? to + 1 : to, 0, moved);
+
+  // Show the new order straight away, then confirm it with the server.
+  SIGNERS.forEach((s, i) => { s.order = i + 1; });
+  rebuildSignerPicker();
+  updateCounts();
+  persistSignerOrder(before);
+}
+
+async function persistSignerOrder(previous) {
+  try {
+    const res = await fetch(REORDER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ order: SIGNERS.map(s => s.id) })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'The signing order could not be saved.');
+    SIGNERS = data.signers;                 // server is the authority on numbering
+  } catch (err) {
+    SIGNERS = previous;                     // put the list back the way it was
+    alert(err.message || 'The signing order could not be saved.');
+  }
+  rebuildSignerPicker();
+  updateCounts();
+}
+
+async function removeSigner(id) {
+  const s = SIGNERS.find(x => x.id === id);
+  if (!s) return;
+
+  const placed = fields.filter(f => f.recipient_id === id).length;
+  const msg = 'Remove ' + s.name + ' from this envelope?' +
+    (placed
+      ? '\n\n' + placed + ' field(s) placed for them will be removed too.'
+      : '\n\nThey have no fields placed yet.');
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await fetch(rmSignerUrl(id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: '{}'
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'This signer could not be removed.'); return; }
+
+    // Drop their fields from the local state and off the page.
+    const orphans = new Set(fields.filter(f => f.recipient_id === id).map(f => String(f.id)));
+    fields = fields.filter(f => f.recipient_id !== id);
+    document.querySelectorAll('.ep-fld').forEach(el => {
+      if (orphans.has(el.dataset.id)) el.remove();
+    });
+
+    SIGNERS = data.signers;
+    rebuildSignerPicker();
+    updateCounts();
+  } catch (err) {
+    alert('This signer could not be removed: ' + err.message);
+  }
 }
 
 async function save(silent) {
