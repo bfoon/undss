@@ -291,6 +291,8 @@ urlpatterns = [
     path("esign/<int:pk>/markup/<int:ann_id>/reply/", views_esign_markup.esign_markup_reply_internal, name="esign_markup_reply_internal"),
     path("esign/<int:pk>/markup/<int:ann_id>/resolve/", views_esign_markup.esign_markup_resolve_internal, name="esign_markup_resolve_internal"),
     path("esign/<int:pk>/markup/<int:ann_id>/delete/", views_esign_markup.esign_markup_delete_internal, name="esign_markup_delete_internal"),
+    path("esign/<int:pk>/markup/resolve-all/", views_esign_markup.esign_markup_resolve_all_internal, name="esign_markup_resolve_all_internal"),
+    path("esign/<int:pk>/rework-review/", views_esign_markup.esign_rework_review, name="esign_rework_review"),
 
     # Saved signatures ("My signature" studio)
     path("esign/signatures/", views_esign.esign_signatures, name="esign_signatures"),

@@ -61,6 +61,11 @@
         <button class="btn btn-outline-warning"><i class="bi bi-bell me-1"></i> Remind</button>
       </form>
     {% endif %}
+    {% if is_sender %}
+      <a class="btn btn-outline-primary" href="{% url 'accounts:esign_rework_review' envelope.pk %}">
+        <i class="bi bi-chat-square-text me-1"></i> Review markup
+        {% if open_marks %}<span class="badge bg-danger ms-1">{{ open_marks }}</span>{% endif %}</a>
+    {% endif %}
     {% if can_rework %}
       <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#reworkModal">
         <i class="bi bi-tools me-1"></i> Rework</button>

@@ -138,30 +138,49 @@ def _body(request) -> dict:
 
 
 def _queryset(ctx: _Ctx):
+    """
+    Recipients see the current round only — markup from an earlier revision
+    points at a document they were never shown.
+
+    The sender sees EVERY revision, because that is the whole job during a
+    rework: the marks that caused the rework were made against the previous
+    revision, and hiding them would mean reworking blind.
+    """
     qs = (
         EnvelopeAnnotation.objects
-        .filter(envelope=ctx.envelope, revision=ctx.envelope.revision)
+        .filter(envelope=ctx.envelope)
         .select_related("document", "recipient", "author_user")
         .prefetch_related("replies", "replies__recipient", "replies__author_user")
     )
     if not ctx.see_internal:
-        qs = qs.filter(is_internal=False)
+        qs = qs.filter(is_internal=False, revision=ctx.envelope.revision)
     return qs
 
 
 def _payload(ctx: _Ctx, extra=None) -> JsonResponse:
+    rows = list(_queryset(ctx))
+    current = ctx.envelope.revision
+
     items = [
-        a.as_dict(viewer_key=ctx.viewer_key, can_moderate=ctx.can_moderate)
-        for a in _queryset(ctx)
+        a.as_dict(
+            viewer_key=ctx.viewer_key,
+            can_moderate=ctx.can_moderate,
+            current_revision=current,
+        )
+        for a in rows
     ]
+
     data = {
         "ok": True,
         "annotations": items,
         "can_annotate": ctx.can_annotate,
         "can_internal": ctx.see_internal,
+        "can_resolve_all": ctx.can_moderate,
         "colors": markup_colors_json(),
         "me": ctx.display_name,
-        "revision": ctx.envelope.revision,
+        "revision": current,
+        "revisions": sorted({a.revision for a in rows}),
+        "open_count": sum(1 for a in rows if not a.resolved),
     }
     if extra:
         data.update(extra)
@@ -280,15 +299,19 @@ def _do_add(request, ctx: _Ctx):
 
     return _payload(
         ctx,
-        {"annotation": annotation.as_dict(viewer_key=ctx.viewer_key,
-                                          can_moderate=ctx.can_moderate)},
+        {"annotation": annotation.as_dict(
+            viewer_key=ctx.viewer_key,
+            can_moderate=ctx.can_moderate,
+            current_revision=ctx.envelope.revision,
+        )},
     )
 
 
 def _annotation_or_404(ctx: _Ctx, pk):
     qs = EnvelopeAnnotation.objects.filter(envelope=ctx.envelope)
     if not ctx.see_internal:
-        qs = qs.filter(is_internal=False)
+        # Same scoping as _queryset: a recipient may only touch this round.
+        qs = qs.filter(is_internal=False, revision=ctx.envelope.revision)
     return get_object_or_404(qs, pk=pk)
 
 
@@ -345,6 +368,49 @@ def _do_resolve(request, ctx: _Ctx, pk):
         meta={"annotation_id": annotation.pk, "resolved": annotation.resolved},
     )
     return _payload(ctx)
+
+
+def _do_resolve_all(request, ctx: _Ctx):
+    """
+    Close out a whole round of feedback in one action.
+
+    The rework case: a signer left eleven marks, the sender fixed the document,
+    and clicking Resolve eleven times is busywork that people skip — which
+    leaves the next round showing stale red marks nobody trusts.
+
+    Optional {"revision": N} limits it to one round; omitted, it closes every
+    open mark on the envelope. Already-resolved marks are left alone so their
+    original resolver and timestamp survive.
+    """
+    if not ctx.can_moderate:
+        return JsonResponse(
+            {"ok": False, "error": "Only the sender can resolve in bulk."}, status=403
+        )
+
+    qs = _queryset(ctx).filter(resolved=False)
+
+    raw = _body(request).get("revision")
+    if raw not in (None, "", "all"):
+        try:
+            qs = qs.filter(revision=int(raw))
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "error": "Bad revision."}, status=400)
+
+    now = timezone.now()
+    count = qs.update(resolved=True, resolved_at=now, resolved_by_name=ctx.display_name)
+
+    if count:
+        scope = f"revision {raw}" if raw not in (None, "", "all") else "all revisions"
+        log_event(
+            ctx.envelope,
+            "commented",
+            request=request,
+            actor=ctx.user,
+            note=f"Resolved {count} open mark(s) across {scope}",
+            meta={"resolved_all": count, "revision": raw},
+        )
+
+    return _payload(ctx, {"resolved": count})
 
 
 def _do_delete(request, ctx: _Ctx, pk):
@@ -428,6 +494,12 @@ def esign_markup_resolve_internal(request, pk, ann_id):
 
 @login_required
 @require_POST
+def esign_markup_resolve_all_internal(request, pk):
+    return _do_resolve_all(request, _internal_ctx(request, pk))
+
+
+@login_required
+@require_POST
 def esign_markup_delete_internal(request, pk, ann_id):
     return _do_delete(request, _internal_ctx(request, pk), ann_id)
 
@@ -465,3 +537,63 @@ def markup_context(envelope, recipient=None, user=None) -> dict:
         "markup_scope": "internal",
         "markup_can_internal": True,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rework review page — the sender's view of what came back
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_GET
+def esign_rework_review(request, pk):
+    """
+    Read the feedback, fix the document, resolve the marks — in that order, on
+    one page.
+
+    Reached from the envelope detail page and from the banner shown right after
+    a rework. Deliberately separate from `esign_prepare`: preparing is about
+    field placement, and mixing "what did they object to" into that screen buries
+    the feedback under a drag-and-drop canvas.
+    """
+    import json
+
+    from django.shortcuts import render
+
+    from .views_esign import _document_payload, _get_envelope_for_user
+
+    envelope = _get_envelope_for_user(request, pk)
+    documents = list(envelope.documents.all())
+
+    payload = [
+        _document_payload(
+            d, reverse_doc_url(envelope, d)
+        )
+        for d in documents
+    ]
+
+    marks = list(_queryset(_internal_ctx(request, pk)))
+    previous = envelope.revision - 1
+
+    return render(
+        request,
+        "accounts/esign/markup_review.html",
+        {
+            "envelope": envelope,
+            "documents": documents,
+            "documents_json": json.dumps(payload),
+            "is_draft": envelope.status == Envelope.STATUS_DRAFT,
+            "can_edit_documents": envelope.status == Envelope.STATUS_DRAFT,
+            "open_marks": sum(1 for m in marks if not m.resolved),
+            "total_marks": len(marks),
+            "previous_revision": previous if previous >= 1 else None,
+            "prior_open": sum(
+                1 for m in marks if not m.resolved and m.revision < envelope.revision
+            ),
+        },
+    )
+
+
+def reverse_doc_url(envelope, doc):
+    from django.urls import reverse
+
+    return reverse("accounts:esign_document_file", args=[envelope.pk, doc.id])

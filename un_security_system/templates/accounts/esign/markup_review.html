@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}Review markup — {{ envelope.subject }} | eSign{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mr-pane{ height:calc(100vh - 250px); min-height:420px; overflow:auto;
+            background:#E9EEF3; border:1px solid #E5E7EB; border-radius:14px;
+            padding:1rem 1rem 2rem; }
+  @media (max-width: 991px){ .mr-pane{ height:70vh; } }
+  .mr-page{ margin:0 auto 1.1rem; background:#fff; position:relative;
+            box-shadow:0 4px 18px rgba(15,23,42,.14); }
+  .mr-side{ max-height:calc(100vh - 250px); overflow:auto; }
+  @media (max-width: 991px){ .mr-side{ max-height:none; } }
+  .mr-doc{ border:1px solid #E5E7EB; border-radius:10px; padding:.5rem .6rem;
+           margin-bottom:.45rem; font-size:.82rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-3 gap-2">
+  <div>
+    <a class="small text-muted text-decoration-none"
+       href="{% url 'accounts:esign_envelope_detail' envelope.pk %}">
+      <i class="bi bi-arrow-left"></i> Back to envelope</a>
+    <h5 class="fw-bold text-un-primary mb-1 mt-1">{{ envelope.subject }}</h5>
+    <div class="small text-muted">
+      Revision {{ envelope.revision }} · {{ envelope.get_status_display }}
+      {% if envelope.reference %} · Ref {{ envelope.reference }}{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    {% if is_draft %}
+      <a class="btn btn-un-primary" href="{% url 'accounts:esign_prepare' envelope.pk %}">
+        <i class="bi bi-sliders me-1"></i> Continue to prepare</a>
+    {% else %}
+      <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#mrReworkModal">
+        <i class="bi bi-arrow-repeat me-1"></i> Reopen for rework</button>
+    {% endif %}
+  </div>
+</div>
+
+{% if prior_open %}
+  <div class="alert alert-warning d-flex align-items-start gap-2">
+    <i class="bi bi-exclamation-triangle fs-4"></i>
+    <div>
+      <div class="fw-semibold">
+        {{ prior_open }} unresolved mark{{ prior_open|pluralize }} from
+        revision {{ previous_revision }}.
+      </div>
+      <div class="small">
+        These are what the signers objected to last round. Fix the document below,
+        then resolve them so the next round starts clean.
+      </div>
+    </div>
+  </div>
+{% elif total_marks %}
+  <div class="alert alert-light border d-flex align-items-center gap-2">
+    <i class="bi bi-check2-circle fs-5 text-success"></i>
+    <div class="small">
+      All {{ total_marks }} mark{{ total_marks|pluralize }} on this envelope are resolved.
+    </div>
+  </div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="mr-pane" id="mrPane">
+      <div id="mrPages"></div>
+      <div class="text-center text-muted small py-3" id="mrLoading">
+        <div class="spinner-border spinner-border-sm me-2"></div> Loading document…
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5 mr-side">
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-chat-square-text me-2"></i>Markup &amp; comments
+        <span class="float-end small text-muted fw-normal">
+          {{ open_marks }} open / {{ total_marks }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="small text-muted mb-2" style="font-size:.74rem">
+          Marks from every round are listed here. Earlier rounds are shown with a
+          dashed border and a revision badge.
+        </div>
+        <div id="mkThread"></div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary">
+        <i class="bi bi-files me-2"></i>Documents
+      </div>
+      <div class="card-body">
+        {% for d in documents %}
+          <div class="mr-doc d-flex align-items-center gap-2">
+            <i class="bi bi-file-earmark-pdf text-danger"></i>
+            <div class="flex-grow-1 min-w-0">
+              <a class="text-decoration-none"
+                 href="{% url 'accounts:esign_document_file' envelope.pk d.id %}" target="_blank">{{ d }}</a>
+              <div class="text-muted" style="font-size:.72rem">
+                {{ d.page_count }} page{{ d.page_count|pluralize }}
+              </div>
+            </div>
+            {% if can_edit_documents and documents|length > 1 %}
+              <form method="post"
+                    action="{% url 'accounts:esign_document_remove' envelope.pk d.id %}"
+                    onsubmit="return confirm('Remove {{ d|escapejs }}? Any fields placed on it go too.');">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-outline-danger" title="Remove this document">
+                  <i class="bi bi-trash"></i></button>
+              </form>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        {% if can_edit_documents %}
+          <form method="post" enctype="multipart/form-data"
+                action="{% url 'accounts:esign_document_add' envelope.pk %}" class="mt-3">
+            {% csrf_token %}
+            <label class="form-label small fw-semibold">Upload a corrected document</label>
+            <input type="file" name="documents" class="form-control form-control-sm mb-2"
+                   multiple required>
+            <button class="btn btn-sm btn-un-primary">
+              <i class="bi bi-upload me-1"></i> Add to envelope</button>
+            <div class="text-muted mt-1" style="font-size:.72rem">
+              Add the corrected file, then remove the old one — that order keeps at
+              least one document on the envelope at all times.
+            </div>
+          </form>
+        {% else %}
+          <div class="small text-muted">
+            Documents can only be changed while the envelope is a draft.
+            Reopen it for rework first.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not is_draft %}
+<div class="modal fade" id="mrReworkModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" action="{% url 'accounts:esign_rework' envelope.pk %}">
+      {% csrf_token %}
+      <div class="modal-content border-0" style="border-radius:16px">
+        <div class="modal-header border-0 pb-1">
+          <h5 class="modal-title fw-bold text-warning">
+            <i class="bi bi-arrow-repeat me-2"></i>Reopen for rework</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small">
+            Signatures already collected are cleared and the revision number goes up.
+            The audit trail keeps the record, and the markup from this round stays
+            visible here so you can work through it.
+          </p>
+          <label class="form-label small fw-semibold">Note to recipients (optional)</label>
+          <textarea name="note" class="form-control" rows="3"
+                    placeholder="e.g. Serial number in Section B corrected."></textarea>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Reopen</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/_pdf_loader.html" %}
+{% include "accounts/esign/_markup.html" %}
+<script>
+const DOCS = {{ documents_json|safe }};
+
+EsignMarkup.init({
+  pane:   document.getElementById('mrPane'),
+  thread: document.getElementById('mkThread'),
+  canAnnotate: true,
+  allowInternal: true,
+  urls: {
+    list:       "{% url 'accounts:esign_markup_list_internal'    envelope.pk %}",
+    add:        "{% url 'accounts:esign_markup_add_internal'     envelope.pk %}",
+    reply:      "{% url 'accounts:esign_markup_reply_internal'   envelope.pk 0 %}",
+    resolve:    "{% url 'accounts:esign_markup_resolve_internal' envelope.pk 0 %}",
+    remove:     "{% url 'accounts:esign_markup_delete_internal'  envelope.pk 0 %}",
+    resolveAll: "{% url 'accounts:esign_markup_resolve_all_internal' envelope.pk %}"
+  }
+});
+
+(async function () {
+  const pane = document.getElementById('mrPane');
+  const host = document.getElementById('mrPages');
+
+  try {
+    const viewer = EsignPdf.createViewer({
+      pane: pane,
+      host: host,
+      pageClass: 'mr-page',
+      maxWidth: 820,
+      onPage: EsignMarkup.onPage,
+    });
+
+    for (const doc of DOCS) {
+      viewer.addDocument(await EsignPdf.load(doc), doc.id);
+    }
+
+    const loading = document.getElementById('mrLoading');
+    if (loading) loading.remove();
+
+    await viewer.draw();
+    viewer.mountToolbar(pane);
+  } catch (e) {
+    const box = document.getElementById('mrLoading');
+    if (box) EsignPdf.showError(box, e, (DOCS[0] || {}).url);
+  }
+})();
+</script>
+{% endblock %}

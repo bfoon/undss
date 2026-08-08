@@ -143,6 +143,11 @@ real id is swapped in client-side.
   .mk-linkbtn{ border:0; background:transparent; padding:0; font-size:.7rem; color:#009EDB; font-weight:600; }
   .mk-linkbtn.mk-muted{ color:#94A3B8; }
   .mk-empty{ font-size:.78rem; color:#94A3B8; padding:.4rem 0; }
+  .mk-revs{ margin-top:-.2rem; }
+  .mk-revs button{ font-size:.66rem; }
+  .mk-badge.mk-stale{ background:#E2E8F0; color:#475569; }
+  .mk-resolveall{ margin:-.15rem 0 .55rem; }
+  .mk-card.mk-staleCard{ border-style:dashed; }
 </style>
 
 <script>
@@ -171,7 +176,8 @@ window.EsignMarkup = (function () {
   var S = {
     items: [], byId: {}, layers: [], tool: 'select', color: 'yellow',
     active: null, filter: 'all', visible: true, pending: null, composer: null,
-    canAnnotate: false, ready: false
+    canAnnotate: false, ready: false,
+    revisions: [], revFilter: 'all', currentRev: null, canResolveAll: false
   };
 
   /* ── small helpers ─────────────────────────────────────────────── */
@@ -739,6 +745,7 @@ window.EsignMarkup = (function () {
 
   function visibleItems() {
     return S.items.filter(function (a) {
+      if (S.revFilter !== 'all' && a.revision !== S.revFilter) return false;
       if (S.filter === 'open') return !a.resolved;
       if (S.filter === 'done') return a.resolved;
       if (S.filter === 'mine') return a.mine;
@@ -763,6 +770,48 @@ window.EsignMarkup = (function () {
     });
     host.appendChild(filters);
 
+    // Revision chips only appear once there IS more than one round — during a
+    // normal first pass they would be noise.
+    if (S.revisions.length > 1) {
+      var revs = document.createElement('div');
+      revs.className = 'mk-filters mk-revs';
+      var opts = [['all', 'All rounds']].concat(S.revisions.map(function (r) {
+        return [r, 'Rev ' + r + (r === S.currentRev ? ' (now)' : '')];
+      }));
+      opts.forEach(function (o) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = o[1];
+        b.className = (S.revFilter === o[0] ? 'mk-active' : '');
+        b.addEventListener('click', function () { S.revFilter = o[0]; renderThread(); });
+        revs.appendChild(b);
+      });
+      host.appendChild(revs);
+    }
+
+    if (S.canResolveAll) {
+      var openNow = visibleItems().filter(function (a) { return !a.resolved; }).length;
+      if (openNow) {
+        var wrapAll = document.createElement('div');
+        wrapAll.className = 'mk-resolveall';
+        var scopeLabel = (S.revFilter === 'all') ? 'all rounds' : ('rev ' + S.revFilter);
+        var all = document.createElement('button');
+        all.type = 'button';
+        all.className = 'mk-linkbtn';
+        all.innerHTML = '<i class="bi bi-check2-all me-1"></i>Resolve ' + openNow +
+                        ' open mark' + (openNow === 1 ? '' : 's') + ' in ' + scopeLabel;
+        all.addEventListener('click', function () {
+          if (!window.confirm('Mark ' + openNow + ' open mark(s) as resolved?')) return;
+          all.disabled = true;
+          api(cfg.urls.resolveAll, { revision: S.revFilter })
+            .then(setData)
+            .catch(function (err) { all.disabled = false; toast(err.message); });
+        });
+        wrapAll.appendChild(all);
+        host.appendChild(wrapAll);
+      }
+    }
+
     var list = visibleItems();
     if (!list.length) {
       var empty = document.createElement('div');
@@ -781,6 +830,7 @@ window.EsignMarkup = (function () {
     var c = colorOf(a.color);
     var card = document.createElement('div');
     card.className = 'mk-card' + (a.resolved ? ' mk-done' : '') +
+      (a.stale ? ' mk-staleCard' : '') +
       (S.active === a.id ? ' mk-sel' : '');
     card.style.borderLeftColor = c.hex;
     card.dataset.id = a.id;
@@ -800,8 +850,11 @@ window.EsignMarkup = (function () {
             '<span class="mk-who">' + esc(a.author) + '</span>' +
             '<span class="mk-badge" style="background:' + c.hex + '">' + esc(a.color_label) + '</span>' +
             (a.is_internal ? '<span class="mk-badge" style="background:#475569">Internal</span>' : '') +
+            (a.stale ? '<span class="mk-badge mk-stale">Rev ' + a.revision + '</span>' : '') +
           '</div>' +
-          '<div class="mk-meta">' + esc(a.role) + ' · page ' + a.page + ' · ' + esc(a.created_display) + '</div>' +
+          '<div class="mk-meta">' + esc(a.role) +
+            (a.orphaned ? ' · document removed' : ' · page ' + a.page) +
+            ' · ' + esc(a.created_display) + '</div>' +
         '</div>' +
       '</div>' +
       '<div class="mk-body">' + esc(a.text) + '</div>' +
@@ -895,6 +948,10 @@ window.EsignMarkup = (function () {
     var was = S.canAnnotate;
     if (typeof json.can_annotate === 'boolean') S.canAnnotate = json.can_annotate && cfg.canAnnotate;
     if (json.colors && json.colors.length) COLORS = json.colors;
+    S.revisions = json.revisions || [];
+    S.currentRev = (typeof json.revision === 'number') ? json.revision : null;
+    S.canResolveAll = !!json.can_resolve_all && !!(cfg.urls && cfg.urls.resolveAll);
+    if (S.revFilter !== 'all' && S.revisions.indexOf(S.revFilter) === -1) S.revFilter = 'all';
 
     // The server has the final say — e.g. the recipient signed in another tab,
     // which closes markup. Rebuild the bar so the drawing tools disappear.

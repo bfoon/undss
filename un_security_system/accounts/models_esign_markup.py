@@ -193,8 +193,17 @@ class EnvelopeAnnotation(models.Model):
     envelope = models.ForeignKey(
         "accounts.Envelope", on_delete=models.CASCADE, related_name="annotations"
     )
+    #: SET_NULL, not CASCADE, and this matters during rework: the whole point of
+    #: reworking is often "replace the document they complained about". Under
+    #: CASCADE, removing that document would silently delete the very feedback
+    #: that prompted the rework. The mark loses its page anchor but the comment
+    #: thread survives, and the sender can still read and resolve it.
     document = models.ForeignKey(
-        "accounts.EnvelopeDocument", on_delete=models.CASCADE, related_name="annotations"
+        "accounts.EnvelopeDocument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="annotations",
     )
     page = models.PositiveSmallIntegerField(default=1)
 
@@ -317,12 +326,18 @@ class EnvelopeAnnotation(models.Model):
         return ""
 
     # -- serialisation --------------------------------------------------
-    def as_dict(self, viewer_key: str = "", can_moderate: bool = False) -> dict:
+    def as_dict(self, viewer_key: str = "", can_moderate: bool = False,
+                current_revision: int = None) -> dict:
         mine = bool(viewer_key) and self.owner_key() == viewer_key
+        stale = bool(current_revision) and self.revision < current_revision
         return {
             "id": self.pk,
             "document_id": self.document_id,
+            "document_name": str(self.document) if self.document_id else "",
+            "orphaned": self.document_id is None,
             "page": self.page,
+            "revision": self.revision,
+            "stale": stale,
             "kind": self.kind,
             "color": self.color,
             "color_hex": self.color_hex,
