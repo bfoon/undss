@@ -38,6 +38,8 @@
     box-shadow:0 8px 26px rgba(0,0,0,.2); border-radius:999px;
   }
   .es-page{ position:relative; }
+  /* Above .mk-layer (z-index 3) so clicks always reach the field. */
+  .es-field{ z-index:5; }
   .es-doc-stamp{
     position:absolute; top:6px; left:10px; font-size:.6rem; color:#94A3B8;
     font-family:ui-monospace,Menlo,monospace; pointer-events:none;
@@ -141,6 +143,17 @@
       <div class="es-step"><i class="bi bi-1-circle-fill"></i><div>Tap <b>Start</b> — we jump you to the first field.</div></div>
       <div class="es-step"><i class="bi bi-2-circle-fill"></i><div>Adopt a signature once; reuse it on every field.</div></div>
       <div class="es-step"><i class="bi bi-3-circle-fill"></i><div>Tap <b>Finish</b>. Everyone gets the signed copy and the audit trail.</div></div>
+    </div>
+
+    <div class="es-card p-2 mb-3">
+      <div class="small fw-semibold text-muted mb-2">
+        <i class="bi bi-chat-square-text me-1"></i>Markup &amp; comments
+      </div>
+      <div class="small text-muted mb-2" style="font-size:.72rem">
+        Pick a colour and a tool on the document toolbar, then highlight, draw,
+        box or pin what you want to raise. Markup closes once you sign.
+      </div>
+      <div id="mkThread"></div>
     </div>
 
     <div class="es-card p-2 mb-3">
@@ -307,6 +320,7 @@
 
 {% block extra_js %}
 {% include "accounts/esign/_pdf_loader.html" %}
+{% include "accounts/esign/_markup.html" %}
 <script>
 const DOCS   = {{ documents_json|safe }};
 const FIELDS = {{ fields_json|safe }};
@@ -335,6 +349,23 @@ const KIND_LABEL = {
   text:'Text', checkbox:'Check'
 };
 
+// ── markup layer ────────────────────────────────────────────────
+// Available while this recipient still has something to do. The API applies
+// the same rule, and re-checks it on every request.
+EsignMarkup.init({
+  pane:   document.getElementById('esViewer'),
+  thread: document.getElementById('mkThread'),
+  canAnnotate: {% if recipient.status != 'signed' and recipient.status != 'declined' %}true{% else %}false{% endif %},
+  allowInternal: false,
+  urls: {
+    list:    "{% url 'accounts:esign_markup_list'    recipient.token %}",
+    add:     "{% url 'accounts:esign_markup_add'     recipient.token %}",
+    reply:   "{% url 'accounts:esign_markup_reply'   recipient.token 0 %}",
+    resolve: "{% url 'accounts:esign_markup_resolve' recipient.token 0 %}",
+    remove:  "{% url 'accounts:esign_markup_delete'  recipient.token 0 %}"
+  }
+});
+
 // ── render documents ────────────────────────────────────────────
 let viewer = null;
 
@@ -344,8 +375,10 @@ function decoratePage(wrap, docId, pageNo) {
   stamp.textContent = BRAND + ' Envelope ID: ' + ENVELOPE_ID;
   wrap.appendChild(stamp);
 
-  // Runs again after every zoom/resize redraw; values[] keeps what's filled in.
+  // Both run again after every zoom/resize redraw; values[] keeps what's
+  // filled in, and EsignMarkup keeps its own copy of the marks.
   placeFields(wrap, docId, pageNo);
+  EsignMarkup.onPage(wrap, docId, pageNo);
 }
 
 async function renderAll() {

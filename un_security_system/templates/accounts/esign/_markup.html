@@ -1,0 +1,939 @@
+{% comment %}
+accounts/templates/accounts/esign/_markup.html
+
+Word-style markup layer for the eSign PDF viewers.
+
+Mounts on top of EsignPdf without touching it: the host page passes
+EsignMarkup.onPage as the viewer's onPage callback, so every mark is
+repainted on each zoom / resize redraw exactly like signature fields are.
+
+NOTE for anyone editing this header: Django's hash-comment syntax is SINGLE
+LINE ONLY. A multi-line block of it leaves every following line live, so an
+example "include this template" line inside the comment made the template
+include itself and blew the stack with a RecursionError. Keep prose inside
+this comment block, and keep template-tag syntax out of it entirely.
+
+Usage in a viewer page:
+
+  1. Include this template in the extra_js block, after the _pdf_loader include.
+  2. Put a <div id="mkThread"></div> wherever the comment cards should go.
+  3. Call EsignMarkup.init({ pane, thread, canAnnotate, allowInternal, urls })
+     with urls = { list, add, reply, resolve, remove }.
+  4. Pass onPage: EsignMarkup.onPage to EsignPdf.createViewer, or call
+     EsignMarkup.onPage(wrap, docId, pageNo) from your own onPage handler.
+
+URLs carrying an annotation id are built with 0 as the placeholder and the
+real id is swapped in client-side.
+{% endcomment %}
+
+<span id="mkCsrf" hidden>{% csrf_token %}</span>
+
+<style>
+  /* ── palette ──────────────────────────────────────────────────────── */
+  /* The viewer's own zoom toolbar (.esv-toolbar) is sticky at top:0 with
+     z-index 6 and is inserted as the pane's first child by mountToolbar().
+     This bar therefore pins just below it and sits behind it, so the two
+     never overlap when the document scrolls. */
+  .mk-bar{
+    position:sticky; top:46px; z-index:5; display:flex; flex-wrap:wrap; gap:.35rem;
+    align-items:center; margin:0 auto .85rem; padding:.4rem .5rem; width:max-content;
+    max-width:100%; background:rgba(255,255,255,.96); border:1px solid #E5E7EB;
+    border-radius:999px; box-shadow:0 6px 22px rgba(15,23,42,.14);
+    backdrop-filter:blur(8px);
+  }
+  @media (max-width: 575px){ .mk-bar{ top:40px; gap:.2rem; padding:.3rem .35rem; } }
+  .mk-tool{
+    border:0; background:transparent; width:34px; height:34px; border-radius:999px;
+    color:#475569; font-size:.95rem; line-height:1; display:inline-flex;
+    align-items:center; justify-content:center; transition:background .12s ease,color .12s ease;
+  }
+  .mk-tool:hover{ background:#F1F5F9; color:#0F172A; }
+  .mk-tool.mk-active{ background:#009EDB; color:#fff; }
+  .mk-tool[disabled]{ opacity:.4; }
+  .mk-sep{ width:1px; height:22px; background:#E5E7EB; margin:0 .2rem; }
+  .mk-swatch{
+    width:22px; height:22px; border-radius:50%; border:2px solid transparent;
+    padding:0; outline:1px solid rgba(15,23,42,.12); outline-offset:1px;
+  }
+  .mk-swatch.mk-active{ border-color:#0F172A; transform:scale(1.12); }
+  .mk-count{ font-size:.74rem; font-weight:600; color:#475569; padding:0 .45rem; white-space:nowrap; }
+
+  /* ── the overlay that sits on each rendered page ──────────────────── */
+  .mk-layer{ position:absolute; inset:0; z-index:3; pointer-events:none; }
+  .mk-layer.mk-drawing{ pointer-events:auto; cursor:crosshair; touch-action:none; }
+  .mk-layer.mk-hidden{ display:none; }
+  .mk-svg{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+  .mk-svg path{ pointer-events:stroke; cursor:pointer; }
+
+  .mk-mark{ position:absolute; pointer-events:auto; cursor:pointer; border-radius:3px; }
+  .mk-mark.mk-hl{ mix-blend-mode:multiply; opacity:.34; }
+  .mk-mark.mk-area{ background:transparent; border:2px solid; border-radius:6px; }
+  .mk-mark.mk-strike{ background:transparent; }
+  .mk-mark.mk-strike::after{
+    content:''; position:absolute; left:0; right:0; top:50%; height:2.5px;
+    background:currentColor; transform:translateY(-50%);
+  }
+  .mk-pin{
+    position:absolute; width:24px; height:24px; margin:-12px 0 0 -12px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; color:#fff; font-size:.7rem;
+    pointer-events:auto; cursor:pointer; box-shadow:0 2px 8px rgba(15,23,42,.3);
+  }
+  .mk-mark.mk-sel, .mk-pin.mk-sel{ box-shadow:0 0 0 3px rgba(15,23,42,.28); }
+  .mk-mark.mk-done, .mk-pin.mk-done{ opacity:.3; }
+  .mk-svg path.mk-done{ opacity:.3; }
+  .mk-tag{
+    position:absolute; transform:translate(0,-100%); margin-top:-3px;
+    font-size:.62rem; font-weight:700; letter-spacing:.02em; color:#fff;
+    padding:1px 6px; border-radius:6px 6px 6px 0; pointer-events:auto; cursor:pointer;
+    white-space:nowrap; box-shadow:0 2px 6px rgba(15,23,42,.22);
+  }
+
+  /* ── the little box that opens when a mark is drawn ───────────────── */
+  .mk-composer{
+    position:absolute; z-index:40; width:272px; max-width:88%; background:#fff;
+    border:1px solid #E5E7EB; border-radius:12px; box-shadow:0 12px 34px rgba(15,23,42,.24);
+    padding:.6rem .65rem; pointer-events:auto;
+  }
+  .mk-composer .mk-head{ display:flex; align-items:center; gap:.4rem; font-size:.74rem;
+                         font-weight:700; margin-bottom:.35rem; }
+  .mk-dot{ width:11px; height:11px; border-radius:50%; flex:0 0 auto; }
+  .mk-composer textarea{
+    width:100%; border:1px solid #E5E7EB; border-radius:8px; padding:.4rem .5rem;
+    font-size:.82rem; resize:vertical; min-height:64px; outline:none;
+  }
+  .mk-composer textarea:focus{ border-color:#009EDB; box-shadow:0 0 0 3px rgba(0,158,219,.15); }
+  .mk-composer .mk-actions{ display:flex; justify-content:space-between; align-items:center;
+                            gap:.4rem; margin-top:.45rem; }
+  .mk-hint{ font-size:.68rem; color:#94A3B8; }
+
+  /* ── thread cards (the right-hand column, like Word's comment pane) ── */
+  .mk-filters{ display:flex; gap:.25rem; margin-bottom:.5rem; }
+  .mk-filters button{
+    border:1px solid #E5E7EB; background:#fff; border-radius:999px; font-size:.7rem;
+    padding:.12rem .55rem; color:#475569;
+  }
+  .mk-filters button.mk-active{ background:#0F172A; border-color:#0F172A; color:#fff; }
+
+  .mk-card{
+    border:1px solid #E5E7EB; border-left:4px solid #E5E7EB; border-radius:10px;
+    padding:.55rem .6rem; margin-bottom:.5rem; background:#fff; cursor:pointer;
+    transition:box-shadow .12s ease, transform .12s ease;
+  }
+  .mk-card:hover{ box-shadow:0 4px 14px rgba(15,23,42,.10); }
+  .mk-card.mk-sel{ box-shadow:0 0 0 2px rgba(0,158,219,.35); transform:translateX(-2px); }
+  .mk-card.mk-done{ opacity:.62; background:#F8FAFC; }
+  .mk-av{
+    width:26px; height:26px; border-radius:50%; background:#0F172A; color:#fff;
+    font-size:.64rem; font-weight:700; display:flex; align-items:center;
+    justify-content:center; flex:0 0 auto;
+  }
+  .mk-who{ font-size:.78rem; font-weight:700; color:#0F172A; line-height:1.15; }
+  .mk-meta{ font-size:.66rem; color:#94A3B8; }
+  .mk-body{ font-size:.8rem; color:#1E293B; white-space:pre-wrap; word-break:break-word;
+            margin-top:.35rem; }
+  .mk-badge{ font-size:.62rem; font-weight:700; padding:.05rem .4rem; border-radius:999px;
+             color:#fff; white-space:nowrap; }
+  .mk-replies{ margin-top:.45rem; padding-left:.55rem; border-left:2px solid #EEF2F6; }
+  .mk-reply{ margin-bottom:.35rem; }
+  .mk-reply .mk-body{ margin-top:.1rem; font-size:.76rem; }
+  .mk-card textarea{
+    width:100%; border:1px solid #E5E7EB; border-radius:8px; padding:.3rem .45rem;
+    font-size:.78rem; resize:vertical; min-height:46px; outline:none; margin-top:.35rem;
+  }
+  .mk-linkbtn{ border:0; background:transparent; padding:0; font-size:.7rem; color:#009EDB; font-weight:600; }
+  .mk-linkbtn.mk-muted{ color:#94A3B8; }
+  .mk-empty{ font-size:.78rem; color:#94A3B8; padding:.4rem 0; }
+</style>
+
+<script>
+window.EsignMarkup = (function () {
+  'use strict';
+
+  /* Keep in sync with MARKUP_COLORS in accounts/models_esign_markup.py */
+  var COLORS = [
+    { key:'yellow', label:'Comment',     hex:'#F4C000', prompt:'What would you like to say about this?' },
+    { key:'green',  label:'Looks good',  hex:'#16A34A', prompt:'Confirm what you are happy with here.' },
+    { key:'red',    label:'Must change', hex:'#DC2626', prompt:'What has to change before you can sign?' },
+    { key:'blue',   label:'Question',    hex:'#009EDB', prompt:'What would you like clarified?' },
+    { key:'purple', label:'Suggestion',  hex:'#7C3AED', prompt:'What would you suggest instead?' }
+  ];
+
+  var TOOLS = [
+    { key:'select',    icon:'bi-cursor',        title:'Select / move around' },
+    { key:'highlight', icon:'bi-highlighter',   title:'Highlight an area' },
+    { key:'freehand',  icon:'bi-pencil',        title:'Draw freehand' },
+    { key:'area',      icon:'bi-bounding-box',  title:'Box an area' },
+    { key:'strike',    icon:'bi-type-strikethrough', title:'Strike through' },
+    { key:'note',      icon:'bi-pin-map',       title:'Drop a note pin' }
+  ];
+
+  var cfg = null;
+  var S = {
+    items: [], byId: {}, layers: [], tool: 'select', color: 'yellow',
+    active: null, filter: 'all', visible: true, pending: null, composer: null,
+    canAnnotate: false, ready: false
+  };
+
+  /* ── small helpers ─────────────────────────────────────────────── */
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = (s === null || s === undefined) ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function colorOf(key) {
+    for (var i = 0; i < COLORS.length; i++) if (COLORS[i].key === key) return COLORS[i];
+    return COLORS[0];
+  }
+
+  function csrf() {
+    var el = document.querySelector('#mkCsrf input[name=csrfmiddlewaretoken]');
+    return el ? el.value : '';
+  }
+
+  function withId(url, id) {
+    return String(url).replace(/\/0\//, '/' + id + '/');
+  }
+
+  function api(url, body) {
+    var opts = {
+      method: body ? 'POST' : 'GET',
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    };
+    if (body) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.headers['X-CSRFToken'] = csrf();
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(url, opts).then(function (r) {
+      return r.json().catch(function () { return { ok:false, error:'Server error.' }; })
+        .then(function (j) {
+          if (!r.ok || j.ok === false) throw new Error(j.error || 'Request failed.');
+          return j;
+        });
+    });
+  }
+
+  function toast(msg) {
+    var el = document.createElement('div');
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);' +
+      'background:#0F172A;color:#fff;padding:.5rem .85rem;border-radius:999px;' +
+      'font-size:.8rem;z-index:2000;box-shadow:0 8px 24px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 3200);
+  }
+
+  /* ── toolbar ───────────────────────────────────────────────────── */
+
+  function buildBar() {
+    var bar = document.createElement('div');
+    bar.className = 'mk-bar';
+    bar.id = 'mkBar';
+
+    TOOLS.forEach(function (t) {
+      if (t.key !== 'select' && !S.canAnnotate) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mk-tool' + (t.key === S.tool ? ' mk-active' : '');
+      b.title = t.title;
+      b.dataset.tool = t.key;
+      b.innerHTML = '<i class="bi ' + t.icon + '"></i>';
+      b.addEventListener('click', function () { setTool(t.key); });
+      bar.appendChild(b);
+    });
+
+    if (S.canAnnotate) {
+      bar.appendChild(sep());
+      COLORS.forEach(function (c) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'mk-swatch' + (c.key === S.color ? ' mk-active' : '');
+        b.style.background = c.hex;
+        b.title = c.label;
+        b.dataset.color = c.key;
+        b.addEventListener('click', function () { setColor(c.key); });
+        bar.appendChild(b);
+      });
+    }
+
+    bar.appendChild(sep());
+
+    var eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'mk-tool';
+    eye.title = 'Show / hide all markup';
+    eye.innerHTML = '<i class="bi bi-eye"></i>';
+    eye.addEventListener('click', function () {
+      S.visible = !S.visible;
+      eye.innerHTML = '<i class="bi ' + (S.visible ? 'bi-eye' : 'bi-eye-slash') + '"></i>';
+      S.layers.forEach(function (l) { l.classList.toggle('mk-hidden', !S.visible); });
+    });
+    bar.appendChild(eye);
+
+    var count = document.createElement('span');
+    count.className = 'mk-count';
+    count.id = 'mkCount';
+    bar.appendChild(count);
+
+    cfg.pane.prepend(bar);
+  }
+
+  function sep() {
+    var s = document.createElement('span');
+    s.className = 'mk-sep';
+    return s;
+  }
+
+  function setTool(key) {
+    S.tool = key;
+    document.querySelectorAll('#mkBar .mk-tool[data-tool]').forEach(function (b) {
+      b.classList.toggle('mk-active', b.dataset.tool === key);
+    });
+    S.layers.forEach(function (l) {
+      l.classList.toggle('mk-drawing', key !== 'select' && S.canAnnotate);
+    });
+  }
+
+  function setColor(key) {
+    S.color = key;
+    document.querySelectorAll('#mkBar .mk-swatch').forEach(function (b) {
+      b.classList.toggle('mk-active', b.dataset.color === key);
+    });
+    if (S.composer) paintComposerHead();
+  }
+
+  /* ── page overlay ──────────────────────────────────────────────── */
+
+  function onPage(wrap, docId, pageNo) {
+    if (!cfg) return;
+
+    var layer = document.createElement('div');
+    layer.className = 'mk-layer' +
+      (S.tool !== 'select' && S.canAnnotate ? ' mk-drawing' : '') +
+      (S.visible ? '' : ' mk-hidden');
+    layer.dataset.doc = docId;
+    layer.dataset.page = pageNo;
+
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'mk-svg');
+    svg.setAttribute('viewBox', '0 0 1000 1000');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    layer.appendChild(svg);
+
+    wrap.appendChild(layer);
+    bindDraw(layer);
+
+    S.layers = S.layers.filter(function (l) { return l.isConnected; });
+    S.layers.push(layer);
+
+    renderLayer(layer);
+  }
+
+  function itemsFor(layer) {
+    var doc = parseInt(layer.dataset.doc, 10);
+    var page = parseInt(layer.dataset.page, 10);
+    return S.items.filter(function (a) {
+      return a.document_id === doc && a.page === page;
+    });
+  }
+
+  function renderAll() {
+    S.layers = S.layers.filter(function (l) { return l.isConnected; });
+    S.layers.forEach(renderLayer);
+    renderThread();
+
+    var bar = document.getElementById('mkBar');
+    if (bar) {
+      // Read-only and nothing marked up: the bar is pure noise, so drop it.
+      bar.style.display = (!S.canAnnotate && !S.items.length) ? 'none' : '';
+    }
+
+    var c = document.getElementById('mkCount');
+    if (c) {
+      var open = S.items.filter(function (a) { return !a.resolved; }).length;
+      c.textContent = S.items.length
+        ? open + ' open · ' + S.items.length + ' total'
+        : 'No markup yet';
+    }
+  }
+
+  function renderLayer(layer) {
+    Array.prototype.slice.call(layer.children).forEach(function (n) {
+      if (n.tagName.toLowerCase() !== 'svg') n.remove();
+    });
+    var svg = layer.querySelector('svg');
+    svg.innerHTML = '';
+
+    itemsFor(layer).forEach(function (a) { drawItem(layer, svg, a); });
+  }
+
+  function pct(v) { return (v * 100) + '%'; }
+
+  function drawItem(layer, svg, a) {
+    var c = colorOf(a.color);
+    var sel = (S.active === a.id);
+
+    if (a.kind === 'freehand') {
+      (a.geometry.strokes || []).forEach(function (stroke) {
+        var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d', pathFrom(stroke));
+        p.setAttribute('fill', 'none');
+        p.setAttribute('stroke', c.hex);
+        p.setAttribute('stroke-width', '3');
+        p.setAttribute('stroke-linecap', 'round');
+        p.setAttribute('stroke-linejoin', 'round');
+        p.setAttribute('vector-effect', 'non-scaling-stroke');
+        p.setAttribute('class', (a.resolved ? 'mk-done ' : '') + (sel ? 'mk-selpath' : ''));
+        if (sel) p.setAttribute('stroke-width', '5');
+        p.addEventListener('click', function (e) { e.stopPropagation(); activate(a.id, 'page'); });
+        svg.appendChild(p);
+      });
+      addTag(layer, a, a.anchor.x, a.anchor.y);
+      return;
+    }
+
+    if (a.kind === 'note') {
+      var pin = document.createElement('div');
+      pin.className = 'mk-pin' + (a.resolved ? ' mk-done' : '') + (sel ? ' mk-sel' : '');
+      pin.style.left = pct(a.geometry.x);
+      pin.style.top = pct(a.geometry.y);
+      pin.style.background = c.hex;
+      pin.title = a.author + ' — ' + c.label;
+      pin.innerHTML = '<i class="bi bi-chat-left-fill"></i>';
+      pin.addEventListener('click', function (e) { e.stopPropagation(); activate(a.id, 'page'); });
+      layer.appendChild(pin);
+      return;
+    }
+
+    var el = document.createElement('div');
+    el.className = 'mk-mark mk-' + a.kind +
+      (a.resolved ? ' mk-done' : '') + (sel ? ' mk-sel' : '');
+    el.style.left = pct(a.geometry.x);
+    el.style.top = pct(a.geometry.y);
+    el.style.width = pct(a.geometry.w);
+    el.style.height = pct(a.geometry.h);
+    el.style.color = c.hex;
+    if (a.kind === 'highlight') el.style.background = c.hex;
+    if (a.kind === 'area') el.style.borderColor = c.hex;
+    el.title = a.author + ' — ' + c.label;
+    el.addEventListener('click', function (e) { e.stopPropagation(); activate(a.id, 'page'); });
+    layer.appendChild(el);
+
+    addTag(layer, a, a.geometry.x, a.geometry.y);
+  }
+
+  function addTag(layer, a, x, y) {
+    if (a.resolved) return;
+    var c = colorOf(a.color);
+    var tag = document.createElement('div');
+    tag.className = 'mk-tag';
+    tag.style.left = pct(x);
+    tag.style.top = pct(y);
+    tag.style.background = c.hex;
+    tag.textContent = a.initials + (a.replies.length ? ' · ' + (a.replies.length + 1) : '');
+    tag.title = a.author + ' — ' + c.label;
+    tag.addEventListener('click', function (e) { e.stopPropagation(); activate(a.id, 'page'); });
+    layer.appendChild(tag);
+  }
+
+  function pathFrom(points) {
+    return points.map(function (p, i) {
+      return (i ? 'L' : 'M') + (p.x * 1000).toFixed(1) + ' ' + (p.y * 1000).toFixed(1);
+    }).join(' ');
+  }
+
+  /* ── drawing ───────────────────────────────────────────────────── */
+
+  function rel(layer, e) {
+    var r = layer.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))
+    };
+  }
+
+  function bindDraw(layer) {
+    var drag = null;
+
+    layer.addEventListener('pointerdown', function (e) {
+      if (!S.canAnnotate || S.tool === 'select') return;
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.preventDefault();
+
+      // A pending mark being extended (more pen strokes on the same page)
+      // stays attached to the open composer instead of starting a new one.
+      if (S.pending && S.pending.layer !== layer) closeComposer(true);
+
+      var p = rel(layer, e);
+
+      if (S.tool === 'note') {
+        startPending(layer, 'note', { x: p.x, y: p.y });
+        return;
+      }
+
+      layer.setPointerCapture(e.pointerId);
+
+      if (S.tool === 'freehand') {
+        drag = { kind: 'freehand', stroke: [p] };
+        return;
+      }
+      drag = { kind: S.tool, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      drag.preview = document.createElement('div');
+      drag.preview.className = 'mk-mark mk-' + S.tool;
+      drag.preview.style.color = colorOf(S.color).hex;
+      if (S.tool === 'highlight') drag.preview.style.background = colorOf(S.color).hex;
+      if (S.tool === 'area') drag.preview.style.borderColor = colorOf(S.color).hex;
+      layer.appendChild(drag.preview);
+      paintPreview(drag);
+    });
+
+    layer.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var p = rel(layer, e);
+
+      if (drag.kind === 'freehand') {
+        var last = drag.stroke[drag.stroke.length - 1];
+        if (Math.abs(p.x - last.x) < 0.0015 && Math.abs(p.y - last.y) < 0.0015) return;
+        drag.stroke.push(p);
+        paintStrokePreview(layer, drag);
+        return;
+      }
+      drag.x1 = p.x; drag.y1 = p.y;
+      paintPreview(drag);
+    });
+
+    function finish(e) {
+      if (!drag) return;
+      try { layer.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
+
+      if (drag.kind === 'freehand') {
+        var stroke = drag.stroke;
+        if (drag.tempPath) drag.tempPath.remove();
+        drag = null;
+        if (stroke.length < 2) return;
+
+        if (S.pending && S.pending.kind === 'freehand' && S.pending.layer === layer) {
+          S.pending.geometry.strokes.push(stroke);
+          paintPendingFreehand();
+        } else {
+          startPending(layer, 'freehand', { strokes: [stroke] });
+        }
+        return;
+      }
+
+      var g = {
+        x: Math.min(drag.x0, drag.x1),
+        y: Math.min(drag.y0, drag.y1),
+        w: Math.abs(drag.x1 - drag.x0),
+        h: Math.abs(drag.y1 - drag.y0)
+      };
+      if (drag.preview) drag.preview.remove();
+      var kind = drag.kind;
+      drag = null;
+
+      if (g.w < 0.006 && g.h < 0.006) return;   // stray click, not a drag
+      g.w = Math.max(g.w, 0.012);
+      g.h = Math.max(g.h, 0.010);
+      startPending(layer, kind, g);
+    }
+
+    layer.addEventListener('pointerup', finish);
+    layer.addEventListener('pointercancel', finish);
+  }
+
+  function paintPreview(drag) {
+    var g = {
+      x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1),
+      w: Math.abs(drag.x1 - drag.x0), h: Math.abs(drag.y1 - drag.y0)
+    };
+    drag.preview.style.left = pct(g.x);
+    drag.preview.style.top = pct(g.y);
+    drag.preview.style.width = pct(g.w);
+    drag.preview.style.height = pct(g.h);
+    drag.preview.style.opacity = drag.kind === 'highlight' ? '.34' : '1';
+  }
+
+  function paintStrokePreview(layer, drag) {
+    var svg = layer.querySelector('svg');
+    if (!drag.tempPath) {
+      drag.tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      drag.tempPath.setAttribute('fill', 'none');
+      drag.tempPath.setAttribute('stroke', colorOf(S.color).hex);
+      drag.tempPath.setAttribute('stroke-width', '3');
+      drag.tempPath.setAttribute('stroke-linecap', 'round');
+      drag.tempPath.setAttribute('stroke-linejoin', 'round');
+      drag.tempPath.setAttribute('vector-effect', 'non-scaling-stroke');
+      svg.appendChild(drag.tempPath);
+    }
+    drag.tempPath.setAttribute('d', pathFrom(drag.stroke));
+  }
+
+  /* ── composer: the small comment box the colour drives ─────────── */
+
+  function startPending(layer, kind, geometry) {
+    closeComposer(true);
+    S.pending = { layer: layer, kind: kind, geometry: geometry, color: S.color, nodes: [] };
+    paintPending();
+    openComposer();
+  }
+
+  function paintPending() {
+    var p = S.pending;
+    if (!p) return;
+    p.nodes.forEach(function (n) { n.remove(); });
+    p.nodes = [];
+
+    if (p.kind === 'freehand') { paintPendingFreehand(); return; }
+
+    var c = colorOf(p.color);
+    if (p.kind === 'note') {
+      var pin = document.createElement('div');
+      pin.className = 'mk-pin';
+      pin.style.left = pct(p.geometry.x);
+      pin.style.top = pct(p.geometry.y);
+      pin.style.background = c.hex;
+      pin.innerHTML = '<i class="bi bi-chat-left-fill"></i>';
+      p.layer.appendChild(pin);
+      p.nodes.push(pin);
+      return;
+    }
+
+    var el = document.createElement('div');
+    el.className = 'mk-mark mk-' + p.kind;
+    el.style.left = pct(p.geometry.x);
+    el.style.top = pct(p.geometry.y);
+    el.style.width = pct(p.geometry.w);
+    el.style.height = pct(p.geometry.h);
+    el.style.color = c.hex;
+    if (p.kind === 'highlight') el.style.background = c.hex;
+    if (p.kind === 'area') el.style.borderColor = c.hex;
+    p.layer.appendChild(el);
+    p.nodes.push(el);
+  }
+
+  function paintPendingFreehand() {
+    var p = S.pending;
+    var svg = p.layer.querySelector('svg');
+    p.nodes.forEach(function (n) { n.remove(); });
+    p.nodes = [];
+    p.geometry.strokes.forEach(function (stroke) {
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', pathFrom(stroke));
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', colorOf(p.color).hex);
+      path.setAttribute('stroke-width', '3');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      path.setAttribute('vector-effect', 'non-scaling-stroke');
+      svg.appendChild(path);
+      p.nodes.push(path);
+    });
+  }
+
+  function anchorOf(p) {
+    if (p.kind === 'freehand') {
+      var xs = [], ys = [];
+      p.geometry.strokes.forEach(function (s) {
+        s.forEach(function (pt) { xs.push(pt.x); ys.push(pt.y); });
+      });
+      return { x: Math.min.apply(null, xs), y: Math.min.apply(null, ys),
+               h: Math.max.apply(null, ys) - Math.min.apply(null, ys) };
+    }
+    if (p.kind === 'note') return { x: p.geometry.x, y: p.geometry.y, h: 0.02 };
+    return { x: p.geometry.x, y: p.geometry.y, h: p.geometry.h };
+  }
+
+  function openComposer() {
+    var p = S.pending;
+    var wrap = p.layer.parentElement;
+    var box = document.createElement('div');
+    box.className = 'mk-composer';
+    box.innerHTML =
+      '<div class="mk-head"><span class="mk-dot"></span><span class="mk-title"></span>' +
+      '<button type="button" class="mk-linkbtn mk-muted ms-auto" data-mk="cancel">' +
+      '<i class="bi bi-x-lg"></i></button></div>' +
+      '<textarea class="mk-text" rows="3"></textarea>' +
+      '<div class="mk-actions"><span class="mk-hint"></span>' +
+      '<button type="button" class="btn btn-sm btn-un-primary" data-mk="post">Comment</button></div>';
+
+    wrap.appendChild(box);
+    S.composer = box;
+
+    var a = anchorOf(p);
+    var w = wrap.clientWidth || 1;
+    var left = a.x * w;
+    if (left + 272 > w - 8) left = Math.max(8, w - 280);
+    box.style.left = left + 'px';
+    box.style.top = ((a.y + a.h) * 100) + '%';
+    box.style.marginTop = '8px';
+
+    paintComposerHead();
+
+    var ta = box.querySelector('.mk-text');
+    ta.focus();
+    ta.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closeComposer(); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { commit(); }
+    });
+    box.querySelector('[data-mk=cancel]').addEventListener('click', function () { closeComposer(); });
+    box.querySelector('[data-mk=post]').addEventListener('click', commit);
+    box.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+  }
+
+  function paintComposerHead() {
+    if (!S.composer || !S.pending) return;
+    S.pending.color = S.color;
+    var c = colorOf(S.color);
+    S.composer.querySelector('.mk-dot').style.background = c.hex;
+    S.composer.querySelector('.mk-title').textContent = c.label;
+    S.composer.querySelector('.mk-title').style.color = c.hex;
+    S.composer.querySelector('.mk-text').placeholder = c.prompt;
+    S.composer.querySelector('.mk-hint').textContent =
+      S.pending.kind === 'freehand' ? 'Keep drawing to add to this mark' : 'Ctrl+Enter to post';
+    paintPending();
+  }
+
+  function closeComposer(silent) {
+    if (S.composer) { S.composer.remove(); S.composer = null; }
+    if (S.pending) {
+      S.pending.nodes.forEach(function (n) { n.remove(); });
+      S.pending = null;
+    }
+    if (!silent) setTool(S.tool);
+  }
+
+  function commit() {
+    var p = S.pending;
+    if (!p) return;
+    var ta = S.composer.querySelector('.mk-text');
+    var text = (ta.value || '').trim();
+    if (!text) { ta.focus(); return; }
+
+    var btn = S.composer.querySelector('[data-mk=post]');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    api(cfg.urls.add, {
+      document_id: parseInt(p.layer.dataset.doc, 10),
+      page: parseInt(p.layer.dataset.page, 10),
+      kind: p.kind,
+      color: p.color,
+      geometry: p.geometry,
+      text: text,
+      is_internal: !!(cfg.allowInternal && S.internalNext)
+    }).then(function (j) {
+      closeComposer(true);
+      setData(j);
+      if (j.annotation) activate(j.annotation.id, 'thread');
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = 'Comment';
+      toast(err.message || 'Could not save that comment.');
+    });
+  }
+
+  /* ── thread cards ──────────────────────────────────────────────── */
+
+  function visibleItems() {
+    return S.items.filter(function (a) {
+      if (S.filter === 'open') return !a.resolved;
+      if (S.filter === 'done') return a.resolved;
+      if (S.filter === 'mine') return a.mine;
+      return true;
+    });
+  }
+
+  function renderThread() {
+    if (!cfg.thread) return;
+    var host = cfg.thread;
+    host.innerHTML = '';
+
+    var filters = document.createElement('div');
+    filters.className = 'mk-filters';
+    [['all', 'All'], ['open', 'Open'], ['done', 'Resolved'], ['mine', 'Mine']].forEach(function (f) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = f[1];
+      b.className = S.filter === f[0] ? 'mk-active' : '';
+      b.addEventListener('click', function () { S.filter = f[0]; renderThread(); });
+      filters.appendChild(b);
+    });
+    host.appendChild(filters);
+
+    var list = visibleItems();
+    if (!list.length) {
+      var empty = document.createElement('div');
+      empty.className = 'mk-empty';
+      empty.textContent = S.canAnnotate
+        ? 'No markup yet. Pick a colour and a tool above, then mark the document.'
+        : 'No markup on this document.';
+      host.appendChild(empty);
+      return;
+    }
+
+    list.forEach(function (a) { host.appendChild(cardFor(a)); });
+  }
+
+  function cardFor(a) {
+    var c = colorOf(a.color);
+    var card = document.createElement('div');
+    card.className = 'mk-card' + (a.resolved ? ' mk-done' : '') +
+      (S.active === a.id ? ' mk-sel' : '');
+    card.style.borderLeftColor = c.hex;
+    card.dataset.id = a.id;
+
+    var replies = a.replies.map(function (r) {
+      return '<div class="mk-reply"><div class="d-flex align-items-center gap-1">' +
+        '<span class="mk-who">' + esc(r.author) + '</span>' +
+        '<span class="mk-meta">· ' + esc(r.created_display) + '</span></div>' +
+        '<div class="mk-body">' + esc(r.text) + '</div></div>';
+    }).join('');
+
+    card.innerHTML =
+      '<div class="d-flex align-items-start gap-2">' +
+        '<div class="mk-av" style="background:' + c.hex + '">' + esc(a.initials) + '</div>' +
+        '<div class="flex-grow-1 min-w-0">' +
+          '<div class="d-flex align-items-center gap-1 flex-wrap">' +
+            '<span class="mk-who">' + esc(a.author) + '</span>' +
+            '<span class="mk-badge" style="background:' + c.hex + '">' + esc(a.color_label) + '</span>' +
+            (a.is_internal ? '<span class="mk-badge" style="background:#475569">Internal</span>' : '') +
+          '</div>' +
+          '<div class="mk-meta">' + esc(a.role) + ' · page ' + a.page + ' · ' + esc(a.created_display) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="mk-body">' + esc(a.text) + '</div>' +
+      (replies ? '<div class="mk-replies">' + replies + '</div>' : '') +
+      '<div class="d-flex align-items-center gap-2 mt-2">' +
+        (S.canAnnotate ? '<button type="button" class="mk-linkbtn" data-mk="reply">Reply</button>' : '') +
+        '<button type="button" class="mk-linkbtn" data-mk="resolve">' +
+          (a.resolved ? 'Reopen' : 'Resolve') + '</button>' +
+        (a.can_delete ? '<button type="button" class="mk-linkbtn mk-muted ms-auto" data-mk="delete">Delete</button>' : '') +
+      '</div>';
+
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('button, textarea')) return;
+      activate(a.id, 'thread');
+    });
+
+    var replyBtn = card.querySelector('[data-mk=reply]');
+    if (replyBtn) {
+      replyBtn.addEventListener('click', function () { openReply(card, a); });
+    }
+    card.querySelector('[data-mk=resolve]').addEventListener('click', function () {
+      api(withId(cfg.urls.resolve, a.id), {}).then(setData)
+        .catch(function (err) { toast(err.message); });
+    });
+    var del = card.querySelector('[data-mk=delete]');
+    if (del) {
+      del.addEventListener('click', function () {
+        if (!window.confirm('Remove this mark and its comments?')) return;
+        api(withId(cfg.urls.remove, a.id), {}).then(setData)
+          .catch(function (err) { toast(err.message); });
+      });
+    }
+    return card;
+  }
+
+  function openReply(card, a) {
+    if (card.querySelector('.mk-replybox')) {
+      card.querySelector('.mk-replybox textarea').focus();
+      return;
+    }
+    var box = document.createElement('div');
+    box.className = 'mk-replybox';
+    box.innerHTML =
+      '<textarea rows="2" placeholder="Reply…"></textarea>' +
+      '<div class="d-flex justify-content-end gap-2 mt-1">' +
+        '<button type="button" class="mk-linkbtn mk-muted" data-mk="rcancel">Cancel</button>' +
+        '<button type="button" class="btn btn-sm btn-un-primary py-0 px-2" data-mk="rpost">Post</button>' +
+      '</div>';
+    card.appendChild(box);
+    var ta = box.querySelector('textarea');
+    ta.focus();
+
+    box.querySelector('[data-mk=rcancel]').addEventListener('click', function () { box.remove(); });
+    box.querySelector('[data-mk=rpost]').addEventListener('click', function () {
+      var text = (ta.value || '').trim();
+      if (!text) { ta.focus(); return; }
+      var btn = box.querySelector('[data-mk=rpost]');
+      btn.disabled = true;
+      api(withId(cfg.urls.reply, a.id), { text: text })
+        .then(setData)
+        .catch(function (err) { btn.disabled = false; toast(err.message); });
+    });
+    ta.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) box.querySelector('[data-mk=rpost]').click();
+    });
+  }
+
+  /* ── selection ─────────────────────────────────────────────────── */
+
+  function activate(id, from) {
+    S.active = (S.active === id) ? null : id;
+    renderAll();
+    if (!S.active) return;
+
+    if (from === 'page' && cfg.thread) {
+      var card = cfg.thread.querySelector('.mk-card[data-id="' + S.active + '"]');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      var mark = document.querySelector('.mk-layer .mk-sel');
+      if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  /* ── data ──────────────────────────────────────────────────────── */
+
+  function setData(json) {
+    S.items = json.annotations || [];
+    S.byId = {};
+    S.items.forEach(function (a) { S.byId[a.id] = a; });
+
+    var was = S.canAnnotate;
+    if (typeof json.can_annotate === 'boolean') S.canAnnotate = json.can_annotate && cfg.canAnnotate;
+    if (json.colors && json.colors.length) COLORS = json.colors;
+
+    // The server has the final say — e.g. the recipient signed in another tab,
+    // which closes markup. Rebuild the bar so the drawing tools disappear.
+    if (was !== S.canAnnotate) {
+      var bar = document.getElementById('mkBar');
+      if (bar) bar.remove();
+      if (!S.canAnnotate) { S.tool = 'select'; closeComposer(true); }
+      buildBar();
+    }
+
+    renderAll();
+  }
+
+  function refresh() {
+    return api(cfg.urls.list).then(setData).catch(function () { /* keep what we have */ });
+  }
+
+  /* ── init ──────────────────────────────────────────────────────── */
+
+  function init(opts) {
+    cfg = Object.assign({ canAnnotate: false, allowInternal: false, thread: null }, opts);
+    S.canAnnotate = !!cfg.canAnnotate;
+    buildBar();
+    renderThread();
+    refresh();
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && S.composer) closeComposer();
+    });
+    return EsignMarkup;
+  }
+
+  return {
+    init: init,
+    onPage: onPage,
+    refresh: refresh,
+    setTool: setTool,
+    setColor: setColor,
+    get items() { return S.items; }
+  };
+})();
+</script>

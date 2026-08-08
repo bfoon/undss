@@ -16,6 +16,7 @@ from .views_room_booking import (
 )
 from .views_asset_verify import asset_verify, asset_verification_history
 from . import views_esign
+from . import views_esign_markup
 
 app_name = 'accounts'
 
@@ -284,6 +285,13 @@ urlpatterns = [
     path("esign/<int:pk>/documents/add/", views_esign.esign_document_add, name="esign_document_add"),
     path("esign/<int:pk>/download/<str:kind>/", views_esign.esign_download, name="esign_download"),
 
+    # Markup & comments — sender / ICT / Ops side (login required)
+    path("esign/<int:pk>/markup/", views_esign_markup.esign_markup_list_internal, name="esign_markup_list_internal"),
+    path("esign/<int:pk>/markup/add/", views_esign_markup.esign_markup_add_internal, name="esign_markup_add_internal"),
+    path("esign/<int:pk>/markup/<int:ann_id>/reply/", views_esign_markup.esign_markup_reply_internal, name="esign_markup_reply_internal"),
+    path("esign/<int:pk>/markup/<int:ann_id>/resolve/", views_esign_markup.esign_markup_resolve_internal, name="esign_markup_resolve_internal"),
+    path("esign/<int:pk>/markup/<int:ann_id>/delete/", views_esign_markup.esign_markup_delete_internal, name="esign_markup_delete_internal"),
+
     # Saved signatures ("My signature" studio)
     path("esign/signatures/", views_esign.esign_signatures, name="esign_signatures"),
     path("esign/signatures/save/", views_esign.esign_signature_save, name="esign_signature_save"),
@@ -298,6 +306,13 @@ urlpatterns = [
     path("esign/s/<str:token>/review/", views_esign.esign_review, name="esign_review"),
     path("esign/s/<str:token>/document/<int:doc_id>/", views_esign.esign_token_document, name="esign_token_document"),
     path("esign/s/<str:token>/download/<str:kind>/", views_esign.esign_token_download, name="esign_token_download"),
+
+    # Markup & comments — recipient side (tokenized, no login)
+    path("esign/s/<str:token>/markup/", views_esign_markup.esign_markup_list, name="esign_markup_list"),
+    path("esign/s/<str:token>/markup/add/", views_esign_markup.esign_markup_add, name="esign_markup_add"),
+    path("esign/s/<str:token>/markup/<int:pk>/reply/", views_esign_markup.esign_markup_reply, name="esign_markup_reply"),
+    path("esign/s/<str:token>/markup/<int:pk>/resolve/", views_esign_markup.esign_markup_resolve, name="esign_markup_resolve"),
+    path("esign/s/<str:token>/markup/<int:pk>/delete/", views_esign_markup.esign_markup_delete, name="esign_markup_delete"),
 
     # --- NEW URLs ---
     path('booking/<int:pk>/', booking_detail_view, name='booking_detail'),

@@ -3,11 +3,14 @@
 
 {% block extra_css %}
 <style>
-  .rv-page{ margin:0 auto 1.1rem; background:#fff; box-shadow:0 4px 18px rgba(15,23,42,.14); }
+  .rv-page{ margin:0 auto 1.1rem; background:#fff; box-shadow:0 4px 18px rgba(15,23,42,.14);
+            position:relative; }
   .rv-pane{ height:calc(100vh - 210px); min-height:380px; overflow:auto;
             background:#E9EEF3; border:1px solid #E5E7EB; border-radius:14px;
             padding:1rem 1rem 2rem; }
   @media (max-width: 991px){ .rv-pane{ height:70vh; } }
+  .rv-side{ max-height:calc(100vh - 210px); overflow:auto; }
+  @media (max-width: 991px){ .rv-side{ max-height:none; } }
   .rv-tl{ position:relative; padding-left:1.4rem; }
   .rv-tl::before{ content:''; position:absolute; left:.45rem; top:.2rem; bottom:.2rem; width:2px; background:#E5E7EB; }
   .rv-ev{ position:relative; padding:.35rem 0; font-size:.82rem; }
@@ -59,7 +62,7 @@
       </div>
     </div>
 
-    <div class="col-lg-4">
+    <div class="col-lg-4 rv-side">
       <div class="es-card p-3 mb-3">
         <div class="fw-bold text-un-primary mb-2">{{ envelope.subject }}</div>
         <div class="small text-muted mb-2">
@@ -68,6 +71,28 @@
         </div>
         <div class="es-token d-block" style="white-space:normal">Envelope ID: {{ envelope.envelope_id }}</div>
         <div class="small text-muted mt-1">Your token: <b>{{ recipient.short_token }}</b></div>
+      </div>
+
+      {# Markup is a PRE-signature activity. The nested condition below is the #}
+      {# same rule the API enforces: the envelope must still be in play AND    #}
+      {# this recipient must not have signed or declined yet.                  #}
+      <div class="es-card p-3 mb-3">
+        <div class="fw-semibold small mb-2">
+          <i class="bi bi-chat-square-text me-1"></i>Markup &amp; comments
+        </div>
+        {% if envelope.status == 'sent' or envelope.status == 'returned' %}
+          {% if recipient.status != 'signed' and recipient.status != 'declined' %}
+            <div class="small text-muted mb-2" style="font-size:.74rem">
+              Pick a colour, choose a tool on the document toolbar, then highlight, draw,
+              box or pin the part you want to talk about — a comment box opens for it.
+            </div>
+          {% elif recipient.status == 'signed' %}
+            <div class="small text-muted mb-2" style="font-size:.74rem">
+              Markup closed when you signed. Earlier marks stay here for reference.
+            </div>
+          {% endif %}
+        {% endif %}
+        <div id="mkThread"></div>
       </div>
 
       <div class="es-card p-3 mb-3">
@@ -102,8 +127,23 @@
 
 {% block extra_js %}
 {% include "accounts/esign/_pdf_loader.html" %}
+{% include "accounts/esign/_markup.html" %}
 <script>
 const DOCS = {{ documents_json|safe }};
+
+EsignMarkup.init({
+  pane:   document.getElementById('rvPane'),
+  thread: document.getElementById('mkThread'),
+  canAnnotate: {% if envelope.status == 'sent' or envelope.status == 'returned' %}{% if recipient.status != 'signed' and recipient.status != 'declined' %}true{% else %}false{% endif %}{% else %}false{% endif %},
+  allowInternal: false,
+  urls: {
+    list:    "{% url 'accounts:esign_markup_list'    recipient.token %}",
+    add:     "{% url 'accounts:esign_markup_add'     recipient.token %}",
+    reply:   "{% url 'accounts:esign_markup_reply'   recipient.token 0 %}",
+    resolve: "{% url 'accounts:esign_markup_resolve' recipient.token 0 %}",
+    remove:  "{% url 'accounts:esign_markup_delete'  recipient.token 0 %}"
+  }
+});
 
 (async function () {
   const pane = document.getElementById('rvPane');
@@ -115,6 +155,7 @@ const DOCS = {{ documents_json|safe }};
       host: host,
       pageClass: 'rv-page',
       maxWidth: 900,
+      onPage: EsignMarkup.onPage,
     });
 
     for (const doc of DOCS) {
