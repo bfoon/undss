@@ -11,6 +11,23 @@
   @media (max-width: 991px){ .rv-pane{ height:70vh; } }
   .rv-side{ max-height:calc(100vh - 210px); overflow:auto; }
   @media (max-width: 991px){ .rv-side{ max-height:none; } }
+  /* Own scroll region: the trail grows for the life of the envelope, and
+     without a cap it pushes the markup thread and signer list far off screen. */
+  .rv-trailwrap{ position:relative; }
+  .rv-trail{
+    max-height:270px; overflow-y:auto; padding-right:.5rem;
+    overscroll-behavior:contain;
+    scrollbar-width:thin; scrollbar-color:#CBD5E1 transparent;
+  }
+  .rv-trail::-webkit-scrollbar{ width:7px; }
+  .rv-trail::-webkit-scrollbar-thumb{ background:#CBD5E1; border-radius:999px; }
+  .rv-trail::-webkit-scrollbar-track{ background:transparent; }
+  .rv-trailwrap::after{
+    content:''; position:absolute; left:0; right:.5rem; bottom:0; height:22px;
+    background:linear-gradient(to top, #fff, rgba(255,255,255,0));
+    pointer-events:none; opacity:1; transition:opacity .15s ease;
+  }
+  .rv-trailwrap.at-end::after{ opacity:0; }
   .rv-tl{ position:relative; padding-left:1.4rem; }
   .rv-tl::before{ content:''; position:absolute; left:.45rem; top:.2rem; bottom:.2rem; width:2px; background:#E5E7EB; }
   .rv-ev{ position:relative; padding:.35rem 0; font-size:.82rem; }
@@ -106,7 +123,12 @@
       </div>
 
       <div class="es-card p-3">
-        <div class="fw-semibold small mb-2"><i class="bi bi-clock-history me-1"></i>Audit trail</div>
+        <div class="fw-semibold small mb-2">
+          <i class="bi bi-clock-history me-1"></i>Audit trail
+          <span class="float-end text-muted fw-normal">{{ events|length }}</span>
+        </div>
+        <div class="rv-trailwrap" id="rvTrailWrap">
+        <div class="rv-trail" id="rvTrail">
         <div class="rv-tl">
           {% for e in events %}
             <div class="rv-ev">
@@ -118,6 +140,8 @@
               </div>
             </div>
           {% endfor %}
+        </div>
+        </div>
         </div>
       </div>
     </div>
@@ -172,6 +196,21 @@ EsignMarkup.init({
     const box = document.getElementById('rvLoading');
     if (box) EsignPdf.showError(box, e, (DOCS[0] || {}).url);
   }
+})();
+
+// Drop the "more below" fade once the trail is fully scrolled.
+(function () {
+  const wrap = document.getElementById('rvTrailWrap');
+  const trail = document.getElementById('rvTrail');
+  if (!wrap || !trail) return;
+
+  const sync = () => {
+    const atEnd = trail.scrollTop + trail.clientHeight >= trail.scrollHeight - 4;
+    wrap.classList.toggle('at-end', atEnd || trail.scrollHeight <= trail.clientHeight);
+  };
+  trail.addEventListener('scroll', sync, { passive: true });
+  window.addEventListener('resize', sync);
+  sync();
 })();
 </script>
 {% endblock %}

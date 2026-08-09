@@ -14,6 +14,28 @@
   .ed-ev.done::before{ background:#009EDB; border-color:#009EDB; }
   .ed-ev.bad::before{ background:#EF4444; border-color:#EF4444; }
   .ed-meta{ font-size:.74rem; color:var(--un-gray); }
+
+  /* The audit trail is append-only and grows for the life of the envelope —
+     a busy one runs to hundreds of entries. Giving it its own scroll region
+     keeps the page a fixed height, so the recipients panel on the left stays
+     reachable without scrolling past the whole history. */
+  .ed-trailwrap{ position:relative; }
+  .ed-trail{
+    max-height:calc(100vh - 340px); min-height:220px; overflow-y:auto;
+    padding-right:.6rem; overscroll-behavior:contain;
+    scrollbar-width:thin; scrollbar-color:#CBD5E1 transparent;
+  }
+  .ed-trail::-webkit-scrollbar{ width:8px; }
+  .ed-trail::-webkit-scrollbar-thumb{ background:#CBD5E1; border-radius:999px; }
+  .ed-trail::-webkit-scrollbar-track{ background:transparent; }
+  /* Fade hint that there is more below; hidden once you reach the end. */
+  .ed-trailwrap::after{
+    content:''; position:absolute; left:1rem; right:1rem; bottom:0; height:26px;
+    background:linear-gradient(to top, #fff, rgba(255,255,255,0));
+    pointer-events:none; opacity:1; transition:opacity .15s ease;
+  }
+  .ed-trailwrap.at-end::after{ opacity:0; }
+  @media (max-width: 991px){ .ed-trail{ max-height:58vh; } }
   .ed-rec{ border:1px solid #E5E7EB; border-radius:12px; padding:.7rem .85rem; margin-bottom:.55rem; background:#fff; }
 </style>
 {% endblock %}
@@ -234,7 +256,8 @@
         <i class="bi bi-clock-history me-2"></i>Audit trail
         <span class="float-end small text-muted">{{ events|length }} event{{ events|length|pluralize }}</span>
       </div>
-      <div class="card-body">
+      <div class="card-body ed-trailwrap" id="edTrailWrap">
+        <div class="ed-trail" id="edTrail">
         <div class="ed-timeline">
           {% for e in events %}
             <div class="ed-ev {% if e.event == 'completed' or e.event == 'signed' %}done{% elif e.event == 'declined' or e.event == 'voided' %}bad{% endif %}">
@@ -253,6 +276,7 @@
           {% empty %}
             <div class="text-muted small">No events recorded yet.</div>
           {% endfor %}
+        </div>
         </div>
       </div>
       <div class="card-footer bg-white small text-muted">
@@ -375,4 +399,22 @@
     </form>
   </div>
 </div>
+
+<script>
+// Hide the "more below" fade once the trail is scrolled to the end, so it is
+// an honest hint rather than permanent decoration.
+(function () {
+  var wrap = document.getElementById('edTrailWrap');
+  var trail = document.getElementById('edTrail');
+  if (!wrap || !trail) return;
+
+  function sync() {
+    var atEnd = trail.scrollTop + trail.clientHeight >= trail.scrollHeight - 4;
+    wrap.classList.toggle('at-end', atEnd || trail.scrollHeight <= trail.clientHeight);
+  }
+  trail.addEventListener('scroll', sync, { passive: true });
+  window.addEventListener('resize', sync);
+  sync();
+})();
+</script>
 {% endblock %}
