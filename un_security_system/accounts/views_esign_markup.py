@@ -597,3 +597,55 @@ def reverse_doc_url(envelope, doc):
     from django.urls import reverse
 
     return reverse("accounts:esign_document_file", args=[envelope.pk, doc.id])
+
+
+@login_required
+@require_GET
+def esign_markup_pdf(request, pk):
+    """
+    Download the document with the markup burned on and the comments laid out
+    in a side margin — the printable record of a review round.
+
+    `?revision=N` limits it to one round; omitted, every round is included.
+    """
+    import re as _re
+
+    from django.http import HttpResponse
+
+    from .utils_esign_markup_pdf import build_markup_pdf
+
+    ctx = _internal_ctx(request, pk)
+    envelope = ctx.envelope
+
+    marks = list(_queryset(ctx))
+    if not marks:
+        return JsonResponse(
+            {"ok": False, "error": "There is no markup on this envelope yet."}, status=404
+        )
+
+    revision = request.GET.get("revision") or None
+
+    try:
+        pdf = build_markup_pdf(envelope, marks, revision=revision)
+    except Exception:
+        logger.exception("eSign: markup PDF failed for envelope %s", envelope.pk)
+        return JsonResponse(
+            {"ok": False, "error": "The markup PDF could not be generated."}, status=500
+        )
+
+    stem = _re.sub(r"[^\w\s.-]", "", str(envelope.reference or envelope.subject or "")).strip()
+    stem = _re.sub(r"\s+", "-", stem)[:60].strip("-.") or envelope.envelope_id[:8]
+    suffix = f"-rev{revision}" if revision else ""
+
+    log_event(
+        envelope,
+        "commented",
+        request=request,
+        actor=request.user,
+        note=f"Downloaded the markup PDF ({len(marks)} mark(s){suffix or ', all revisions'})",
+    )
+
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{stem}-markup{suffix}.pdf"'
+    response["Content-Length"] = str(len(pdf))
+    return response

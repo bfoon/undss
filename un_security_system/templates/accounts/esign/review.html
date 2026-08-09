@@ -136,6 +136,7 @@ EsignMarkup.init({
   thread: document.getElementById('mkThread'),
   canAnnotate: {% if envelope.status == 'sent' or envelope.status == 'returned' %}{% if recipient.status != 'signed' and recipient.status != 'declined' %}true{% else %}false{% endif %}{% else %}false{% endif %},
   allowInternal: false,
+  poll: 15000,         // live comments; pauses while you are typing
   urls: {
     list:    "{% url 'accounts:esign_markup_list'    recipient.token %}",
     add:     "{% url 'accounts:esign_markup_add'     recipient.token %}",

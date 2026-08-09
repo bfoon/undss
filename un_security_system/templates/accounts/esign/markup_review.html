@@ -29,6 +29,10 @@
     </div>
   </div>
   <div class="d-flex gap-2">
+    {% if total_marks %}
+      <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_markup_pdf' envelope.pk %}">
+        <i class="bi bi-file-earmark-arrow-down me-1"></i> Markup PDF</a>
+    {% endif %}
     {% if is_draft %}
       <a class="btn btn-un-primary" href="{% url 'accounts:esign_prepare' envelope.pk %}">
         <i class="bi bi-sliders me-1"></i> Continue to prepare</a>
@@ -83,8 +87,18 @@
       <div class="card-body">
         <div class="small text-muted mb-2" style="font-size:.74rem">
           Marks from every round are listed here. Earlier rounds are shown with a
-          dashed border and a revision badge.
+          dashed border and a revision badge. Comments refresh automatically.
         </div>
+        {% if total_marks and previous_revision %}
+          <div class="mb-2" style="font-size:.74rem">
+            Download:
+            <a href="{% url 'accounts:esign_markup_pdf' envelope.pk %}">all rounds</a>
+            ·
+            <a href="{% url 'accounts:esign_markup_pdf' envelope.pk %}?revision={{ previous_revision }}">rev {{ previous_revision }} only</a>
+            ·
+            <a href="{% url 'accounts:esign_markup_pdf' envelope.pk %}?revision={{ envelope.revision }}">rev {{ envelope.revision }} only</a>
+          </div>
+        {% endif %}
         <div id="mkThread"></div>
       </div>
     </div>
@@ -184,6 +198,8 @@ EsignMarkup.init({
   thread: document.getElementById('mkThread'),
   canAnnotate: true,
   allowInternal: true,
+  poll: 8000,          // live comments; pauses while you are typing
+
   urls: {
     list:       "{% url 'accounts:esign_markup_list_internal'    envelope.pk %}",
     add:        "{% url 'accounts:esign_markup_add_internal'     envelope.pk %}",

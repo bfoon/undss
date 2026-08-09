@@ -59,14 +59,24 @@ real id is swapped in client-side.
   .mk-count{ font-size:.74rem; font-weight:600; color:#475569; padding:0 .45rem; white-space:nowrap; }
 
   /* ── the overlay that sits on each rendered page ──────────────────── */
-  .mk-layer{ position:absolute; inset:0; z-index:3; pointer-events:none; }
+  /* NO z-index here, deliberately. A z-index on this layer creates a stacking
+     context, and mix-blend-mode only blends against the backdrop INSIDE its
+     own stacking context — so the highlight would blend against empty space
+     instead of the page canvas and come out looking like a flat sticker.
+     Without z-index the layer still paints above the canvas (it is appended
+     after it), and .es-field carries z-index:5 to stay above the layer. */
+  .mk-layer{ position:absolute; inset:0; pointer-events:none; }
   .mk-layer.mk-drawing{ pointer-events:auto; cursor:crosshair; touch-action:none; }
   .mk-layer.mk-hidden{ display:none; }
   .mk-svg{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
   .mk-svg path{ pointer-events:stroke; cursor:pointer; }
 
   .mk-mark{ position:absolute; pointer-events:auto; cursor:pointer; border-radius:3px; }
-  .mk-mark.mk-hl{ mix-blend-mode:multiply; opacity:.34; }
+  /* Transparency belongs in the rgba fill, NOT in `opacity` — `opacity` makes
+     its own stacking context (killing the blend) and is applied after
+     compositing, which washes the ink out. Multiply is what makes black text
+     stay black under the ink, exactly like a real highlighter. */
+  .mk-mark.mk-hl{ mix-blend-mode:multiply; border-radius:2px; }
   .mk-mark.mk-area{ background:transparent; border:2px solid; border-radius:6px; }
   .mk-mark.mk-strike{ background:transparent; }
   .mk-mark.mk-strike::after{
@@ -187,6 +197,17 @@ window.EsignMarkup = (function () {
     d.textContent = (s === null || s === undefined) ? '' : String(s);
     return d.innerHTML;
   }
+
+  function rgba(hex, alpha) {
+    var h = String(hex || '').replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    if (isNaN(n)) return 'rgba(244,192,0,' + alpha + ')';
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' +
+           (n & 255) + ',' + alpha + ')';
+  }
+
+  var HL_ALPHA = 0.38;   // marker ink density; also mirrored in the PDF export
 
   function colorOf(key) {
     for (var i = 0; i < COLORS.length; i++) if (COLORS[i].key === key) return COLORS[i];
@@ -422,7 +443,7 @@ window.EsignMarkup = (function () {
     el.style.width = pct(a.geometry.w);
     el.style.height = pct(a.geometry.h);
     el.style.color = c.hex;
-    if (a.kind === 'highlight') el.style.background = c.hex;
+    if (a.kind === 'highlight') el.style.background = rgba(c.hex, HL_ALPHA);
     if (a.kind === 'area') el.style.borderColor = c.hex;
     el.title = a.author + ' — ' + c.label;
     el.addEventListener('click', function (e) { e.stopPropagation(); activate(a.id, 'page'); });
@@ -490,7 +511,7 @@ window.EsignMarkup = (function () {
       drag.preview = document.createElement('div');
       drag.preview.className = 'mk-mark mk-' + S.tool;
       drag.preview.style.color = colorOf(S.color).hex;
-      if (S.tool === 'highlight') drag.preview.style.background = colorOf(S.color).hex;
+      if (S.tool === 'highlight') drag.preview.style.background = rgba(colorOf(S.color).hex, HL_ALPHA);
       if (S.tool === 'area') drag.preview.style.borderColor = colorOf(S.color).hex;
       layer.appendChild(drag.preview);
       paintPreview(drag);
@@ -559,7 +580,6 @@ window.EsignMarkup = (function () {
     drag.preview.style.top = pct(g.y);
     drag.preview.style.width = pct(g.w);
     drag.preview.style.height = pct(g.h);
-    drag.preview.style.opacity = drag.kind === 'highlight' ? '.34' : '1';
   }
 
   function paintStrokePreview(layer, drag) {
@@ -614,7 +634,7 @@ window.EsignMarkup = (function () {
     el.style.width = pct(p.geometry.w);
     el.style.height = pct(p.geometry.h);
     el.style.color = c.hex;
-    if (p.kind === 'highlight') el.style.background = c.hex;
+    if (p.kind === 'highlight') el.style.background = rgba(c.hex, HL_ALPHA);
     if (p.kind === 'area') el.style.borderColor = c.hex;
     p.layer.appendChild(el);
     p.nodes.push(el);
@@ -969,14 +989,72 @@ window.EsignMarkup = (function () {
     return api(cfg.urls.list).then(setData).catch(function () { /* keep what we have */ });
   }
 
+  /* ── live updates ──────────────────────────────────────────────── */
+  /*
+   * Polling, not websockets. A markup thread is low-traffic and this needs no
+   * consumer, no routing entry and no ASGI change — but the refresh has to be
+   * careful, because a naive one repaints the thread and throws away whatever
+   * the user was halfway through typing.
+   */
+
+  function signature(items) {
+    // Cheap change-detector: only repaint when something actually moved.
+    return items.map(function (a) {
+      return a.id + ':' + (a.resolved ? 1 : 0) + ':' + a.replies.length +
+             ':' + a.text.length;
+    }).join('|');
+  }
+
+  function busyTyping() {
+    if (S.composer) return true;                       // mid-comment
+    var active = document.activeElement;
+    if (active && active.tagName === 'TEXTAREA' &&
+        cfg.thread && cfg.thread.contains(active)) return true;
+    // An open reply box with text in it, even if focus wandered off.
+    var boxes = cfg.thread ? cfg.thread.querySelectorAll('.mk-replybox textarea') : [];
+    for (var i = 0; i < boxes.length; i++) {
+      if ((boxes[i].value || '').trim()) return true;
+    }
+    return false;
+  }
+
+  function tick() {
+    if (document.hidden || busyTyping()) return;
+    api(cfg.urls.list).then(function (json) {
+      if (busyTyping()) return;                        // they started while in flight
+      var incoming = json.annotations || [];
+      if (signature(incoming) === signature(S.items) &&
+          S.items.length === incoming.length) {
+        return;                                        // nothing new, don't repaint
+      }
+      var before = S.items.length;
+      setData(json);
+      if (incoming.length > before) {
+        toast((incoming.length - before) + ' new comment' +
+              (incoming.length - before === 1 ? '' : 's'));
+      }
+    }).catch(function () { /* transient network trouble: try again next tick */ });
+  }
+
+  function startPolling(ms) {
+    if (!ms) return;
+    setInterval(tick, Math.max(4000, ms));
+    // Catch up immediately when they come back to the tab.
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) tick();
+    });
+  }
+
   /* ── init ──────────────────────────────────────────────────────── */
 
   function init(opts) {
-    cfg = Object.assign({ canAnnotate: false, allowInternal: false, thread: null }, opts);
+    cfg = Object.assign({ canAnnotate: false, allowInternal: false, thread: null,
+                          poll: 0 }, opts);
     S.canAnnotate = !!cfg.canAnnotate;
     buildBar();
     renderThread();
     refresh();
+    startPolling(cfg.poll);
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && S.composer) closeComposer();
