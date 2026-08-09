@@ -288,6 +288,43 @@ def notify_returned(request, recipient: EnvelopeRecipient):
         )
 
 
+def notify_markup_reply(request, recipient: EnvelopeRecipient, envelope: Envelope,
+                        author: str, text: str, page=None):
+    """
+    Someone replied to a mark this recipient left on the document.
+
+    Without this the conversation is one-directional: a recipient's mark emails
+    the sender, but the sender's answer only ever appears in the page thread —
+    so a signer who has closed the tab never learns their question was answered
+    and the envelope stalls waiting on them.
+
+    Reuses the `comment` email template. If you want wording specific to page
+    markup, copy it to `accounts/esign/email/markup_reply.html` and change the
+    template name below.
+    """
+    subject = f"Reply to your comment: {envelope.subject}"
+
+    if recipient.is_signing_role and recipient.status != EnvelopeRecipient.STATUS_SIGNED:
+        action_url = sign_url(request, recipient)
+    else:
+        action_url = review_url(request, recipient)
+
+    _send(
+        subject,
+        [recipient.email],
+        "comment",
+        _ctx(envelope, recipient=recipient, author=author, comment=text,
+             action_url=action_url, page=page, is_markup_reply=True),
+    )
+    log_event(
+        envelope,
+        "delivered",
+        request=request,
+        recipient=recipient,
+        note=f"Markup reply emailed to {recipient.email}",
+    )
+
+
 def notify_comment(request, envelope: Envelope, author: str, text: str):
     _send(
         f"Comment from {author}: {envelope.subject}",

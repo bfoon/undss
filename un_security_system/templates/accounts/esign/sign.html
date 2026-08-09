@@ -357,6 +357,7 @@ EsignMarkup.init({
   thread: document.getElementById('mkThread'),
   canAnnotate: {% if recipient.status != 'signed' and recipient.status != 'declined' %}true{% else %}false{% endif %},
   allowInternal: false,
+  poll: 8000,          // live: replies from the sender appear without a reload
   urls: {
     list:    "{% url 'accounts:esign_markup_list'    recipient.token %}",
     add:     "{% url 'accounts:esign_markup_add'     recipient.token %}",

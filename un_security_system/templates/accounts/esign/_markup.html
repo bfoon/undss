@@ -1005,6 +1005,10 @@ window.EsignMarkup = (function () {
     }).join('|');
   }
 
+  function replyCount(items) {
+    return items.reduce(function (n, a) { return n + a.replies.length; }, 0);
+  }
+
   function busyTyping() {
     if (S.composer) return true;                       // mid-comment
     var active = document.activeElement;
@@ -1027,11 +1031,26 @@ window.EsignMarkup = (function () {
           S.items.length === incoming.length) {
         return;                                        // nothing new, don't repaint
       }
-      var before = S.items.length;
+
+      var marksBefore = S.items.length;
+      var repliesBefore = replyCount(S.items);
+      var keepActive = S.active;
+
       setData(json);
-      if (incoming.length > before) {
-        toast((incoming.length - before) + ' new comment' +
-              (incoming.length - before === 1 ? '' : 's'));
+
+      // Keep whatever card they were reading selected across the repaint.
+      if (keepActive && S.byId[keepActive]) {
+        S.active = keepActive;
+        renderAll();
+      }
+
+      var newMarks = incoming.length - marksBefore;
+      var newReplies = replyCount(incoming) - repliesBefore;
+
+      if (newReplies > 0) {
+        toast(newReplies + ' new repl' + (newReplies === 1 ? 'y' : 'ies'));
+      } else if (newMarks > 0) {
+        toast(newMarks + ' new comment' + (newMarks === 1 ? '' : 's'));
       }
     }).catch(function () { /* transient network trouble: try again next tick */ });
   }

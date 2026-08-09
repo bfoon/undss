@@ -23,6 +23,7 @@ import json
 import logging
 
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -139,12 +140,19 @@ def _body(request) -> dict:
 
 def _queryset(ctx: _Ctx):
     """
-    Recipients see the current round only — markup from an earlier revision
-    points at a document they were never shown.
+    The sender sees EVERY revision — that is the whole job during a rework: the
+    marks that caused it were made against the previous revision, and hiding
+    them would mean reworking blind.
 
-    The sender sees EVERY revision, because that is the whole job during a
-    rework: the marks that caused the rework were made against the previous
-    revision, and hiding them would mean reworking blind.
+    A recipient sees the current round, PLUS their own marks from earlier
+    rounds whatever revision they belong to. That second half matters: a signer
+    asks a question in round 1, the sender reworks and answers it, and the
+    answer has to be visible to the person who asked. Scoping recipients
+    strictly to the current revision would email them "your question was
+    answered" with a link to a page where the thread is not shown.
+
+    Other people's stale marks stay hidden — those point at a document this
+    recipient was never given.
     """
     qs = (
         EnvelopeAnnotation.objects
@@ -153,7 +161,9 @@ def _queryset(ctx: _Ctx):
         .prefetch_related("replies", "replies__recipient", "replies__author_user")
     )
     if not ctx.see_internal:
-        qs = qs.filter(is_internal=False, revision=ctx.envelope.revision)
+        qs = qs.filter(is_internal=False).filter(
+            Q(revision=ctx.envelope.revision) | Q(recipient=ctx.recipient)
+        )
     return qs
 
 
@@ -214,6 +224,40 @@ def _notify_sender(request, ctx: _Ctx, annotation, text, is_reply=False):
     except Exception:
         logger.exception("eSign markup: could not queue notification for envelope %s",
                          ctx.envelope.pk)
+
+
+def _notify_reply(request, ctx: _Ctx, annotation, text):
+    """
+    Route a reply to everyone who needs it, in both directions.
+
+    The sender answering a signer's question is the case that matters: the
+    signer is the one holding up the envelope, and until now their answer only
+    ever landed in the page thread. Anyone who had closed the tab never found
+    out, and the envelope sat waiting on them.
+
+    Never notify the author of the reply about their own reply.
+    """
+    if annotation.is_internal:
+        return  # internal marks stay inside the sender's team
+
+    # 1. The person whose mark this is, if that is not the person replying.
+    author = annotation.recipient
+    if author and author.email and author.pk != getattr(ctx.recipient, "pk", None):
+        try:
+            from . import esign_notify
+
+            esign_notify.notify_markup_reply(
+                request, author, ctx.envelope, ctx.display_name, text,
+                page=annotation.page,
+            )
+        except Exception:
+            logger.exception(
+                "eSign markup: could not queue reply notification to recipient %s",
+                author.pk,
+            )
+
+    # 2. The sender, when a recipient is the one replying.
+    _notify_sender(request, ctx, annotation, text, is_reply=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -310,8 +354,11 @@ def _do_add(request, ctx: _Ctx):
 def _annotation_or_404(ctx: _Ctx, pk):
     qs = EnvelopeAnnotation.objects.filter(envelope=ctx.envelope)
     if not ctx.see_internal:
-        # Same scoping as _queryset: a recipient may only touch this round.
-        qs = qs.filter(is_internal=False, revision=ctx.envelope.revision)
+        # Mirrors _queryset exactly — otherwise a recipient could see their own
+        # earlier mark in the thread and then get a 404 trying to reply to it.
+        qs = qs.filter(is_internal=False).filter(
+            Q(revision=ctx.envelope.revision) | Q(recipient=ctx.recipient)
+        )
     return get_object_or_404(qs, pk=pk)
 
 
@@ -341,8 +388,7 @@ def _do_reply(request, ctx: _Ctx, pk):
         meta={"annotation_id": annotation.pk, "reply_id": reply.pk},
     )
 
-    if not annotation.is_internal:
-        _notify_sender(request, ctx, annotation, text, is_reply=True)
+    _notify_reply(request, ctx, annotation, text)
 
     return _payload(ctx)
 
