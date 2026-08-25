@@ -157,12 +157,14 @@ def _agency_or_redirect(request):
 
 
 def _service_enabled(agency, user) -> bool:
+    """
+    eSign now has its own switch (AgencyServiceConfig.esign_enabled) and no
+    longer depends on Asset Management being on for the agency.
+    """
     svc, _ = AgencyServiceConfig.objects.get_or_create(agency=agency)
     if user.is_superuser:
         return True
-    # eSign rides on the Asset Management service flag unless you add a
-    # dedicated `esign_enabled` field to AgencyServiceConfig.
-    return bool(getattr(svc, "esign_enabled", svc.asset_mgmt_enabled))
+    return bool(svc.esign_enabled)
 
 
 def _can_manage_envelope(user, envelope) -> bool:

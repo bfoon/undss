@@ -843,16 +843,31 @@ class RoomApprover(models.Model):
 class AgencyServiceConfig(models.Model):
     """
     Toggle services per agency + optional pricing.
-    Superuser can enable/disable asset management per agency.
+    Superuser can enable/disable each module per agency.
+
+    Asset Management and eSign are independent switches — an agency can run
+    eSign with Asset Management off, and vice versa.
     """
     agency = models.OneToOneField(Agency, on_delete=models.CASCADE, related_name="service_config")
 
+    # ── Asset Management ────────────────────────────────────────────────────
     asset_mgmt_enabled = models.BooleanField(default=False)
 
     # Optional billing (if you want to charge agencies)
     asset_mgmt_is_paid = models.BooleanField(default=False)
     asset_mgmt_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     asset_mgmt_cost_currency = models.CharField(max_length=10, default="USD", blank=True)
+
+    # ── eSign ───────────────────────────────────────────────────────────────
+    esign_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable the eSign module for this agency. Independent of Asset Management.",
+    )
+
+    # Optional billing for eSign
+    esign_is_paid = models.BooleanField(default=False)
+    esign_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    esign_cost_currency = models.CharField(max_length=10, default="USD", blank=True)
 
     # Workflow toggles (agency-specific)
     require_manager_approval = models.BooleanField(default=True)
@@ -863,8 +878,22 @@ class AgencyServiceConfig(models.Model):
     asset_tag_length = models.PositiveIntegerField(default=6)
     asset_qr_include_url = models.BooleanField(default=True)
 
+    class Meta:
+        verbose_name = "Agency service config"
+        verbose_name_plural = "Agency service configs"
+
     def __str__(self):
         return f"{self.agency} service config"
+
+    @property
+    def enabled_services(self) -> list:
+        """Human-readable list of active modules — handy for admin/list views."""
+        out = []
+        if self.asset_mgmt_enabled:
+            out.append("Asset Mgmt")
+        if self.esign_enabled:
+            out.append("eSign")
+        return out
 
 
 class Unit(models.Model):

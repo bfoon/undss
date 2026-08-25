@@ -6,8 +6,10 @@ Optional. Add to the bottom of accounts/admin.py:
 """
 
 from django.contrib import admin
+from django.contrib.admin.sites import NotRegistered
 from django.utils.html import format_html
 
+from .models import AgencyServiceConfig
 from .models_esign import (
     Envelope,
     EnvelopeDocument,
@@ -17,7 +19,12 @@ from .models_esign import (
     SignatureProfile,
 )
 
-__all__ = ["EnvelopeAdmin", "SignatureProfileAdmin", "EnvelopeEventAdmin"]
+__all__ = [
+    "EnvelopeAdmin",
+    "SignatureProfileAdmin",
+    "EnvelopeEventAdmin",
+    "AgencyServiceConfigAdmin",
+]
 
 
 class RecipientInline(admin.TabularInline):
@@ -86,3 +93,59 @@ class EnvelopeEventAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+# ---------------------------------------------------------------------------
+# Per-agency service switches (Asset Management / eSign)
+# admin.py registers this model plainly, so replace that registration.
+# ---------------------------------------------------------------------------
+
+try:
+    admin.site.unregister(AgencyServiceConfig)
+except NotRegistered:
+    pass
+
+
+@admin.register(AgencyServiceConfig)
+class AgencyServiceConfigAdmin(admin.ModelAdmin):
+    list_display = ("agency", "asset_mgmt_enabled", "esign_enabled", "modules")
+    list_filter = ("asset_mgmt_enabled", "esign_enabled")
+    list_editable = ("asset_mgmt_enabled", "esign_enabled")
+    search_fields = ("agency__code", "agency__name")
+    ordering = ("agency__code",)
+    fieldsets = (
+        (None, {"fields": ("agency",)}),
+        ("Asset Management", {
+            "fields": (
+                "asset_mgmt_enabled",
+                "asset_mgmt_is_paid",
+                "asset_mgmt_cost_amount",
+                "asset_mgmt_cost_currency",
+            ),
+        }),
+        ("eSign", {
+            "description": "eSign is independent — it can be on with Asset Management off.",
+            "fields": (
+                "esign_enabled",
+                "esign_is_paid",
+                "esign_cost_amount",
+                "esign_cost_currency",
+            ),
+        }),
+        ("Asset workflow", {
+            "classes": ("collapse",),
+            "fields": (
+                "require_manager_approval",
+                "require_ict_assignment",
+                "require_requester_verification",
+                "asset_tag_auto_generate",
+                "asset_tag_prefix",
+                "asset_tag_length",
+                "asset_qr_include_url",
+            ),
+        }),
+    )
+
+    @admin.display(description="Modules")
+    def modules(self, obj):
+        return ", ".join(obj.enabled_services) or "—"
