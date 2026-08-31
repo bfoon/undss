@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Change log{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'tenancy:overview' %}">Platform modules</a></li>
+      <li class="breadcrumb-item active">Change log</li>
+    </ol>
+  </nav>
+
+  <h1 class="h3 mb-4">Change log</h1>
+
+  <form method="get" class="row g-2 mb-4">
+    <div class="col-md-4">
+      <select name="action" class="form-select" onchange="this.form.submit()">
+        <option value="">All actions</option>
+        {% for value, label in actions %}
+          <option value="{{ value }}" {% if value == selected_action %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <input type="text" name="scope" class="form-control" placeholder="Scope key, e.g. office:3"
+             value="{{ selected_scope }}">
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-secondary w-100" type="submit">Filter</button>
+    </div>
+  </form>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width:170px;">When</th>
+            <th>Action</th>
+            <th>Scope</th>
+            <th>Module</th>
+            <th>Detail</th>
+            <th>By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+            <tr>
+              <td class="small text-muted">{{ entry.created_at|date:"d M Y H:i" }}</td>
+              <td>{{ entry.get_action_display }}</td>
+              <td class="small">{{ entry.scope_label|default:"—" }}</td>
+              <td><code class="small">{{ entry.feature_code|default:"—" }}</code></td>
+              <td class="small text-muted">{{ entry.detail|default:"—" }}</td>
+              <td class="small">{{ entry.actor|default:"system" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Nothing logged yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

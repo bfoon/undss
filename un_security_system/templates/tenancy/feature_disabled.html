@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Module not enabled{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4 p-md-5 text-center">
+          <div class="mb-3">
+            <i class="bi bi-toggle-off text-secondary" style="font-size:3rem;"></i>
+          </div>
+
+          <h1 class="h4 mb-3">
+            {% if feature_names|length == 1 %}
+              {{ feature_names.0 }} is not switched on here
+            {% else %}
+              Some modules are not switched on here
+            {% endif %}
+          </h1>
+
+          {% if feature_names|length > 1 %}
+            <p class="text-muted mb-2">
+              This page needs {% if requires_all %}all of{% else %}at least one of{% endif %}:
+            </p>
+            <p class="mb-3">
+              {% for name in feature_names %}
+                <span class="badge bg-light text-dark border">{{ name }}</span>
+              {% endfor %}
+            </p>
+          {% endif %}
+
+          <p class="text-muted mb-4">
+            {% if office %}
+              {{ office }} does not currently have this module. Your ICT focal point
+              can request it, or the platform superuser can switch it on.
+            {% else %}
+              Your account is not attached to a country office yet, so no modules
+              resolve. Ask your ICT focal point to assign you to one.
+            {% endif %}
+          </p>
+
+          <div class="d-flex gap-2 justify-content-center flex-wrap">
+            <a href="{% url 'dashboard:dashboard' %}" class="btn btn-primary">
+              <i class="bi bi-house-door me-1"></i> Back to dashboard
+            </a>
+            {% if user.is_superuser and office %}
+              <a href="{% url 'tenancy:feature_console' office.scope_key %}" class="btn btn-outline-secondary">
+                <i class="bi bi-sliders me-1"></i> Manage modules for this office
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

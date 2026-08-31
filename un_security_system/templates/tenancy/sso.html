@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Microsoft SSO{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'tenancy:overview' %}">Platform modules</a></li>
+      <li class="breadcrumb-item active">Microsoft SSO</li>
+    </ol>
+  </nav>
+
+  <h1 class="h3 mb-1">Microsoft SSO</h1>
+  <p class="text-muted mb-4">
+    Store Entra ID settings per agency or office now, so an office can be switched to
+    Microsoft sign-in later without a schema change.
+  </p>
+
+  <div class="alert alert-warning d-flex align-items-start gap-2">
+    <i class="bi bi-cone-striped mt-1"></i>
+    <div>
+      <strong>Not active yet.</strong> These settings are saved and validated, and the
+      redirect URI below is already reserved, but the sign-in exchange is not wired up on
+      this deployment. Everyone continues to use username and password.
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <label class="form-label small text-muted mb-1">Redirect URI to register in Entra</label>
+      <div class="input-group">
+        <input type="text" class="form-control font-monospace" id="cbUri" value="{{ callback_hint }}" readonly>
+        <button class="btn btn-outline-secondary" type="button"
+                onclick="navigator.clipboard.writeText(document.getElementById('cbUri').value)">
+          <i class="bi bi-clipboard"></i> Copy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white"><h2 class="h6 mb-0">Add or update a configuration</h2></div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save">
+
+            <div class="mb-3">
+              <label class="form-label">Applies to</label>
+              <select name="scope" class="form-select" required>
+                <option value="">Choose an agency or office…</option>
+                {% for key, label in scopes %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+              </select>
+              <div class="form-text">An office configuration overrides its agency's.</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Button label</label>
+              <input type="text" name="display_name" class="form-control" value="Sign in with Microsoft">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Directory (tenant) ID</label>
+              <input type="text" name="tenant_id" class="form-control font-monospace"
+                     placeholder="00000000-0000-0000-0000-000000000000">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Application (client) ID</label>
+              <input type="text" name="client_id" class="form-control font-monospace">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Client secret</label>
+              <input type="password" name="client_secret" class="form-control" autocomplete="new-password">
+              <div class="form-text">
+                Leave blank to keep the stored value. For production, set it in the
+                environment instead.
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Redirect URI</label>
+              <input type="url" name="redirect_uri" class="form-control" value="{{ callback_hint }}">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Scopes</label>
+              <input type="text" name="scopes" class="form-control" value="openid profile email User.Read">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Allowed email domains</label>
+              <input type="text" name="allowed_email_domains" class="form-control"
+                     placeholder="undp.org, un.org">
+              <div class="form-text">Comma-separated. Blank means any domain in the tenant.</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Role for new accounts</label>
+              <select name="default_role" class="form-select">
+                {% for value, label in role_choices %}
+                  <option value="{{ value }}" {% if value == "requester" %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="auto_provision_users" id="apu">
+                <label class="form-check-label" for="apu">Create accounts on first sign-in</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="enforce_sso" id="esso">
+                <label class="form-check-label" for="esso">Hide password login for this scope</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="bypass_for_superusers" id="bfs" checked>
+                <label class="form-check-label" for="bfs">Keep password login for superusers</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="is_enabled" id="ien">
+                <label class="form-check-label" for="ien">Enabled</label>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="bi bi-save me-1"></i> Save configuration
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white"><h2 class="h6 mb-0">Saved configurations</h2></div>
+        <div class="list-group list-group-flush">
+          {% for cfg in configs %}
+            <div class="list-group-item py-3">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div>
+                  <div class="fw-semibold">{{ cfg.scope_label }}</div>
+                  <div class="small text-muted">
+                    {{ cfg.get_provider_display }}
+                    {% if cfg.tenant_id %} · tenant {{ cfg.tenant_id|slice:":8" }}…{% endif %}
+                  </div>
+                  <div class="small mt-1">
+                    {% if cfg.is_enabled %}
+                      <span class="badge bg-success">enabled</span>
+                    {% else %}
+                      <span class="badge bg-secondary">disabled</span>
+                    {% endif %}
+                    {% if cfg.is_ready %}
+                      <span class="badge bg-light text-dark border">ready</span>
+                    {% else %}
+                      <span class="badge bg-warning text-dark">incomplete</span>
+                    {% endif %}
+                    {% if cfg.enforce_sso %}<span class="badge bg-info">enforced</span>{% endif %}
+                    {% if cfg.auto_provision_users %}
+                      <span class="badge bg-light text-dark border">auto-provision</span>
+                    {% endif %}
+                  </div>
+                  {% if cfg.allowed_email_domains %}
+                    <div class="small text-muted mt-1">Domains: {{ cfg.allowed_email_domains }}</div>
+                  {% endif %}
+                </div>
+                <form method="post" onsubmit="return confirm('Remove this configuration?');">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="config_id" value="{{ cfg.pk }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                </form>
+              </div>
+            </div>
+          {% empty %}
+            <div class="list-group-item text-center text-muted py-4">
+              Nothing configured yet.
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Security Dashboard - UN Security Management System{% endblock %}
+{% block title %}{% if request.has_security_dashboard %}Security Dashboard{% else %}My Modules{% endif %} - UN Security Management System{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -93,13 +93,17 @@
                 <div class="col-lg-8">
                     <h1 class="h2 mb-2">
                         <i class="bi bi-speedometer2 me-3"></i>
-                        Security Operations Dashboard
+                        {% if request.has_security_dashboard %}Security Operations Dashboard{% else %}My Modules{% endif %}
                     </h1>
                     <p class="mb-0 opacity-90">
                         Welcome back,
                         <strong>{{ user.get_full_name|default:user.username }}</strong>
                         • {{ user.get_role_display|default:user.role }}
-                        • {% now "l, F j, Y" %}
+                        {% if request.has_security_dashboard %}
+                          • {% now "l, F j, Y" %}
+                        {% else %}
+                          • Showing modules enabled for {% if office %}{{ office }}{% elif user.agency %}{{ user.agency }}{% else %}your account{% endif %}
+                        {% endif %}
                     </p>
                 </div>
                 <div class="col-lg-4 text-lg-end">
@@ -116,9 +120,12 @@
     </div>
 </div>
 
+{% if request.has_security_dashboard %}
+
 {# ---------------------------------------------------- #}
 {#   ROW 1 – MY VISITORS (per user; LSA/SOC see all)   #}
 {# ---------------------------------------------------- #}
+{% if request.tenancy_features.visitor_access %}
 <div class="row g-4 mb-4">
     <div class="col-lg-3 col-md-6">
         <div class="card stat-card text-center">
@@ -235,6 +242,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 {# ---------------------------------------------------- #}
 {#   ROW 1b – ICT FOCAL: AGENCY USER STATS             #}
@@ -308,71 +316,65 @@
 {#   ROW 2 – GLOBAL STATS (only for LSA / SOC)         #}
 {# ---------------------------------------------------- #}
 {% if is_lsa_or_soc %}
-<div class="row g-4 mb-4">
+  {% if request.tenancy_features.visitor_access or request.tenancy_features.vehicle_access %}
+  <div class="row g-4 mb-4">
+    {% if request.tenancy_features.visitor_access %}
     <div class="col-lg-3 col-md-6">
-        <div class="card stat-card text-center">
-            <div class="card-body p-4">
-                <div class="stat-icon"
-                     style="background-color: rgba(0, 158, 219, 0.1); color: var(--un-blue);">
-                    <i class="bi bi-people"></i>
-                </div>
-                <div class="stat-number text-un-primary">
-                    {{ global_visitors_total|default:0 }}
-                </div>
-                <h6 class="card-title text-muted mb-0">Total Visitors (All Time)</h6>
-                <small class="text-muted">All visitors recorded in the system</small>
-            </div>
+      <div class="card stat-card text-center">
+        <div class="card-body p-4">
+          <div class="stat-icon" style="background-color: rgba(0, 158, 219, 0.1); color: var(--un-blue);">
+            <i class="bi bi-people"></i>
+          </div>
+          <div class="stat-number text-un-primary">{{ global_visitors_total|default:0 }}</div>
+          <h6 class="card-title text-muted mb-0">Total Visitors (All Time)</h6>
+          <small class="text-muted">All visitors recorded in the system</small>
         </div>
+      </div>
     </div>
 
     <div class="col-lg-3 col-md-6">
-        <div class="card stat-card text-center">
-            <div class="card-body p-4">
-                <div class="stat-icon"
-                     style="background-color: rgba(253, 126, 20, 0.1); color: var(--warning-color);">
-                    <i class="bi bi-clock-history"></i>
-                </div>
-                <div class="stat-number" style="color: var(--warning-color);">
-                    {{ pending_approvals|default:0 }}
-                </div>
-                <h6 class="card-title text-muted mb-0">Pending Approvals (Global)</h6>
-                <small class="text-muted">All visitors waiting for approval</small>
-            </div>
+      <div class="card stat-card text-center">
+        <div class="card-body p-4">
+          <div class="stat-icon" style="background-color: rgba(253, 126, 20, 0.1); color: var(--warning-color);">
+            <i class="bi bi-clock-history"></i>
+          </div>
+          <div class="stat-number" style="color: var(--warning-color);">{{ pending_approvals|default:0 }}</div>
+          <h6 class="card-title text-muted mb-0">Pending Approvals (Global)</h6>
+          <small class="text-muted">All visitors waiting for approval</small>
         </div>
+      </div>
     </div>
 
     <div class="col-lg-3 col-md-6">
-        <div class="card stat-card text-center">
-            <div class="card-body p-4">
-                <div class="stat-icon"
-                     style="background-color: rgba(25, 135, 84, 0.1); color: var(--success-color);">
-                    <i class="bi bi-car-front"></i>
-                </div>
-                <div class="stat-number" style="color: var(--success-color);">
-                    {{ vehicles_in_compound|default:0 }}
-                </div>
-                <h6 class="card-title text-muted mb-0">Vehicles On-Site (Estimate)</h6>
-                <small class="text-muted">Based on last gate movement</small>
-            </div>
+      <div class="card stat-card text-center">
+        <div class="card-body p-4">
+          <div class="stat-icon" style="background-color: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
+            <i class="bi bi-calendar-check"></i>
+          </div>
+          <div class="stat-number" style="color: #0dcaf0;">{{ total_visitors_today|default:0 }}</div>
+          <h6 class="card-title text-muted mb-0">Visitors Today (Global)</h6>
+          <small class="text-muted">All agencies combined</small>
         </div>
+      </div>
     </div>
+    {% endif %}
 
+    {% if request.tenancy_features.vehicle_access %}
     <div class="col-lg-3 col-md-6">
-        <div class="card stat-card text-center">
-            <div class="card-body p-4">
-                <div class="stat-icon"
-                     style="background-color: rgba(13, 202, 240, 0.1); color: #0dcaf0;">
-                    <i class="bi bi-calendar-check"></i>
-                </div>
-                <div class="stat-number" style="color: #0dcaf0;">
-                    {{ total_visitors_today|default:0 }}
-                </div>
-                <h6 class="card-title text-muted mb-0">Visitors Today (Global)</h6>
-                <small class="text-muted">All agencies combined</small>
-            </div>
+      <div class="card stat-card text-center">
+        <div class="card-body p-4">
+          <div class="stat-icon" style="background-color: rgba(25, 135, 84, 0.1); color: var(--success-color);">
+            <i class="bi bi-car-front"></i>
+          </div>
+          <div class="stat-number" style="color: var(--success-color);">{{ vehicles_in_compound|default:0 }}</div>
+          <h6 class="card-title text-muted mb-0">Vehicles On-Site (Estimate)</h6>
+          <small class="text-muted">Based on last gate movement</small>
         </div>
+      </div>
     </div>
-</div>
+    {% endif %}
+  </div>
+  {% endif %}
 {% endif %}
 
 {# ---------------------------------------------------- #}
@@ -394,6 +396,7 @@
             </div>
             <div class="card-body">
                 <div class="row g-3">
+{% if request.tenancy_features.visitor_access %}
                     <!-- Request Visitor Access -->
                     <div class="col-lg-4 col-md-6">
                         <a href="{% url 'visitors:visitor_create' %}"
@@ -405,7 +408,9 @@
                             </small>
                         </a>
                     </div>
+                    {% endif %}
 
+{% if request.tenancy_features.id_cards %}
                     <!-- Request Staff ID Card -->
                     <div class="col-lg-4 col-md-6">
                         <a href="{% url 'accounts:my_idcard_requests' %}"
@@ -417,7 +422,9 @@
                             </small>
                         </a>
                     </div>
+                    {% endif %}
 
+{% if request.tenancy_features.asset_exit %}
                     <!-- Request Asset Exit -->
                     <div class="col-lg-4 col-md-6">
                         <a href="{% url 'vehicles:asset_exit_new' %}"
@@ -429,6 +436,7 @@
                             </small>
                         </a>
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -452,6 +460,7 @@
             </div>
             <div class="card-body">
                 <div class="row g-3">
+{% if request.tenancy_features.visitor_access %}
                     <div class="col-lg-4">
                         <a href="{% url 'visitors:visitor_list' %}"
                            class="btn quick-action-btn w-100 d-flex flex-column justify-content-center align-items-center">
@@ -460,6 +469,8 @@
                             <small class="text-muted">See visitor entries</small>
                         </a>
                     </div>
+                    {% endif %}
+{% if request.tenancy_features.vehicle_access %}
                     <div class="col-lg-4">
                         <a href="{% url 'vehicles:record_movement' %}"
                            class="btn quick-action-btn w-100 d-flex flex-column justify-content-center align-items-center">
@@ -468,6 +479,8 @@
                             <small class="text-muted">Log vehicle entry/exit</small>
                         </a>
                     </div>
+                    {% endif %}
+{% if request.tenancy_features.parking_cards %}
                     <div class="col-lg-4">
                         <button class="btn quick-action-btn w-100 d-flex flex-column justify-content-center align-items-center"
                                 data-bs-toggle="modal" data-bs-target="#parkingCardModal">
@@ -476,6 +489,7 @@
                             <small class="text-muted">Verify card validity</small>
                         </button>
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -487,6 +501,7 @@
 {#   LSA / SOC: Recent Activities & Alerts             #}
 {# ---------------------------------------------------- #}
 {% if user.role == 'lsa' or user.role == 'soc' %}
+{% if request.tenancy_features.security_incidents or request.tenancy_features.incident_reporting %}
 <div class="row g-4">
   <div class="col-lg-8">
     <div class="card h-100">
@@ -542,10 +557,12 @@
   </div>
 </div>
 {% endif %}
+{% endif %}
 
 {# ---------------------------------------------------- #}
 {#   Parking Card Check Modal                          #}
 {# ---------------------------------------------------- #}
+{% if request.tenancy_features.parking_cards %}
 <div class="modal fade" id="parkingCardModal" tabindex="-1"
      aria-labelledby="parkingCardModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -585,6 +602,66 @@
         </div>
     </div>
 </div>
+{% endif %}
+
+{% else %}
+
+{# ---------------------------------------------------- #}
+{#   NO SECURITY MODULES: SHOW ASSIGNED TENANCY APPS   #}
+{# ---------------------------------------------------- #}
+<div class="row g-4 mb-4">
+  {% for module in request.available_modules %}
+    <div class="col-xl-4 col-md-6">
+      <div class="card h-100 stat-card">
+        <div class="card-body p-4 d-flex flex-column">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="stat-icon mb-0 flex-shrink-0" style="width:52px;height:52px;font-size:1.25rem;background-color:var(--un-light-blue);color:var(--un-dark-blue);">
+              <i class="bi {{ module.icon }}"></i>
+            </div>
+            <div>
+              <div class="small text-uppercase text-muted fw-semibold">{{ module.category_label }}</div>
+              <h5 class="mb-1">{{ module.name }}</h5>
+              <span class="badge bg-success-subtle text-success border border-success-subtle">Available</span>
+            </div>
+          </div>
+
+          <p class="text-muted flex-grow-1">{{ module.description }}</p>
+
+          {% if module.included %}
+            <div class="mb-3">
+              <small class="text-muted d-block mb-1">Included capabilities</small>
+              {% for child in module.included %}
+                <span class="badge bg-light text-dark border me-1 mb-1">{{ child }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if module.url %}
+            <a class="btn btn-un-primary mt-auto" href="{{ module.url }}">
+              Open {{ module.name }} <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+          {% else %}
+            <button class="btn btn-outline-secondary mt-auto" disabled>
+              {{ module.name }} is enabled
+            </button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body p-5 text-center">
+          <i class="bi bi-grid fs-1 text-muted"></i>
+          <h4 class="mt-3">No modules are currently assigned</h4>
+          <p class="text-muted mb-0">Ask your platform administrator to enable modules for your agency or country office.</p>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

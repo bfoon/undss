@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Admins · {{ office.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+      {% if is_super %}
+        <li class="breadcrumb-item"><a href="{% url 'tenancy:overview' %}">Platform modules</a></li>
+      {% endif %}
+      <li class="breadcrumb-item active">{{ office }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-2">
+    <div>
+      <h1 class="h3 mb-1">Office admins</h1>
+      <p class="text-muted mb-0">{{ office }} · {{ user_count }} user{{ user_count|pluralize }}</p>
+    </div>
+    <a href="{% url 'tenancy:office_users' office.pk %}" class="btn btn-outline-secondary">
+      <i class="bi bi-people me-1"></i> View users
+    </a>
+  </div>
+
+  <div class="alert alert-light border">
+    <div class="row small">
+      <div class="col-md-6">
+        <strong>Main admin</strong> — appointed by the platform superuser. Manages every
+        user in this office and appoints sub admins.
+      </div>
+      <div class="col-md-6">
+        <strong>Sub admin</strong> — appointed by a main admin. Manages ordinary users in
+        this office. Cannot change other admins.
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white"><h2 class="h6 mb-0">Appoint an admin</h2></div>
+        <div class="card-body">
+          {% if candidates %}
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="grant">
+
+              <div class="mb-3">
+                <label class="form-label">User</label>
+                <select name="user" class="form-select" required>
+                  <option value="">Choose someone in this office…</option>
+                  {% for c in candidates %}
+                    <option value="{{ c.pk }}">
+                      {{ c.get_full_name|default:c.username }} ({{ c.username }})
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">Level</label>
+                <select name="level" class="form-select" id="levelSelect">
+                  {% for value, label in levels %}
+                    {% if value != "main" or is_super %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                {% if not is_super %}
+                  <div class="form-text">Only the superuser can appoint main admins.</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="can_manage_users" id="cmu" checked>
+                  <label class="form-check-label" for="cmu">Create and edit users</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="can_reset_passwords" id="crp" checked>
+                  <label class="form-check-label" for="crp">Reset passwords</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="can_invite" id="cin" checked>
+                  <label class="form-check-label" for="cin">Generate registration links</label>
+                </div>
+                {% if is_super %}
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="can_toggle_delegable_features" id="ctf">
+                    <label class="form-check-label" for="ctf">
+                      Change delegable modules
+                      <span class="text-muted d-block small">Main admins only.</span>
+                    </label>
+                  </div>
+                {% endif %}
+              </div>
+
+              <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-person-check me-1"></i> Appoint
+              </button>
+            </form>
+          {% else %}
+            <p class="text-muted mb-0">
+              Everyone in this office is already an admin, or no users are assigned here yet.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Admin</th>
+                <th>Level</th>
+                <th>Rights</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for role in admins %}
+                <tr class="{% if not role.is_active %}opacity-50{% endif %}">
+                  <td>
+                    <div class="fw-semibold">{{ role.user.get_full_name|default:role.user.username }}</div>
+                    <small class="text-muted">
+                      {{ role.user.email }}
+                      {% if role.granted_by %} · added by {{ role.granted_by }}{% endif %}
+                    </small>
+                  </td>
+                  <td>
+                    <span class="badge {% if role.level == 'main' %}bg-primary{% else %}bg-secondary{% endif %}">
+                      {{ role.get_level_display }}
+                    </span>
+                    {% if not role.is_active %}
+                      <span class="badge bg-danger">revoked</span>
+                    {% endif %}
+                  </td>
+                  <td class="small text-muted">
+                    {% if role.can_manage_users %}Users{% endif %}
+                    {% if role.can_reset_passwords %} · Passwords{% endif %}
+                    {% if role.can_invite %} · Invites{% endif %}
+                    {% if role.can_toggle_delegable_features %} · Modules{% endif %}
+                  </td>
+                  <td class="text-end">
+                    {% if role.is_active %}
+                      {% if role.level != "main" or is_super %}
+                        <form method="post" class="d-inline"
+                              onsubmit="return confirm('Revoke admin rights for {{ role.user }}?');">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="revoke">
+                          <input type="hidden" name="role_id" value="{{ role.pk }}">
+                          <button class="btn btn-sm btn-outline-danger" type="submit">Revoke</button>
+                        </form>
+                      {% else %}
+                        <span class="text-muted small">Superuser only</span>
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="4" class="text-center text-muted py-4">
+                    No admins appointed for this office yet.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

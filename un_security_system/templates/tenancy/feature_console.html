@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Modules · {{ office|default:agency }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'tenancy:overview' %}">Platform modules</a></li>
+      <li class="breadcrumb-item active">{{ office|default:agency }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
+    <div>
+      <h1 class="h3 mb-1">{{ office|default:agency }}</h1>
+      <p class="text-muted mb-0">
+        {% if office %}
+          Settings here override {{ office.agency.code }}'s agency defaults for this office only.
+        {% else %}
+          Agency defaults. Every {{ agency.code }} office inherits these unless it overrides them.
+        {% endif %}
+      </p>
+    </div>
+    <div class="text-end">
+      <div class="h4 mb-0">{{ enabled_count }} <span class="text-muted h6">of {{ total_count }} on</span></div>
+      {% if office %}
+        <a href="{% url 'tenancy:office_admins' office.pk %}" class="small">Manage office admins</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not is_super %}
+    <div class="alert alert-info d-flex align-items-start gap-2">
+      <i class="bi bi-info-circle mt-1"></i>
+      <div>
+        As a main admin you can change the modules marked <em>you can change this</em>.
+        Everything else is set by the platform superuser.
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% for group in groups %}
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h2 class="h6 mb-0">{{ group.label }}</h2>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for item in group.items %}
+            <div class="list-group-item py-3">
+              <div class="d-flex align-items-start gap-3">
+                <div class="form-check form-switch mt-1">
+                  <input class="form-check-input" type="checkbox"
+                         role="switch"
+                         name="features"
+                         id="f_{{ item.feature.code }}"
+                         value="{{ item.feature.code }}"
+                         {% if item.enabled %}checked{% endif %}
+                         {% if not item.editable %}disabled{% endif %}>
+                </div>
+
+                <div class="flex-grow-1">
+                  <label class="fw-semibold mb-1 d-block" for="f_{{ item.feature.code }}">
+                    {{ item.feature.name }}
+                    {% if item.feature.requires %}
+                      <span class="badge bg-light text-dark border fw-normal">
+                        needs {{ item.parent_names|join:", " }}
+                      </span>
+                    {% endif %}
+                    {% if item.feature.shareable %}
+                      <span class="badge bg-light text-dark border fw-normal">
+                        <i class="bi bi-link-45deg"></i> linkable
+                      </span>
+                    {% endif %}
+                  </label>
+
+                  <div class="text-muted small">{{ item.feature.description }}</div>
+
+                  <div class="small mt-1">
+                    {% if not item.parents_ok %}
+                      <span class="text-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Stays off until {{ item.parent_names|join:" and " }} {{ item.parent_names|length|pluralize:"is,are" }} on.
+                      </span>
+                    {% elif item.is_explicit %}
+                      <span class="text-muted">
+                        Set here on {{ item.grant.updated_at|date:"d M Y" }}{% if item.grant.updated_by %} by {{ item.grant.updated_by }}{% endif %}.
+                      </span>
+                    {% elif office %}
+                      <span class="text-muted">
+                        Inherited from {{ office.agency.code }} defaults
+                        ({% if item.inherited_value %}on{% else %}off{% endif %}).
+                      </span>
+                    {% else %}
+                      <span class="text-muted">Using the catalogue default.</span>
+                    {% endif %}
+
+                    {% if not is_super and item.editable %}
+                      <span class="text-success ms-1">· you can change this</span>
+                    {% endif %}
+                  </div>
+
+                  {% if item.grant and item.grant.valid_until %}
+                    <div class="small text-muted mt-1">
+                      <i class="bi bi-calendar-event"></i> Expires {{ item.grant.valid_until|date:"d M Y" }}
+                      {% if item.grant.is_expired %}<span class="text-danger">(expired)</span>{% endif %}
+                    </div>
+                  {% endif %}
+                </div>
+
+                <div class="text-end">
+                  <code class="small text-muted">{{ item.feature.code }}</code>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+
+    <div class="d-flex gap-2 mb-4">
+      <button type="submit" name="action" value="save" class="btn btn-primary">
+        <i class="bi bi-check2 me-1"></i> Save modules
+      </button>
+      <a href="{% url 'tenancy:overview' %}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+
+  {% if is_super and other_scopes %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white">
+        <h2 class="h6 mb-0">Copy settings from another office</h2>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Overwrites this scope's switches with the chosen scope's. Useful when opening a
+          second office that should mirror the first.
+        </p>
+        <form method="post" class="row g-2 align-items-end">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="copy">
+          <div class="col-md-8">
+            <label class="form-label small">Copy from</label>
+            <select name="source_scope" class="form-select" required>
+              <option value="">Choose an agency or office…</option>
+              {% for key, label in other_scopes %}
+                <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <button type="submit" class="btn btn-outline-primary w-100">
+              <i class="bi bi-files me-1"></i> Copy settings across
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

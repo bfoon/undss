@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Country offices{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'tenancy:overview' %}">Platform modules</a></li>
+      <li class="breadcrumb-item active">Country offices</li>
+    </ol>
+  </nav>
+
+  <h1 class="h3 mb-4">Country offices</h1>
+
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white"><h2 class="h6 mb-0">Add an office</h2></div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create">
+
+            <div class="mb-3">
+              <label class="form-label">Agency</label>
+              <select name="agency" class="form-select" required>
+                <option value="">Choose…</option>
+                {% for a in agencies %}
+                  <option value="{{ a.pk }}">{{ a.code }} — {{ a.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="row g-2">
+              <div class="col-8 mb-3">
+                <label class="form-label">Office name</label>
+                <input type="text" name="name" class="form-control" placeholder="Gambia Country Office" required>
+              </div>
+              <div class="col-4 mb-3">
+                <label class="form-label">Code</label>
+                <input type="text" name="code" class="form-control text-uppercase" placeholder="GMB" required>
+              </div>
+            </div>
+
+            <div class="row g-2">
+              <div class="col-6 mb-3">
+                <label class="form-label">Country</label>
+                <input type="text" name="country" class="form-control" placeholder="The Gambia">
+              </div>
+              <div class="col-6 mb-3">
+                <label class="form-label">City</label>
+                <input type="text" name="city" class="form-control" placeholder="Banjul">
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Time zone</label>
+              <input type="text" name="timezone_name" class="form-control" value="UTC" placeholder="Africa/Banjul">
+            </div>
+
+            <div class="row g-2">
+              <div class="col-7 mb-3">
+                <label class="form-label">Contact email</label>
+                <input type="email" name="contact_email" class="form-control">
+              </div>
+              <div class="col-5 mb-3">
+                <label class="form-label">Phone</label>
+                <input type="text" name="contact_phone" class="form-control">
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="bi bi-plus-lg me-1"></i> Create office
+            </button>
+            <p class="form-text mt-2 mb-0">
+              You will land on the module switches for the new office.
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Office</th>
+                <th class="text-center">Users</th>
+                <th class="text-center">Admins</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for office in offices %}
+                <tr>
+                  <td>
+                    <div class="fw-semibold">{{ office.name }}</div>
+                    <small class="text-muted">
+                      {{ office.agency.code }} · {{ office.code }}
+                      {% if office.country %} · {{ office.country }}{% endif %}
+                      {% if office.is_default %}<span class="badge bg-info ms-1">default</span>{% endif %}
+                      {% if not office.is_active %}<span class="badge bg-secondary ms-1">inactive</span>{% endif %}
+                    </small>
+                  </td>
+                  <td class="text-center">{{ office.n_users }}</td>
+                  <td class="text-center">{{ office.n_admins }}</td>
+                  <td class="text-end">
+                    <a href="{% url 'tenancy:feature_console' office.scope_key %}"
+                       class="btn btn-sm btn-outline-primary">Modules</a>
+                    <a href="{% url 'tenancy:office_admins' office.pk %}"
+                       class="btn btn-sm btn-outline-secondary">Admins</a>
+                    {% if not office.is_default %}
+                      <form method="post" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="set_default">
+                        <input type="hidden" name="office_id" value="{{ office.pk }}">
+                        <button class="btn btn-sm btn-link text-muted" type="submit"
+                                title="Make this the fallback office for {{ office.agency.code }}">
+                          Set default
+                        </button>
+                      </form>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4" class="text-center text-muted py-4">No offices yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

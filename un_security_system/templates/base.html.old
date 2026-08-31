@@ -869,35 +869,10 @@ canvas {
                   </a>
                 </li>
 
-                {% if user.is_authenticated and request.available_menu_modules %}
-                  <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                       aria-expanded="false">
-                      <i class="bi bi-grid me-1"></i> <span class="nav-label">My Modules</span>
-                    </a>
-                    <ul class="dropdown-menu">
-                      <li class="dropdown-header">Available to your agency / office</li>
-                      {% for module in request.available_menu_modules %}
-                        <li>
-                          <a class="dropdown-item" href="{% if module.url %}{{ module.url }}{% else %}{% url 'dashboard:dashboard' %}{% endif %}">
-                            <i class="bi {{ module.icon }} me-2"></i>{{ module.name }}
-                            {% if module.included %}
-                              <small class="d-block text-muted ms-4">
-                                Includes: {% for child in module.included %}{{ child }}{% if not forloop.last %}, {% endif %}{% endfor %}
-                              </small>
-                            {% endif %}
-                          </a>
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  </li>
-                {% endif %}
-
                 {% if user.is_authenticated %}
 
                   {# ===== Guards / LSA / SOC ===== #}
                   {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
-                    {% if request.tenancy_features.visitor_access %}
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
@@ -918,9 +893,7 @@ canvas {
                         {% endif %}
                       </ul>
                     </li>
-                    {% endif %}
 
-                    {% if request.tenancy_features.vehicle_access or request.tenancy_features.key_control or request.tenancy_features.parking_cards or request.tenancy_features.mailroom or request.tenancy_features.asset_exit or request.tenancy_features.security_incidents %}
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
@@ -928,98 +901,92 @@ canvas {
                       </a>
                       <ul class="dropdown-menu">
 
-                        {% if request.tenancy_features.vehicle_access %}
-                          <li class="dropdown-header">Vehicle Management</li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:vehicle_list' %}">
-                            <i class="bi bi-list-ul me-2"></i>All Vehicles
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:record_movement' %}">
-                            <i class="bi bi-arrow-left-right me-2"></i>Record Movement
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:movement_list' %}">
-                            <i class="bi bi-clock-history me-2"></i>Movement Log
-                          </a></li>
-                        {% endif %}
+                        <li class="dropdown-header">Vehicle Management</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:vehicle_list' %}">
+                          <i class="bi bi-list-ul me-2"></i>All Vehicles
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:record_movement' %}">
+                          <i class="bi bi-arrow-left-right me-2"></i>Record Movement
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:movement_list' %}">
+                          <i class="bi bi-clock-history me-2"></i>Movement Log
+                        </a></li>
 
-                        {% if request.tenancy_features.key_control %}
-                          {% if request.tenancy_features.vehicle_access %}<li><hr class="dropdown-divider"></li>{% endif %}
-                          <li class="dropdown-header">Key Control</li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:key_list' %}">
-                            <i class="bi bi-key me-2"></i>Keys Inventory
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:quick_key' %}">
-                            <i class="bi bi-qr-code-scan me-2"></i>Quick Issue/Return
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:key_logs' %}">
-                            <i class="bi bi-clipboard-check me-2"></i>Key Logs
-                          </a></li>
-                        {% endif %}
+                        <li><hr class="dropdown-divider"></li>
 
-                        {% if request.tenancy_features.parking_cards and user.role == 'lsa' %}
-                          <li><hr class="dropdown-divider"></li>
-                          <li class="dropdown-header">Parking Cards</li>
+                        <li class="dropdown-header">Key Control</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:key_list' %}">
+                          <i class="bi bi-key me-2" aria-hidden="true"></i>Keys Inventory
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:quick_key' %}">
+                          <i class="bi bi-qr-code-scan me-2" aria-hidden="true"></i>Quick Issue/Return
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:key_logs' %}">
+                          <i class="bi bi-clipboard-check me-2" aria-hidden="true"></i>Key Logs
+                        </a></li>
+
+                        {% if user.role == 'lsa' %}
+                          <li class="dropdown-header mt-2">Parking Cards (LSA)</li>
                           <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_list' %}">
                             <i class="bi bi-credit-card me-2"></i>All Parking Cards
                           </a></li>
                           <li><a class="dropdown-item" href="{% url 'vehicles:parking_card_create' %}">
                             <i class="bi bi-plus-circle me-2"></i>Issue Parking Card
                           </a></li>
+                          <li class="dropdown-header mt-2">Parking Card Requests (Staff → LSA)</li>
                           <li><a class="dropdown-item" href="{% url 'vehicles:pc_requests_pending' %}">
                             <i class="bi bi-inbox me-2"></i>Pending Requests
                           </a></li>
                         {% endif %}
 
-                        {% if request.tenancy_features.mailroom %}
-                          <li><hr class="dropdown-divider"></li>
-                          <li class="dropdown-header">Packages & Mailroom</li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
-                            <i class="bi bi-box-seam me-2"></i>Packages
-                          </a></li>
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li class="dropdown-header">Packages & Mailroom</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
+                          <i class="bi bi-box-seam me-2"></i>Packages
+                        </a></li>
+
+                        {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' or user.is_superuser %}
                           <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
                             <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
                           </a></li>
                         {% endif %}
 
-                        {% if request.tenancy_features.asset_exit %}
-                          <li><hr class="dropdown-divider"></li>
-                          <li class="dropdown-header">Asset Exit</li>
-                          {% if user.role == 'lsa' or user.role == 'soc' %}
-                            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_queue' %}">
-                              <i class="bi bi-inboxes me-2"></i>Asset Exit Review
-                            </a></li>
-                          {% endif %}
-                          {% if user.role == 'data_entry' %}
-                            <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_approved_list' %}">
-                              <i class="bi bi-shield-check me-2"></i>Approved Asset Exits (Gate)
-                            </a></li>
-                          {% endif %}
-                          <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
-                            <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
+                        <li><hr class="dropdown-divider"></li>
+
+                        {% if user.role == 'lsa' or user.role == 'soc' %}
+                          <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_queue' %}">
+                            <i class="bi bi-inboxes me-2"></i>Asset Exit Review
                           </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
-                            <i class="bi bi-file-text me-2"></i>My Asset Requests
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_verify_page' %}">
-                            <i class="bi bi-shield-check me-2"></i>Verify Asset Exit
+                        {% endif %}
+                        {% if user.role == 'data_entry' %}
+                          <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_approved_list' %}">
+                            <i class="bi bi-shield-check me-2"></i>Approved Asset Exits (Gate)
                           </a></li>
                         {% endif %}
 
-                        {% if request.tenancy_features.security_incidents %}
-                          {% if user.role == 'lsa' or user.role == 'soc' %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'incidents:triage' %}">
-                              <i class="bi bi-life-preserver me-2"></i>Incident Triage
-                            </a></li>
-                          {% endif %}
-                        {% endif %}
+                        <li class="dropdown-header">Asset Exit</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
+                          <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
+                          <i class="bi bi-file-text me-2"></i>My Asset Requests
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_verify_page' %}">
+                          <i class="bi bi-shield-check me-2"></i>Verify Asset Exit
+                        </a></li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'incidents:triage' %}">
+                            <i class="bi bi-life-preserver"></i> Incident Triage
+                          </a>
+
+                        </li>
                       </ul>
                     </li>
-                    {% endif %}
                   {% endif %}
 
                   {# ===== Requesters (normal staff) ===== #}
                   {% if user.role == 'requester' or user.role == 'reception' or user.role == 'registry' or user.role == 'ict_focal' or user.role == 'agency_hr' %}
-                    {% if request.tenancy_features.visitor_access %}
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
@@ -1034,71 +1001,71 @@ canvas {
                         </a></li>
                       </ul>
                     </li>
-                    {% endif %}
 
-                    {% if request.tenancy_features.parking_cards or request.tenancy_features.id_cards or request.tenancy_features.asset_exit or request.tenancy_features.mailroom or request.tenancy_features.incident_reporting %}
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                          aria-expanded="false">
                         <i class="bi bi-credit-card" aria-hidden="true"></i> <span class="nav-label">Cards & Assets</span>
                       </a>
                       <ul class="dropdown-menu">
-                        {% if request.tenancy_features.parking_cards %}
-                          <li class="dropdown-header">Parking Card Request</li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:pc_request_new' %}">
-                            <i class="bi bi-plus-circle me-2"></i>New Parking Card Request
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:my_pc_requests' %}">
-                            <i class="bi bi-card-list me-2"></i>My Parking Card Requests
+                        <li class="dropdown-header">Parking Card Request</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:pc_request_new' %}">
+                          <i class="bi bi-plus-circle me-2"></i>New Parking Card Request
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:my_pc_requests' %}">
+                          <i class="bi bi-card-list me-2"></i>My Parking Card Requests
+                        </a></li>
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-header">ID Cards</li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
+                            <i class="bi bi-credit-card me-2"></i> Request ID Card
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="{% url 'accounts:my_id_card_requests' %}">
+                            <i class="bi bi-card-list me-2"></i> My ID Card Requests
+                          </a>
+                        </li>
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li class="dropdown-header">Asset Exit</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
+                          <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
+                          <i class="bi bi-file-text me-2"></i>My Asset Requests
+                        </a></li>
+
+                        <li><hr class="dropdown-divider"></li>
+
+                        <li class="dropdown-header">Packages & Mailroom</li>
+                        <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
+                          <i class="bi bi-box-seam me-2"></i>Packages
+                        </a></li>
+
+                        {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' or user.is_superuser %}
+                          <li><a class="dropdown-item" href="{% url 'vehicles:package_log_new' %}">
+                            <i class="bi bi-journal-plus me-2"></i>Log New Package (Gate)
                           </a></li>
                         {% endif %}
 
-                        {% if request.tenancy_features.id_cards %}
-                          {% if request.tenancy_features.parking_cards %}<li><hr class="dropdown-divider"></li>{% endif %}
-                          <li class="dropdown-header">ID Cards</li>
-                          <li><a class="dropdown-item" href="{% url 'accounts:my_idcard_requests' %}">
-                            <i class="bi bi-credit-card me-2"></i>Request ID Card
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'accounts:my_id_card_requests' %}">
-                            <i class="bi bi-card-list me-2"></i>My ID Card Requests
-                          </a></li>
-                        {% endif %}
+                        <li><hr class="dropdown-divider"></li>
 
-                        {% if request.tenancy_features.asset_exit %}
-                          <li><hr class="dropdown-divider"></li>
-                          <li class="dropdown-header">Asset Exit</li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:asset_exit_new' %}">
-                            <i class="bi bi-box-arrow-right me-2"></i>Request Asset Exit
-                          </a></li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:my_asset_exits' %}">
-                            <i class="bi bi-file-text me-2"></i>My Asset Requests
-                          </a></li>
-                        {% endif %}
-
-                        {% if request.tenancy_features.mailroom %}
-                          <li><hr class="dropdown-divider"></li>
-                          <li class="dropdown-header">Packages & Mailroom</li>
-                          <li><a class="dropdown-item" href="{% url 'vehicles:package_list' %}">
-                            <i class="bi bi-box-seam me-2"></i>Packages
-                          </a></li>
-                        {% endif %}
-
-                        {% if request.tenancy_features.incident_reporting %}
-                          <li><hr class="dropdown-divider"></li>
-                          <li class="dropdown-header">Incident</li>
-                          <li><a class="dropdown-item" href="{% url 'incidents:new' %}">
-                            <i class="bi bi-shield-exclamation me-2"></i>Report Incident
-                          </a></li>
-                        {% endif %}
+                        <li class="dropdown-header">Incident</li>
+                        <li><a class="dropdown-item" href="{% url 'incidents:new' %}">
+                          <i class="bi bi-shield-exclamation"></i> Report Incident</a>
+                        </li>
                       </ul>
                     </li>
-                    {% endif %}
 
                   {% endif %}
 
                 {% endif %}
 
-                {% if request.user.is_authenticated and request.tenancy_features.common_services %}
+                {% if request.user.is_authenticated %}
                   {# Manager tools are visible to CSR managers and super admins. #}
                   {% if is_csm or request.user.is_superuser %}
                     {% url 'incidents:csr_dashboard' as cs_landing_url %}
@@ -1161,7 +1128,7 @@ canvas {
                   </li>
                 {% endif %}
 
-                {% if user.is_authenticated and request.tenancy_features.comms_devices %}
+                {% if user.is_authenticated %}
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" id="commsDropdown" role="button"
                      data-bs-toggle="dropdown" aria-expanded="false">
@@ -1200,7 +1167,7 @@ canvas {
                 {% endif %}
 
                 {# === Asset Management (Agency Service) === #}
-              {% if user.is_authenticated and request.tenancy_features.asset_mgmt %}
+              {% if user.is_authenticated and asset_mgmt_enabled or user.is_superuser %}
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                      aria-expanded="false">
@@ -1212,6 +1179,27 @@ canvas {
                     <li>
                       <a class="dropdown-item" href="{% url 'accounts:asset_management' %}">
                         <i class="bi bi-boxes me-2"></i> Asset Portal
+                      </a>
+                    </li>
+
+                    <li><hr class="dropdown-divider"></li>
+
+                    <li><hr class="dropdown-divider"></li>
+
+                    <li class="dropdown-header">eSign</li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:esign_dashboard' %}">
+                        <i class="bi bi-pen-fill me-2"></i> eSign Portal
+                      </a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:esign_new' %}">
+                        <i class="bi bi-envelope-plus me-2"></i> Send for Signature
+                      </a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'accounts:esign_signatures' %}">
+                        <i class="bi bi-vector-pen me-2"></i> My Signature
                       </a>
                     </li>
 
@@ -1251,38 +1239,9 @@ canvas {
                 </li>
               {% endif %}
 
-                {# === eSign (separate top-level module) === #}
-                {% if user.is_authenticated %}
-                  {% if request.tenancy_features.esign or esign_enabled %}
-                  <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                       aria-expanded="false">
-                      <i class="bi bi-pen-fill me-1"></i> <span class="nav-label">eSign</span>
-                    </a>
-                    <ul class="dropdown-menu">
-                      <li>
-                        <a class="dropdown-item fw-semibold" href="{% url 'accounts:esign_dashboard' %}">
-                          <i class="bi bi-grid-1x2 me-2"></i> eSign Portal
-                        </a>
-                      </li>
-                      <li>
-                        <a class="dropdown-item" href="{% url 'accounts:esign_new' %}">
-                          <i class="bi bi-envelope-plus me-2"></i> Send for Signature
-                        </a>
-                      </li>
-                      <li>
-                        <a class="dropdown-item" href="{% url 'accounts:esign_signatures' %}">
-                          <i class="bi bi-vector-pen me-2"></i> My Signature
-                        </a>
-                      </li>
-                    </ul>
-                  </li>
-                  {% endif %}
-                {% endif %}
-
 
                 {# === Rooms & Bookings (new feature under Accounts) === #}
-                {% if user.is_authenticated and request.tenancy_features.room_booking %}
+                {% if user.is_authenticated %}
                   <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                        aria-expanded="false">
@@ -1307,7 +1266,7 @@ canvas {
                   </li>
                 {% endif %}
 
-                {% if user.is_authenticated and request.tenancy_features.id_cards %}
+                {% if user.is_authenticated %}
                   {% if user.role == 'lsa' or user.role == 'soc' or user.role == 'agency_hr' or user.is_superuser %}
                     <li class="nav-item dropdown">
                       <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
@@ -1345,46 +1304,7 @@ canvas {
                   {% endif %}
                 {% endif %}
 
-                {# === Tenancy / Platform Administration (superuser only) === #}
-                {% if user.is_authenticated and user.is_superuser %}
-                  <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                       aria-expanded="false">
-                      <i class="bi bi-diagram-3 me-1"></i> <span class="nav-label">Tenancy</span>
-                    </a>
-                    <ul class="dropdown-menu">
-                      <li>
-                        <a class="dropdown-item fw-semibold" href="{% url 'tenancy:overview' %}">
-                          <i class="bi bi-grid-1x2 me-2"></i> Tenancy Overview
-                        </a>
-                      </li>
-                      <li><hr class="dropdown-divider"></li>
-                      <li>
-                        <a class="dropdown-item" href="{% url 'tenancy:office_list' %}">
-                          <i class="bi bi-buildings me-2"></i> Country Offices
-                        </a>
-                      </li>
-                      <li>
-                        <a class="dropdown-item" href="{% url 'tenancy:sharing_links' %}">
-                          <i class="bi bi-share me-2"></i> Directory Sharing
-                        </a>
-                      </li>
-                      <li>
-                        <a class="dropdown-item" href="{% url 'tenancy:sso_settings' %}">
-                          <i class="bi bi-microsoft me-2"></i> Microsoft SSO
-                        </a>
-                      </li>
-                      <li>
-                        <a class="dropdown-item" href="{% url 'tenancy:audit_log' %}">
-                          <i class="bi bi-clock-history me-2"></i> Audit Log
-                        </a>
-                      </li>
-                    </ul>
-                  </li>
-                {% endif %}
-
-                {% if user.is_authenticated and request.tenancy_features.ict_console %}
-                {% if user.role == 'ict_focal' or user.is_superuser %}
+                {% if user.is_authenticated and user.role == 'ict_focal' %}
                 <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                     <i class="bi bi-person-gear me-1"></i> <span class="nav-label">ICT Console</span>
@@ -1398,7 +1318,6 @@ canvas {
                     </a></li>
                   </ul>
                 </li>
-                {% endif %}
                 {% endif %}
               </ul>
 

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Platform modules{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+      <h1 class="h3 mb-1">Platform modules</h1>
+      <p class="text-muted mb-0">
+        Switch modules on or off per agency and per country office.
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{% url 'tenancy:office_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-buildings me-1"></i> Country offices
+      </a>
+      <a href="{% url 'tenancy:sharing_links' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-link-45deg me-1"></i> Directory links
+      </a>
+      <a href="{% url 'tenancy:sso_settings' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-microsoft me-1"></i> Microsoft SSO
+      </a>
+      <a href="{% url 'tenancy:audit_log' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-clock-history me-1"></i> Change log
+      </a>
+    </div>
+  </div>
+
+  {% for row in rows %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+          <h2 class="h5 mb-0">{{ row.agency.name }}</h2>
+          <small class="text-muted">
+            {{ row.agency.code }} · {{ row.office_count }} office{{ row.office_count|pluralize }}
+          </small>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+          <span class="text-muted small">
+            Agency defaults: {{ row.on_count }} of {{ total_features }} on
+          </span>
+          <a href="{% url 'tenancy:feature_console' row.scope_key %}" class="btn btn-sm btn-outline-primary">
+            Edit agency defaults
+          </a>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Country office</th>
+              <th class="text-center" style="width:110px;">Users</th>
+              <th class="text-center" style="width:110px;">Admins</th>
+              <th class="text-center" style="width:130px;">Modules on</th>
+              <th>Active modules</th>
+              <th class="text-end" style="width:200px;">Manage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in row.offices %}
+              <tr>
+                <td>
+                  <div class="fw-semibold">{{ item.office.name }}</div>
+                  <small class="text-muted">
+                    {{ item.office.code }}{% if item.office.country %} · {{ item.office.country }}{% endif %}
+                    {% if not item.office.is_active %}
+                      <span class="badge bg-secondary ms-1">inactive</span>
+                    {% endif %}
+                  </small>
+                </td>
+                <td class="text-center">{{ item.user_count }}</td>
+                <td class="text-center">{{ item.admin_count }}</td>
+                <td class="text-center">
+                  <span class="badge {% if item.on_count %}bg-success{% else %}bg-secondary{% endif %}">
+                    {{ item.on_count }} / {{ total_features }}
+                  </span>
+                </td>
+                <td>
+                  {% for code in item.on_codes|slice:":6" %}
+                    <span class="badge bg-light text-dark border">{{ code }}</span>
+                  {% empty %}
+                    <span class="text-muted small">Nothing switched on</span>
+                  {% endfor %}
+                  {% if item.on_codes|length > 6 %}
+                    <span class="text-muted small">+{{ item.on_codes|length|add:"-6" }} more</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <a href="{% url 'tenancy:feature_console' item.scope_key %}" class="btn btn-sm btn-primary">
+                    Modules
+                  </a>
+                  <a href="{% url 'tenancy:office_admins' item.office.pk %}" class="btn btn-sm btn-outline-secondary">
+                    Admins
+                  </a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                  No country offices yet.
+                  <a href="{% url 'tenancy:office_list' %}">Add the first one</a>.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% empty %}
+    <div class="alert alert-info">No agencies exist yet. Create one in the Django admin first.</div>
+  {% endfor %}
+
+  {% if recent_changes %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white">
+        <h2 class="h6 mb-0">Recent changes</h2>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for entry in recent_changes %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>
+              <span class="fw-semibold">{{ entry.get_action_display }}</span>
+              {% if entry.feature_code %} · {{ entry.feature_code }}{% endif %}
+              · {{ entry.scope_label }}
+              {% if entry.detail %}<span class="text-muted">— {{ entry.detail }}</span>{% endif %}
+            </span>
+            <small class="text-muted">
+              {{ entry.actor|default:"system" }} · {{ entry.created_at|date:"d M Y H:i" }}
+            </small>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

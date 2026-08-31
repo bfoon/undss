@@ -65,6 +65,13 @@ class User(AbstractUser):
         null=True, blank=True,
         related_name="users",
     )
+    country_office = models.ForeignKey(
+        "tenancy.CountryOffice",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="users",
+        help_text="Country office this user belongs to",
+    )
     # Password policy
     must_change_password = models.BooleanField(default=False)
     temp_password_set_at = models.DateTimeField(null=True, blank=True)

@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'accounts',
+    "tenancy",
     'vehicles',
     'visitors',
     'incidents',
@@ -67,6 +68,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "accounts.middleware.ForcePasswordChangeMiddleware",
+    "tenancy.middleware.FeatureGateMiddleware",
 ]
 
 ROOT_URLCONF = 'un_security_system.urls'
@@ -82,6 +84,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'accounts.context_processors.agency_service_flags',
+                "tenancy.context_processors.tenancy",
             ],
         },
     },

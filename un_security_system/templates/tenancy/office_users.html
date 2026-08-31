@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Users · {{ office.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <h1 class="h3 mb-1">Users you administer</h1>
+  <p class="text-muted mb-4">{{ office }}</p>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Email</th>
+            <th class="text-center">Active</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td class="fw-semibold">{{ u.get_full_name|default:"—" }}</td>
+              <td>{{ u.username }}</td>
+              <td><span class="badge bg-light text-dark border">{{ u.get_role_display }}</span></td>
+              <td class="small text-muted">{{ u.email|default:"—" }}</td>
+              <td class="text-center">
+                {% if u.is_active %}
+                  <i class="bi bi-check-circle text-success"></i>
+                {% else %}
+                  <i class="bi bi-x-circle text-muted"></i>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-center text-muted py-4">No users to show.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

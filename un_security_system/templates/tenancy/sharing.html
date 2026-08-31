@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Directory links{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'tenancy:overview' %}">Platform modules</a></li>
+      <li class="breadcrumb-item active">Directory links</li>
+    </ol>
+  </nav>
+
+  <h1 class="h3 mb-1">Directory links</h1>
+  <p class="text-muted mb-4">
+    Let two offices see each other's people inside one module — so an UNDP sender can
+    address an eSign envelope to a UNICEF colleague, without either side gaining
+    visibility anywhere else.
+  </p>
+
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white"><h2 class="h6 mb-0">Create a link</h2></div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create">
+
+            <div class="mb-3">
+              <label class="form-label">Module</label>
+              <select name="feature_code" class="form-select" required>
+                <option value="">Choose…</option>
+                {% for code, name in shareable_features %}
+                  <option value="{{ code }}">{{ name }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Only modules marked linkable in the catalogue appear here.</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">From</label>
+              <select name="source_scope" class="form-select" required>
+                <option value="">Choose…</option>
+                {% for key, label in scopes %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">To</label>
+              <select name="target_scope" class="form-select" required>
+                <option value="">Choose…</option>
+                {% for key, label in scopes %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" name="is_mutual" id="mutual" checked>
+              <label class="form-check-label" for="mutual">
+                Both sides can see each other
+                <span class="d-block text-muted small">Uncheck to make it one-way.</span>
+              </label>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Note</label>
+              <input type="text" name="note" class="form-control" placeholder="Why this link exists">
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="bi bi-link-45deg me-1"></i> Create link
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Module</th>
+                <th>Link</th>
+                <th class="text-center">Status</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for share in shares %}
+                <tr class="{% if not share.is_active %}opacity-50{% endif %}">
+                  <td><span class="badge bg-light text-dark border">{{ share.feature_code }}</span></td>
+                  <td>
+                    <div>{{ share.source_label }}
+                      <span class="mx-1 text-primary">{% if share.is_mutual %}&#8596;{% else %}&#8594;{% endif %}</span>
+                      {{ share.target_label }}
+                    </div>
+                    {% if share.note %}<small class="text-muted">{{ share.note }}</small>{% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if share.is_active %}
+                      <span class="badge bg-success">active</span>
+                    {% else %}
+                      <span class="badge bg-secondary">paused</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    <form method="post" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="toggle">
+                      <input type="hidden" name="share_id" value="{{ share.pk }}">
+                      <button class="btn btn-sm btn-outline-secondary" type="submit">
+                        {% if share.is_active %}Pause{% else %}Reactivate{% endif %}
+                      </button>
+                    </form>
+                    <form method="post" class="d-inline"
+                          onsubmit="return confirm('Remove this link permanently?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="share_id" value="{{ share.pk }}">
+                      <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4" class="text-center text-muted py-4">No links yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
