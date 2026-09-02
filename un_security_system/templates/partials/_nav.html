@@ -32,15 +32,23 @@ stop competing for one horizontal strip.
   }
 
   /* ── Top bar ───────────────────────────────────────────────────────── */
+  body > .appnav-topbar,
   .appnav-topbar{
     position: fixed; top:0; left:0; right:0; height: var(--appnav-topbar-h);
     background: var(--appnav-bg); border-bottom: 1px solid var(--appnav-border);
     display:flex; align-items:center; gap:.75rem; padding:0 .75rem;
-    z-index:1035;
+    z-index:1040;
   }
   .appnav-brand{
     display:flex; align-items:center; gap:.6rem;
     color:#fff; text-decoration:none; font-weight:600; white-space:nowrap;
+  }
+  @media (min-width:1200px){
+    /* Line the brand up with the sidebar edge. */
+    body.appnav-has-sidebar .appnav-brand{
+      min-width:calc(var(--appnav-w) - 106px);
+    }
+    body.appnav-rail .appnav-brand{ min-width:0; }
   }
   .appnav-brand:hover{ color:#fff; }
   .appnav-brand-logo{
@@ -81,6 +89,7 @@ stop competing for one horizontal strip.
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* ── Sidebar ───────────────────────────────────────────────────────── */
+  body > .appnav-sidebar,
   .appnav-sidebar{
     position:fixed; top:var(--appnav-topbar-h); bottom:0; left:0;
     width:var(--appnav-w); background:var(--appnav-bg);
@@ -132,10 +141,11 @@ stop competing for one horizontal strip.
 
   /* ── Collapsed icon rail (desktop only) ────────────────────────────── */
   @media (min-width:1200px){
+    /* The top bar spans the full width and the sidebar starts beneath it.
+       Insetting the bar by the sidebar width instead would leave the top-left
+       corner owned by neither element — a blank rectangle. */
     body.appnav-has-sidebar{ padding-left:var(--appnav-w); }
-    body.appnav-has-sidebar .appnav-topbar{ left:var(--appnav-w); }
     body.appnav-rail{ padding-left:var(--appnav-w-rail); }
-    body.appnav-rail .appnav-topbar{ left:var(--appnav-w-rail); }
     body.appnav-rail .appnav-sidebar{ width:var(--appnav-w-rail); }
     body.appnav-rail .appnav-sidebar .appnav-link > span,
     body.appnav-rail .appnav-sidebar .appnav-caret,
@@ -155,7 +165,12 @@ stop competing for one horizontal strip.
   }
 
   /* ── Mobile drawer ─────────────────────────────────────────────────── */
+  body > .appnav-drawer,
   .appnav-drawer{ background:var(--appnav-bg); width:290px; }
+  /* The tree carries the background too, so a stray rule on a child cannot
+     leave a pale strip behind the links. */
+  .appnav-sidebar .appnav-tree,
+  .appnav-drawer .appnav-tree{ background:transparent; color:var(--appnav-fg); }
   .appnav-drawer .offcanvas-header{ border-bottom:1px solid var(--appnav-border); }
   .appnav-drawer .btn-close{ filter:invert(1) grayscale(1) brightness(2); }
 
