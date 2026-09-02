@@ -1,0 +1,481 @@
+{% comment %}
+templates/partials/_nav_items.html
+══════════════════════════════════
+
+The navigation link tree, written once and included twice — by the desktop
+sidebar and by the mobile drawer. Editing a link here changes it in both.
+
+Every permission condition is carried over unchanged from the old navbar:
+the same `request.tenancy_features.*` flags, the same role checks, the same
+`is_csm` / `is_csr_fulfiller` variables.
+
+The structural change is that three levels (navbar → dropdown → item) became
+two (section → item). A sidebar has the vertical room that a navbar does not,
+so nothing needs to hide behind a caret.
+
+`navscope` is required, and must differ between the two includes:
+
+    {% include "partials/_nav_items.html" with navscope="sb" %}   {# sidebar #}
+    {% include "partials/_nav_items.html" with navscope="dw" %}   {# drawer  #}
+
+It prefixes every collapse id. Without it both copies would share ids, and
+Bootstrap targets the first match in the document — so a toggle tapped in the
+drawer would silently expand the group in the hidden sidebar instead.
+{% endcomment %}
+
+<nav class="appnav-tree" aria-label="Main">
+
+  {# ── Overview ───────────────────────────────────────────────────────── #}
+  <div class="appnav-section">
+    {% url 'dashboard:dashboard' as u_dash %}
+    <a class="appnav-link {% if request.path == u_dash %}is-active{% endif %}"
+       href="{{ u_dash }}" data-appnav-label="Dashboard">
+      <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Dashboard</span>
+    </a>
+
+    {% if user.is_authenticated and request.available_menu_modules %}
+      <button class="appnav-link appnav-toggle collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpModules"
+              aria-expanded="false" data-appnav-label="My Modules">
+        <i class="bi bi-grid" aria-hidden="true"></i><span>My Modules</span>
+        <span class="appnav-count">{{ request.assigned_module_count }}</span>
+        <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+      </button>
+      <div class="collapse" id="{{ navscope }}navGrpModules">
+        <div class="appnav-sub">
+          {% for module in request.available_menu_modules %}
+            <a class="appnav-link appnav-link-sub"
+               href="{% if module.url %}{{ module.url }}{% else %}{{ u_dash }}{% endif %}"
+               title="{{ module.description }}">
+              <i class="bi {{ module.icon }}" aria-hidden="true"></i><span>{{ module.name }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if user.is_authenticated %}
+
+  {# ══ SECURITY & ACCESS ═══════════════════════════════════════════════ #}
+  {% if request.tenancy_features.visitor_access or request.tenancy_features.vehicle_access or request.tenancy_features.key_control or request.tenancy_features.parking_cards or request.tenancy_features.asset_exit or request.tenancy_features.security_incidents or request.tenancy_features.incident_reporting %}
+  <div class="appnav-section">
+    <div class="appnav-heading">Security &amp; Access</div>
+
+    {# — Visitors: operations roles — #}
+    {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+      {% if request.tenancy_features.visitor_access %}
+        {% url 'visitors:visitor_list' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-people" aria-hidden="true"></i><span>All Visitors</span>
+        </a>
+        {% url 'visitors:visitor_create' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-person-plus" aria-hidden="true"></i><span>Register New Visitor</span>
+        </a>
+        {% if user.role == 'lsa' or user.role == 'soc' %}
+          {% url 'visitors:visitor_verify_page' as u %}
+          <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-check-circle" aria-hidden="true"></i><span>Verify Clearance (Gate)</span>
+          </a>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+
+    {# — Visitors: staff roles — #}
+    {% if user.role == 'requester' or user.role == 'reception' or user.role == 'registry' or user.role == 'ict_focal' or user.role == 'agency_hr' %}
+      {% if request.tenancy_features.visitor_access %}
+        {% url 'visitors:visitor_create' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-person-plus" aria-hidden="true"></i><span>Request Visitor Approval</span>
+        </a>
+        {% url 'visitors:visitor_list' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-list-ul" aria-hidden="true"></i><span>My Visitors</span>
+        </a>
+      {% endif %}
+    {% endif %}
+
+    {# — Vehicles — #}
+    {% if request.tenancy_features.vehicle_access %}
+      {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+        <button class="appnav-link appnav-toggle collapsed" type="button"
+                data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpVehicles" aria-expanded="false">
+          <i class="bi bi-car-front" aria-hidden="true"></i><span>Vehicles</span>
+          <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+        </button>
+        <div class="collapse" id="{{ navscope }}navGrpVehicles">
+          <div class="appnav-sub">
+            {% url 'vehicles:vehicle_list' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-list-ul" aria-hidden="true"></i><span>All Vehicles</span>
+            </a>
+            {% url 'vehicles:record_movement' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-arrow-left-right" aria-hidden="true"></i><span>Record Movement</span>
+            </a>
+            {% url 'vehicles:movement_list' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-clock-history" aria-hidden="true"></i><span>Movement Log</span>
+            </a>
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
+
+    {# — Keys — #}
+    {% if request.tenancy_features.key_control %}
+      {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+        <button class="appnav-link appnav-toggle collapsed" type="button"
+                data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpKeys" aria-expanded="false">
+          <i class="bi bi-key" aria-hidden="true"></i><span>Key Control</span>
+          <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+        </button>
+        <div class="collapse" id="{{ navscope }}navGrpKeys">
+          <div class="appnav-sub">
+            {% url 'vehicles:key_list' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-key" aria-hidden="true"></i><span>Keys Inventory</span>
+            </a>
+            {% url 'vehicles:quick_key' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-qr-code-scan" aria-hidden="true"></i><span>Quick Issue / Return</span>
+            </a>
+            {% url 'vehicles:key_logs' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-clipboard-check" aria-hidden="true"></i><span>Key Logs</span>
+            </a>
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
+
+    {# — Parking cards — #}
+    {% if request.tenancy_features.parking_cards %}
+      {% if user.role == 'lsa' %}
+        <button class="appnav-link appnav-toggle collapsed" type="button"
+                data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpParking" aria-expanded="false">
+          <i class="bi bi-credit-card" aria-hidden="true"></i><span>Parking Cards</span>
+          <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+        </button>
+        <div class="collapse" id="{{ navscope }}navGrpParking">
+          <div class="appnav-sub">
+            {% url 'vehicles:parking_card_list' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-credit-card" aria-hidden="true"></i><span>All Parking Cards</span>
+            </a>
+            {% url 'vehicles:parking_card_create' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-plus-circle" aria-hidden="true"></i><span>Issue Parking Card</span>
+            </a>
+            {% url 'vehicles:pc_requests_pending' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-inbox" aria-hidden="true"></i><span>Pending Requests</span>
+            </a>
+          </div>
+        </div>
+      {% else %}
+        {% url 'vehicles:pc_request_new' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-plus-circle" aria-hidden="true"></i><span>New Parking Card Request</span>
+        </a>
+        {% url 'vehicles:my_pc_requests' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-card-list" aria-hidden="true"></i><span>My Parking Card Requests</span>
+        </a>
+      {% endif %}
+    {% endif %}
+
+    {# — Asset exit — #}
+    {% if request.tenancy_features.asset_exit %}
+      <button class="appnav-link appnav-toggle collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpExit" aria-expanded="false">
+        <i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Asset Exit</span>
+        <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+      </button>
+      <div class="collapse" id="{{ navscope }}navGrpExit">
+        <div class="appnav-sub">
+          {% if user.role == 'lsa' or user.role == 'soc' %}
+            {% url 'vehicles:asset_exit_queue' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-inboxes" aria-hidden="true"></i><span>Asset Exit Review</span>
+            </a>
+          {% endif %}
+          {% if user.role == 'data_entry' %}
+            {% url 'vehicles:asset_exit_approved_list' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-shield-check" aria-hidden="true"></i><span>Approved Exits (Gate)</span>
+            </a>
+          {% endif %}
+          {% url 'vehicles:asset_exit_new' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Request Asset Exit</span>
+          </a>
+          {% url 'vehicles:my_asset_exits' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-file-text" aria-hidden="true"></i><span>My Asset Requests</span>
+          </a>
+          {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+            {% url 'vehicles:asset_exit_verify_page' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-shield-check" aria-hidden="true"></i><span>Verify Asset Exit</span>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    {# — Incidents — #}
+    {% if request.tenancy_features.security_incidents %}
+      {% if user.role == 'lsa' or user.role == 'soc' %}
+        {% url 'incidents:triage' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-life-preserver" aria-hidden="true"></i><span>Incident Triage</span>
+        </a>
+      {% endif %}
+    {% endif %}
+    {% if request.tenancy_features.incident_reporting %}
+      {% url 'incidents:new' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-shield-exclamation" aria-hidden="true"></i><span>Report Incident</span>
+      </a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ══ FACILITIES ══════════════════════════════════════════════════════ #}
+  {% if request.tenancy_features.common_services or request.tenancy_features.room_booking or request.tenancy_features.mailroom %}
+  <div class="appnav-section">
+    <div class="appnav-heading">Facilities</div>
+
+    {% if request.tenancy_features.common_services %}
+      {% if is_csm or request.user.is_superuser %}
+        {% url 'incidents:csr_dashboard' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-speedometer2" aria-hidden="true"></i><span>CSR Dashboard</span>
+        </a>
+        {% url 'incidents:csr_queue' as u %}
+        <a class="appnav-link" href="{{ u }}?scope=all">
+          <i class="bi bi-globe" aria-hidden="true"></i><span>All Agencies Queue</span>
+        </a>
+      {% endif %}
+      {% if is_csr_fulfiller or is_csm or request.user.is_superuser %}
+        {% url 'incidents:csr_queue' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-inbox" aria-hidden="true"></i><span>My CSR Queue</span>
+        </a>
+      {% endif %}
+      {% url 'incidents:cs_support' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-plus-circle" aria-hidden="true"></i><span>New Service Request</span>
+      </a>
+      {% url 'incidents:my_csr' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-file-earmark-text" aria-hidden="true"></i><span>My Service Requests</span>
+      </a>
+    {% endif %}
+
+    {% if request.tenancy_features.room_booking %}
+      {% url 'accounts:room_list' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-door-open" aria-hidden="true"></i><span>Rooms &amp; Schedules</span>
+      </a>
+      {% if user.is_superuser or user.role == 'lsa' or user.role == 'soc' or user.role == 'agency_hr' or user.role == 'ict_focal' %}
+        {% url 'accounts:room_approvals' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-clipboard-check" aria-hidden="true"></i><span>My Room Approvals</span>
+        </a>
+      {% endif %}
+    {% endif %}
+
+    {% if request.tenancy_features.mailroom %}
+      {% url 'vehicles:package_list' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-box-seam" aria-hidden="true"></i><span>Packages</span>
+      </a>
+      {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+        {% url 'vehicles:package_log_new' as u %}
+        <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+          <i class="bi bi-journal-plus" aria-hidden="true"></i><span>Log New Package (Gate)</span>
+        </a>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ══ ICT & ASSETS ════════════════════════════════════════════════════ #}
+  {% if request.tenancy_features.asset_mgmt or request.tenancy_features.esign or esign_enabled or request.tenancy_features.comms_devices %}
+  <div class="appnav-section">
+    <div class="appnav-heading">ICT &amp; Assets</div>
+
+    {% if request.tenancy_features.asset_mgmt %}
+      <button class="appnav-link appnav-toggle collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpAssets" aria-expanded="false">
+        <i class="bi bi-laptop" aria-hidden="true"></i><span>Assets</span>
+        <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+      </button>
+      <div class="collapse" id="{{ navscope }}navGrpAssets">
+        <div class="appnav-sub">
+          {% url 'accounts:asset_management' as u_assets %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u_assets %}is-active{% endif %}" href="{{ u_assets }}">
+            <i class="bi bi-boxes" aria-hidden="true"></i><span>Asset Portal</span>
+          </a>
+          <a class="appnav-link appnav-link-sub" href="{{ u_assets }}#request">
+            <i class="bi bi-send-check" aria-hidden="true"></i><span>Request an Asset</span>
+          </a>
+          {% if user.is_superuser or user.role == 'ict_focal' %}
+            <a class="appnav-link appnav-link-sub" href="{{ u_assets }}#register">
+              <i class="bi bi-plus-circle" aria-hidden="true"></i><span>Register New Asset</span>
+            </a>
+            <a class="appnav-link appnav-link-sub" href="{{ u_assets }}#ict-queue">
+              <i class="bi bi-clipboard-data" aria-hidden="true"></i><span>ICT Assignment Queue</span>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if request.tenancy_features.esign or esign_enabled %}
+      <button class="appnav-link appnav-toggle collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpEsign" aria-expanded="false">
+        <i class="bi bi-pen-fill" aria-hidden="true"></i><span>eSign</span>
+        <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+      </button>
+      <div class="collapse" id="{{ navscope }}navGrpEsign">
+        <div class="appnav-sub">
+          {% url 'accounts:esign_dashboard' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-grid-1x2" aria-hidden="true"></i><span>eSign Portal</span>
+          </a>
+          {% url 'accounts:esign_new' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-envelope-plus" aria-hidden="true"></i><span>Send for Signature</span>
+          </a>
+          {% url 'accounts:esign_signatures' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-vector-pen" aria-hidden="true"></i><span>My Signature</span>
+          </a>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if request.tenancy_features.comms_devices %}
+      <button class="appnav-link appnav-toggle collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpComms" aria-expanded="false">
+        <i class="bi bi-broadcast" aria-hidden="true"></i><span>Communications</span>
+        <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+      </button>
+      <div class="collapse" id="{{ navscope }}navGrpComms">
+        <div class="appnav-sub">
+          {% if user.role != 'guard' and user.role != 'data_entry' %}
+            {% url 'comms:my_devices' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-broadcast-pin" aria-hidden="true"></i><span>My Radios &amp; Sat Phones</span>
+            </a>
+          {% endif %}
+          {% if user.role == 'lsa' or user.role == 'soc' %}
+            {% url 'comms:radios' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-radioactive" aria-hidden="true"></i><span>All Radios</span>
+            </a>
+            {% url 'comms:satphones' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-phone" aria-hidden="true"></i><span>Sat Phones</span>
+            </a>
+            {% url 'comms:users_without_radios' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-person-dash" aria-hidden="true"></i><span>Users Without Radios</span>
+            </a>
+            {% url 'comms:check_start' as u %}
+            <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+              <i class="bi bi-activity" aria-hidden="true"></i><span>Start Radio Check</span>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ══ PEOPLE ══════════════════════════════════════════════════════════ #}
+  {% if request.tenancy_features.id_cards %}
+  <div class="appnav-section">
+    <div class="appnav-heading">People</div>
+
+    {% url 'accounts:my_idcard_requests' as u %}
+    <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+      <i class="bi bi-credit-card-2-front" aria-hidden="true"></i><span>Request ID Card</span>
+    </a>
+
+    {% if user.role == 'lsa' or user.role == 'soc' or user.role == 'agency_hr' or user.is_superuser %}
+      {% url 'accounts:idcard_request_list' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-inbox" aria-hidden="true"></i><span>All ID Card Requests</span>
+      </a>
+      {% url 'accounts:idcard_request_for_user' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-person-plus" aria-hidden="true"></i><span>Request for Staff</span>
+      </a>
+      {% url 'accounts:expiring_ids' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>Expiring / Expired IDs</span>
+      </a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ══ ADMINISTRATION ══════════════════════════════════════════════════ #}
+  {% if user.is_superuser or user.role == 'ict_focal' %}
+  <div class="appnav-section">
+    <div class="appnav-heading">Administration</div>
+
+    {% if request.tenancy_features.ict_console %}
+      {% url 'accounts:ict_user_list' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-people" aria-hidden="true"></i><span>Agency Users</span>
+      </a>
+      {% url 'accounts:ict_user_create' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-person-plus" aria-hidden="true"></i><span>Create User</span>
+      </a>
+    {% endif %}
+
+    {% if user.is_superuser %}
+      <button class="appnav-link appnav-toggle collapsed" type="button"
+              data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpTenancy" aria-expanded="false">
+        <i class="bi bi-diagram-3" aria-hidden="true"></i><span>Tenancy</span>
+        <i class="bi bi-chevron-down appnav-caret" aria-hidden="true"></i>
+      </button>
+      <div class="collapse" id="{{ navscope }}navGrpTenancy">
+        <div class="appnav-sub">
+          {% url 'tenancy:overview' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-grid-1x2" aria-hidden="true"></i><span>Tenancy Overview</span>
+          </a>
+          {% url 'tenancy:office_list' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-buildings" aria-hidden="true"></i><span>Country Offices</span>
+          </a>
+          {% url 'tenancy:sharing_links' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-share" aria-hidden="true"></i><span>Directory Sharing</span>
+          </a>
+          {% url 'tenancy:sso_settings' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-microsoft" aria-hidden="true"></i><span>Microsoft SSO</span>
+          </a>
+          {% url 'tenancy:audit_log' as u %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+            <i class="bi bi-clock-history" aria-hidden="true"></i><span>Audit Log</span>
+          </a>
+        </div>
+      </div>
+      <a class="appnav-link" href="/admin/">
+        <i class="bi bi-gear" aria-hidden="true"></i><span>Django Admin</span>
+      </a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% endif %}
+</nav>

@@ -1,0 +1,374 @@
+{% comment %}
+templates/partials/_nav.html
+════════════════════════════
+
+The whole navigation. Include it once in base.html, just inside <body>.
+
+Three layouts from one link tree (_nav_items.html):
+
+  ≥1200px  fixed left sidebar, 264px, collapsible to a 76px icon rail
+  768–1199 slim top bar; the sidebar becomes a slide-in drawer
+  <768px   same drawer, plus a bottom tab bar for the five most-used pages
+
+The old navbar was `navbar-expand-xxl`, so anything under 1400px — which is
+most laptops, including a 1366×768 and a 13" MacBook — dropped to the mobile
+hamburger. A sidebar solves that: a laptop gets the full menu, and 12 modules
+stop competing for one horizontal strip.
+{% endcomment %}
+
+<style>
+  :root{
+    --appnav-w: 264px;
+    --appnav-w-rail: 76px;
+    --appnav-topbar-h: 60px;
+    --appnav-bottom-h: 58px;
+    --appnav-bg: #0b3d5c;
+    --appnav-bg-soft: rgba(255,255,255,.06);
+    --appnav-fg: rgba(255,255,255,.82);
+    --appnav-fg-dim: rgba(255,255,255,.52);
+    --appnav-fg-on: #fff;
+    --appnav-accent: #009EDB;
+    --appnav-border: rgba(255,255,255,.10);
+  }
+
+  /* ── Top bar ───────────────────────────────────────────────────────── */
+  .appnav-topbar{
+    position: fixed; top:0; left:0; right:0; height: var(--appnav-topbar-h);
+    background: var(--appnav-bg); border-bottom: 1px solid var(--appnav-border);
+    display:flex; align-items:center; gap:.75rem; padding:0 .75rem;
+    z-index:1035;
+  }
+  .appnav-brand{
+    display:flex; align-items:center; gap:.6rem;
+    color:#fff; text-decoration:none; font-weight:600; white-space:nowrap;
+  }
+  .appnav-brand:hover{ color:#fff; }
+  .appnav-brand-logo{
+    background:#fff; border-radius:6px; padding:3px; line-height:0;
+    min-width:36px; min-height:36px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .appnav-brand-logo img{ height:24px; max-width:84px; object-fit:contain; }
+  .appnav-brand-sub{
+    font-size:.62rem; letter-spacing:.6px; color:rgba(255,255,255,.55);
+    font-weight:600; text-transform:uppercase;
+  }
+
+  .appnav-iconbtn{
+    background:transparent; border:0; color:var(--appnav-fg);
+    width:40px; height:40px; border-radius:8px; flex:0 0 auto;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:1.15rem; transition:background .12s ease, color .12s ease;
+  }
+  .appnav-iconbtn:hover{ background:var(--appnav-bg-soft); color:#fff; }
+  .appnav-iconbtn:focus-visible{ outline:2px solid var(--appnav-accent); outline-offset:2px; }
+
+  .appnav-user{
+    display:flex; align-items:center; gap:.5rem; color:var(--appnav-fg);
+    background:transparent; border:0; padding:.3rem .5rem; border-radius:8px;
+    max-width:230px;
+  }
+  .appnav-user:hover{ background:var(--appnav-bg-soft); color:#fff; }
+  .appnav-avatar{
+    width:32px; height:32px; border-radius:50%; flex:0 0 auto;
+    background:var(--appnav-accent); color:#fff; font-weight:700; font-size:.78rem;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .appnav-user-meta{ display:flex; flex-direction:column; line-height:1.15; text-align:left; min-width:0; }
+  .appnav-user-name{ font-size:.84rem; font-weight:600; color:#fff;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .appnav-user-role{ font-size:.68rem; color:var(--appnav-fg-dim);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ── Sidebar ───────────────────────────────────────────────────────── */
+  .appnav-sidebar{
+    position:fixed; top:var(--appnav-topbar-h); bottom:0; left:0;
+    width:var(--appnav-w); background:var(--appnav-bg);
+    border-right:1px solid var(--appnav-border);
+    overflow-y:auto; overscroll-behavior:contain;
+    z-index:1030; padding:.75rem 0 1rem;
+    transition:width .16s ease;
+  }
+  .appnav-sidebar::-webkit-scrollbar{ width:8px; }
+  .appnav-sidebar::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.16); border-radius:4px; }
+  .appnav-sidebar{ scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.16) transparent; }
+
+  /* ── Link tree ─────────────────────────────────────────────────────── */
+  .appnav-section{ padding:.25rem .6rem; }
+  .appnav-section + .appnav-section{
+    margin-top:.35rem; padding-top:.6rem; border-top:1px solid var(--appnav-border);
+  }
+  .appnav-heading{
+    font-size:.66rem; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+    color:var(--appnav-fg-dim); padding:.4rem .65rem .3rem;
+  }
+  .appnav-link{
+    display:flex; align-items:center; gap:.7rem; width:100%;
+    padding:.52rem .65rem; margin-bottom:1px;
+    color:var(--appnav-fg); text-decoration:none;
+    background:transparent; border:0; border-radius:8px;
+    font-size:.875rem; line-height:1.3; text-align:left;
+    transition:background .12s ease, color .12s ease;
+  }
+  .appnav-link > .bi:first-child{ font-size:1rem; width:20px; flex:0 0 20px; text-align:center; }
+  .appnav-link > span{ flex:1 1 auto; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .appnav-link:hover{ background:var(--appnav-bg-soft); color:#fff; }
+  .appnav-link:focus-visible{ outline:2px solid var(--appnav-accent); outline-offset:-2px; }
+  .appnav-link.is-active{
+    background:rgba(0,158,219,.20); color:#fff; font-weight:600;
+    box-shadow:inset 3px 0 0 var(--appnav-accent);
+  }
+  .appnav-link-sub{ font-size:.82rem; padding-left:1.15rem; color:var(--appnav-fg-dim); }
+  .appnav-link-sub:hover{ color:#fff; }
+  .appnav-sub{ margin:1px 0 .3rem; }
+  .appnav-caret{ font-size:.7rem; transition:transform .16s ease; flex:0 0 auto; }
+  .appnav-toggle[aria-expanded="true"] .appnav-caret{ transform:rotate(180deg); }
+  .appnav-toggle[aria-expanded="true"]{ color:#fff; }
+  .appnav-count{
+    font-size:.68rem; font-weight:700; padding:.05rem .4rem; border-radius:10px;
+    background:var(--appnav-bg-soft); color:var(--appnav-fg-dim); flex:0 0 auto;
+  }
+
+  /* ── Collapsed icon rail (desktop only) ────────────────────────────── */
+  @media (min-width:1200px){
+    body.appnav-has-sidebar{ padding-left:var(--appnav-w); }
+    body.appnav-has-sidebar .appnav-topbar{ left:var(--appnav-w); }
+    body.appnav-rail{ padding-left:var(--appnav-w-rail); }
+    body.appnav-rail .appnav-topbar{ left:var(--appnav-w-rail); }
+    body.appnav-rail .appnav-sidebar{ width:var(--appnav-w-rail); }
+    body.appnav-rail .appnav-sidebar .appnav-link > span,
+    body.appnav-rail .appnav-sidebar .appnav-caret,
+    body.appnav-rail .appnav-sidebar .appnav-count,
+    body.appnav-rail .appnav-sidebar .appnav-heading{ display:none; }
+    body.appnav-rail .appnav-sidebar .appnav-link{ justify-content:center; padding:.6rem 0; }
+    body.appnav-rail .appnav-sidebar .appnav-link-sub{ padding-left:0; }
+    body.appnav-rail .appnav-sidebar .collapse{ display:none !important; }
+    /* Label on hover, so the rail stays usable */
+    body.appnav-rail .appnav-sidebar .appnav-link{ position:relative; }
+    body.appnav-rail .appnav-sidebar .appnav-link:hover::after{
+      content:attr(data-appnav-label); position:absolute; left:100%; margin-left:.4rem;
+      background:#0a2d44; color:#fff; padding:.3rem .55rem; border-radius:6px;
+      font-size:.78rem; white-space:nowrap; z-index:5; pointer-events:none;
+      box-shadow:0 4px 14px rgba(0,0,0,.3);
+    }
+  }
+
+  /* ── Mobile drawer ─────────────────────────────────────────────────── */
+  .appnav-drawer{ background:var(--appnav-bg); width:290px; }
+  .appnav-drawer .offcanvas-header{ border-bottom:1px solid var(--appnav-border); }
+  .appnav-drawer .btn-close{ filter:invert(1) grayscale(1) brightness(2); }
+
+  /* ── Phone bottom bar ──────────────────────────────────────────────── */
+  .appnav-bottom{
+    position:fixed; left:0; right:0; bottom:0; height:var(--appnav-bottom-h);
+    background:#fff; border-top:1px solid #e2e8f0; z-index:1030;
+    display:flex; padding-bottom:env(safe-area-inset-bottom);
+  }
+  .appnav-bottom a, .appnav-bottom button{
+    flex:1 1 0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:2px; border:0; background:transparent;
+    color:#64748b; text-decoration:none; font-size:.63rem; font-weight:600;
+    padding:.3rem .1rem; min-width:0;
+  }
+  .appnav-bottom .bi{ font-size:1.15rem; }
+  .appnav-bottom a.is-active{ color:var(--appnav-accent); }
+  .appnav-bottom span{ overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; max-width:100%; }
+
+  /* ── Page offsets ──────────────────────────────────────────────────── */
+  body{ padding-top:var(--appnav-topbar-h); }
+  @media (max-width:767.98px){ body{ padding-bottom:var(--appnav-bottom-h); } }
+  @media (prefers-reduced-motion:reduce){
+    .appnav-sidebar, .appnav-caret{ transition:none; }
+  }
+</style>
+
+{# ══ Top bar ═════════════════════════════════════════════════════════ #}
+<header class="appnav-topbar" role="banner">
+
+  {# Drawer trigger — below 1200px only #}
+  <button class="appnav-iconbtn d-xl-none" type="button"
+          data-bs-toggle="offcanvas" data-bs-target="#appnavDrawer"
+          aria-controls="appnavDrawer" aria-label="Open menu">
+    <i class="bi bi-list" aria-hidden="true"></i>
+  </button>
+
+  {# Rail toggle — 1200px and up #}
+  <button class="appnav-iconbtn d-none d-xl-inline-flex" type="button"
+          id="appnavRailToggle" aria-label="Collapse or expand the sidebar">
+    <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
+  </button>
+
+  <a class="appnav-brand" href="{% url 'dashboard:dashboard' %}" aria-label="UN PASS home">
+    {% if user.is_authenticated and user.agency and user.agency.logo %}
+      <span class="appnav-brand-logo">
+        <img src="{{ user.agency.logo.url }}" alt="{{ user.agency.name }}">
+      </span>
+    {% else %}
+      <i class="bi bi-shield-check fs-4" aria-hidden="true"></i>
+    {% endif %}
+    <span class="d-none d-sm-flex flex-column lh-1">
+      <span>UN PASS</span>
+      {% if user.is_authenticated %}
+        {% if office %}
+          <span class="appnav-brand-sub">{{ office.agency.code }} · {{ office.name }}</span>
+        {% elif user.agency and user.agency.code %}
+          <span class="appnav-brand-sub">{{ user.agency.code }}</span>
+        {% endif %}
+      {% endif %}
+    </span>
+  </a>
+
+  <div class="ms-auto d-flex align-items-center gap-1">
+    {% if user.is_authenticated %}
+
+      {% block appnav_topbar_extra %}{% endblock %}
+
+      <div class="dropdown">
+        <button class="appnav-user" type="button" data-bs-toggle="dropdown"
+                aria-expanded="false" aria-label="Account menu">
+          <span class="appnav-avatar" aria-hidden="true">
+            {{ user.get_full_name|default:user.username|slice:":1"|upper }}
+          </span>
+          <span class="appnav-user-meta d-none d-md-flex">
+            <span class="appnav-user-name">{{ user.get_full_name|default:user.username }}</span>
+            <span class="appnav-user-role">
+              {% if user.role %}{{ user.get_role_display|default:user.role }}{% else %}User{% endif %}
+            </span>
+          </span>
+          <i class="bi bi-chevron-down d-none d-md-inline small" aria-hidden="true"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow">
+          <li class="dropdown-item-text">
+            <div class="fw-semibold">{{ user.get_full_name|default:user.username }}</div>
+            <small class="text-muted">
+              {% if user.role %}{{ user.get_role_display|default:user.role }}{% else %}User{% endif %}
+              {% if office %}<br>{{ office }}{% endif %}
+            </small>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item" href="{% url 'accounts:profile' %}">
+              <i class="bi bi-person me-2" aria-hidden="true"></i>My Profile
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item text-danger" href="{% url 'accounts:logout' %}">
+              <i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>Sign Out
+            </a>
+          </li>
+        </ul>
+      </div>
+    {% else %}
+      <a class="btn btn-sm btn-light" href="{% url 'accounts:login' %}">
+        <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i> Sign In
+      </a>
+    {% endif %}
+  </div>
+</header>
+
+{% if user.is_authenticated %}
+
+{# ══ Desktop sidebar — 1200px and up ═════════════════════════════════ #}
+<aside class="appnav-sidebar d-none d-xl-block" id="appnavSidebar">
+  {% include "partials/_nav_items.html" with navscope="sb" %}
+</aside>
+
+{# ══ Drawer — below 1200px ═══════════════════════════════════════════ #}
+<div class="offcanvas offcanvas-start appnav-drawer d-xl-none"
+     tabindex="-1" id="appnavDrawer" aria-labelledby="appnavDrawerLabel">
+  <div class="offcanvas-header">
+    <h2 class="offcanvas-title h6 text-white mb-0" id="appnavDrawerLabel">
+      <i class="bi bi-shield-check me-2" aria-hidden="true"></i>UN PASS
+    </h2>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body p-0">
+    {% include "partials/_nav_items.html" with navscope="dw" %}
+  </div>
+</div>
+
+{# ══ Phone bottom bar — below 768px ══════════════════════════════════ #}
+<nav class="appnav-bottom d-md-none" aria-label="Quick navigation">
+  {% url 'dashboard:dashboard' as u %}
+  <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">
+    <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Home</span>
+  </a>
+
+  {% if request.tenancy_features.visitor_access %}
+    {% url 'visitors:visitor_list' as u %}
+    <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">
+      <i class="bi bi-people" aria-hidden="true"></i><span>Visitors</span>
+    </a>
+  {% elif request.tenancy_features.room_booking %}
+    {% url 'accounts:room_list' as u %}
+    <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">
+      <i class="bi bi-door-open" aria-hidden="true"></i><span>Rooms</span>
+    </a>
+  {% endif %}
+
+  {% if request.tenancy_features.esign or esign_enabled %}
+    {% url 'accounts:esign_dashboard' as u %}
+    <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">
+      <i class="bi bi-pen-fill" aria-hidden="true"></i><span>eSign</span>
+    </a>
+  {% elif request.tenancy_features.common_services %}
+    {% url 'incidents:my_csr' as u %}
+    <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">
+      <i class="bi bi-tools" aria-hidden="true"></i><span>Services</span>
+    </a>
+  {% endif %}
+
+  {% if request.tenancy_features.incident_reporting %}
+    {% url 'incidents:new' as u %}
+    <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">
+      <i class="bi bi-shield-exclamation" aria-hidden="true"></i><span>Report</span>
+    </a>
+  {% endif %}
+
+  <button type="button" data-bs-toggle="offcanvas" data-bs-target="#appnavDrawer"
+          aria-controls="appnavDrawer">
+    <i class="bi bi-grid" aria-hidden="true"></i><span>Menu</span>
+  </button>
+</nav>
+
+<script>
+(function () {
+  var body = document.body;
+  var KEY = 'unpass:nav:rail';
+
+  if (document.getElementById('appnavSidebar')) {
+    body.classList.add('appnav-has-sidebar');
+  }
+  try {
+    if (localStorage.getItem(KEY) === '1') body.classList.add('appnav-rail');
+  } catch (e) { /* private mode — just start expanded */ }
+
+  var toggle = document.getElementById('appnavRailToggle');
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      var railed = body.classList.toggle('appnav-rail');
+      toggle.setAttribute('aria-pressed', railed ? 'true' : 'false');
+      try { localStorage.setItem(KEY, railed ? '1' : '0'); } catch (e) {}
+    });
+  }
+
+  // Open the group containing the current page, in both sidebar and drawer.
+  document.querySelectorAll('.appnav-link.is-active').forEach(function (link) {
+    var group = link.closest('.collapse');
+    if (!group) return;
+    group.classList.add('show');
+    var btn = document.querySelector('[data-bs-target="#' + group.id + '"]');
+    if (btn) { btn.classList.remove('collapsed'); btn.setAttribute('aria-expanded', 'true'); }
+  });
+
+  // Give every rail item a tooltip label from its own text.
+  document.querySelectorAll('#appnavSidebar .appnav-link').forEach(function (link) {
+    if (link.hasAttribute('data-appnav-label')) return;
+    var span = link.querySelector('span');
+    if (span) link.setAttribute('data-appnav-label', span.textContent.trim());
+  });
+})();
+</script>
+{% endif %}
