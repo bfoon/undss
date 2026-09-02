@@ -17,6 +17,7 @@ from .views_room_booking import (
 from .views_asset_verify import asset_verify, asset_verification_history
 from . import views_esign
 from . import views_esign_markup
+from . import views_esign_self
 
 app_name = 'accounts'
 
@@ -264,6 +265,12 @@ urlpatterns = [
     # Sender side (login required)
     path("esign/", views_esign.esign_dashboard, name="esign_dashboard"),
     path("esign/new/", views_esign.esign_new, name="esign_new"),
+
+    # Sign something yourself — no recipients, no email. Creates a one-recipient
+    # envelope so the conversion, stamping, certificate and audit trail are all
+    # the same code as a normal send.
+    path("esign/self/", views_esign_self.esign_self_new, name="esign_self_new"),
+    path("esign/<int:pk>/self/sign/", views_esign_self.esign_self_finish, name="esign_self_finish"),
     path("esign/<int:pk>/", views_esign.esign_envelope_detail, name="esign_envelope_detail"),
     path("esign/<int:pk>/prepare/", views_esign.esign_prepare, name="esign_prepare"),
     path("esign/<int:pk>/fields/", views_esign.esign_fields_save, name="esign_fields_save"),

@@ -15,8 +15,10 @@
     <p class="text-muted mb-0">
       {% if form.instance.pk %}
         Update user information for {{ form.instance.username }}
+      {% elif form.country_office.field.queryset.count == 1 %}
+        Add a new user to {{ form.country_office.field.queryset.first }}
       {% else %}
-        Add a new user to your agency
+        Add a new user and choose which country office they belong to
       {% endif %}
     </p>
   </div>
@@ -85,6 +87,43 @@
                 </div>
               {% endif %}
             </div>
+
+<!--            {# The country office decides which records this person sees, so it-->
+<!--               belongs with the account details rather than tucked away below.-->
+<!--               The field is added by the view, not declared in forms.py, so the-->
+<!--               guard keeps this template working if tenancy is not installed. #}-->
+            {% if form.country_office %}
+              <div class="col-md-6">
+                <label for="{{ form.country_office.id_for_label }}" class="form-label fw-semibold">
+                  {{ form.country_office.label }}
+                  <span class="text-danger">*</span>
+                </label>
+                {{ form.country_office }}
+
+                {% if form.country_office.field.widget.attrs.disabled %}
+<!--                  {# A disabled input is not submitted. The view falls back to-->
+<!--                     the actor's own office, but post the value anyway so the-->
+<!--                     browser and the server agree on what was shown. #}-->
+                  <input type="hidden" name="country_office"
+                         value="{{ form.country_office.value|default_if_none:'' }}">
+                  <small class="form-text text-muted d-block mt-1">
+                    <i class="bi bi-lock me-1"></i>You can only add users to your own office.
+                  </small>
+                {% elif form.country_office.help_text %}
+                  <small class="form-text text-muted d-block mt-1">
+                    {{ form.country_office.help_text }}
+                  </small>
+                {% endif %}
+
+                {% if form.country_office.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.country_office.errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
           </div>
         </div>
 
@@ -210,8 +249,13 @@
         <div class="flex-grow-1 ms-3">
           <h6 class="alert-heading mb-1">Password Setup Required</h6>
           <p class="mb-0 small">
-            The user will be created within your agency without an initial password.
-            You'll need to either set a password through the admin panel or send them a password reset link to activate their account.
+            The user is created without an initial password. Set one from their
+            detail page, or send them a reset link to activate the account.
+          </p>
+          <p class="mb-0 small mt-2">
+            Their country office decides which records they can see — a user in
+            one office does not see another office's visitors, vehicles or
+            packages, even where both offices have the same modules switched on.
           </p>
         </div>
       </div>
@@ -234,12 +278,17 @@
 </style>
 
 <script>
-  // Add Bootstrap validation classes to form controls with errors
-  document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.invalid-feedback').forEach(function(feedback) {
-      const formControl = feedback.previousElementSibling;
-      if (formControl && (formControl.classList.contains('form-control') || formControl.classList.contains('form-select'))) {
-        formControl.classList.add('is-invalid');
+  // Mark inputs that have errors.
+  //
+  // This used to look only at the element immediately before .invalid-feedback,
+  // so any field with help text between the input and the error — which is most
+  // of them — never got the red border. Search the whole group instead.
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.invalid-feedback').forEach(function (feedback) {
+      var group = feedback.closest('.col-md-6, .col-12, .mb-3, .mb-4');
+      var control = group && group.querySelector('.form-control, .form-select');
+      if (control) {
+        control.classList.add('is-invalid');
       }
     });
   });

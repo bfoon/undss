@@ -1,61 +1,5 @@
 {% extends "base.html" %}
 {% block title %}eSign | UN PASS {% endblock %}
-<div class="modal fade" id="dupModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <form method="post" id="dupForm">
-      {% csrf_token %}
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title text-un-primary"><i class="bi bi-files me-2"></i>Duplicate flow</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <p class="small text-muted">
-            Copies the recipients, signing order and options into a new draft.
-          </p>
-          <label class="form-label small fw-semibold">Subject</label>
-          <input type="text" name="subject" id="dupSubject" class="form-control mb-3" maxlength="200">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="include_documents" id="dupDocsD">
-            <label class="form-check-label small" for="dupDocsD">
-              Also copy the documents and the field layout
-            </label>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-un-primary">Create duplicate</button>
-        </div>
-      </div>
-    </form>
-  </div>
-</div>
-
-<div class="modal fade" id="delModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <form method="post" id="delForm">
-      {% csrf_token %}
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title text-danger"><i class="bi bi-trash me-2"></i>Delete draft</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <p class="mb-2">Permanently delete <b id="delSubject"></b>?</p>
-          <p class="small text-muted mb-0">
-            Its documents and any fields you've placed go with it. Nothing has been
-            sent, so no one else is affected. This cannot be undone.
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-danger">Delete draft</button>
-        </div>
-      </div>
-    </form>
-  </div>
-</div>
-
 {% block extra_js %}
 <script>
 const DEL_URL = "{% url 'accounts:esign_envelope_delete' 0 %}";
@@ -103,13 +47,17 @@ document.querySelectorAll('.es-del').forEach(btn => {
           <div>
             <h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-pen-fill me-2"></i>eSign</h4>
             <div class="text-muted">
-              Send any document for legally-binding electronic signature — with routing, CC/BCC,
-              viewers, reminders and a full audit trail on every envelope.
+              Send a document for legally-binding electronic signature — with routing, CC/BCC,
+              viewers, reminders and a full audit trail on every envelope. Or sign
+              something yourself, with no recipients at all.
             </div>
           </div>
           <div class="d-flex gap-2 flex-wrap">
             <a class="btn btn-un-primary" href="{% url 'accounts:esign_new' %}">
               <i class="bi bi-plus-circle me-1"></i> New envelope
+            </a>
+            <a class="btn btn-outline-primary" href="{% url 'accounts:esign_self_new' %}">
+              <i class="bi bi-pen-fill me-1"></i> Sign a document
             </a>
             <a class="btn btn-outline-primary" href="{% url 'accounts:esign_signatures' %}">
               <i class="bi bi-pen me-1"></i> My signature
@@ -227,13 +175,19 @@ document.querySelectorAll('.es-del').forEach(btn => {
               </td>
               <td><span class="es-token">{{ e.short_id }}</span></td>
               <td>
-                <span class="es-avatars">
-                  {% for r in e.recipients.all|slice:":5" %}
-                    <span class="es-av" title="{{ r.name }} — {{ r.get_role_display }}">
-                      {{ r.name|slice:":1"|upper }}</span>
-                  {% endfor %}
-                </span>
-                <span class="small text-muted ms-2">{{ e.recipients.count }}</span>
+                {% if e.is_self_sign %}
+                  <span class="badge bg-light text-dark border">
+                    <i class="bi bi-person-check me-1"></i>Signed by you
+                  </span>
+                {% else %}
+                  <span class="es-avatars">
+                    {% for r in e.recipients.all|slice:":5" %}
+                      <span class="es-av" title="{{ r.name }} — {{ r.get_role_display }}">
+                        {{ r.name|slice:":1"|upper }}</span>
+                    {% endfor %}
+                  </span>
+                  <span class="small text-muted ms-2">{{ e.recipients.count }}</span>
+                {% endif %}
               </td>
               <td><span class="badge bg-{{ e.status_color }}">{{ e.get_status_display }}</span></td>
               <td style="min-width:120px">
@@ -276,6 +230,62 @@ document.querySelectorAll('.es-del').forEach(btn => {
         </table>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="modal fade" id="dupModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" id="dupForm">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-un-primary"><i class="bi bi-files me-2"></i>Duplicate flow</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">
+            Copies the recipients, signing order and options into a new draft.
+          </p>
+          <label class="form-label small fw-semibold">Subject</label>
+          <input type="text" name="subject" id="dupSubject" class="form-control mb-3" maxlength="200">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="include_documents" id="dupDocsD">
+            <label class="form-check-label small" for="dupDocsD">
+              Also copy the documents and the field layout
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-un-primary">Create duplicate</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="delModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <form method="post" id="delForm">
+      {% csrf_token %}
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger"><i class="bi bi-trash me-2"></i>Delete draft</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Permanently delete <b id="delSubject"></b>?</p>
+          <p class="small text-muted mb-0">
+            Its documents and any fields you've placed go with it. Nothing has been
+            sent, so no one else is affected. This cannot be undone.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-danger">Delete draft</button>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 {% endblock %}

@@ -185,6 +185,14 @@ class Envelope(models.Model):
     enforce_order = models.BooleanField(
         default=True, help_text="Sign in the order recipients were added."
     )
+    is_self_sign = models.BooleanField(
+        default=False,
+        help_text=(
+            "Signed by its creator alone — one recipient, no invitation email. "
+            "Everything else about the envelope is unchanged, so the completed "
+            "PDF and certificate are produced the same way."
+        ),
+    )
     reminders_enabled = models.BooleanField(default=True)
     reminder_days = models.PositiveSmallIntegerField(default=3)
     expires_at = models.DateTimeField(null=True, blank=True)

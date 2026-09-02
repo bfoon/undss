@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Sign a document | eSign{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ss-drop{ border:2px dashed #CBD5E1; border-radius:14px; padding:2.2rem 1.6rem; text-align:center;
+            background:#F8FAFC; cursor:pointer; transition:.15s; }
+  .ss-drop:hover, .ss-drop.drag{ border-color:var(--un-blue); background:rgba(0,158,219,.06); }
+  .ss-filechip{ display:inline-flex;align-items:center;gap:.4rem;background:#EAF6FC;color:#005A8B;
+                border-radius:999px;padding:.3rem .8rem;font-size:.85rem;margin:.2rem; }
+  .ss-mode{ border:2px solid #E5E7EB; border-radius:14px; padding:1rem; cursor:pointer;
+            height:100%; transition:.15s; background:#fff; }
+  .ss-mode:hover{ border-color:#CBD5E1; }
+  .ss-mode input{ position:absolute; opacity:0; pointer-events:none; }
+  .ss-mode.is-on{ border-color:var(--un-blue); box-shadow:0 0 0 3px rgba(0,158,219,.12); }
+  .ss-mode .bi{ font-size:1.5rem; color:var(--un-blue); }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" id="ssForm">
+  {% csrf_token %}
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+      <h4 class="fw-bold text-un-primary mb-0">
+        <i class="bi bi-pen-fill me-2"></i>Sign a document
+      </h4>
+      <div class="text-muted small">
+        Just you — no recipients, no email, no waiting. You get back a signed PDF
+        with a certificate.
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-light" href="{% url 'accounts:esign_dashboard' %}">Cancel</a>
+      <button class="btn btn-un-primary px-4" id="ssSubmit">
+        <i class="bi bi-pen me-1"></i> Continue
+      </button>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card mb-3">
+        <div class="card-header bg-white fw-bold text-un-primary">
+          <i class="bi bi-file-earmark-arrow-up me-2"></i>Document
+        </div>
+        <div class="card-body">
+          <div class="ss-drop" id="ssDrop">
+            <i class="bi bi-cloud-arrow-up fs-1 text-primary"></i>
+            <div class="fw-semibold mt-2">Drop a file here or click to browse</div>
+            <div class="small text-muted">
+              PDF{% if office_ext %}, {{ office_ext }}{% endif %} or an image ·
+              up to 25 MB
+            </div>
+            <input type="file" name="documents" id="ssFiles" class="d-none" multiple
+                   accept="{{ accept_attr }}">
+          </div>
+          <div id="ssFileList" class="mt-2"></div>
+
+          {% if not converter_ok %}
+            <div class="alert alert-warning small mt-3 mb-0">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              <b>Office conversion is unavailable</b> — only PDF and image uploads
+              will work right now.
+              <div class="text-muted mt-1">{{ converter_note }}</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header bg-white fw-bold text-un-primary">
+          <i class="bi bi-card-text me-2"></i>Details <span class="text-muted fw-normal small">— optional</span>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" for="ssSubject">Title</label>
+            <input type="text" name="subject" id="ssSubject" class="form-control" maxlength="200"
+                   placeholder="Taken from the filename if you leave this blank">
+          </div>
+          <div class="mb-0">
+            <label class="form-label small fw-semibold" for="ssRef">Reference number</label>
+            <input type="text" name="reference" id="ssRef" class="form-control" maxlength="120">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card mb-3">
+        <div class="card-header bg-white fw-bold text-un-primary">
+          <i class="bi bi-crosshair me-2"></i>Where does your signature go?
+        </div>
+        <div class="card-body">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="ss-mode is-on d-flex gap-3 align-items-start" id="ssModeQuick">
+                <input type="radio" name="mode" value="quick" checked>
+                <i class="bi bi-lightning-charge"></i>
+                <span>
+                  <span class="fw-semibold d-block">Quick sign</span>
+                  <span class="small text-muted">
+                    Signature and date go bottom-right on the last page. You can
+                    still drag them before signing.
+                  </span>
+                </span>
+              </label>
+            </div>
+            <div class="col-12">
+              <label class="ss-mode d-flex gap-3 align-items-start" id="ssModePlace">
+                <input type="radio" name="mode" value="place">
+                <i class="bi bi-bounding-box"></i>
+                <span>
+                  <span class="fw-semibold d-block">Place fields myself</span>
+                  <span class="small text-muted">
+                    Opens the layout screen so you can add signature, initials,
+                    date and text boxes anywhere.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body small text-muted">
+          <div class="fw-semibold text-un-primary mb-2">
+            <i class="bi bi-info-circle me-1"></i>What you get
+          </div>
+          <ul class="mb-0 ps-3">
+            <li>A flattened PDF with your signature stamped in.</li>
+            <li>A signing certificate showing when you signed and from where.</li>
+            <li>An envelope ID printed on every page.</li>
+            <li>The document in your eSign list, downloadable any time.</li>
+          </ul>
+          {% if not has_signature %}
+            <div class="alert alert-light border mt-3 mb-0">
+              You have no saved signature yet — you can draw, type or upload one
+              on the signing screen, and keep it for next time.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var drop  = document.getElementById('ssDrop');
+  var input = document.getElementById('ssFiles');
+  var list  = document.getElementById('ssFileList');
+  var form  = document.getElementById('ssForm');
+
+  drop.addEventListener('click', function () { input.click(); });
+  ['dragenter','dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('drag'); });
+  });
+  drop.addEventListener('drop', function (e) { input.files = e.dataTransfer.files; render(); });
+  input.addEventListener('change', render);
+
+  function render() {
+    list.innerHTML = '';
+    Array.from(input.files).forEach(function (f) {
+      var ext  = (f.name.split('.').pop() || '').toLowerCase();
+      var icon = ext === 'pdf' ? 'bi-file-earmark-pdf'
+        : ['doc','docx','odt','rtf','txt'].indexOf(ext) > -1 ? 'bi-file-earmark-word'
+        : ['xls','xlsx','ods','csv'].indexOf(ext) > -1 ? 'bi-file-earmark-excel'
+        : ['ppt','pptx','odp'].indexOf(ext) > -1 ? 'bi-file-earmark-slides'
+        : 'bi-file-earmark-image';
+      var chip = document.createElement('span');
+      chip.className = 'ss-filechip';
+      chip.innerHTML = '<i class="bi ' + icon + '"></i>' +
+        f.name.replace(/</g, '&lt;') +
+        ' <span class="text-muted">(' + Math.round(f.size / 1024) + ' KB)</span>';
+      list.appendChild(chip);
+    });
+    // Offer the filename as the title, but let a typed title win.
+    var subject = document.getElementById('ssSubject');
+    if (input.files.length && !subject.value) {
+      subject.placeholder = input.files[0].name.replace(/\.[^.]+$/, '');
+    }
+  }
+
+  document.querySelectorAll('.ss-mode').forEach(function (card) {
+    card.addEventListener('click', function () {
+      document.querySelectorAll('.ss-mode').forEach(function (c) { c.classList.remove('is-on'); });
+      card.classList.add('is-on');
+    });
+  });
+
+  form.addEventListener('submit', function (e) {
+    if (!input.files.length) {
+      e.preventDefault();
+      alert('Choose a document to sign.');
+    }
+  });
+})();
+</script>
+{% endblock %}

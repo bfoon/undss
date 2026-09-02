@@ -31,12 +31,104 @@ from .forms import CustomUserRegistrationForm as UserCreationForm
 
 from .permissions import is_ict_focal
 
+# ── Country-office scoping ───────────────────────────────────────────────────
+# Everything below used to scope by agency alone. With several country offices
+# per agency, "same agency" is far too wide: a UNDP Gambia focal point could
+# administer UNDP Senegal's accounts.
+#
+# tenancy.services owns the rules — superuser sees everything, a main admin
+# sees their own office including its sub admins, a sub admin sees ordinary
+# users in their office only. Importing them keeps one definition rather than
+# re-deriving the same logic in five places.
+#
+# The fallback keeps this module importable if the tenancy app is not installed
+# yet, degrading to the previous agency-only behaviour rather than breaking.
+try:
+    from tenancy.services import (
+        can_manage_user as _can_manage_user,
+        manageable_users as _manageable_users,
+    )
+    from tenancy.models import CountryOffice
+
+    TENANCY_AVAILABLE = True
+except ImportError:  # pragma: no cover - only on a deployment without tenancy
+    CountryOffice = None
+    TENANCY_AVAILABLE = False
+
+    def _manageable_users(actor, base_queryset=None):
+        qs = base_queryset if base_queryset is not None else get_user_model().objects.all()
+        if getattr(actor, "is_superuser", False):
+            return qs
+        if not getattr(actor, "agency_id", None):
+            return qs.none()
+        return qs.filter(agency_id=actor.agency_id)
+
+    def _can_manage_user(actor, target):
+        if getattr(actor, "is_superuser", False):
+            return True
+        return bool(
+            getattr(actor, "agency_id", None)
+            and getattr(target, "agency_id", None) == actor.agency_id
+        )
+
+
 User = get_user_model()
 
 
 # you already use this check in the file
 def is_ict_focal_point(user):
     return user.is_authenticated and (user.is_superuser or getattr(user, "role", "") in ("ict_focal", "lsa", "soc"))
+
+
+def assignable_offices(actor):
+    """
+    Country offices this person may put a user into.
+
+    Superuser: every office. Everyone else: their own only — moving somebody
+    into another office is a tenancy decision, not an ICT one.
+    """
+    if not TENANCY_AVAILABLE or CountryOffice is None:
+        return []
+    if getattr(actor, "is_superuser", False):
+        return list(
+            CountryOffice.objects.filter(is_active=True)
+            .select_related("agency")
+            .order_by("agency__code", "name")
+        )
+    office = getattr(actor, "country_office", None)
+    return [office] if office else []
+
+
+def default_office_for(actor):
+    """The office a newly created user should land in."""
+    offices = assignable_offices(actor)
+    if len(offices) == 1:
+        return offices[0]
+    return getattr(actor, "country_office", None)
+
+
+def _require_manageable(request, pk, redirect_to="accounts:ict_user_list"):
+    """
+    Fetch a user the caller is allowed to administer, or bounce them.
+
+    Returns (user, None) on success and (None, response) on refusal, so the
+    calling view stays a straight line. Replaces the agency check that was
+    copy-pasted into four separate views.
+    """
+    target = get_object_or_404(User, pk=pk)
+
+    if not _can_manage_user(request.user, target):
+        if TENANCY_AVAILABLE and not getattr(request.user, "country_office_id", None):
+            messages.error(
+                request,
+                "Your account is not assigned to a country office yet, so you "
+                "cannot administer users. Ask the platform superuser to assign you.",
+            )
+        else:
+            messages.error(request, "That user is not in your country office.")
+        return None, redirect(redirect_to)
+
+    return target, None
 
 
 def _make_qr_png_bytes(text: str) -> bytes:
@@ -122,6 +214,78 @@ def send_registration_email_async(user, first_name):
     threading.Thread(target=_send, daemon=True).start()
 
 
+def _attach_office_field(form, actor, current=None):
+    """
+    Put a `country_office` choice on a user form, limited to what the actor may
+    assign. A single-office admin gets it preselected and locked, so the field
+    is visible — people should see which office they are creating into — but
+    not editable by someone who has no authority to change it.
+    """
+    if not TENANCY_AVAILABLE or CountryOffice is None:
+        return form
+
+    from django import forms as dj_forms
+
+    offices = assignable_offices(actor)
+    existing = getattr(current, 'country_office', None) if current else None
+
+    # Never silently drop a user's current office just because the actor cannot
+    # assign it — show it, disabled.
+    if existing and existing not in offices:
+        offices = [existing] + offices
+
+    if not offices:
+        return form
+
+    queryset = CountryOffice.objects.filter(pk__in=[o.pk for o in offices]).select_related('agency')
+    initial = existing or default_office_for(actor)
+
+    field = dj_forms.ModelChoiceField(
+        queryset=queryset,
+        required=True,
+        initial=initial.pk if initial else None,
+        label='Country office',
+        empty_label=None if len(offices) == 1 else '— choose an office —',
+        help_text='Which office this user belongs to. Decides what they can see.',
+    )
+
+    locked = len(offices) == 1 and not getattr(actor, 'is_superuser', False)
+    css = 'form-select'
+    if locked:
+        # disabled inputs are not submitted, so _apply_office puts the value
+        # back on the instance rather than trusting the POST.
+        field.widget.attrs['disabled'] = 'disabled'
+        field.required = False
+    field.widget.attrs['class'] = css
+
+    form.fields['country_office'] = field
+    return form
+
+
+def _apply_office(form, actor):
+    """
+    Copy the chosen office onto the instance, refusing anything the actor is
+    not allowed to assign. A hand-crafted POST cannot move a user into another
+    office by putting a different pk in the form.
+    """
+    if not TENANCY_AVAILABLE or CountryOffice is None:
+        return
+
+    allowed = {o.pk for o in assignable_offices(actor) if o}
+    chosen = form.cleaned_data.get('country_office') if hasattr(form, 'cleaned_data') else None
+
+    if chosen is not None and chosen.pk in allowed:
+        form.instance.country_office = chosen
+        return
+
+    # Nothing valid submitted — either the field was disabled, or someone tried
+    # an office they may not use. Fall back to the actor's own office, and keep
+    # whatever the user already had if there is no default.
+    fallback = default_office_for(actor)
+    if fallback is not None:
+        form.instance.country_office = fallback
+
+
 class ICTUserGuardMixin(LoginRequiredMixin, UserPassesTestMixin):
     """Mixin to restrict access to ICT focal point users only."""
 
@@ -138,19 +302,15 @@ class ICTUserGuardMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 
 class ICTUserAccessMixin(ICTUserGuardMixin):
-    """Mixin to ensure ICT focal can only access users in their agency."""
+    """Restrict detail and edit views to users the caller may administer."""
 
     def get_object(self, queryset=None):
-        """Get user object and verify it's in the ICT focal's agency."""
         obj = super().get_object(queryset)
-        user = self.request.user
 
-        # Check if the user belongs to the ICT focal's agency
-        if not user.agency_id:
-            raise Http404("You are not assigned to an agency.")
-
-        if obj.agency_id != user.agency_id:
-            raise Http404("User not found in your agency.")
+        if not _can_manage_user(self.request.user, obj):
+            # 404 rather than 403 on purpose: confirming that a user exists in
+            # another office is itself a small disclosure.
+            raise Http404("User not found in your country office.")
 
         return obj
 
@@ -163,22 +323,33 @@ class ICTUserListView(ICTUserGuardMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        """Return users in the ICT focal's agency with optional search."""
-        user = self.request.user
+        """Users the caller may administer, with optional search and filters."""
+        base = User.objects.select_related('agency')
+        if TENANCY_AVAILABLE:
+            base = base.select_related('country_office', 'country_office__agency')
 
-        # Base queryset with related data
-        qs = User.objects.select_related('agency').order_by(
+        qs = _manageable_users(self.request.user, base).order_by(
             'last_name', 'first_name', 'username'
         )
 
-        # Filter by agency - ICT focal can only see their agency's users
-        if user.agency_id:
-            qs = qs.filter(agency_id=user.agency_id)
-        else:
-            # If ICT focal has no agency, show empty queryset
-            return User.objects.none()
+        # Office filter — only meaningful for a superuser, who can see several.
+        office_id = self.request.GET.get('office', '').strip()
+        if office_id and TENANCY_AVAILABLE:
+            if office_id == 'none':
+                qs = qs.filter(country_office__isnull=True)
+            elif office_id.isdigit():
+                qs = qs.filter(country_office_id=int(office_id))
 
-        # Apply search filter if provided
+        role = self.request.GET.get('role', '').strip()
+        if role:
+            qs = qs.filter(role=role)
+
+        status = self.request.GET.get('status', '').strip()
+        if status == 'active':
+            qs = qs.filter(is_active=True)
+        elif status == 'inactive':
+            qs = qs.filter(is_active=False)
+
         search_query = self.request.GET.get('q', '').strip()
         if search_query:
             qs = qs.filter(
@@ -197,15 +368,32 @@ class ICTUserListView(ICTUserGuardMixin, ListView):
         user = self.request.user
 
         context['my_agency'] = user.agency
+        context['my_office'] = getattr(user, 'country_office', None)
         context['q'] = self.request.GET.get('q', '').strip()
+        context['selected_office'] = self.request.GET.get('office', '').strip()
+        context['selected_role'] = self.request.GET.get('role', '').strip()
+        context['selected_status'] = self.request.GET.get('status', '').strip()
+        context['role_choices'] = getattr(User, 'ROLE_CHOICES', [])
 
-        # Add user counts for better UX
-        if user.agency_id:
-            context['total_agency_users'] = User.objects.filter(
-                agency_id=user.agency_id
-            ).count()
+        offices = assignable_offices(user)
+        context['offices'] = offices
+        # Only worth showing the office column and filter when more than one
+        # office is in play.
+        context['show_office_column'] = len(offices) > 1
+
+        # Counts come from the scoped queryset, so they always agree with the
+        # list below them. Counting the whole agency, as this used to, showed a
+        # total the person could not actually see.
+        scoped = _manageable_users(user, User.objects.all())
+        context['total_scoped_users'] = scoped.count()
+        context['total_active_users'] = scoped.filter(is_active=True).count()
+        # Kept under the old name so an unmodified user_list.html still renders.
+        context['total_agency_users'] = context['total_scoped_users']
+
+        if TENANCY_AVAILABLE:
+            context['unassigned_count'] = scoped.filter(country_office__isnull=True).count()
         else:
-            context['total_agency_users'] = 0
+            context['unassigned_count'] = 0
 
         return context
 
@@ -241,12 +429,26 @@ class ICTUserCreateView(ICTUserGuardMixin, CreateView):
         kwargs['request_user'] = self.request.user
         return kwargs
 
+    def get_form(self, form_class=None):
+        """
+        Add the country office selector.
+
+        Injected here rather than declared in ICTUserCreateForm so that forms.py
+        does not need to know about the tenancy app, and so this file degrades
+        cleanly on a deployment that has not installed it.
+        """
+        form = super().get_form(form_class)
+        _attach_office_field(form, self.request.user)
+        return form
+
     def form_valid(self, form):
         """
         Handle successful form submission:
+        - Assign the country office
         - Create user
         - Send password setup / reset link to the new user's email (if present)
         """
+        _apply_office(form, self.request.user)
         response = super().form_valid(form)
 
         new_user = form.instance
@@ -345,14 +547,30 @@ class ICTUserUpdateView(ICTUserAccessMixin, UpdateView):
         kwargs['request_user'] = self.request.user
         return kwargs
 
+    def get_form(self, form_class=None):
+        """Add the country office selector, preselected to the user's own."""
+        form = super().get_form(form_class)
+        _attach_office_field(form, self.request.user, current=self.object)
+        return form
+
     def form_valid(self, form):
         """Handle successful form submission."""
+        moved_from = getattr(self.object, 'country_office', None)
+        _apply_office(form, self.request.user)
         response = super().form_valid(form)
 
-        messages.success(
-            self.request,
-            f'User "{form.instance.username}" has been updated successfully.'
-        )
+        moved_to = getattr(form.instance, 'country_office', None)
+        if moved_from != moved_to and moved_to is not None:
+            messages.success(
+                self.request,
+                f'User "{form.instance.username}" has been updated and moved to '
+                f'{moved_to}.'
+            )
+        else:
+            messages.success(
+                self.request,
+                f'User "{form.instance.username}" has been updated successfully.'
+            )
 
         return response
 
@@ -377,13 +595,10 @@ def ict_user_set_password(request, pk):
     # Get user and verify agency
     target_user = get_object_or_404(User, pk=pk)
 
-    if not request.user.agency_id:
-        messages.error(request, 'You are not assigned to an agency.')
-        return redirect('accounts:ict_user_list')
-
-    if target_user.agency_id != request.user.agency_id:
-        messages.error(request, 'User not found in your agency.')
-        return redirect('accounts:ict_user_list')
+    scoped, refusal = _require_manageable(request, target_user.pk)
+    if refusal:
+        return refusal
+    target_user = scoped
 
     # Prevent ICT focal from changing their own password this way
     if target_user.id == request.user.id:
@@ -451,13 +666,10 @@ def ict_user_send_reset_link(request, pk):
     # Get user and verify agency
     target_user = get_object_or_404(User, pk=pk)
 
-    if not request.user.agency_id:
-        messages.error(request, 'You are not assigned to an agency.')
-        return redirect('accounts:ict_user_list')
-
-    if target_user.agency_id != request.user.agency_id:
-        messages.error(request, 'User not found in your agency.')
-        return redirect('accounts:ict_user_list')
+    scoped, refusal = _require_manageable(request, target_user.pk)
+    if refusal:
+        return refusal
+    target_user = scoped
 
     if not target_user.email:
         messages.error(request, f'User "{target_user.username}" has no email address set.')
@@ -547,13 +759,10 @@ def ict_user_toggle_status(request, pk):
     # Get user and verify agency
     target_user = get_object_or_404(User, pk=pk)
 
-    if not request.user.agency_id:
-        messages.error(request, 'You are not assigned to an agency.')
-        return redirect('accounts:ict_user_list')
-
-    if target_user.agency_id != request.user.agency_id:
-        messages.error(request, 'User not found in your agency.')
-        return redirect('accounts:ict_user_list')
+    scoped, refusal = _require_manageable(request, target_user.pk)
+    if refusal:
+        return refusal
+    target_user = scoped
 
     # Prevent ICT focal from deactivating themselves 😂
     if target_user.id == request.user.id:
@@ -707,9 +916,14 @@ def register_with_invite(request, code):
             )
             user.is_active = False
 
-            # Same agency as the ICT focal point who created the invite
+            # Same agency AND the same country office as whoever issued the
+            # invite. Without the office the new account lands nowhere: the
+            # feature switches resolve to the agency defaults and the user
+            # shows up in no office's list.
             if hasattr(user, "agency") and hasattr(invite.created_by, "agency"):
                 user.agency = invite.created_by.agency
+            if hasattr(user, "country_office_id") and getattr(invite.created_by, "country_office_id", None):
+                user.country_office_id = invite.created_by.country_office_id
 
             user.save()
 

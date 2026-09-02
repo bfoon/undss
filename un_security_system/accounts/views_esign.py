@@ -1062,6 +1062,17 @@ def esign_send(request, pk):
         v.save(update_fields=["status", "sent_at"])
         esign_notify.notify_viewer(request, v)
 
+    # A self-signed envelope has nobody to wait for, so hand the sender their
+    # own signing screen rather than the "sent, now wait" screen.
+    #
+    # Imported here, not at the top of the file: views_esign_self imports
+    # MAX_DOC_BYTES and the agency helpers from this module, so a module-level
+    # import would be a cycle and the URLConf would fail to load.
+    from .views_esign_self import is_self_sign
+
+    if is_self_sign(envelope):
+        return redirect("accounts:esign_sign", token=signers[0].token)
+
     messages.success(request, f"Sent. Envelope ID {envelope.short_id}.")
     return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 

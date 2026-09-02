@@ -24,9 +24,24 @@
             <i class="bi bi-shield-exclamation me-1"></i>Must Change Password
           </span>
         {% endif %}
+        {% for role in target_user.office_admin_roles.all %}
+          {% if role.is_active %}
+            <span class="badge {% if role.level == 'main' %}bg-primary{% else %}bg-secondary{% endif %} ms-2">
+              <i class="bi bi-person-gear me-1"></i>{{ role.get_level_display }}
+            </span>
+          {% endif %}
+        {% endfor %}
       </div>
       <p class="text-muted mb-0">
         <i class="bi bi-building me-1"></i>{{ target_user.agency|default:"No Agency" }}
+        {% if target_user.country_office %}
+          <span class="mx-1">·</span>
+          <i class="bi bi-geo-alt me-1"></i>{{ target_user.country_office.name }}
+        {% else %}
+          <span class="badge bg-warning text-dark ms-2">
+            <i class="bi bi-exclamation-triangle me-1"></i>No country office
+          </span>
+        {% endif %}
       </p>
     </div>
     
@@ -153,6 +168,37 @@
                 </div>
               </div>
               <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Agency</label>
+                <div class="fw-semibold">
+                  {% if target_user.agency %}
+                    <i class="bi bi-building me-1"></i>{{ target_user.agency }}
+                  {% else %}
+                    <span class="text-muted fst-italic">Not set</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label text-muted small mb-1">Country Office</label>
+                <div class="fw-semibold">
+                  {% if target_user.country_office %}
+                    <i class="bi bi-geo-alt me-1"></i>{{ target_user.country_office }}
+                    {% if target_user.country_office.country %}
+                      <span class="text-muted fw-normal">
+                        · {{ target_user.country_office.country }}
+                      </span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-warning">
+                      <i class="bi bi-exclamation-triangle me-1"></i>Not assigned
+                    </span>
+                    <div class="small text-muted fw-normal mt-1">
+                      Until this is set the account inherits agency defaults and
+                      appears in no office's user list.
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
                 <label class="form-label text-muted small mb-1">Date Joined</label>
                 <div class="fw-semibold">
                   <i class="bi bi-calendar-event me-1"></i>
@@ -260,6 +306,16 @@
               <i class="bi bi-exclamation-triangle-fill me-1"></i>
               <strong>Note:</strong> Deactivating a user will prevent them from logging in.
             </div>
+
+            {% if not target_user.country_office %}
+              <div class="alert alert-info mt-3 mb-0 small" role="alert">
+                <i class="bi bi-info-circle-fill me-1"></i>
+                This user has no country office.
+                <a href="{% url 'accounts:ict_user_edit' pk=target_user.pk %}"
+                   class="alert-link">Assign one</a>
+                so their module access and record visibility resolve correctly.
+              </div>
+            {% endif %}
           </div>
         </div>
       {% endif %}

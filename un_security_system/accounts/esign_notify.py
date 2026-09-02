@@ -239,6 +239,13 @@ def notify_sender_viewed(request, recipient: EnvelopeRecipient):
 
 def notify_sender_signed(request, recipient: EnvelopeRecipient):
     env = recipient.envelope
+
+    # On a self-signed document the sender and the signer are the same person.
+    # Telling them by email that they just signed is noise. Guarded here rather
+    # than at the call site so every caller gets it.
+    if getattr(env, "is_self_sign", False):
+        return
+
     prog = env.progress()
     _send(
         f"Signed by {recipient.name} ({prog['done']}/{prog['total']}): {env.subject}",
