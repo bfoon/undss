@@ -48,6 +48,53 @@ User = get_user_model()
 # Helper functions
 # -------------------------------------------------------------------
 
+PRIVILEGED_VISITOR_ROLES = {"lsa", "soc", "data_entry"}
+
+
+def is_privileged_visitor_user(user) -> bool:
+    """Gate staff and security see the whole register; everyone else sees their own."""
+    return bool(
+        getattr(user, "is_superuser", False)
+        or getattr(user, "role", None) in PRIVILEGED_VISITOR_ROLES
+    )
+
+
+def visible_visitors(user, base=None):
+    """
+    Visitors this person may see.
+
+    VisitorListView already applied this rule. The CSV export, the search API
+    and the stats API did not — each ran `Visitor.objects.all()`, so any signed
+    in account could pull the entire register: names, ID numbers, phone numbers,
+    emails, employers, who they came to see and their vehicle plates.
+
+    One definition, used by all four, so a filter on the page and a filter on
+    the download cannot drift apart again.
+    """
+    qs = base if base is not None else Visitor.objects.all()
+
+    if not user or not getattr(user, "is_authenticated", False):
+        return qs.none()
+
+    if not is_privileged_visitor_user(user):
+        return qs.filter(registered_by=user)
+
+    if getattr(user, "is_superuser", False):
+        return qs
+
+    # Privileged, but still only their own country office. Compared through the
+    # registering user, since Visitor has no office field of its own. Skipped
+    # when either side has no office, so nothing that predates the tenancy work
+    # disappears.
+    office_id = getattr(user, "country_office_id", None)
+    if office_id:
+        qs = qs.filter(
+            Q(registered_by__country_office_id=office_id)
+            | Q(registered_by__country_office__isnull=True)
+        )
+    return qs
+
+
 def _visible_upcoming_bookings(user):
     """
     Approved meetings from today onwards, in rooms this person can see.
@@ -275,13 +322,9 @@ class VisitorListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Visitor.objects.all()
-
-        privileged_roles = {'lsa', 'soc', 'data_entry'}
-        is_privileged = user.is_superuser or getattr(user, 'role', None) in privileged_roles
-
-        if not is_privileged:
-            qs = qs.filter(registered_by=user)
+        # Shared with the export and the two APIs — see visible_visitors().
+        qs = visible_visitors(user)
+        is_privileged = is_privileged_visitor_user(user)
 
         filter_status = self.kwargs.get('filter_status')
         status_filter = self.request.GET.get('status_filter') or ''
@@ -998,7 +1041,9 @@ def visitor_search_api(request):
     if len(query) < 2:
         return JsonResponse({'visitors': []})
 
-    visitors = Visitor.objects.filter(
+    # Scoped: a two-character query against the whole register was a lookup
+    # tool for anyone with an account.
+    visitors = visible_visitors(request.user).filter(
         Q(full_name__icontains=query) |
         Q(id_number__icontains=query) |
         Q(organization__icontains=query) |
@@ -1022,15 +1067,20 @@ def visitor_search_api(request):
 def visitor_stats_api(request):
     today = timezone.now().date()
 
+    # Counted from the same scoped queryset as the list, so the numbers on a
+    # page always match the rows underneath them. They also stop reporting how
+    # many visitors another office had today.
+    scope = visible_visitors(request.user)
+
     stats = {
-        'total_today': Visitor.objects.filter(registered_at__date=today).count(),
-        'pending': Visitor.objects.filter(status='pending').count(),
-        'approved': Visitor.objects.filter(status='approved').count(),
-        'rejected': Visitor.objects.filter(status='rejected').count(),
-        'active': Visitor.objects.filter(checked_in=True, checked_out=False).count(),
-        'completed_today': Visitor.objects.filter(check_out_time__date=today).count(),
+        'total_today': scope.filter(registered_at__date=today).count(),
+        'pending': scope.filter(status='pending').count(),
+        'approved': scope.filter(status='approved').count(),
+        'rejected': scope.filter(status='rejected').count(),
+        'active': scope.filter(checked_in=True, checked_out=False).count(),
+        'completed_today': scope.filter(check_out_time__date=today).count(),
         'by_type': {
-            vtype[0]: Visitor.objects.filter(visitor_type=vtype[0]).count()
+            vtype[0]: scope.filter(visitor_type=vtype[0]).count()
             for vtype in Visitor.VISITOR_TYPES
         }
     }
@@ -1040,7 +1090,9 @@ def visitor_stats_api(request):
 
 @login_required
 def visitor_status_api(request, visitor_id):
-    visitor = get_object_or_404(Visitor, id=visitor_id)
+    # get_object_or_404 on the scoped queryset, not on the model: this URL
+    # takes an id directly, so a scoped list alone would not have covered it.
+    visitor = get_object_or_404(visible_visitors(request.user), id=visitor_id)
     return JsonResponse({
         'id': visitor.id,
         'full_name': visitor.full_name,
@@ -1088,7 +1140,13 @@ def bulk_approve_visitors(request):
 @login_required
 def export_visitors(request):
     response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename="visitors_export.csv"'
+    # Name the file for what it contains. "visitors_export.csv" downloaded
+    # twice from two different filters is two files you cannot tell apart.
+    stamp = timezone.now().strftime('%Y%m%d-%H%M')
+    scope_tag = 'all' if is_privileged_visitor_user(request.user) else 'mine'
+    response['Content-Disposition'] = (
+        f'attachment; filename="visitors-{scope_tag}-{stamp}.csv"'
+    )
 
     writer = csv.writer(response)
     writer.writerow([
@@ -1100,7 +1158,9 @@ def export_visitors(request):
         'Linked Meeting',
     ])
 
-    queryset = Visitor.objects.all().select_related(
+    # Was Visitor.objects.all() — the download ignored the rule the list
+    # applies, so a requester could export every visitor in the deployment.
+    queryset = visible_visitors(request.user).select_related(
         'registered_by', 'approved_by', 'linked_booking'
     )
 
