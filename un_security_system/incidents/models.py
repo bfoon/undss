@@ -212,10 +212,8 @@ class CommonServiceRequest(models.Model):
         return self.current_level >= self.total_levels()
 
     def clean(self):
-        # If it's a notice, enforce schedule
         if self.is_notice and (not self.disruption_start or not self.disruption_end):
             raise ValidationError("For notices, please provide disruption start and end time.")
-
     def __str__(self):
         return f"CSR#{self.pk} {self.title}"
 

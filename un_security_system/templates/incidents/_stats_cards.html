@@ -1,26 +1,86 @@
+{% comment %}
+  incidents/_stats_cards.html
+
+  Changes from the previous version:
+
+  * The cards are links. A count is a question — "which four are critical?" —
+    and every one of these maps to a filter the list view already supports,
+    so clicking a card now answers it instead of leaving you to find the
+    filter yourself.
+
+  * A zero reads as zero rather than as nothing. `{{ stats.new }}` renders an
+    empty string when `stats` is missing from the context, so a card would
+    show a blank where a number belongs. `|default:"0"` fixes that.
+
+  * The active filter is marked, so the page shows which subset you are
+    looking at.
+
+  * Screen readers get the label and the number as one phrase, rather than
+    an icon, a stray word and a stray digit.
+
+  Set `stats_url_name` before including to point the cards somewhere else:
+
+      {% include "incidents/_stats_cards.html" with stats_url_name="incidents:triage" %}
+{% endcomment %}
+
+{% url stats_url_name|default:"incidents:my_incidents" as stats_base %}
+
 <div class="row g-3 mb-4">
+
   <div class="col-lg-3 col-md-6">
-    <div class="stat-card shadow-sm">
-      <div class="stat-icon stat-icon-primary"><i class="bi bi-clipboard-data"></i></div>
-      <div class="stat-content"><div class="stat-label">All Incidents</div><div class="stat-value">{{ stats.total }}</div></div>
-    </div>
+    <a href="{{ stats_base }}"
+       class="stat-card shadow-sm text-decoration-none {% if not request.GET.status and not request.GET.severity %}stat-card-active{% endif %}"
+       aria-label="All incidents: {{ stats.total|default:'0' }}">
+      <div class="stat-icon stat-icon-primary" aria-hidden="true">
+        <i class="bi bi-clipboard-data"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-label">All Incidents</div>
+        <div class="stat-value">{{ stats.total|default:"0" }}</div>
+      </div>
+    </a>
   </div>
+
   <div class="col-lg-3 col-md-6">
-    <div class="stat-card shadow-sm stat-card-new">
-      <div class="stat-icon stat-icon-warning"><i class="bi bi-exclamation-circle"></i></div>
-      <div class="stat-content"><div class="stat-label">New</div><div class="stat-value">{{ stats.new }}</div></div>
-    </div>
+    <a href="{{ stats_base }}?status=new"
+       class="stat-card shadow-sm stat-card-new text-decoration-none {% if request.GET.status == 'new' %}stat-card-active{% endif %}"
+       aria-label="New incidents: {{ stats.new|default:'0' }}">
+      <div class="stat-icon stat-icon-warning" aria-hidden="true">
+        <i class="bi bi-exclamation-circle"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-label">New</div>
+        <div class="stat-value">{{ stats.new|default:"0" }}</div>
+      </div>
+    </a>
   </div>
+
   <div class="col-lg-3 col-md-6">
-    <div class="stat-card shadow-sm stat-card-review">
-      <div class="stat-icon stat-icon-info"><i class="bi bi-hourglass-split"></i></div>
-      <div class="stat-content"><div class="stat-label">In Review</div><div class="stat-value">{{ stats.in_review }}</div></div>
-    </div>
+    <a href="{{ stats_base }}?status=in_review"
+       class="stat-card shadow-sm stat-card-review text-decoration-none {% if request.GET.status == 'in_review' %}stat-card-active{% endif %}"
+       aria-label="In review: {{ stats.in_review|default:'0' }}">
+      <div class="stat-icon stat-icon-info" aria-hidden="true">
+        <i class="bi bi-hourglass-split"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-label">In Review</div>
+        <div class="stat-value">{{ stats.in_review|default:"0" }}</div>
+      </div>
+    </a>
   </div>
+
   <div class="col-lg-3 col-md-6">
-    <div class="stat-card shadow-sm stat-card-critical">
-      <div class="stat-icon stat-icon-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
-      <div class="stat-content"><div class="stat-label">Critical Priority</div><div class="stat-value">{{ stats.critical }}</div></div>
-    </div>
+    <a href="{{ stats_base }}?severity=critical"
+       class="stat-card shadow-sm stat-card-critical text-decoration-none {% if request.GET.severity == 'critical' %}stat-card-active{% endif %}"
+       aria-label="Critical priority: {{ stats.critical|default:'0' }}">
+      <div class="stat-icon stat-icon-danger" aria-hidden="true">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+      </div>
+      <div class="stat-content">
+        <div class="stat-label">Critical Priority</div>
+        <div class="stat-value">{{ stats.critical|default:"0" }}</div>
+      </div>
+    </a>
   </div>
+
 </div>

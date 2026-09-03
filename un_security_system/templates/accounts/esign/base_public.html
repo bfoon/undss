@@ -24,6 +24,21 @@
     }
     .es-card{ border:1px solid #E5E7EB; border-radius:14px; background:#fff; }
     footer.es-foot{ color:var(--un-gray); font-size:.78rem; }
+
+    /* Way back into the app.
+       These pages are reached by a token link, so they carry no navigation at
+       all — which is right for an external signer who has no account, and a
+       dead end for a colleague who does. The link only renders when someone is
+       signed in, and sits beside the brand rather than in the action group, so
+       it does not compete with Finish / Decline / Return on the signing page. */
+    .es-back{
+      display:inline-flex; align-items:center; gap:.35rem;
+      font-size:.8rem; font-weight:600; text-decoration:none;
+      color:var(--un-gray); border:1px solid #E5E7EB; border-radius:999px;
+      padding:.2rem .7rem; white-space:nowrap;
+    }
+    .es-back:hover{ color:var(--un-dark); border-color:var(--un-blue); background:#F8FAFC; }
+    .es-back:focus-visible{ outline:2px solid var(--un-blue); outline-offset:2px; }
   </style>
   {% block extra_css %}{% endblock %}
 </head>
@@ -34,6 +49,15 @@
     <div class="fw-bold text-un-primary">
       <i class="bi bi-pen-fill me-1"></i> {{ esign_brand|default:"UNDP eSign" }}
     </div>
+
+    {% if user.is_authenticated %}
+      <a class="es-back" href="{% url 'accounts:esign_dashboard' %}"
+         title="Back to your eSign portal">
+        <i class="bi bi-arrow-left"></i>
+        <span class="d-none d-sm-inline">eSign portal</span>
+      </a>
+    {% endif %}
+
     {% if envelope %}
       <span class="es-token d-none d-sm-inline" title="Envelope ID — printed on every page of this document">
         Envelope ID: {{ envelope.envelope_id }}
@@ -62,6 +86,17 @@
 <footer class="es-foot text-center py-4">
   {% if envelope %}<div class="mb-1">Envelope ID: {{ envelope.envelope_id }}</div>{% endif %}
   <div>Electronic signatures collected by {{ esign_brand|default:"UNDP eSign" }} — every action is recorded in the audit trail.</div>
+  {% if user.is_authenticated %}
+    {# Repeated here because the signing page is long: after scrolling to the
+       bottom of a twenty-page document, the topbar is a long way up. #}
+    <div class="mt-2">
+      <a href="{% url 'accounts:esign_dashboard' %}" class="text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>Back to the eSign portal
+      </a>
+      <span class="mx-2">·</span>
+      <span>Signed in as {{ user.get_full_name|default:user.username }}</span>
+    </div>
+  {% endif %}
 </footer>
 
 {% block extra_js %}{% endblock %}

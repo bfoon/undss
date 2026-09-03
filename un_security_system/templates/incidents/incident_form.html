@@ -1,7 +1,17 @@
 {% extends "base.html" %}
+{% block title %}Report Security Incident - Incident Management{% endblock %}
+
+{% comment %}
+  Styles live in incidents/_incident_styles.html, shared by all four
+  incident pages. They used to be a <style> block inside
+  {% block content %}, which puts a stylesheet inside <body> and gave
+  each page its own drifting copy of the same classes.
+{% endcomment %}
+{% block extra_css %}{% include "incidents/_incident_styles.html" %}{% endblock %}
+
 {% load crispy_forms_tags %}
 
-{% block title %}Report Security Incident - Incident Management{% endblock %}
+
 
 {% block content %}
 <div class="incident-report-container">
@@ -243,433 +253,64 @@
   </div>
 </div>
 
-<style>
-  /* Layout & Container */
-  .incident-report-container {
-    background-color: #f8f9fa;
-    min-height: 100vh;
-  }
-
-  /* Page Header */
-  .page-header {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 0.75rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  }
-
-  .page-title {
-    font-size: 1.75rem;
-    font-weight: 600;
-    color: #212529;
-    margin: 0;
-  }
-
-  .breadcrumb {
-    font-size: 0.875rem;
-  }
-
-  .breadcrumb-item a {
-    color: #6c757d;
-    text-decoration: none;
-  }
-
-  .breadcrumb-item a:hover {
-    color: #0d6efd;
-  }
-
-  /* Cards */
-  .card {
-    border: none;
-    border-radius: 0.75rem;
-    overflow: hidden;
-  }
-
-  .form-card {
-    border: 2px solid #e9ecef;
-  }
-
-  .card-header {
-    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-    color: white;
-    border: none;
-    padding: 1rem 1.5rem;
-  }
-
-  .card-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: white;
-  }
-
-  /* Form Sections */
-  .form-section {
-    margin-bottom: 2rem;
-  }
-
-  .form-section:last-of-type {
-    margin-bottom: 0;
-  }
-
-  .section-title {
-    color: #495057;
-    font-weight: 600;
-    font-size: 1rem;
-    margin-bottom: 1.25rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 2px solid #e9ecef;
-    display: flex;
-    align-items: center;
-  }
-
-  .section-title i {
-    color: #dc3545;
-  }
-
-  /* Crispy Forms Styling Override */
-  .form-section label {
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 0.5rem;
-    font-size: 0.95rem;
-  }
-
-  .form-section .form-control,
-  .form-section .form-select {
-    border: 2px solid #e9ecef;
-    border-radius: 0.5rem;
-    padding: 0.75rem 1rem;
-    font-size: 0.95rem;
-    transition: all 0.2s ease;
-  }
-
-  .form-section .form-control:focus,
-  .form-section .form-select:focus {
-    border-color: #dc3545;
-    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
-    outline: none;
-  }
-
-  .form-section textarea.form-control {
-    resize: vertical;
-    min-height: 120px;
-  }
-
-  .form-section .invalid-feedback {
-    display: block;
-    font-size: 0.875rem;
-    color: #dc3545;
-    margin-top: 0.375rem;
-    font-weight: 500;
-  }
-
-  .form-section .form-text {
-    font-size: 0.85rem;
-    color: #6c757d;
-    margin-top: 0.375rem;
-  }
-
-  .form-section .mb-3 {
-    margin-bottom: 0 !important;
-  }
-
-  /* Form Actions */
-  .form-actions {
-    background: #f8f9fa;
-    margin: 0 -1.5rem -1.5rem;
-    padding: 1.5rem;
-    border-radius: 0 0 0.75rem 0.75rem;
-  }
-
-  .form-note {
-    font-size: 0.875rem;
-  }
-
-  /* Alert */
-  .alert-info {
-    background: #e3f2fd;
-    border: 2px solid #90caf9;
-    border-radius: 0.75rem;
-  }
-
-  .alert-info .alert-icon {
-    color: #1976d2;
-  }
-
-  .alert-info .alert-heading {
-    color: #0d47a1;
-    font-size: 1rem;
-  }
-
-  /* Guidelines Card */
-  .guidelines-card {
-    border: 2px solid #e9ecef;
-  }
-
-  .guidelines-card h6 {
-    color: #495057;
-    font-weight: 600;
-  }
-
-  .guidelines-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    font-size: 0.9rem;
-    color: #495057;
-  }
-
-  .guidelines-list li {
-    padding: 0.5rem 0;
-    padding-left: 1.5rem;
-    position: relative;
-    border-bottom: 1px solid #f0f0f0;
-  }
-
-  .guidelines-list li:last-child {
-    border-bottom: none;
-  }
-
-  .guidelines-list li::before {
-    content: "✓";
-    position: absolute;
-    left: 0;
-    color: #28a745;
-    font-weight: bold;
-    font-size: 1rem;
-  }
-
-  /* Severity Card */
-  .severity-card {
-    border: 2px solid #e9ecef;
-  }
-
-  .severity-card h6 {
-    color: #495057;
-    font-weight: 600;
-  }
-
-  .severity-guide {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .severity-item {
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #f0f0f0;
-  }
-
-  .severity-item:last-child {
-    padding-bottom: 0;
-    border-bottom: none;
-  }
-
-  .severity-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.375rem 0.75rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .severity-critical {
-    background: #fee;
-    color: #c00;
-  }
-
-  .severity-high {
-    background: #fff3cd;
-    color: #856404;
-  }
-
-  .severity-medium {
-    background: #d1ecf1;
-    color: #0c5460;
-  }
-
-  .severity-low {
-    background: #e2e3e5;
-    color: #383d41;
-  }
-
-  /* Emergency Card */
-  .emergency-card {
-    background: linear-gradient(135deg, #fee 0%, #fdd 100%);
-    border: 2px solid #fcc;
-  }
-
-  .emergency-card h6 {
-    color: #c00;
-    font-weight: 600;
-  }
-
-  .emergency-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .emergency-item {
-    font-size: 0.9rem;
-    color: #495057;
-  }
-
-  .emergency-item strong {
-    display: block;
-    margin-bottom: 0.25rem;
-    color: #212529;
-  }
-
-  .emergency-item a {
-    text-decoration: none;
-    font-size: 1.1rem;
-  }
-
-  /* Buttons */
-  .btn {
-    font-weight: 500;
-    padding: 0.625rem 1.25rem;
-    border-radius: 0.5rem;
-    transition: all 0.2s ease;
-    border-width: 2px;
-  }
-
-  .btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  .btn:active {
-    transform: translateY(0);
-  }
-
-  .btn-danger {
-    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-    border-color: #dc3545;
-  }
-
-  .btn-danger:hover {
-    background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
-    border-color: #bd2130;
-  }
-
-  .btn-outline-secondary {
-    color: #6c757d;
-    border-color: #6c757d;
-  }
-
-  .btn-outline-secondary:hover {
-    background-color: #6c757d;
-    border-color: #6c757d;
-    color: white;
-  }
-
-  /* Responsive Design */
-  @media (max-width: 991px) {
-    .page-title {
-      font-size: 1.5rem;
-    }
-  }
-
-  @media (max-width: 767px) {
-    .form-actions {
-      padding: 1rem;
-    }
-
-    .form-actions .d-flex {
-      flex-direction: column;
-      align-items: stretch !important;
-    }
-
-    .button-group {
-      width: 100%;
-    }
-
-    .button-group .btn {
-      flex: 1;
-    }
-
-    .form-note {
-      text-align: center;
-      width: 100%;
-      margin-bottom: 0.5rem;
-    }
-  }
-
-  /* Animation */
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .form-card {
-    animation: slideIn 0.3s ease-out;
-  }
-</style>
-
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // Form validation enhancement
-    const form = document.getElementById('incidentForm');
-
-    if (form) {
-      form.addEventListener('submit', function(event) {
-        if (!form.checkValidity()) {
-          event.preventDefault();
-          event.stopPropagation();
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Form validation enhancement
+      const form = document.getElementById('incidentForm');
+
+      if (form) {
+        form.addEventListener('submit', function(event) {
+          if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          form.classList.add('was-validated');
+        });
+
+        // Real-time validation
+        const inputs = form.querySelectorAll('input, select, textarea');
+        inputs.forEach(function(input) {
+          input.addEventListener('blur', function() {
+            if (input.hasAttribute('required') && !input.value) {
+              input.classList.add('is-invalid');
+            } else {
+              input.classList.remove('is-invalid');
+            }
+          });
+
+          input.addEventListener('input', function() {
+            if (input.classList.contains('is-invalid') && input.value) {
+              input.classList.remove('is-invalid');
+            }
+          });
+        });
+      }
+
+      // Auto-dismiss alerts
+      const alerts = document.querySelectorAll('.alert');
+      alerts.forEach(function(alert) {
+        if (!alert.classList.contains('alert-info') && !alert.classList.contains('alert-warning')) {
+          setTimeout(function() {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+          }, 5000);
         }
-        form.classList.add('was-validated');
       });
 
-      // Real-time validation
-      const inputs = form.querySelectorAll('input, select, textarea');
-      inputs.forEach(function(input) {
-        input.addEventListener('blur', function() {
-          if (input.hasAttribute('required') && !input.value) {
-            input.classList.add('is-invalid');
-          } else {
-            input.classList.remove('is-invalid');
+      // File input enhancement
+      const fileInput = document.querySelector('input[type="file"]');
+      if (fileInput) {
+        fileInput.addEventListener('change', function() {
+          if (this.files.length > 0) {
+            const fileName = this.files[0].name;
+            const fileSize = (this.files[0].size / 1024 / 1024).toFixed(2);
+            console.log(`Selected: ${fileName} (${fileSize} MB)`);
           }
         });
-
-        input.addEventListener('input', function() {
-          if (input.classList.contains('is-invalid') && input.value) {
-            input.classList.remove('is-invalid');
-          }
-        });
-      });
-    }
-
-    // Auto-dismiss alerts
-    const alerts = document.querySelectorAll('.alert');
-    alerts.forEach(function(alert) {
-      if (!alert.classList.contains('alert-info') && !alert.classList.contains('alert-warning')) {
-        setTimeout(function() {
-          const bsAlert = new bootstrap.Alert(alert);
-          bsAlert.close();
-        }, 5000);
       }
     });
-
-    // File input enhancement
-    const fileInput = document.querySelector('input[type="file"]');
-    if (fileInput) {
-      fileInput.addEventListener('change', function() {
-        if (this.files.length > 0) {
-          const fileName = this.files[0].name;
-          const fileSize = (this.files[0].size / 1024 / 1024).toFixed(2);
-          console.log(`Selected: ${fileName} (${fileSize} MB)`);
-        }
-      });
-    }
-  });
-</script>
+  </script>
 {% endblock %}

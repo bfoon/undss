@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Incident Triage - Incident Management{% endblock %}
 
+{% comment %}
+  Styles live in incidents/_incident_styles.html, shared by all four
+  incident pages. They used to be a <style> block inside
+  {% block content %}, which puts a stylesheet inside <body> and gave
+  each page its own drifting copy of the same classes.
+{% endcomment %}
+{% block extra_css %}{% include "incidents/_incident_styles.html" %}{% endblock %}
+
 {% block content %}
 <div class="triage-container">
   <div class="container-fluid px-4 py-4" style="max-width: 1600px;">
@@ -325,551 +333,59 @@
   </div>
 </div>
 
-<style>
-  /* Layout & Container */
-  .triage-container {
-    background-color: #f8f9fa;
-    min-height: 100vh;
-  }
-
-  /* Page Header */
-  .page-header {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 0.75rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  }
-
-  .page-title {
-    font-size: 1.75rem;
-    font-weight: 600;
-    color: #212529;
-    margin: 0;
-  }
-
-  .breadcrumb {
-    font-size: 0.875rem;
-  }
-
-  .breadcrumb-item a {
-    color: #6c757d;
-    text-decoration: none;
-  }
-
-  .breadcrumb-item a:hover {
-    color: #0d6efd;
-  }
-
-  /* Statistics Cards */
-  .stat-card {
-    background: white;
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    border: 2px solid #f0f0f0;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    transition: all 0.3s ease;
-  }
-
-  .stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-  }
-
-  .stat-card-new:hover {
-    border-color: #ffc107;
-  }
-
-  .stat-card-review:hover {
-    border-color: #17a2b8;
-  }
-
-  .stat-card-critical:hover {
-    border-color: #dc3545;
-  }
-
-  .stat-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-
-  .stat-icon-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-  }
-
-  .stat-icon-warning {
-    background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
-    color: white;
-  }
-
-  .stat-icon-info {
-    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
-    color: white;
-  }
-
-  .stat-icon-danger {
-    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-    color: white;
-  }
-
-  .stat-content {
-    flex: 1;
-  }
-
-  .stat-label {
-    font-size: 0.875rem;
-    color: #6c757d;
-    font-weight: 500;
-    margin-bottom: 0.25rem;
-  }
-
-  .stat-value {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: #212529;
-    line-height: 1;
-  }
-
-  /* Cards */
-  .card {
-    border: none;
-    border-radius: 0.75rem;
-    overflow: hidden;
-  }
-
-  .filter-card,
-  .table-card {
-    border: 2px solid #e9ecef;
-  }
-
-  .card-header {
-    background: white;
-    border-bottom: 2px solid #f0f0f0;
-    padding: 1rem 1.5rem;
-  }
-
-  .card-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #212529;
-  }
-
-  /* Form Controls */
-  .form-label {
-    color: #495057;
-    margin-bottom: 0.5rem;
-  }
-
-  .form-control,
-  .form-select {
-    border: 2px solid #e9ecef;
-    border-radius: 0.5rem;
-    padding: 0.625rem 1rem;
-    font-size: 0.95rem;
-    transition: all 0.2s ease;
-  }
-
-  .form-control:focus,
-  .form-select:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
-    outline: none;
-  }
-
-  /* Table Styling */
-  .incidents-table {
-    font-size: 0.95rem;
-  }
-
-  .incidents-table thead {
-    background: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-  }
-
-  .incidents-table th {
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.8rem;
-    letter-spacing: 0.5px;
-    color: #495057;
-    padding: 1rem 1rem;
-    border: none;
-  }
-
-  .incidents-table td {
-    padding: 1rem 1rem;
-    vertical-align: middle;
-    border-bottom: 1px solid #f0f0f0;
-  }
-
-  .incidents-table tbody tr {
-    transition: all 0.2s;
-  }
-
-  .incidents-table tbody tr:hover {
-    background-color: #f8f9fa;
-    transform: scale(1.002);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  }
-
-  .incident-row.row-critical {
-    background-color: #fff5f5;
-    border-left: 4px solid #dc3545;
-  }
-
-  .incident-row.row-critical:hover {
-    background-color: #ffebeb;
-  }
-
-  .incident-id {
-    font-family: monospace;
-    font-weight: 600;
-    color: #6c757d;
-    font-size: 0.95rem;
-  }
-
-  .incident-title-link {
-    color: #212529;
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-
-  .incident-title-link:hover {
-    color: #667eea;
-  }
-
-  /* Severity Badges */
-  .severity-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.375rem 0.75rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .severity-critical {
-    background: #fee;
-    color: #c00;
-  }
-
-  .severity-high {
-    background: #fff3cd;
-    color: #856404;
-  }
-
-  .severity-medium {
-    background: #d1ecf1;
-    color: #0c5460;
-  }
-
-  .severity-low {
-    background: #e2e3e5;
-    color: #383d41;
-  }
-
-  /* Status Badges */
-  .status-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.375rem 0.75rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .status-new {
-    background: #fff3cd;
-    color: #856404;
-  }
-
-  .status-review {
-    background: #d1ecf1;
-    color: #0c5460;
-  }
-
-  .status-resolved {
-    background: #d1e7dd;
-    color: #0f5132;
-  }
-
-  .status-dismissed {
-    background: #e2e3e5;
-    color: #383d41;
-  }
-
-  /* Reporter & Date Info */
-  .reporter-info {
-    display: flex;
-    align-items: center;
-    font-size: 0.9rem;
-  }
-
-  .date-info {
-    line-height: 1.4;
-  }
-
-  .date-primary {
-    font-weight: 500;
-    color: #212529;
-  }
-
-  .date-time {
-    font-size: 0.85rem;
-    color: #6c757d;
-  }
-
-  /* Card View */
-  .incident-card {
-    border: 2px solid #e9ecef;
-    border-radius: 0.75rem;
-    overflow: hidden;
-    transition: all 0.3s ease;
-  }
-
-  .incident-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-  }
-
-  .incident-card-header {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-bottom: 2px solid #e9ecef;
-  }
-
-  .incident-card-header.header-critical {
-    background: linear-gradient(135deg, #fee 0%, #fdd 100%);
-    border-bottom-color: #fcc;
-  }
-
-  .incident-card-header.header-high {
-    background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
-    border-bottom-color: #ffc107;
-  }
-
-  .incident-card-id {
-    font-family: monospace;
-    font-weight: 700;
-    color: #6c757d;
-  }
-
-  .severity-badge-small,
-  .status-badge-small {
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .incident-card-body {
-    padding: 1rem;
-  }
-
-  .incident-card-title {
-    font-weight: 600;
-    color: #212529;
-    margin-bottom: 1rem;
-  }
-
-  .incident-card-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    font-size: 0.85rem;
-    color: #6c757d;
-  }
-
-  .meta-item {
-    display: flex;
-    align-items: center;
-  }
-
-  .incident-card-footer {
-    padding: 1rem;
-    background: #f8f9fa;
-    border-top: 1px solid #e9ecef;
-  }
-
-  /* Empty State */
-  .empty-state {
-    padding: 4rem 2rem;
-  }
-
-  .empty-icon {
-    font-size: 4rem;
-    color: #dee2e6;
-  }
-
-  .empty-title {
-    font-weight: 600;
-    color: #6c757d;
-    margin-bottom: 0.5rem;
-  }
-
-  .empty-text {
-    font-size: 0.95rem;
-  }
-
-  /* Buttons */
-  .btn {
-    font-weight: 500;
-    padding: 0.625rem 1.25rem;
-    border-radius: 0.5rem;
-    transition: all 0.2s ease;
-    border-width: 2px;
-  }
-
-  .btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  .btn:active {
-    transform: translateY(0);
-  }
-
-  .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #667eea;
-  }
-
-  .btn-primary:hover {
-    background: linear-gradient(135deg, #5568d3 0%, #66428b 100%);
-    border-color: #5568d3;
-  }
-
-  .btn-danger {
-    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-    border-color: #dc3545;
-  }
-
-  .btn-danger:hover {
-    background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
-    border-color: #bd2130;
-  }
-
-  .btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-  }
-
-  /* Badges */
-  .badge {
-    font-weight: 500;
-    padding: 0.375rem 0.65rem;
-    font-size: 0.85rem;
-  }
-
-  /* Responsive Design */
-  @media (max-width: 991px) {
-    .page-title {
-      font-size: 1.5rem;
-    }
-
-    .stat-card {
-      padding: 1rem;
-    }
-
-    .stat-icon {
-      width: 48px;
-      height: 48px;
-      font-size: 1.25rem;
-    }
-
-    .stat-value {
-      font-size: 1.5rem;
-    }
-  }
-
-  @media (max-width: 767px) {
-    .incidents-table {
-      font-size: 0.875rem;
-    }
-
-    .incidents-table th,
-    .incidents-table td {
-      padding: 0.75rem 0.5rem;
-    }
-  }
-
-  /* Animation */
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .stat-card,
-  .table-card,
-  .filter-card {
-    animation: fadeIn 0.4s ease-out;
-  }
-</style>
-
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-
-    // View toggle functionality
-    const tableView = document.querySelector('.table-view');
-    const cardsView = document.querySelector('.cards-view');
-    const viewButtons = document.querySelectorAll('[data-view]');
-
-    viewButtons.forEach(button => {
-      button.addEventListener('click', function() {
-        const view = this.getAttribute('data-view');
-
-        // Update active button
-        viewButtons.forEach(btn => btn.classList.remove('active'));
-        this.classList.add('active');
-
-        // Toggle views
-        if (view === 'table') {
-          tableView.style.display = 'block';
-          cardsView.style.display = 'none';
-        } else {
-          tableView.style.display = 'none';
-          cardsView.style.display = 'block';
-        }
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize tooltips
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
       });
-    });
 
-    // Search input enhancement
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-      searchInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-          document.getElementById('filterForm').submit();
-        }
+      // View toggle functionality
+      const tableView = document.querySelector('.table-view');
+      const cardsView = document.querySelector('.cards-view');
+      const viewButtons = document.querySelectorAll('[data-view]');
+
+      viewButtons.forEach(button => {
+        button.addEventListener('click', function() {
+          const view = this.getAttribute('data-view');
+
+          // Update active button
+          viewButtons.forEach(btn => btn.classList.remove('active'));
+          this.classList.add('active');
+
+          // Toggle views
+          if (view === 'table') {
+            tableView.style.display = 'block';
+            cardsView.style.display = 'none';
+          } else {
+            tableView.style.display = 'none';
+            cardsView.style.display = 'block';
+          }
+        });
       });
-    }
 
-    // Keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
-      // Ctrl/Cmd + K to focus search
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        if (searchInput) searchInput.focus();
+      // Search input enhancement
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+          if (e.key === 'Enter') {
+            document.getElementById('filterForm').submit();
+          }
+        });
       }
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', function(e) {
+        // Ctrl/Cmd + K to focus search
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+          e.preventDefault();
+          if (searchInput) searchInput.focus();
+        }
+      });
     });
-  });
-</script>
+  </script>
 {% endblock %}

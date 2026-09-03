@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Q, Exists, OuterRef, QuerySet, Value, CharField, Count
-from django.http import HttpResponse, HttpRequest
+from django.http import Http404, HttpResponse, HttpRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.utils import timezone
@@ -26,6 +26,12 @@ import logging
 from un_security_system.roles import is_lsa_or_soc, is_not_guard
 from .forms import CommunicationDeviceForm, RadioCheckSessionForm
 from .models import CommunicationDevice, RadioCheckSession, RadioCheckEntry
+from .device_access import (
+    can_view_device,
+    visible_devices,
+    visible_sessions,
+    visible_users,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +41,9 @@ User = get_user_model()
 # PERMISSION HELPERS
 # ============================================================================
 
-def _is_lsa_or_soc(user) -> bool:
-    """Check if user has LSA or SOC role, or is superuser."""
-    return getattr(user, "role", None) in ("lsa", "soc") or getattr(user, "is_superuser", False)
-
+# _is_lsa_or_soc used to be defined here, shadowed by the identical
+# is_lsa_or_soc imported from un_security_system.roles above and never
+# called. Removed so there is one definition of the rule.
 
 class OnlyTeamMixin(UserPassesTestMixin):
     """Mixin to restrict access to LSA/SOC users only."""
@@ -365,10 +370,13 @@ class RadioListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
         q = self.request.GET.get("q", "").strip()
         status = self.request.GET.get("status", "").strip()
 
+        # Scoped: this used to return every radio in the deployment, so a
+        # Gambia LSA saw Senegal's and UNICEF's kit as well as their own.
         qs = (
-            CommunicationDevice.objects
+            visible_devices(self.request.user)
             .filter(device_type__in=["hf", "vhf"])
-            .select_related("assigned_to", "assigned_to__agency")
+            .select_related("assigned_to", "assigned_to__agency",
+                            "assigned_to__country_office")
             .order_by("call_sign")
         )
 
@@ -434,9 +442,10 @@ class SatPhoneListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
 
     def get_queryset(self):
         q = (self.request.GET.get("q") or "").strip()
-        qs = (CommunicationDevice.objects
+        # Scoped, same as the radio list.
+        qs = (visible_devices(self.request.user)
               .filter(device_type="satphone")
-              .select_related("assigned_to")
+              .select_related("assigned_to", "assigned_to__country_office")
               .annotate(
                   display_id=Coalesce(
                       "imei",
@@ -471,8 +480,10 @@ class UsersWithoutRadiosView(LoginRequiredMixin, OnlyTeamMixin, ListView):
             device_type__in=["hf", "vhf"],
             assigned_to=OuterRef("pk")
         )
+        # Scoped: without this the page listed every active user on the
+        # platform, which is a staff directory for every agency at once.
         return (
-            User.objects.filter(is_active=True)
+            visible_users(self.request.user, User.objects.filter(is_active=True))
             .exclude(role__in=["guard", "data_entry"])
             .annotate(has_radio=Exists(radio_subq))
             .filter(has_radio=False)
@@ -487,6 +498,15 @@ class CommunicationDeviceDetailView(LoginRequiredMixin, OnlyTeamMixin, DetailVie
     template_name = "comms/device_detail.html"
     context_object_name = "device"
 
+    def get_object(self, queryset=None):
+        # A scoped list is not a permission — this URL takes a pk directly, so
+        # without the check any LSA could open any office's device by guessing
+        # an id.
+        device = super().get_object(queryset)
+        if not can_view_device(self.request.user, device):
+            raise Http404("Device not found.")
+        return device
+
 
 class CommunicationDeviceUpdateView(LoginRequiredMixin, OnlyTeamMixin, UpdateView):
     """Allow LSA/SOC to update device information."""
@@ -496,6 +516,12 @@ class CommunicationDeviceUpdateView(LoginRequiredMixin, OnlyTeamMixin, UpdateVie
         "status", "assigned_to", "notes"
     ]
     template_name = "comms/device_form.html"
+
+    def get_object(self, queryset=None):
+        device = super().get_object(queryset)
+        if not can_view_device(self.request.user, device):
+            raise Http404("Device not found.")
+        return device
 
     def form_valid(self, form):
         """Validate device-specific requirements before saving."""
@@ -769,7 +795,8 @@ class RadioCheckSessionListView(LoginRequiredMixin, OnlyTeamMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self) -> QuerySet:
-        qs = RadioCheckSession.objects.all()
+        # Scoped to sessions started by this office.
+        qs = visible_sessions(self.request.user)
 
         # --- text search ---
         q = (self.request.GET.get("q") or "").strip()
