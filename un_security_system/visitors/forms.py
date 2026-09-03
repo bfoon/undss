@@ -11,17 +11,42 @@ from .models import Visitor, VisitorLog, GroupMember
 # We lazy-import to avoid hard circular dependency.
 # ---------------------------------------------------------------------------
 
-def _upcoming_bookings_qs():
-    """Return approved RoomBookings that are today or in the future."""
+def _upcoming_bookings_qs(user=None):
+    """
+    Approved RoomBookings from today onwards, in rooms this person can see.
+
+    Without the room filter the dropdown listed every approved meeting in the
+    database — including meetings in another agency's private rooms. Anyone
+    registering a visitor could read the title, date, room and host of a
+    meeting they have no access to, and link a visitor to it.
+
+    The scoping comes from accounts.room_access, so it follows the same three
+    levels as the room list itself: office-private, agency-wide, or shared
+    across every agency in the country.
+
+    `user=None` keeps the old unfiltered behaviour, so any caller that has not
+    been updated still works. Both visitor views pass the request user.
+    """
     try:
         from accounts.models import RoomBooking
         today = timezone.now().date()
-        return (
+        qs = (
             RoomBooking.objects
             .filter(status='approved', date__gte=today)
             .order_by('date', 'start_time')
             .select_related('room')
         )
+
+        if user is not None:
+            try:
+                from accounts.room_access import visible_rooms
+                qs = qs.filter(room__in=visible_rooms(user))
+            except ImportError:
+                # room_access not installed — leave the queryset unfiltered
+                # rather than emptying the dropdown.
+                pass
+
+        return qs
     except Exception:
         return []
 
@@ -71,10 +96,37 @@ class VisitorForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        # Passed by VisitorCreateView / VisitorUpdateView so the meeting list
+        # can be limited to rooms this person may see. Optional, so any other
+        # caller keeps working.
+        self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
 
-        # Set the live queryset for upcoming meetings
-        self.fields['linked_booking'].queryset = _upcoming_bookings_qs()
+        # Set the live queryset for upcoming meetings, scoped to the rooms this
+        # person has access to.
+        #
+        # ModelChoiceField validates the submitted pk against this queryset, so
+        # narrowing it here also rejects a hand-crafted POST naming a meeting in
+        # a room the person cannot see. No extra clean() needed.
+        self.fields['linked_booking'].queryset = _upcoming_bookings_qs(self.request_user)
+
+        # Keep the meeting a record is already linked to, even if the room has
+        # since been made private — otherwise editing that visitor would
+        # silently drop the link.
+        instance_booking_id = getattr(self.instance, 'linked_booking_id', None)
+        if instance_booking_id:
+            current = self.fields['linked_booking'].queryset.filter(
+                pk=instance_booking_id
+            ).exists()
+            if not current:
+                try:
+                    from accounts.models import RoomBooking
+                    self.fields['linked_booking'].queryset = (
+                        _upcoming_bookings_qs(self.request_user)
+                        | RoomBooking.objects.filter(pk=instance_booking_id)
+                    ).distinct()
+                except Exception:
+                    pass
 
         self.helper = FormHelper()
         self.helper.form_method = 'post'

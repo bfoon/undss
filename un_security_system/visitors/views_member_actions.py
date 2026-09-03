@@ -554,9 +554,22 @@ def booking_info_api(request, booking_id):
         from django.utils import timezone as tz
 
         today = tz.now().date()
-        booking = RoomBooking.objects.select_related(
+        qs = RoomBooking.objects.select_related(
             'requested_by', 'room', 'requested_by__agency'
-        ).get(pk=booking_id, status='approved', date__gte=today)
+        ).filter(status='approved', date__gte=today)
+
+        # Scope to rooms this person can see. Without this the endpoint hands
+        # back the title, host, room and attendee count of any approved meeting
+        # to anyone who can guess a booking id — including meetings in another
+        # agency's private rooms. Narrowing the dropdown alone would not have
+        # closed that, because this URL is reachable directly.
+        try:
+            from accounts.room_access import visible_rooms
+            qs = qs.filter(room__in=visible_rooms(request.user))
+        except ImportError:
+            pass
+
+        booking = qs.get(pk=booking_id)
 
         host = booking.requested_by
         host_name = host.get_full_name() or host.username

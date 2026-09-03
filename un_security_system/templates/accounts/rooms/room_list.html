@@ -471,7 +471,12 @@
                         </div>
                         <div class="overflow-hidden">
                             <h5 class="fw-bold mb-0 text-truncate">{{ room.name }}</h5>
-                            <div class="text-muted small"><i class="bi bi-hash"></i>{{ room.code }}</div>
+                            <div class="text-muted small">
+                                <i class="bi bi-hash"></i>{{ room.code }}
+                                {% if room.sharing_label and not room.is_own_office %}
+                                    <span class="mx-1">·</span>{{ room.sharing_label }}
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
 
@@ -526,7 +531,19 @@
                             <i class="bi bi-people-fill"></i>{{ room.capacity }} seats
                         </span>
                         {% endif %}
+                        {% if room.is_shared_in %}
+                        <span class="room-feature"
+                              title="Shared with your office by {{ room.owner_office.agency.code }}">
+                            <i class="bi bi-people"></i>Shared by {{ room.owner_office.agency.code }}
+                        </span>
+                        {% endif %}
                     </div>
+
+                    {% if room.is_shared_in and room.shared_note %}
+                    <div class="alert alert-light border py-2 px-2 mb-2 small">
+                        <i class="bi bi-info-circle me-1 text-primary"></i>{{ room.shared_note }}
+                    </div>
+                    {% endif %}
 
                     <!-- Amenities -->
                     {% if room.amenities_for_display %}

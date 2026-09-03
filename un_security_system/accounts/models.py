@@ -372,6 +372,38 @@ class Room(models.Model):
         help_text="Users who can approve bookings for this room."
     )
 
+    owner_office = models.ForeignKey(
+        "tenancy.CountryOffice",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="rooms",
+        help_text="The country office that owns this room.",
+    )
+
+    visibility = models.CharField(
+        max_length=10,
+        choices=(
+            ("office", "This country office only"),
+            ("agency", "All offices of this agency"),
+            ("country", "All agencies in this country (shared compound)"),
+        ),
+        default="office",
+        db_index=True,
+        help_text=(
+            "Who can see and book this room. 'This country office only' keeps "
+            "it private. 'All agencies in this country' is for a shared "
+            "compound room that every agency in the building uses."
+        ),
+    )
+
+    shared_note = models.CharField(
+        max_length=200, blank=True, default="",
+        help_text=(
+            "Optional line shown to people from other agencies, e.g. "
+            "'Book 48h ahead — contact UNDP reception for the key.'"
+        ),
+    )
+
     def __str__(self):
         return f"{self.name} ({self.code})"
 

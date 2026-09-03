@@ -48,6 +48,27 @@ User = get_user_model()
 # Helper functions
 # -------------------------------------------------------------------
 
+def _visible_upcoming_bookings(user):
+    """
+    Approved meetings from today onwards, in rooms this person can see.
+
+    Same scoping as the dropdown in VisitorForm, so the "there are meetings to
+    link" hint and the list of meetings can never disagree.
+    """
+    from accounts.models import RoomBooking
+
+    qs = RoomBooking.objects.filter(
+        status="approved", date__gte=timezone.now().date()
+    )
+    try:
+        from accounts.room_access import visible_rooms
+
+        qs = qs.filter(room__in=visible_rooms(user))
+    except ImportError:
+        pass
+    return qs
+
+
 def is_lsa(user):
     return user.is_authenticated and user.role == 'lsa'
 
@@ -356,16 +377,18 @@ class VisitorCreateView(LoginRequiredMixin, CreateView):
     template_name = 'visitors/visitor_form.html'
     success_url = reverse_lazy('visitors:visitor_list')
 
+    def get_form_kwargs(self):
+        # Lets the form limit the meeting dropdown to rooms this person can see.
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        # Pass upcoming bookings for the JS preview fetch URL hint
-        try:
-            from accounts.models import RoomBooking
-            ctx['has_upcoming_bookings'] = RoomBooking.objects.filter(
-                status='approved', date__gte=timezone.now().date()
-            ).exists()
-        except ImportError:
-            ctx['has_upcoming_bookings'] = False
+        # Whether to show the meeting-link UI at all. Counted from the same
+        # scoped list as the dropdown, so it cannot promise meetings that the
+        # dropdown will not contain.
+        ctx['has_upcoming_bookings'] = _visible_upcoming_bookings(self.request.user).exists()
         return ctx
 
     def form_valid(self, form):
@@ -489,6 +512,11 @@ class VisitorUpdateView(LoginRequiredMixin, UpdateView):
     form_class = VisitorForm
     template_name = 'visitors/visitor_form.html'
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+
     def get_success_url(self):
         return reverse('visitors:visitor_detail', kwargs={'pk': self.object.pk})
 
@@ -498,14 +526,12 @@ class VisitorUpdateView(LoginRequiredMixin, UpdateView):
         if self.object.visitor_type == 'group':
             context['existing_members'] = self.object.group_members.all()
 
-        # Pass upcoming bookings for the JS preview
-        try:
-            from accounts.models import RoomBooking
-            context['has_upcoming_bookings'] = RoomBooking.objects.filter(
-                status='approved', date__gte=timezone.now().date()
-            ).exists()
-        except ImportError:
-            context['has_upcoming_bookings'] = False
+        # Whether to offer the meeting-link UI. Counted from the same scoped
+        # list as the dropdown, so it cannot promise meetings the dropdown will
+        # not contain.
+        context['has_upcoming_bookings'] = _visible_upcoming_bookings(
+            self.request.user
+        ).exists()
 
         return context
 

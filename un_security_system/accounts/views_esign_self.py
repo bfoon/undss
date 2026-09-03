@@ -20,11 +20,15 @@ else.
 
 The two routes
 --------------
-`quick`     one signature block, bottom-right of the last page, straight to
-            the signing screen. For "I just need to sign this."
+Both routes end on the same layout screen, because that is the only screen
+where a field can be moved. They differ in what is already on it:
 
-`place`     the normal prepare screen, so you can put a signature, initials,
-            a date and text boxes wherever you want them, then sign.
+`quick`     a signature and a date pre-placed bottom-right on the last page.
+            Drag them where you want and press Sign it now. For "I just need
+            to sign this, but not necessarily there."
+
+`place`     an empty document, so you add signature, initials, date and text
+            boxes wherever you want them.
 
 Wiring
 ------
@@ -219,9 +223,19 @@ def esign_self_new(request):
         return redirect("accounts:esign_self_new")
 
     if mode == "quick":
-        return _go_sign(request, envelope, recipient,
-                        "Your signature block is on the last page. "
-                        "Drag it if you want it elsewhere, then sign.")
+        # Land on the layout screen, not straight on the signing screen.
+        #
+        # The signing screen renders the fields where they were placed; it does
+        # not let you move them. Quick sign is meant to save you the work of
+        # placing a field, not to take away the choice of where it goes — so
+        # the block is pre-placed and you arrive somewhere you can drag it.
+        # "Sign it now" on that screen takes you straight to signing.
+        messages.info(
+            request,
+            "Your signature and date are on the last page. Drag them anywhere "
+            "you like, then choose Sign it now.",
+        )
+        return redirect("accounts:esign_prepare", pk=envelope.pk)
 
     messages.success(request, "Now place your signature where you want it, then sign.")
     return redirect("accounts:esign_prepare", pk=envelope.pk)

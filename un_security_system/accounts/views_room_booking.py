@@ -57,6 +57,15 @@ except ImportError:
 
 # ======================= EMAIL HELPERS =======================
 
+from .room_access import (
+    annotate_sharing,
+    apply_room_scope,
+    attach_room_scope_fields,
+    can_view_room,
+    visible_rooms,
+)
+
+
 def _send_email_async(subject, message, recipients):
     """
     Send email in the background using a thread.
@@ -943,7 +952,12 @@ class RoomListView(LoginRequiredMixin, ListView):
     context_object_name = "rooms"
 
     def get_queryset(self):
-        return Room.objects.filter(is_active=True).prefetch_related("amenities")
+        # Was Room.objects.filter(is_active=True) — every room in the database,
+        # visible to every signed-in user regardless of agency or office.
+        return visible_rooms(
+            self.request.user,
+            Room.objects.filter(is_active=True),
+        ).select_related("owner_office", "owner_office__agency").prefetch_related("amenities")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -987,6 +1001,14 @@ class RoomListView(LoginRequiredMixin, ListView):
             })
 
         ctx["bookings_by_room_json"] = json.dumps(bookings_by_room)
+
+        # Tell the template which rooms are the viewer's own and which are
+        # shared in from another agency in the same country.
+        annotate_sharing(rooms, user)
+        ctx["shared_room_count"] = sum(1 for r in rooms if getattr(r, "is_shared_in", False))
+        ctx["own_room_count"] = sum(1 for r in rooms if getattr(r, "is_own_office", False))
+        ctx["my_office"] = getattr(user, "country_office", None)
+
         return ctx
 
 
@@ -994,6 +1016,14 @@ class RoomDetailView(LoginRequiredMixin, DetailView):
     model = Room
     template_name = "accounts/rooms/room_detail.html"
     context_object_name = "room"
+
+    def get_object(self, queryset=None):
+        room = super().get_object(queryset)
+        if not can_view_room(self.request.user, room):
+            # 404 rather than 403: confirming that another agency's room exists
+            # is itself a small disclosure.
+            raise Http404("Room not found.")
+        return room
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1273,7 +1303,9 @@ class MyRoomBookingsView(LoginRequiredMixin, ListView):
         ctx['sort_by'] = self.request.GET.get('sort', '-created_at')
 
         # Get available rooms for filter dropdown
-        ctx['available_rooms'] = Room.objects.filter(is_active=True).order_by('name')
+        ctx['available_rooms'] = visible_rooms(
+            self.request.user, Room.objects.filter(is_active=True)
+        ).order_by('name')
 
         return ctx
 
@@ -1305,7 +1337,9 @@ class RoomBookingCreateView(LoginRequiredMixin, CreateView):
 
         if room_id:
             try:
-                room = Room.objects.get(pk=room_id)
+                # visible_rooms rather than Room.objects: a pk in the query
+                # string must not preselect a room the person cannot see.
+                room = visible_rooms(self.request.user).get(pk=room_id)
                 return form_class(room=room, **form_kwargs)
             except (Room.DoesNotExist, ValueError, TypeError):
                 pass
@@ -3598,7 +3632,17 @@ class RoomCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     def test_func(self):
         return self.request.user.is_superuser
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["request_user"] = self.request.user
+        return kwargs
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        return attach_room_scope_fields(form, self.request.user)
+
     def form_valid(self, form):
+        apply_room_scope(form, self.request.user)
         messages.success(self.request, f"Room '{form.instance.name}' created successfully!")
         return super().form_valid(form)
 
@@ -3619,7 +3663,17 @@ class RoomUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     def test_func(self):
         return self.request.user.is_superuser
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["request_user"] = self.request.user
+        return kwargs
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        return attach_room_scope_fields(form, self.request.user)
+
     def form_valid(self, form):
+        apply_room_scope(form, self.request.user)
         messages.success(self.request, f"Room '{form.instance.name}' updated successfully!")
         return super().form_valid(form)
 
@@ -3688,11 +3742,9 @@ def room_bookings_calendar(request):
     Calendar page (Day/Week/Month/List).
     Loads bookings via AJAX from room_bookings_events endpoint.
     """
-    rooms = Room.objects.filter(is_active=True).order_by("name")
-
-    # Optional: restrict rooms per agency if you have agency field
-    # if hasattr(Room, "agency_id") and request.user.agency_id:
-    #     rooms = rooms.filter(agency_id=request.user.agency_id)
+    rooms = visible_rooms(
+        request.user, Room.objects.filter(is_active=True)
+    ).order_by("name")
 
     context = {
         "rooms": rooms,
@@ -3723,11 +3775,9 @@ def room_bookings_events(request):
     future_only = (request.GET.get("future_only") or "1").strip() == "1"
 
     # Base queryset
-    qs = RoomBooking.objects.select_related("room", "requested_by").all()
-
-    # Optional: agency restriction if your models have agency
-    # if hasattr(RoomBooking, "agency_id") and request.user.agency_id:
-    #     qs = qs.filter(room__agency_id=request.user.agency_id)
+    qs = RoomBooking.objects.select_related("room", "requested_by").filter(
+        room__in=visible_rooms(request.user)
+    )
 
     if mine:
         qs = qs.filter(requested_by=request.user)
@@ -3802,7 +3852,9 @@ def check_availability_api(request):
         return JsonResponse({'available': True})  # incomplete — don't block
 
     try:
-        room = Room.objects.get(pk=room_id, is_active=True)
+        # Scoped: otherwise this endpoint answers "is UNICEF's boardroom free
+        # at 10am on Tuesday" for anyone who can guess a room id.
+        room = visible_rooms(request.user).get(pk=room_id, is_active=True)
         check_date = date_cls.fromisoformat(date_str)
         start_time = time_cls.fromisoformat(start_str)
         end_time = time_cls.fromisoformat(end_str)

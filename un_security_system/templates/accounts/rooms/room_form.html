@@ -150,22 +150,43 @@
     </div>
     {% endif %}
     
+    {% if form.errors %}
+      {% comment %}
+        Catch-all for fields this template does not render.
+
+        approval_mode was in RoomForm.Meta.fields but had no markup here, so
+        the browser could never send it, the form failed with "This field is
+        required" every single time, and there was nowhere for that error to
+        appear. The page just came back looking unchanged.
+
+        This block lists any error whose field has no visible input, so the
+        same class of mistake announces itself instead of hiding.
+      {% endcomment %}
+      {% for field in form %}
+        {% if field.errors and field.is_hidden %}
+          <div class="alert alert-danger">
+            <strong>{{ field.label }}:</strong> {{ field.errors|join:", " }}
+          </div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+
     <form method="post" novalidate>
         {% csrf_token %}
-        
+
         <!-- Basic Information -->
         <div class="form-section">
             <div class="form-section-title">
                 <i class="bi bi-info-circle me-2"></i>Basic Information
             </div>
-            
+
             <div class="row g-3">
                 <div class="col-md-6">
                     <label for="{{ form.name.id_for_label }}" class="form-label fw-semibold">
                         Room Name <span class="text-danger">*</span>
                     </label>
-                    <input type="text" 
-                           name="{{ form.name.name }}" 
+                    <input type="text"
+                           name="{{ form.name.name }}"
                            class="form-control {% if form.name.errors %}is-invalid{% endif %}"
                            id="{{ form.name.id_for_label }}"
                            value="{{ form.name.value|default:'' }}"
@@ -180,13 +201,13 @@
                     {% endif %}
                     <small class="form-text text-muted">Full name of the room</small>
                 </div>
-                
+
                 <div class="col-md-6">
                     <label for="{{ form.code.id_for_label }}" class="form-label fw-semibold">
                         Room Code <span class="text-danger">*</span>
                     </label>
-                    <input type="text" 
-                           name="{{ form.code.name }}" 
+                    <input type="text"
+                           name="{{ form.code.name }}"
                            class="form-control {% if form.code.errors %}is-invalid{% endif %}"
                            id="{{ form.code.id_for_label }}"
                            value="{{ form.code.value|default:'' }}"
@@ -201,12 +222,12 @@
                     {% endif %}
                     <small class="form-text text-muted">Short unique identifier (e.g., CR-A, LIB-1)</small>
                 </div>
-                
+
                 <div class="col-md-6">
                     <label for="{{ form.room_type.id_for_label }}" class="form-label fw-semibold">
                         Room Type <span class="text-danger">*</span>
                     </label>
-                    <select name="{{ form.room_type.name }}" 
+                    <select name="{{ form.room_type.name }}"
                             class="form-select {% if form.room_type.errors %}is-invalid{% endif %}"
                             id="{{ form.room_type.id_for_label }}"
                             required>
@@ -227,13 +248,13 @@
                         </div>
                     {% endif %}
                 </div>
-                
+
                 <div class="col-md-6">
                     <label for="{{ form.capacity.id_for_label }}" class="form-label fw-semibold">
                         Capacity
                     </label>
-                    <input type="number" 
-                           name="{{ form.capacity.name }}" 
+                    <input type="number"
+                           name="{{ form.capacity.name }}"
                            class="form-control {% if form.capacity.errors %}is-invalid{% endif %}"
                            id="{{ form.capacity.id_for_label }}"
                            value="{{ form.capacity.value|default:'' }}"
@@ -248,13 +269,13 @@
                     {% endif %}
                     <small class="form-text text-muted">Maximum number of people</small>
                 </div>
-                
+
                 <div class="col-12">
                     <label for="{{ form.location.id_for_label }}" class="form-label fw-semibold">
                         Location
                     </label>
-                    <input type="text" 
-                           name="{{ form.location.name }}" 
+                    <input type="text"
+                           name="{{ form.location.name }}"
                            class="form-control {% if form.location.errors %}is-invalid{% endif %}"
                            id="{{ form.location.id_for_label }}"
                            value="{{ form.location.value|default:'' }}"
@@ -268,12 +289,12 @@
                     {% endif %}
                     <small class="form-text text-muted">Building, floor, or area description</small>
                 </div>
-                
+
                 <div class="col-12">
                     <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold">
                         Description
                     </label>
-                    <textarea name="{{ form.description.name }}" 
+                    <textarea name="{{ form.description.name }}"
                               class="form-control {% if form.description.errors %}is-invalid{% endif %}"
                               id="{{ form.description.id_for_label }}"
                               rows="4"
@@ -287,11 +308,28 @@
                     {% endif %}
                     <small class="form-text text-muted">Additional details about the room</small>
                 </div>
-                
+
+                <div class="col-md-6">
+                    <label for="{{ form.approval_mode.id_for_label }}" class="form-label fw-semibold">
+                        Approval mode <span class="text-danger">*</span>
+                    </label>
+                    {{ form.approval_mode }}
+                    {% if form.approval_mode.errors %}
+                        <div class="text-danger">
+                            {% for error in form.approval_mode.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">
+                        {{ form.approval_mode.help_text|default:"Whether bookings for this room need approving." }}
+                    </small>
+                </div>
+
                 <div class="col-12">
                     <div class="form-check">
-                        <input type="checkbox" 
-                               name="{{ form.is_active.name }}" 
+                        <input type="checkbox"
+                               name="{{ form.is_active.name }}"
                                class="form-check-input"
                                id="{{ form.is_active.id_for_label }}"
                                {% if form.is_active.value or form.is_active.value == None %}checked{% endif %}>
@@ -309,7 +347,92 @@
                 </div>
             </div>
         </div>
-        
+
+<!--        {# ── Who can book it ────────────────────────────────────────────────-->
+<!--           Guarded on the field existing, so this template still renders on a-->
+<!--           deployment where the tenancy fields have not been added yet. ── #}-->
+        {% if form.owner_office or form.visibility %}
+        <div class="form-section">
+            <div class="form-section-title">
+                <i class="bi bi-shield-lock me-2"></i>Who can book this room
+            </div>
+            <div class="row g-3">
+
+                {% if form.owner_office %}
+                <div class="col-md-6">
+                    <label for="{{ form.owner_office.id_for_label }}" class="form-label fw-semibold">
+                        Owning country office
+                    </label>
+                    {{ form.owner_office }}
+                    {% if form.owner_office.errors %}
+                        <div class="text-danger">
+                            {% for error in form.owner_office.errors %}{{ error }}{% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">
+                        The office responsible for the room. Leaving this blank
+                        keeps the room visible to everyone, as before.
+                    </small>
+                </div>
+                {% endif %}
+
+                {% if form.visibility %}
+                <div class="col-md-6">
+                    <label for="{{ form.visibility.id_for_label }}" class="form-label fw-semibold">
+                        Visibility
+                    </label>
+                    {{ form.visibility }}
+                    {% if form.visibility.errors %}
+                        <div class="text-danger">
+                            {% for error in form.visibility.errors %}{{ error }}{% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted" id="visHelp">
+                        Who may see this room in their list and book it.
+                    </small>
+                </div>
+                {% endif %}
+
+                {% if form.shared_note %}
+                <div class="col-12" id="sharedNoteWrap">
+                    <label for="{{ form.shared_note.id_for_label }}" class="form-label fw-semibold">
+                        Note for other agencies
+                    </label>
+                    {{ form.shared_note }}
+                    {% if form.shared_note.errors %}
+                        <div class="text-danger">
+                            {% for error in form.shared_note.errors %}{{ error }}{% endfor %}
+                        </div>
+                    {% endif %}
+                    <small class="form-text text-muted">
+                        Shown to people from other agencies before they book —
+                        access arrangements, notice periods, who holds the key.
+                    </small>
+                </div>
+                {% endif %}
+
+                <div class="col-12">
+                    <div class="alert alert-light border mb-0 small">
+                        <div class="mb-1">
+                            <i class="bi bi-building-lock me-1 text-primary"></i>
+                            <b>This country office only</b> — private to the owning office.
+                        </div>
+                        <div class="mb-1">
+                            <i class="bi bi-diagram-3 me-1 text-primary"></i>
+                            <b>All offices of this agency</b> — any office of the same
+                            agency, in any country.
+                        </div>
+                        <div>
+                            <i class="bi bi-people me-1 text-primary"></i>
+                            <b>All agencies in this country</b> — the shared compound
+                            case. Every agency with an office in the same country can book it.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Amenities -->
         <div class="form-section">
             <div class="form-section-title">
@@ -424,6 +547,18 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+// The note is only ever seen by another agency, so hide the field unless the
+// room is shared that widely.
+(function () {
+  var vis  = document.getElementById('{{ form.visibility.id_for_label }}');
+  var wrap = document.getElementById('sharedNoteWrap');
+  if (!vis || !wrap) return;
+  function sync() { wrap.style.display = (vis.value === 'country') ? '' : 'none'; }
+  vis.addEventListener('change', sync);
+  sync();
+})();
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Add smooth transitions to checkbox items

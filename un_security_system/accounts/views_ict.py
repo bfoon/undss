@@ -258,7 +258,20 @@ def _attach_office_field(form, actor, current=None):
         field.required = False
     field.widget.attrs['class'] = css
 
-    form.fields['country_office'] = field
+    existing = form.fields.get('country_office')
+    if existing is not None:
+        # Declared in forms.py — narrow it rather than replace it, so the
+        # form's own label, help text and validation survive.
+        existing.queryset = queryset
+        existing.required = field.required
+        existing.empty_label = field.empty_label
+        if initial is not None and not form.instance.pk:
+            existing.initial = initial.pk
+        if locked:
+            existing.widget.attrs['disabled'] = 'disabled'
+        existing.widget.attrs.setdefault('class', css)
+    else:
+        form.fields['country_office'] = field
     return form
 
 

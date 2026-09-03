@@ -178,12 +178,55 @@ ICT_ASSIGNABLE_ROLES = [
 ]
 
 
+def _scope_office_field(form, request_user, allow_blank=False):
+    """
+    Limit a `country_office` field to the offices this person may assign.
+
+    Superusers get every active office. Anyone else gets their own, plus
+    whatever the record already has — so editing a user who sits in another
+    office shows that office rather than silently dropping it.
+
+    Called from both ICT user forms and shared with the room form's equivalent
+    in accounts/room_access.py.
+    """
+    field = form.fields.get("country_office")
+    if field is None:
+        return
+
+    try:
+        from tenancy.models import CountryOffice
+    except ImportError:
+        return
+
+    offices = CountryOffice.objects.filter(is_active=True).select_related("agency")
+
+    if not getattr(request_user, "is_superuser", False):
+        own = getattr(request_user, "country_office_id", None)
+        current = getattr(form.instance, "country_office_id", None)
+        keep = [pk for pk in (own, current) if pk]
+        offices = offices.filter(pk__in=keep) if keep else offices.none()
+
+    field.queryset = offices.order_by("agency__code", "name")
+    field.required = not allow_blank
+
+    if not form.instance.pk and getattr(request_user, "country_office_id", None):
+        field.initial = request_user.country_office_id
+
+    # One choice and no authority to change it: show it, but do not pretend
+    # it is a decision. The view re-checks on save either way.
+    if field.queryset.count() == 1 and not getattr(request_user, "is_superuser", False):
+        field.empty_label = None
+        field.widget.attrs["disabled"] = "disabled"
+        field.required = False
+
+
 class ICTUserCreateForm(forms.ModelForm):
     """Form for ICT focal points to create users in their agency."""
 
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'employee_id', 'role']
+        fields = ['username', 'first_name', 'last_name', 'email', 'phone',
+                  'employee_id', 'role', 'country_office']
         widgets = {
             'username': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter username'}),
             'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter first name'}),
@@ -192,6 +235,7 @@ class ICTUserCreateForm(forms.ModelForm):
             'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+1234567890'}),
             'employee_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter employee ID'}),
             'role': forms.Select(attrs={'class': 'form-select'}),
+            'country_office': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -203,7 +247,13 @@ class ICTUserCreateForm(forms.ModelForm):
         self.fields['username'].help_text = 'Required. 150 characters or fewer.'
         self.fields['email'].help_text = 'Optional. Used for password reset links.'
         self.fields['employee_id'].help_text = 'Optional. Internal employee identifier.'
-        self.fields['role'].help_text = 'Select the role for this user within your agency.'
+        self.fields['role'].help_text = 'Select the role for this user.'
+        if 'country_office' in self.fields:
+            self.fields['country_office'].label = 'Country office'
+            self.fields['country_office'].help_text = (
+                'Which office this user belongs to. Decides which records they see.'
+            )
+            _scope_office_field(self, self.request_user)
 
     def clean_username(self):
         username = self.cleaned_data.get('username')
@@ -237,6 +287,21 @@ class ICTUserCreateForm(forms.ModelForm):
         user = super().save(commit=False)
         if self.request_user and self.request_user.agency_id:
             user.agency_id = self.request_user.agency_id
+
+        # A disabled select is not submitted, so fall back to the creator's own
+        # office. Without this the account is created with no office and shows
+        # up in nobody's list.
+        if not getattr(user, 'country_office_id', None) and self.request_user:
+            own_office_id = getattr(self.request_user, 'country_office_id', None)
+            if own_office_id:
+                user.country_office_id = own_office_id
+
+        # Keep agency and office consistent — the office knows its agency, and
+        # a mismatch between the two produces a user nobody can find.
+        office = getattr(user, 'country_office', None)
+        if office is not None and getattr(office, 'agency_id', None):
+            user.agency_id = office.agency_id
+
         user.is_active = True
         user.set_unusable_password()
         if commit:
@@ -249,7 +314,8 @@ class ICTUserUpdateForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'employee_id', 'role']
+        fields = ['username', 'first_name', 'last_name', 'email', 'phone',
+                  'employee_id', 'role', 'country_office']
         widgets = {
             'username': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter username'}),
             'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter first name'}),
@@ -258,6 +324,7 @@ class ICTUserUpdateForm(forms.ModelForm):
             'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '+1234567890'}),
             'employee_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter employee ID'}),
             'role': forms.Select(attrs={'class': 'form-select'}),
+            'country_office': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -266,6 +333,12 @@ class ICTUserUpdateForm(forms.ModelForm):
         self.fields['role'].choices = [('', '---------')] + ICT_ASSIGNABLE_ROLES
         self.fields['username'].required = True
         self.fields['role'].required = True
+        if 'country_office' in self.fields:
+            self.fields['country_office'].label = 'Country office'
+            self.fields['country_office'].help_text = (
+                'Moving someone to another office changes what they can see.'
+            )
+            _scope_office_field(self, self.request_user)
 
     def clean_username(self):
         username = self.cleaned_data.get('username')
@@ -298,10 +371,46 @@ class ICTUserUpdateForm(forms.ModelForm):
         return role
 
     def clean(self):
+        """
+        Confirm the editor may act on this user.
+
+        Two things were wrong with the previous version:
+
+        1. It compared agencies. With several country offices per agency that
+           is too wide — a Gambia focal point passed the check while editing a
+           Senegal account. The view blocks it now, and this should agree with
+           the view rather than contradict it.
+
+        2. It had no superuser bypass, so a superuser editing anyone outside
+           their own agency was refused with "You can only edit users in your
+           own agency." A superuser has no agency in the sense this test meant.
+        """
         cleaned_data = super().clean()
-        if self.instance.pk and self.request_user:
+
+        if not self.instance.pk or not self.request_user:
+            return cleaned_data
+
+        if getattr(self.request_user, 'is_superuser', False):
+            return cleaned_data
+
+        try:
+            from tenancy.services import can_manage_user
+        except ImportError:
+            # No tenancy app — fall back to the old agency comparison.
             if self.instance.agency_id != self.request_user.agency_id:
                 raise ValidationError('You can only edit users in your own agency.')
+            return cleaned_data
+
+        if not can_manage_user(self.request_user, self.instance):
+            raise ValidationError('You can only edit users in your own country office.')
+
+        # Do not let someone move a user into an office they cannot assign.
+        chosen = cleaned_data.get('country_office')
+        if chosen is not None:
+            allowed = set(self.fields['country_office'].queryset.values_list('pk', flat=True))
+            if chosen.pk not in allowed:
+                raise ValidationError('You cannot move a user to that country office.')
+
         return cleaned_data
 
 
@@ -566,6 +675,9 @@ class RoomForm(forms.ModelForm):
         fields = [
             "name", "code", "room_type", "location", "capacity", "description",
             "approval_mode", "is_active", "amenities", "approvers",
+            # Who can see and book it. The views narrow owner_office to the
+            # offices the editor may assign; see accounts/room_access.py.
+            "owner_office", "visibility", "shared_note",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Conference Room A"}),
@@ -577,10 +689,58 @@ class RoomForm(forms.ModelForm):
                 attrs={"class": "form-control", "rows": 4, "placeholder": "Describe the room and its purpose"}),
             "approval_mode": forms.Select(attrs={"class": "form-select"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "owner_office": forms.Select(attrs={"class": "form-select"}),
+            "visibility": forms.Select(attrs={"class": "form-select"}),
+            "shared_note": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Anything another agency needs to know before booking",
+            }),
         }
 
     def __init__(self, *args, **kwargs):
+        # The room views pass request_user so the office list can be narrowed.
+        # Accepted optionally, so any existing caller that does not pass it
+        # keeps working.
+        self.request_user = kwargs.pop("request_user", None)
         super().__init__(*args, **kwargs)
+
+        if "owner_office" in self.fields:
+            self.fields["owner_office"].required = False
+            self.fields["owner_office"].label = "Owning country office"
+            self.fields["owner_office"].empty_label = "— no owner (visible to everyone) —"
+            self.fields["owner_office"].help_text = (
+                "The office responsible for the room. Leave blank to keep it "
+                "visible to everyone, as before."
+            )
+        if "visibility" in self.fields:
+            self.fields["visibility"].required = False
+            self.fields["visibility"].help_text = (
+                "Who may see this room in their list and book it."
+            )
+            # If Room.visibility was added without `choices=`, Django builds a
+            # plain CharField and the Select renders with no options at all.
+            # Put the choices on regardless, from the single definition in
+            # room_access so the two can never disagree.
+            try:
+                from .room_access import VISIBILITY_CHOICES
+            except ImportError:
+                VISIBILITY_CHOICES = (
+                    ("office", "This country office only"),
+                    ("agency", "All offices of this agency"),
+                    ("country", "All agencies in this country (shared compound)"),
+                )
+            if not getattr(self.fields["visibility"], "choices", None):
+                self.fields["visibility"] = forms.ChoiceField(
+                    choices=VISIBILITY_CHOICES,
+                    required=False,
+                    label="Visibility",
+                    initial=getattr(self.instance, "visibility", None) or "office",
+                    widget=forms.Select(attrs={"class": "form-select"}),
+                )
+        if "shared_note" in self.fields:
+            self.fields["shared_note"].required = False
+            self.fields["shared_note"].label = "Note for other agencies"
+
         if self.instance.pk:
             self.fields["amenities"].initial = self.instance.amenities.filter(is_active=True)
             linked_users = User.objects.filter(
@@ -616,8 +776,19 @@ class RoomForm(forms.ModelForm):
 
     def save(self, commit=True):
         room = super().save(commit=commit)
-        if commit:
-            self.save_m2m()
+
+        # `self.save_m2m()` used to be called here when commit=True. Django
+        # only defines save_m2m on the *commit=False* path — when commit=True
+        # it has already run _save_m2m() itself — so that line raised
+        #
+        #     AttributeError: 'RoomForm' object has no attribute 'save_m2m'
+        #
+        # on every save, before any of the field values below were written.
+        # That is why nothing on this form appeared to post.
+        if not commit:
+            # Nothing further can be done until the caller saves the instance;
+            # amenities and approvers need a primary key to attach to.
+            return room
 
         selected_amenities = self.cleaned_data.get("amenities")
         selected_approvers = self.cleaned_data.get("approvers")
