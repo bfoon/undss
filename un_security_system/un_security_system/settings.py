@@ -85,6 +85,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'accounts.context_processors.agency_service_flags',
                 "tenancy.context_processors.tenancy",
+                "accounts.context_processors_esign.esign_badge",
             ],
         },
     },

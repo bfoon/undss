@@ -134,6 +134,16 @@ stop competing for one horizontal strip.
   .appnav-caret{ font-size:.7rem; transition:transform .16s ease; flex:0 0 auto; }
   .appnav-toggle[aria-expanded="true"] .appnav-caret{ transform:rotate(180deg); }
   .appnav-toggle[aria-expanded="true"]{ color:#fff; }
+  /* Action-required badge. Distinct from .appnav-count, which is a neutral
+     tally: this one says "you have something to do", so it is the accent
+     colour and stays legible when the sidebar collapses to the icon rail. */
+  .appnav-badge{
+    font-size:.68rem; font-weight:700; line-height:1; flex:0 0 auto;
+    min-width:1.15rem; padding:.2rem .35rem; border-radius:999px;
+    background:var(--appnav-accent); color:#fff; text-align:center;
+  }
+  .appnav-link-sub .appnav-badge{ font-size:.64rem; }
+
   .appnav-count{
     font-size:.68rem; font-weight:700; padding:.05rem .4rem; border-radius:10px;
     background:var(--appnav-bg-soft); color:var(--appnav-fg-dim); flex:0 0 auto;
@@ -151,7 +161,14 @@ stop competing for one horizontal strip.
     body.appnav-rail .appnav-sidebar .appnav-caret,
     body.appnav-rail .appnav-sidebar .appnav-count,
     body.appnav-rail .appnav-sidebar .appnav-heading{ display:none; }
-    body.appnav-rail .appnav-sidebar .appnav-link{ justify-content:center; padding:.6rem 0; }
+    body.appnav-rail .appnav-sidebar .appnav-link{ justify-content:center; padding:.6rem 0; position:relative; }
+    /* The rail hides labels and counts, but an action-required badge is the
+       one thing that must survive — it becomes a dot on the icon. */
+    body.appnav-rail .appnav-sidebar .appnav-badge{
+      display:block; position:absolute; top:.35rem; right:.9rem;
+      min-width:0; width:8px; height:8px; padding:0;
+      font-size:0; color:transparent; overflow:hidden;
+    }
     body.appnav-rail .appnav-sidebar .appnav-link-sub{ padding-left:0; }
     body.appnav-rail .appnav-sidebar .collapse{ display:none !important; }
     /* Label on hover, so the rail stays usable */
@@ -187,6 +204,14 @@ stop competing for one horizontal strip.
     padding:.3rem .1rem; min-width:0;
   }
   .appnav-bottom .bi{ font-size:1.15rem; }
+  /* A number does not fit under a thumb-sized tab, so the phone bar gets a
+     dot. The count itself is one tap away. */
+  .appnav-tabicon{ position:relative; display:inline-flex; line-height:1; }
+  .appnav-tabdot{
+    position:absolute; top:-2px; right:-5px; width:8px; height:8px;
+    border-radius:50%; background:var(--appnav-accent);
+    box-shadow:0 0 0 2px #fff;
+  }
   .appnav-bottom a.is-active{ color:var(--appnav-accent); }
   .appnav-bottom span{ overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap; max-width:100%; }
@@ -326,7 +351,14 @@ stop competing for one horizontal strip.
   {% if request.tenancy_features.esign or esign_enabled %}
     {% url 'accounts:esign_dashboard' as u %}
     <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">
-      <i class="bi bi-pen-fill" aria-hidden="true"></i><span>eSign</span>
+      <span class="appnav-tabicon">
+        <i class="bi bi-pen-fill" aria-hidden="true"></i>
+        {% if esign_action_count %}
+          <span class="appnav-tabdot"
+                aria-label="{{ esign_action_count }} waiting for your signature"></span>
+        {% endif %}
+      </span>
+      <span>eSign</span>
     </a>
   {% elif request.tenancy_features.common_services %}
     {% url 'incidents:my_csr' as u %}
