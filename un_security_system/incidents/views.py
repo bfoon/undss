@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -15,6 +17,9 @@ from django.contrib.auth import get_user_model
 from .models import IncidentReport, CommonServiceRequest
 from .forms import IncidentReportForm, IncidentUpdateForm
 from .permissions import can_user_manage_csr, is_common_services_manager
+from .cs_access import assignable_users_for, can_view_csr, visible_csrs
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -204,11 +209,20 @@ def _notify_incident_new_update(incident, update_obj):
 # -------------------------------------------------------------------
 
 def _csr_detail_url(csr, request):
+    """
+    Absolute link to a request, for notification emails.
+
+    This reversed "common_services:cs_detail", a namespace that does not exist —
+    urls.py declares app_name = "incidents". The try/except turned the
+    NoReverseMatch into an empty string, so every CSR notification has been
+    going out with a blank link and nothing in the logs to say so.
+    """
     try:
         return request.build_absolute_uri(
-            reverse("common_services:cs_detail", kwargs={"pk": csr.pk})
+            reverse("incidents:cs_detail", kwargs={"pk": csr.pk})
         )
     except Exception:
+        logger.exception("CSR %s: could not build a detail URL", getattr(csr, "pk", "?"))
         return ""
 
 
@@ -623,7 +637,7 @@ def view_cs_support(request, incident_pk=None):
 @login_required
 @require_http_methods(["POST"])
 def csr_assign_view(request, pk):
-    csr = get_object_or_404(CommonServiceRequest, pk=pk)
+    csr = get_object_or_404(visible_csrs(request.user), pk=pk)
 
     # ✅ Prevent assignment changes for completed/cancelled requests
     if csr.status in ['completed', 'cancelled']:
@@ -632,15 +646,17 @@ def csr_assign_view(request, pk):
 
     if not can_user_manage_csr(request.user, csr):
         messages.error(request, "You do not have permission to assign this request.")
-        return redirect("common_services:cs_detail", pk=csr.pk)
+        return redirect("incidents:cs_detail", pk=csr.pk)
 
     assignee_id = request.POST.get("assigned_to")
     if not assignee_id:
         messages.error(request, "Please select a user to assign.")
-        return redirect("common_services:cs_detail", pk=csr.pk)
+        return redirect("incidents:cs_detail", pk=csr.pk)
 
+    # From the scoped list, not from User: the select is narrowed, but this
+    # URL takes an id straight from the POST.
     assignee = get_object_or_404(
-        User,
+        assignable_users_for(request.user, csr),
         pk=assignee_id,
         is_active=True,
         agency_id=csr.agency_id,  # ✅ agency-scoped
@@ -670,25 +686,19 @@ def csr_assign_view(request, pk):
 @login_required
 def csr_fulfiller_queue(request):
     user = request.user
-    role = getattr(user, "role", "") or ""
 
-    # ✅ Base queryset: cross-agency for Common Service Manager
-    if is_common_services_manager(user):
-        qs = CommonServiceRequest.objects.all()
-    else:
-        # normal users stay within agency
-        if not getattr(user, "agency_id", None):
-            qs = CommonServiceRequest.objects.none()
-            return render(request, "common_services/csr_fulfiller_queue.html", {"csrs": qs})
-
-        qs = CommonServiceRequest.objects.filter(agency_id=user.agency_id)
-
-        # responsibility logic for non-manager
-        qs = qs.filter(
-            Q(assigned_to_id=user.id) |
-            Q(escalated_to_user_id=user.id) |
-            (Q(escalated_to=role) if role else Q(pk__in=[]))
-        )
+    # Base queryset: one definition, shared with the detail page and the
+    # assign action — see cs_access.visible_csrs. Cross-agency for a Common
+    # Service Manager, own agency and own office for everyone else.
+    #
+    # The old version filtered on agency only, so `escalated_to=role` matched
+    # every request in the agency escalated to "lsa" — a Gambia LSA saw
+    # Senegal's escalations in their queue.
+    # visible_csrs already applies the responsibility rule that used to live
+    # here — raised by me, assigned to me, escalated to me or to my role — and
+    # widens it to the whole office queue for the escalation roles and
+    # configured approvers, who otherwise could never pick up a new request.
+    qs = visible_csrs(user)
 
     # Filters (same as before)
     status = request.GET.get("status") or ""
@@ -771,21 +781,17 @@ def cs_detail(request, pk):
     # - Request owner
     # - Assigned fulfiller
     # - Any user who can manage CSR (approver/level1 manager/role overrides)
-    if not (
-            is_csm or user.is_superuser or csr.requested_by_id == user.id or csr.assigned_to_id == user.id or can_manage):
+    if not can_view_csr(user, csr):
         messages.error(request, "You don't have permission to view this Common Service Request.")
         return redirect("incidents:my_csr")
 
     # ✅ Assignable users list
     # - Managers can assign across all agencies
     # - Others assign only within same agency
-    if is_csm or user.is_superuser:
-        assignable_users = User.objects.filter(is_active=True).order_by("first_name", "last_name", "username")
-    else:
-        assignable_users = User.objects.filter(
-            is_active=True,
-            agency_id=csr.agency_id
-        ).order_by("first_name", "last_name", "username")
+    # Scoped to the office the request belongs to, not just the agency.
+    # Assigning a Gambia request to someone in Senegal produced a task that its
+    # new owner could not see, because their own queue is office-scoped.
+    assignable_users = assignable_users_for(user, csr)
 
     return render(request, "common_services/cs_detail.html", {
         "csr": csr,
@@ -798,7 +804,9 @@ def cs_detail(request, pk):
 @login_required
 @require_http_methods(["POST"])
 def cs_update_status(request, pk):
-    csr = get_object_or_404(CommonServiceRequest, pk=pk)
+    # Scoped fetch: the role gate below allows the assigned fulfiller, a CSM or
+    # a superuser, but the request itself was looked up across every agency.
+    csr = get_object_or_404(visible_csrs(request.user), pk=pk)
 
     user = request.user
     is_csm = is_common_services_manager(user)
@@ -985,7 +993,7 @@ def cs_escalate(request, pk):
     Escalate a CSR to a specific role or user.
     Only CSM or superuser can escalate.
     """
-    csr = get_object_or_404(CommonServiceRequest, pk=pk)
+    csr = get_object_or_404(visible_csrs(request.user), pk=pk)
 
     user = request.user
     is_csm = is_common_services_manager(user)
