@@ -88,10 +88,6 @@
               {% endif %}
             </div>
 
-<!--            {# The country office decides which records this person sees, so it-->
-<!--               belongs with the account details rather than tucked away below.-->
-<!--               The field is added by the view, not declared in forms.py, so the-->
-<!--               guard keeps this template working if tenancy is not installed. #}-->
             {% if form.country_office %}
               <div class="col-md-6">
                 <label for="{{ form.country_office.id_for_label }}" class="form-label fw-semibold">
@@ -101,9 +97,6 @@
                 {{ form.country_office }}
 
                 {% if form.country_office.field.widget.attrs.disabled %}
-<!--                  {# A disabled input is not submitted. The view falls back to-->
-<!--                     the actor's own office, but post the value anyway so the-->
-<!--                     browser and the server agree on what was shown. #}-->
                   <input type="hidden" name="country_office"
                          value="{{ form.country_office.value|default_if_none:'' }}">
                   <small class="form-text text-muted d-block mt-1">

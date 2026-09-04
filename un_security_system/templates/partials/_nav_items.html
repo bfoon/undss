@@ -1,31 +1,6 @@
-{% comment %}
-templates/partials/_nav_items.html
-══════════════════════════════════
-
-The navigation link tree, written once and included twice — by the desktop
-sidebar and by the mobile drawer. Editing a link here changes it in both.
-
-Every permission condition is carried over unchanged from the old navbar:
-the same `request.tenancy_features.*` flags, the same role checks, the same
-`is_csm` / `is_csr_fulfiller` variables.
-
-The structural change is that three levels (navbar → dropdown → item) became
-two (section → item). A sidebar has the vertical room that a navbar does not,
-so nothing needs to hide behind a caret.
-
-`navscope` is required, and must differ between the two includes:
-
-    {% include "partials/_nav_items.html" with navscope="sb" %}   {# sidebar #}
-    {% include "partials/_nav_items.html" with navscope="dw" %}   {# drawer  #}
-
-It prefixes every collapse id. Without it both copies would share ids, and
-Bootstrap targets the first match in the document — so a toggle tapped in the
-drawer would silently expand the group in the hidden sidebar instead.
-{% endcomment %}
 
 <nav class="appnav-tree" aria-label="Main">
 
-  {# ── Overview ───────────────────────────────────────────────────────── #}
   <div class="appnav-section">
     {% url 'dashboard:dashboard' as u_dash %}
     <a class="appnav-link {% if request.path == u_dash %}is-active{% endif %}"
@@ -57,12 +32,10 @@ drawer would silently expand the group in the hidden sidebar instead.
 
   {% if user.is_authenticated %}
 
-  {# ══ SECURITY & ACCESS ═══════════════════════════════════════════════ #}
   {% if request.tenancy_features.visitor_access or request.tenancy_features.vehicle_access or request.tenancy_features.key_control or request.tenancy_features.parking_cards or request.tenancy_features.asset_exit or request.tenancy_features.security_incidents or request.tenancy_features.incident_reporting %}
   <div class="appnav-section">
     <div class="appnav-heading">Security &amp; Access</div>
 
-    {# — Visitors: operations roles — #}
     {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
       {% if request.tenancy_features.visitor_access %}
         {% url 'visitors:visitor_list' as u %}
@@ -82,7 +55,6 @@ drawer would silently expand the group in the hidden sidebar instead.
       {% endif %}
     {% endif %}
 
-    {# — Visitors: staff roles — #}
     {% if user.role == 'requester' or user.role == 'reception' or user.role == 'registry' or user.role == 'ict_focal' or user.role == 'agency_hr' %}
       {% if request.tenancy_features.visitor_access %}
         {% url 'visitors:visitor_create' as u %}
@@ -96,7 +68,6 @@ drawer would silently expand the group in the hidden sidebar instead.
       {% endif %}
     {% endif %}
 
-    {# — Vehicles — #}
     {% if request.tenancy_features.vehicle_access %}
       {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
         <button class="appnav-link appnav-toggle collapsed" type="button"
@@ -123,7 +94,6 @@ drawer would silently expand the group in the hidden sidebar instead.
       {% endif %}
     {% endif %}
 
-    {# — Keys — #}
     {% if request.tenancy_features.key_control %}
       {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
         <button class="appnav-link appnav-toggle collapsed" type="button"
@@ -150,7 +120,6 @@ drawer would silently expand the group in the hidden sidebar instead.
       {% endif %}
     {% endif %}
 
-    {# — Parking cards — #}
     {% if request.tenancy_features.parking_cards %}
       {% if user.role == 'lsa' %}
         <button class="appnav-link appnav-toggle collapsed" type="button"
@@ -186,7 +155,6 @@ drawer would silently expand the group in the hidden sidebar instead.
       {% endif %}
     {% endif %}
 
-    {# — Asset exit — #}
     {% if request.tenancy_features.asset_exit %}
       <button class="appnav-link appnav-toggle collapsed" type="button"
               data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpExit" aria-expanded="false">
@@ -225,7 +193,6 @@ drawer would silently expand the group in the hidden sidebar instead.
       </div>
     {% endif %}
 
-    {# — Incidents — #}
     {% if request.tenancy_features.security_incidents %}
       {% if user.role == 'lsa' or user.role == 'soc' %}
         {% url 'incidents:triage' as u %}
@@ -243,7 +210,6 @@ drawer would silently expand the group in the hidden sidebar instead.
   </div>
   {% endif %}
 
-  {# ══ FACILITIES ══════════════════════════════════════════════════════ #}
   {% if request.tenancy_features.common_services or request.tenancy_features.room_booking or request.tenancy_features.mailroom %}
   <div class="appnav-section">
     <div class="appnav-heading">Facilities</div>
@@ -303,7 +269,6 @@ drawer would silently expand the group in the hidden sidebar instead.
   </div>
   {% endif %}
 
-  {# ══ ICT & ASSETS ════════════════════════════════════════════════════ #}
   {% if request.tenancy_features.asset_mgmt or request.tenancy_features.esign or esign_enabled or request.tenancy_features.comms_devices %}
   <div class="appnav-section">
     <div class="appnav-heading">ICT &amp; Assets</div>
@@ -340,8 +305,6 @@ drawer would silently expand the group in the hidden sidebar instead.
               data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpEsign" aria-expanded="false">
         <i class="bi bi-pen-fill" aria-hidden="true"></i><span>eSign</span>
         {% if esign_action_count %}
-          {# On the group header, so it is visible while the group is collapsed.
-             A badge you have to open a menu to see is not a notification. #}
           <span class="appnav-badge" title="{{ esign_action_count }} document{{ esign_action_count|pluralize }} waiting for your signature">
             {{ esign_badge_label }}
           </span>
@@ -407,7 +370,6 @@ drawer would silently expand the group in the hidden sidebar instead.
   </div>
   {% endif %}
 
-  {# ══ PEOPLE ══════════════════════════════════════════════════════════ #}
   {% if request.tenancy_features.id_cards %}
   <div class="appnav-section">
     <div class="appnav-heading">People</div>
@@ -434,7 +396,6 @@ drawer would silently expand the group in the hidden sidebar instead.
   </div>
   {% endif %}
 
-  {# ══ ADMINISTRATION ══════════════════════════════════════════════════ #}
   {% if user.is_superuser or user.role == 'ict_focal' %}
   <div class="appnav-section">
     <div class="appnav-heading">Administration</div>

@@ -1,20 +1,3 @@
-{% comment %}
-templates/partials/_nav.html
-════════════════════════════
-
-The whole navigation. Include it once in base.html, just inside <body>.
-
-Three layouts from one link tree (_nav_items.html):
-
-  ≥1200px  fixed left sidebar, 264px, collapsible to a 76px icon rail
-  768–1199 slim top bar; the sidebar becomes a slide-in drawer
-  <768px   same drawer, plus a bottom tab bar for the five most-used pages
-
-The old navbar was `navbar-expand-xxl`, so anything under 1400px — which is
-most laptops, including a 1366×768 and a 13" MacBook — dropped to the mobile
-hamburger. A sidebar solves that: a laptop gets the full menu, and 12 modules
-stop competing for one horizontal strip.
-{% endcomment %}
 
 <style>
   :root{
@@ -224,17 +207,14 @@ stop competing for one horizontal strip.
   }
 </style>
 
-{# ══ Top bar ═════════════════════════════════════════════════════════ #}
 <header class="appnav-topbar" role="banner">
 
-  {# Drawer trigger — below 1200px only #}
   <button class="appnav-iconbtn d-xl-none" type="button"
           data-bs-toggle="offcanvas" data-bs-target="#appnavDrawer"
           aria-controls="appnavDrawer" aria-label="Open menu">
     <i class="bi bi-list" aria-hidden="true"></i>
   </button>
 
-  {# Rail toggle — 1200px and up #}
   <button class="appnav-iconbtn d-none d-xl-inline-flex" type="button"
           id="appnavRailToggle" aria-label="Collapse or expand the sidebar">
     <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
@@ -310,12 +290,10 @@ stop competing for one horizontal strip.
 
 {% if user.is_authenticated %}
 
-{# ══ Desktop sidebar — 1200px and up ═════════════════════════════════ #}
 <aside class="appnav-sidebar d-none d-xl-block" id="appnavSidebar">
   {% include "partials/_nav_items.html" with navscope="sb" %}
 </aside>
 
-{# ══ Drawer — below 1200px ═══════════════════════════════════════════ #}
 <div class="offcanvas offcanvas-start appnav-drawer d-xl-none"
      tabindex="-1" id="appnavDrawer" aria-labelledby="appnavDrawerLabel">
   <div class="offcanvas-header">
@@ -329,7 +307,6 @@ stop competing for one horizontal strip.
   </div>
 </div>
 
-{# ══ Phone bottom bar — below 768px ══════════════════════════════════ #}
 <nav class="appnav-bottom d-md-none" aria-label="Quick navigation">
   {% url 'dashboard:dashboard' as u %}
   <a href="{{ u }}" class="{% if request.path == u %}is-active{% endif %}">

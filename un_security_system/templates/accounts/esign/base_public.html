@@ -87,8 +87,6 @@
   {% if envelope %}<div class="mb-1">Envelope ID: {{ envelope.envelope_id }}</div>{% endif %}
   <div>Electronic signatures collected by {{ esign_brand|default:"UNDP eSign" }} — every action is recorded in the audit trail.</div>
   {% if user.is_authenticated %}
-    {# Repeated here because the signing page is long: after scrolling to the
-       bottom of a twenty-page document, the topbar is a long way up. #}
     <div class="mt-2">
       <a href="{% url 'accounts:esign_dashboard' %}" class="text-decoration-none">
         <i class="bi bi-arrow-left me-1"></i>Back to the eSign portal

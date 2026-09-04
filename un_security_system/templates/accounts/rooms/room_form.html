@@ -173,20 +173,20 @@
 
     <form method="post" novalidate>
         {% csrf_token %}
-
+        
         <!-- Basic Information -->
         <div class="form-section">
             <div class="form-section-title">
                 <i class="bi bi-info-circle me-2"></i>Basic Information
             </div>
-
+            
             <div class="row g-3">
                 <div class="col-md-6">
                     <label for="{{ form.name.id_for_label }}" class="form-label fw-semibold">
                         Room Name <span class="text-danger">*</span>
                     </label>
-                    <input type="text"
-                           name="{{ form.name.name }}"
+                    <input type="text" 
+                           name="{{ form.name.name }}" 
                            class="form-control {% if form.name.errors %}is-invalid{% endif %}"
                            id="{{ form.name.id_for_label }}"
                            value="{{ form.name.value|default:'' }}"
@@ -201,13 +201,13 @@
                     {% endif %}
                     <small class="form-text text-muted">Full name of the room</small>
                 </div>
-
+                
                 <div class="col-md-6">
                     <label for="{{ form.code.id_for_label }}" class="form-label fw-semibold">
                         Room Code <span class="text-danger">*</span>
                     </label>
-                    <input type="text"
-                           name="{{ form.code.name }}"
+                    <input type="text" 
+                           name="{{ form.code.name }}" 
                            class="form-control {% if form.code.errors %}is-invalid{% endif %}"
                            id="{{ form.code.id_for_label }}"
                            value="{{ form.code.value|default:'' }}"
@@ -222,12 +222,12 @@
                     {% endif %}
                     <small class="form-text text-muted">Short unique identifier (e.g., CR-A, LIB-1)</small>
                 </div>
-
+                
                 <div class="col-md-6">
                     <label for="{{ form.room_type.id_for_label }}" class="form-label fw-semibold">
                         Room Type <span class="text-danger">*</span>
                     </label>
-                    <select name="{{ form.room_type.name }}"
+                    <select name="{{ form.room_type.name }}" 
                             class="form-select {% if form.room_type.errors %}is-invalid{% endif %}"
                             id="{{ form.room_type.id_for_label }}"
                             required>
@@ -248,13 +248,13 @@
                         </div>
                     {% endif %}
                 </div>
-
+                
                 <div class="col-md-6">
                     <label for="{{ form.capacity.id_for_label }}" class="form-label fw-semibold">
                         Capacity
                     </label>
-                    <input type="number"
-                           name="{{ form.capacity.name }}"
+                    <input type="number" 
+                           name="{{ form.capacity.name }}" 
                            class="form-control {% if form.capacity.errors %}is-invalid{% endif %}"
                            id="{{ form.capacity.id_for_label }}"
                            value="{{ form.capacity.value|default:'' }}"
@@ -269,13 +269,13 @@
                     {% endif %}
                     <small class="form-text text-muted">Maximum number of people</small>
                 </div>
-
+                
                 <div class="col-12">
                     <label for="{{ form.location.id_for_label }}" class="form-label fw-semibold">
                         Location
                     </label>
-                    <input type="text"
-                           name="{{ form.location.name }}"
+                    <input type="text" 
+                           name="{{ form.location.name }}" 
                            class="form-control {% if form.location.errors %}is-invalid{% endif %}"
                            id="{{ form.location.id_for_label }}"
                            value="{{ form.location.value|default:'' }}"
@@ -289,12 +289,12 @@
                     {% endif %}
                     <small class="form-text text-muted">Building, floor, or area description</small>
                 </div>
-
+                
                 <div class="col-12">
                     <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold">
                         Description
                     </label>
-                    <textarea name="{{ form.description.name }}"
+                    <textarea name="{{ form.description.name }}" 
                               class="form-control {% if form.description.errors %}is-invalid{% endif %}"
                               id="{{ form.description.id_for_label }}"
                               rows="4"
@@ -308,7 +308,7 @@
                     {% endif %}
                     <small class="form-text text-muted">Additional details about the room</small>
                 </div>
-
+                
                 <div class="col-md-6">
                     <label for="{{ form.approval_mode.id_for_label }}" class="form-label fw-semibold">
                         Approval mode <span class="text-danger">*</span>
@@ -328,8 +328,8 @@
 
                 <div class="col-12">
                     <div class="form-check">
-                        <input type="checkbox"
-                               name="{{ form.is_active.name }}"
+                        <input type="checkbox" 
+                               name="{{ form.is_active.name }}" 
                                class="form-check-input"
                                id="{{ form.is_active.id_for_label }}"
                                {% if form.is_active.value or form.is_active.value == None %}checked{% endif %}>
@@ -348,9 +348,6 @@
             </div>
         </div>
 
-<!--        {# ── Who can book it ────────────────────────────────────────────────-->
-<!--           Guarded on the field existing, so this template still renders on a-->
-<!--           deployment where the tenancy fields have not been added yet. ── #}-->
         {% if form.owner_office or form.visibility %}
         <div class="form-section">
             <div class="form-section-title">
@@ -478,12 +475,10 @@
 <!--            <div class="form-section-title">-->
 <!--                <i class="bi bi-shield-check me-2"></i>Booking Approvers-->
 <!--            </div>-->
-<!--            -->
 <!--            <p class="text-muted small mb-3">-->
 <!--                Select users who can approve booking requests for this room. -->
 <!--                If no approvers are selected, only superusers can approve bookings.-->
 <!--            </p>-->
-<!--            -->
 <!--            {% if form.approvers.field.queryset.exists %}-->
 <!--                <div class="approver-grid">-->
 <!--                    {% for approver in form.approvers.field.queryset %}-->

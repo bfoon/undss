@@ -732,14 +732,6 @@ canvas {
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    {% comment %}
-      Navigation: top bar + desktop sidebar + mobile drawer + phone tab bar.
-      The link tree lives in partials/_nav_items.html.
-
-      Use {% comment %} for anything spanning more than one line — {# #} only
-      comments to the end of its own line, so a multi-line {# #} prints the
-      remaining lines onto the page.
-    {% endcomment %}
     {% include "partials/_nav.html" %}
 
     <!-- Main Content -->
