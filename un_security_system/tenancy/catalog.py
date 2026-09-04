@@ -225,9 +225,12 @@ FEATURES: Tuple[FeatureDef, ...] = (
         code="mailroom_signing",
         name="Mailroom document signing",
         category="facilities",
-        description="Upload, annotate and sign documents attached to a package step. "
-                    "Separate from the eSign module.",
-        requires=("mailroom",),
+        description="Prepare package-step documents in the shared eSign engine, including "
+                    "recipients, field placement, signing, audit trail and certificate.",
+        # Package signing is a Mailroom capability, but the signing machinery is eSign.
+        # tenancy.services._apply_dependencies() therefore switches this OFF whenever
+        # either parent is unavailable.
+        requires=("mailroom", "esign"),
         delegable=True,
         url_rules=("vehicles:document_*", "vehicles:signature_*"),
     ),

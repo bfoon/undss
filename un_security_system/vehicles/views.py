@@ -10,6 +10,7 @@ from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpR
 from django.db.models import Q, Count, Exists, OuterRef
 from django.conf import settings
 from django.core.mail import send_mail
+from django.core.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
 import csv
 import base64
@@ -1991,13 +1992,39 @@ def package_detail(request, pk):
         pk=pk,
     )
 
-    step_logs = package.step_logs.select_related('step', 'performed_by').order_by('performed_at')
+    step_logs = (
+        package.step_logs
+        .select_related('step', 'performed_by', 'signature_recipient_user')
+        .prefetch_related('documents__esign_envelope', 'documents__esign_envelope__recipients')
+        .order_by('performed_at')
+    )
     all_steps = list(package.flow_template.steps_ordered) if package.flow_template else []
-    completed_orders = {s.step_order for s in step_logs}
+
+    # A signature-required step is not complete merely because the scan was
+    # submitted.  It becomes complete only when its linked eSign envelope has
+    # produced the final signed PDF.  Legacy/non-eSign logs keep the old rule.
+    completed_orders = set()
+    pending_esign_doc = None
+    for log in step_logs:
+        esign_doc = log.package_esign_document
+        if log.step and log.step.requires_recipient_signature and esign_doc:
+            env = esign_doc.esign_envelope
+            if env and env.status == 'completed' and env.completed_pdf:
+                completed_orders.add(log.step_order)
+            elif (
+                package.current_step_id == log.step_id
+                and env
+                and env.status in ('draft', 'sent', 'returned', 'declined', 'expired')
+            ):
+                completed_orders.discard(log.step_order)
+                pending_esign_doc = esign_doc
+        else:
+            completed_orders.add(log.step_order)
 
     can_advance = (
             package.current_step is not None
             and not package.is_complete
+            and pending_esign_doc is None
             and _user_can_perform_step(request.user, package.current_step)
     )
 
@@ -2010,6 +2037,7 @@ def package_detail(request, pk):
         'all_steps': all_steps,
         'completed_orders': completed_orders,
         'can_advance': can_advance,
+        'pending_esign_doc': pending_esign_doc,
     })
 
 
@@ -2028,10 +2056,32 @@ def package_advance_step(request, pk):
         messages.error(request, f"You are not permitted to perform '{current_step.name}'.")
         return redirect('vehicles:package_detail', pk=pk)
 
+    # Do not create a second package signature request while one is already
+    # waiting for completion on this exact workflow step.
+    existing_pending = (
+        PackageDocument.objects
+        .select_related('esign_envelope', 'step_log')
+        .filter(
+            step_log__package=package,
+            step_log__step=current_step,
+            esign_envelope__status__in=['draft', 'sent', 'returned', 'declined', 'expired'],
+        )
+        .order_by('-pk')
+        .first()
+    )
+    if existing_pending:
+        env = existing_pending.esign_envelope
+        messages.info(request, 'This package step is waiting for its eSign signature.')
+        if env and env.is_editable:
+            return redirect('accounts:esign_prepare', pk=env.pk)
+        if env:
+            return redirect('accounts:esign_envelope_detail', pk=env.pk)
+
     form = PackageStepActionForm(
         request.POST or None,
         request.FILES or None,
         step=current_step,
+        user=request.user,
     )
 
     if request.method == 'POST' and form.is_valid():
@@ -2047,8 +2097,58 @@ def package_advance_step(request, pk):
             stamped=form.cleaned_data.get('stamped', False),
             routed_to=form.cleaned_data.get('routed_to', ''),
             recipient_name=form.cleaned_data.get('recipient_name', ''),
+            signature_recipient_user=form.cleaned_data.get('signature_recipient_user'),
+            signature_recipient_email=form.cleaned_data.get('signature_recipient_email', ''),
+            signature_recipient_name=form.cleaned_data.get('signature_recipient_name', ''),
         )
 
+        is_package_esign_step = bool(
+            current_step.requires_scan
+            and current_step.requires_recipient_signature
+            and log.scan_file
+        )
+
+        if is_package_esign_step:
+            try:
+                from tenancy.services import has_feature
+                signing_enabled = has_feature(request.user, 'mailroom_signing')
+            except Exception:
+                logger.exception('Mailroom signing feature check failed')
+                signing_enabled = False
+
+            if signing_enabled:
+                from .package_esign import create_document_from_step_scan, PackageESignError
+                try:
+                    pkg_doc = create_document_from_step_scan(
+                        log, request.user, request=request
+                    )
+                except (PackageESignError, PermissionDenied) as exc:
+                    # The package workflow has NOT advanced yet.  Keep the current
+                    # step in place so the user can correct the signing setup.
+                    messages.error(
+                        request,
+                        f"The package signature request could not be prepared: {exc}",
+                    )
+                    return redirect('vehicles:package_detail', pk=pk)
+
+                if pkg_doc and pkg_doc.esign_envelope_id:
+                    messages.success(
+                        request,
+                        f"Signature request prepared for {log.signature_recipient_email}. "
+                        "Place the fields and send it. Package Flow will advance automatically after signing.",
+                    )
+                    return redirect(
+                        'accounts:esign_prepare', pk=pkg_doc.esign_envelope_id
+                    )
+
+            messages.error(
+                request,
+                'Mailroom document signing is not enabled for this office. '
+                'The package step has not advanced.',
+            )
+            return redirect('vehicles:package_detail', pk=pk)
+
+        # Normal package step: no eSign wait state, so complete it immediately.
         PackageEvent.objects.create(
             package=package,
             status=current_step.status_code[:20],

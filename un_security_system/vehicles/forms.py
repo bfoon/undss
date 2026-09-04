@@ -595,14 +595,24 @@ class PackageFlowStepForm(forms.ModelForm):
 
 # ── Dynamic step action form  ────────────────────────────────
 
+class PackageSignerChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        name = (obj.get_full_name() or obj.username or '').strip()
+        email = (getattr(obj, 'email', '') or '').strip()
+        if name and email:
+            return f"{name} — {email}"
+        return email or name or str(obj)
+
+
 class PackageStepActionForm(forms.Form):
     """
     Dynamically-built form whose fields depend on what a PackageFlowStep requires.
     Pass `step=<PackageFlowStep>` when constructing.
     """
 
-    def __init__(self, *args, step=None, **kwargs):
+    def __init__(self, *args, step=None, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.request_user = user
 
         if step is None:
             return
@@ -640,13 +650,99 @@ class PackageStepActionForm(forms.Form):
             )
 
         if step.requires_recipient_signature:
-            self.fields['recipient_name'] = forms.CharField(
-                label='Recipient Name',
-                max_length=120,
-                required=True,
-                widget=forms.TextInput(attrs={'class': 'form-control',
-                                              'placeholder': 'Full name of person receiving and signing'}),
+            # Package signing is explicit: choose someone in this Country Office,
+            # OR provide an external email address.  The selected value is copied
+            # into accounts.EnvelopeRecipient by vehicles.package_esign.
+            qs = User.objects.filter(is_active=True).exclude(email='')
+            office_id = getattr(user, 'country_office_id', None) if user else None
+            if office_id:
+                qs = qs.filter(country_office_id=office_id)
+            elif getattr(step.template, 'agency_id', None):
+                qs = qs.filter(agency_id=step.template.agency_id)
+            else:
+                qs = User.objects.none()
+
+            self.fields['signature_recipient_user'] = PackageSignerChoiceField(
+                queryset=qs.order_by('first_name', 'last_name', 'username'),
+                label='Internal Signer (your Country Office)',
+                required=False,
+                empty_label='— Select an internal signer —',
+                widget=forms.Select(attrs={'class': 'form-select'}),
+                help_text='Choose a user from your Country Office. Their account email will be used for signing.',
             )
+            self.fields['signature_recipient_email'] = forms.EmailField(
+                label='External Signer Email',
+                required=False,
+                widget=forms.EmailInput(attrs={
+                    'class': 'form-control',
+                    'placeholder': 'person@outside-organisation.org',
+                }),
+                help_text='If the signer is outside your office, leave Internal Signer blank and enter their email here.',
+            )
+            self.fields['signature_recipient_name'] = forms.CharField(
+                label='External Signer Name (optional)',
+                max_length=150,
+                required=False,
+                widget=forms.TextInput(attrs={
+                    'class': 'form-control',
+                    'placeholder': 'Leave blank to show the email address as the signer',
+                }),
+            )
+            # Keep the historical recipient_name populated for package history.
+            self.fields['recipient_name'] = forms.CharField(
+                label='Recipient / Signer Name',
+                max_length=120,
+                required=False,
+                widget=forms.HiddenInput(),
+            )
+
+    def clean(self):
+        cd = super().clean()
+        if not self.request_user:
+            return cd
+
+        internal = cd.get('signature_recipient_user')
+        external_email = (cd.get('signature_recipient_email') or '').strip()
+        external_name = (cd.get('signature_recipient_name') or '').strip()
+
+        if 'signature_recipient_user' not in self.fields:
+            return cd
+
+        if internal and external_email:
+            self.add_error(
+                'signature_recipient_email',
+                'Choose an internal signer OR enter an external signer email, not both.',
+            )
+            return cd
+
+        if internal:
+            email = (getattr(internal, 'email', '') or '').strip()
+            if not email:
+                self.add_error(
+                    'signature_recipient_user',
+                    'This user has no email address on their UN PASS account. Add an email first or use External Signer Email.',
+                )
+                return cd
+            name = (internal.get_full_name() or internal.username or email).strip()
+            cd['signature_recipient_email'] = email
+            cd['signature_recipient_name'] = name
+            cd['recipient_name'] = name[:120]
+            return cd
+
+        if not external_email:
+            self.add_error(
+                'signature_recipient_email',
+                'Select an internal signer or enter an external signer email.',
+            )
+            return cd
+
+        # For an outside signer, the email itself is the display name unless a
+        # name was supplied.  This makes the exact entered address visible in
+        # the eSign signer picker, as expected by Package Flow.
+        name = external_name or external_email
+        cd['signature_recipient_name'] = name
+        cd['recipient_name'] = name[:120]
+        return cd
 
 
 class UserSignatureForm(forms.ModelForm):
@@ -687,7 +783,7 @@ class UserSignatureForm(forms.ModelForm):
 
 
 class PackageDocumentUploadForm(forms.ModelForm):
-    """Attach a scanned document to a step log."""
+    """Attach the original scanned document; new signing is delegated to accounts eSign."""
 
     class Meta:
         model = PackageDocument
@@ -702,6 +798,9 @@ class PackageDocumentUploadForm(forms.ModelForm):
 
 class SignatureFieldForm(forms.ModelForm):
     """
+    Legacy package-signing field form retained for pre-cutover documents only.
+    New package documents use accounts eSign fields and recipient routing.
+
     Created via AJAX from the annotation canvas.
     All position fields come as hidden inputs populated by the JS drag tool.
     """

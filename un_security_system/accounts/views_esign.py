@@ -101,6 +101,40 @@ def allowed_doc_ext() -> tuple:
     """PDF/images always, plus whatever the installed converter can handle."""
     return BASE_DOC_EXT + tuple(supported_upload_ext())
 
+
+def _is_package_flow_envelope(envelope) -> bool:
+    try:
+        envelope.package_document_source
+        return True
+    except Exception:
+        return False
+
+
+def _recipient_directory(user, envelope=None):
+    """
+    Internal recipient directory.
+
+    Package Flow is intentionally restricted to the sender's own Country
+    Office. Anyone outside that office is entered by email and remains an
+    external eSign recipient. Normal eSign keeps the tenancy shareable-directory
+    behaviour.
+    """
+    if envelope is not None and _is_package_flow_envelope(envelope):
+        office_id = getattr(user, 'country_office_id', None)
+        if office_id:
+            return User.objects.filter(country_office_id=office_id, is_active=True)
+        agency_id = getattr(user, 'agency_id', None) or getattr(envelope, 'agency_id', None)
+        if agency_id:
+            return User.objects.filter(agency_id=agency_id, is_active=True)
+        return User.objects.none()
+
+    try:
+        from tenancy.services import visible_users_for
+        return visible_users_for(user, 'esign').filter(is_active=True)
+    except Exception:
+        logger.exception('eSign: could not resolve tenancy recipient directory')
+        return User.objects.none()
+
 # Keep in sync with SignatureProfile.FONT_CHOICES and the CSS in sign.html
 ESIGN_FONTS = [
     {"key": "dancing", "name": "Dancing Script", "css": "'Dancing Script', cursive"},
@@ -480,6 +514,16 @@ def esign_prepare(request, pk):
 
     from .converters_esign import conversion_backend_available as _cba
 
+    package_doc = None
+    package = None
+    if _is_package_flow_envelope(envelope):
+        try:
+            package_doc = envelope.package_document_source
+            package = package_doc.step_log.package
+        except Exception:
+            package_doc = None
+            package = None
+
     return render(
         request,
         "accounts/esign/envelope_prepare.html",
@@ -491,9 +535,12 @@ def esign_prepare(request, pk):
             "signers_json": json.dumps(signers, default=str),
             "fields_json": json.dumps(existing, default=str),
             "field_kinds": SignatureField.KIND_CHOICES,
-            "colleagues": User.objects.filter(
-                agency=envelope.agency, is_active=True
-            ).order_by("first_name", "username")[:500],
+            "colleagues": _recipient_directory(request.user, envelope)
+                .exclude(email='')
+                .order_by("first_name", "last_name", "username")[:500],
+            "is_package_flow": bool(package_doc),
+            "package_document": package_doc,
+            "package": package,
             "signing_roles": [
                 (EnvelopeRecipient.ROLE_SIGNER, "Needs to sign"),
                 (EnvelopeRecipient.ROLE_APPROVER, "Needs to approve"),
@@ -642,13 +689,13 @@ def esign_recipient_add(request, pk):
     if role not in (EnvelopeRecipient.ROLE_SIGNER, EnvelopeRecipient.ROLE_APPROVER):
         role = EnvelopeRecipient.ROLE_SIGNER
 
-    matched = User.objects.filter(agency=envelope.agency, email__iexact=email).first()
+    matched = _recipient_directory(request.user, envelope).filter(email__iexact=email).first()
     name = (payload.get("name") or "").strip()
     if not name:
         name = (
             (matched.get_full_name() or matched.username).strip()
             if matched
-            else email.split("@")[0]
+            else email
         )
     title = (payload.get("title") or "").strip() or (
         getattr(matched, "job_title", "") or "" if matched else ""

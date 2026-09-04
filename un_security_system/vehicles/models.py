@@ -500,11 +500,43 @@ class PackageStepLog(models.Model):
     routed_to = models.CharField(max_length=200, blank=True)
     recipient_name = models.CharField(max_length=120, blank=True)
 
+    # Package-flow eSign recipient.  For internal signers we keep the user link;
+    # for external signers user is NULL and the email/name are authoritative.
+    signature_recipient_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='package_signature_steps',
+    )
+    signature_recipient_email = models.EmailField(blank=True)
+    signature_recipient_name = models.CharField(max_length=150, blank=True)
+
     class Meta:
         ordering = ['performed_at']
 
     def __str__(self):
         return f"{self.package.tracking_code} › {self.step_name} ({self.performed_at:%Y-%m-%d %H:%M})"
+
+    @property
+    def package_esign_document(self):
+        """The eSign-backed document for this step, if one exists."""
+        return (
+            self.documents.select_related('esign_envelope')
+            .filter(esign_envelope__isnull=False)
+            .order_by('pk')
+            .first()
+        )
+
+    @property
+    def package_esign_completed(self):
+        doc = self.package_esign_document
+        return bool(
+            doc
+            and doc.esign_envelope
+            and doc.esign_envelope.status == 'completed'
+            and doc.esign_envelope.completed_pdf
+        )
 
 
 class PackageNotification(models.Model):
@@ -698,6 +730,25 @@ class PackageDocument(models.Model):
 
     # SHA-256 of the original file — set on upload, used to detect tampering
     file_hash = models.CharField(max_length=64, blank=True)
+
+    # Canonical eSign links. The original package file/hash remain the package
+    # provenance record; signing itself is owned by accounts eSign.
+    esign_envelope = models.OneToOneField(
+        'accounts.Envelope',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='package_document_source',
+        help_text='Canonical eSign envelope used to sign this package document.',
+    )
+    esign_document = models.OneToOneField(
+        'accounts.EnvelopeDocument',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='package_document_source',
+        help_text='Copy of this package document inside the eSign envelope.',
+    )
 
     class Meta:
         ordering = ['-uploaded_at']

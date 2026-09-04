@@ -64,17 +64,20 @@
   {% endif %}
   {% endwith %}
 
-  <!-- ── E-Signature Flow Banner (scan steps only) ──────────────────────── -->
-  {% if step.requires_scan %}
+  <!-- ── Shared eSign engine (scan steps) ───────────────────────────────── -->
+  {% if step.requires_scan and features.mailroom_signing %}
   <div class="alert border-0 mb-4 py-3 px-4 d-flex align-items-start gap-3"
        style="background:#ede9fe;border-left:4px solid #667eea!important;">
     <i class="bi bi-pen-fill text-primary fs-4 flex-shrink-0 mt-1"></i>
     <div>
-      <div class="fw-semibold mb-1">E-Signature workflow enabled</div>
+      <div class="fw-semibold mb-1">eSign is connected to this package step</div>
       <div class="small text-muted">
-        Upload the scanned document below. Once you submit, you'll be taken
-        directly to the <strong>signature annotation page</strong> to place
-        signature fields and send the document for digital signing.
+        Upload the document and choose the signer below. For an internal signer, select a user
+        from <strong>your Country Office</strong>. For anyone outside your office, enter their email
+        address. The signer is created automatically in the shared eSign engine. Package Flow stays
+        on this step until eSign produces the completed signed PDF; then the workflow advances
+        automatically. The source file is retained internally for audit/provenance but is hidden
+        from the package view once signing is complete.
       </div>
     </div>
   </div>
@@ -113,6 +116,16 @@
         {% csrf_token %}
 
         {% for field in form %}
+        {% if field.is_hidden %}
+          {{ field }}
+        {% else %}
+        {% if field.name == 'signature_recipient_email' %}
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="border-top flex-grow-1"></div>
+          <span class="small text-muted fw-semibold">OR USE AN OUTSIDE EMAIL</span>
+          <div class="border-top flex-grow-1"></div>
+        </div>
+        {% endif %}
         <div class="mb-4">
 
           {# ── Checkbox (stamp / confirmation) ────────────────────────────── #}
@@ -190,13 +203,14 @@
           {% endif %}
 
         </div>
+        {% endif %}
         {% endfor %}
 
         <!-- Submit row -->
         <div class="d-flex gap-2 pt-3 border-top">
           <button class="btn btn-primary px-4" type="submit" id="submitBtn">
-            {% if step.requires_scan %}
-              <i class="bi bi-pen me-2"></i>Submit & Place Signature Fields
+            {% if step.requires_scan and features.mailroom_signing %}
+              <i class="bi bi-pen me-2"></i>Prepare Package Signature
             {% else %}
               <i class="bi bi-check-circle me-2"></i>Complete Step
             {% endif %}

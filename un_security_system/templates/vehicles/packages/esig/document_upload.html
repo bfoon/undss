@@ -4,7 +4,7 @@
 <div class="container py-4" style="max-width:640px;">
   <div class="mb-4">
     <h4 class="fw-bold mb-1">
-      <i class="bi bi-upload text-primary me-2"></i>Upload Scanned Document
+      <i class="bi bi-upload text-primary me-2"></i>Upload Package Document
     </h4>
     <nav aria-label="breadcrumb">
       <ol class="breadcrumb small mb-0">
@@ -45,13 +45,14 @@
 
         <div class="alert alert-light border small mb-3">
           <i class="bi bi-info-circle text-primary me-2"></i>
-          A <strong>SHA-256 hash</strong> of the uploaded file will be computed automatically
-          to detect any future tampering.
+          A <strong>SHA-256 hash</strong> of the original package file is retained here for provenance.
+          When package signing is enabled, the file is then prepared by the shared eSign engine,
+          which owns field placement, signatures, audit events, the signed PDF and completion certificate.
         </div>
 
         <div class="d-flex gap-2">
           <button class="btn btn-primary px-4" type="submit" id="submitBtn">
-            <i class="bi bi-upload me-2"></i>Upload & Place Signatures
+            <i class="bi bi-upload me-2"></i>Upload & Prepare in eSign
           </button>
           <a href="{% url 'vehicles:package_detail' package.pk %}" class="btn btn-outline-secondary">
             Cancel

@@ -106,10 +106,35 @@
   </div>
 </div>
 
+{% if is_package_flow and package %}
+<div class="alert border-0 shadow-sm mb-3 d-flex align-items-start gap-3"
+     style="background:#eef6ff;border-left:4px solid #009EDB!important;">
+  <i class="bi bi-box-seam text-un-primary fs-5 mt-1"></i>
+  <div class="flex-grow-1">
+    <div class="fw-semibold">Package Flow signature · {{ package.tracking_code }}</div>
+    <div class="small text-muted">
+      Signers selected on the package step are loaded automatically. Internal signers are limited
+      to your Country Office; anyone outside the office can be added by email. The package workflow
+      advances only after the signed PDF is completed.
+    </div>
+  </div>
+  <a href="{% url 'vehicles:package_detail' package.pk %}" class="btn btn-sm btn-outline-primary">
+    <i class="bi bi-box-arrow-in-left me-1"></i>Package
+  </a>
+</div>
+{% endif %}
+
 <div class="ep-shell">
   <div class="ep-tools">
-    <div class="small fw-semibold text-muted mb-2">1. Choose the signer</div>
-    <select class="form-select form-select-sm mb-3" id="epSigner"></select>
+    <div class="d-flex align-items-center mb-2 gap-2">
+      <div class="small fw-semibold text-muted">1. Choose the signer</div>
+      <button type="button" class="btn btn-sm btn-outline-primary ms-auto py-0 px-2"
+              data-bs-toggle="modal" data-bs-target="#epSignerModal" title="Add signer">
+        <i class="bi bi-person-plus me-1"></i>Add
+      </button>
+    </div>
+    <select class="form-select form-select-sm mb-2" id="epSigner"></select>
+    <div class="ep-hint mb-3" id="epNoSignerHint"></div>
 
     <div class="small fw-semibold text-muted mb-2">2. Drag a field onto the page</div>
     {% for value, label in field_kinds %}
@@ -224,7 +249,11 @@
           {% endfor %}
         </datalist>
         <div class="ep-hint mb-3">
+          {% if is_package_flow %}
+          Start typing to pick a colleague from your Country Office, or enter any outside email address.
+          {% else %}
           Start typing to pick a colleague, or enter any address.
+          {% endif %}
         </div>
 
         <div class="row g-2">
@@ -321,6 +350,20 @@ assignColors();
 function rebuildSignerPicker(){
   const prev = sel.value;
   sel.innerHTML = '';
+  const hint = document.getElementById('epNoSignerHint');
+
+  if (!SIGNERS.length) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = 'No signer yet — click Add';
+    o.disabled = true;
+    o.selected = true;
+    sel.appendChild(o);
+    if (hint) hint.textContent = 'Add a signer before placing fields.';
+    return;
+  }
+
+  if (hint) hint.textContent = '';
   SIGNERS.forEach(s => {
     const o = document.createElement('option');
     o.value = s.id; o.textContent = `${s.order}. ${s.name} (${s.role})`;
@@ -351,10 +394,16 @@ function wirePage(wrap, docId, pageNo) {
   wrap.addEventListener('drop', e => {
     e.preventDefault();
     if (!dragKind) return;
+    const signerId = currentSigner();
+    if (!Number.isInteger(signerId)) {
+      alert('Add a signer before placing fields.');
+      dragKind = null;
+      return;
+    }
     const r = wrap.getBoundingClientRect();
     const size = DEFAULT_SIZE[dragKind] || {w:.2,h:.04};
     const f = {
-      id: nextTmpId--, document_id: docId, recipient_id: currentSigner(),
+      id: nextTmpId--, document_id: docId, recipient_id: signerId,
       kind: dragKind, page: pageNo,
       x: Math.max(0, (e.clientX - r.left) / r.width - size.w/2),
       y: Math.max(0, (e.clientY - r.top) / r.height - size.h/2),
@@ -683,6 +732,10 @@ function updateCounts() {
   const host = document.getElementById('epCounts');
   host.innerHTML = '';
 
+  if (!SIGNERS.length) {
+    host.innerHTML = '<div class="ep-hint py-1">No signer has been added yet.</div>';
+  }
+
   SIGNERS.forEach(s => {
     const n = fields.filter(f => f.recipient_id === s.id).length;
     const row = document.createElement('div');
@@ -948,6 +1001,10 @@ document.getElementById('epSave').onclick = () => save(false);
 
 document.getElementById('epSendForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!SIGNERS.length) {
+    alert('Add at least one signer before sending.');
+    return;
+  }
   const missing = SIGNERS.filter(s => !fields.some(f => f.recipient_id === s.id));
   if (missing.length) {
     alert('These signers still have no fields: ' + missing.map(s => s.name).join(', '));

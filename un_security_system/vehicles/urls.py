@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import package_esign
 
 app_name = 'vehicles'
 
@@ -130,7 +131,7 @@ urlpatterns = [
          name='package_flow_step_delete'),
 
     # Signature profile
-    path('signature/profile/', views.signature_profile, name='signature_profile'),
+    path('signature/profile/', package_esign.signature_profile, name='signature_profile'),
     path('signature/<int:pk>/activate/', views.signature_set_active, name='signature_set_active'),
     path('signature/<int:pk>/delete/', views.signature_delete, name='signature_delete'),
 
@@ -138,13 +139,13 @@ urlpatterns = [
     path('packages/step/<int:step_log_pk>/upload-doc/',
          views.document_upload, name='document_upload'),
     path('packages/doc/<int:pk>/annotate/',
-         views.document_annotate, name='document_annotate'),
+         package_esign.document_annotate, name='document_annotate'),
     path('packages/doc/<int:pk>/send/',
-         views.document_send_for_signing, name='document_send_for_signing'),
+         package_esign.document_send_for_signing, name='document_send_for_signing'),
     path('packages/doc/<int:pk>/sign/',
-         views.document_sign, name='document_sign'),
+         package_esign.document_sign, name='document_sign'),
     path('packages/doc/<int:pk>/audit/',
-         views.document_audit, name='document_audit'),
+         package_esign.document_audit, name='document_audit'),
 
     # AJAX
     path('api/packages/doc/<int:doc_pk>/field/save/',

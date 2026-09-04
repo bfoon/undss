@@ -86,7 +86,33 @@
   {% endif %}
 
   <!-- ── Action Banner ──────────────────────────────────────────────────── -->
-  {% if can_advance and package.current_step %}
+  {% if pending_esign_doc and package.current_step %}
+  {% with env=pending_esign_doc.esign_envelope %}
+  <div class="alert border-0 shadow-sm mb-4 d-flex align-items-center gap-3"
+       style="background:#fff7ed;color:#9a3412;">
+    <i class="bi bi-pen-fill fs-3 flex-shrink-0"></i>
+    <div class="flex-grow-1">
+      <div class="fw-bold">Awaiting package signature: {{ package.current_step.name }}</div>
+      <div class="small">
+        {% if env.status == 'draft' or env.status == 'returned' %}
+          The signer is loaded. Place the fields and send the request.
+        {% else %}
+          The request has been sent and Package Flow will advance automatically after signing.
+        {% endif %}
+      </div>
+    </div>
+    {% if env.status == 'draft' or env.status == 'returned' %}
+    <a href="{% url 'accounts:esign_prepare' env.pk %}" class="btn btn-warning fw-semibold px-3">
+      <i class="bi bi-pencil-square me-1"></i>Continue Signature
+    </a>
+    {% else %}
+    <a href="{% url 'accounts:esign_envelope_detail' env.pk %}" class="btn btn-outline-warning fw-semibold px-3">
+      <i class="bi bi-eye me-1"></i>View Status
+    </a>
+    {% endif %}
+  </div>
+  {% endwith %}
+  {% elif can_advance and package.current_step %}
   <div class="alert border-0 shadow-sm mb-4 d-flex align-items-center gap-3"
        style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;">
     <i class="bi bi-play-circle-fill fs-3 flex-shrink-0"></i>
@@ -275,7 +301,14 @@
                       <i class="bi bi-pen me-1"></i>{{ log.recipient_name }}
                     </span>
                   {% endif %}
-                  {% if log.scan_file %}
+                  {% if log.package_esign_completed %}
+                    {% with signed_doc=log.package_esign_document env=log.package_esign_document.esign_envelope %}
+                    <a href="{% url 'accounts:esign_download' env.pk 'signed' %}"
+                       class="badge bg-success text-decoration-none">
+                      <i class="bi bi-file-earmark-check me-1"></i>Signed PDF
+                    </a>
+                    {% endwith %}
+                  {% elif log.scan_file %}
                     <a href="{{ log.scan_file.url }}" target="_blank"
                        class="badge bg-light text-dark border text-decoration-none">
                       <i class="bi bi-file-earmark-image me-1"></i>View Scan
@@ -323,161 +356,166 @@
   </div><!-- /row 1 -->
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       ROW 2 — Documents & E-Signatures (full width)
+       ROW 2 — Package documents backed by the shared eSign engine
   ══════════════════════════════════════════════════════════════════════ -->
   <div class="card shadow-sm border-0">
     <div class="card-header py-3 d-flex justify-content-between align-items-center"
          style="background:linear-gradient(135deg,#2d3748,#4a5568);">
       <h5 class="mb-0 text-white">
-        <i class="bi bi-file-earmark-text me-2"></i>Documents & E-Signatures
+        <i class="bi bi-file-earmark-text me-2"></i>Documents & eSign
       </h5>
-      <a href="{% url 'vehicles:signature_profile' %}" class="btn btn-sm btn-outline-light">
-        <i class="bi bi-pen me-1"></i>My Signature
+      {% if features.mailroom_signing %}
+      <a href="{% url 'accounts:esign_signatures' %}" class="btn btn-sm btn-outline-light">
+        <i class="bi bi-pen me-1"></i>My eSign Signature
       </a>
+      {% endif %}
     </div>
 
-    <div class="card-body p-0">
+    {% if not features.mailroom_signing %}
+    <div class="alert alert-warning rounded-0 border-0 border-bottom mb-0 px-4 py-3">
+      <i class="bi bi-lock-fill me-2"></i>
+      Package document signing is not enabled for this office. The tenancy setting
+      <strong>Mailroom document signing</strong> requires both Mailroom and eSign.
+    </div>
+    {% endif %}
 
+    <div class="card-body p-0">
       {% for log in step_logs %}
         {% for doc in log.documents.all %}
-
-        <!-- Document row -->
+        {% with env=doc.esign_envelope %}
         <div class="px-4 py-3 {% if not forloop.last or not forloop.parentloop.last %}border-bottom{% endif %}">
           <div class="d-flex align-items-start gap-3">
 
-            <!-- File type icon -->
             <div class="flex-shrink-0 text-center" style="width:40px;padding-top:2px;">
-              {% if doc.status == 'signed' %}
+              {% if env and env.status == 'completed' or not env and doc.status == 'signed' %}
                 <i class="bi bi-file-earmark-check-fill text-success fs-3"></i>
-              {% elif doc.status == 'pending_signature' %}
+              {% elif env and env.status == 'sent' or not env and doc.status == 'pending_signature' %}
                 <i class="bi bi-file-earmark-lock2-fill text-warning fs-3"></i>
-              {% elif doc.status == 'annotation_ready' %}
-                <i class="bi bi-file-earmark-richtext-fill text-primary fs-3"></i>
+              {% elif env and env.status == 'returned' %}
+                <i class="bi bi-arrow-counterclockwise text-warning fs-3"></i>
               {% else %}
                 <i class="bi bi-file-earmark-fill text-secondary fs-3"></i>
               {% endif %}
             </div>
 
-            <!-- Info block -->
             <div class="flex-grow-1 min-w-0">
-              <div class="fw-semibold mb-1">{{ doc.filename }}</div>
-              <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-                <span class="badge
-                  {% if doc.status == 'signed' %}bg-success
-                  {% elif doc.status == 'pending_signature' %}bg-warning text-dark
-                  {% elif doc.status == 'annotation_ready' %}bg-primary
-                  {% else %}bg-secondary{% endif %}">
-                  {{ doc.get_status_display }}
-                </span>
-                <span class="badge bg-light text-dark border small">
-                  Step: {{ log.step_name }}
-                </span>
-                <span class="text-muted small">
-                  Uploaded {{ doc.uploaded_at|date:"M d, Y H:i" }}
-                </span>
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <span class="fw-semibold">{{ doc.filename }}</span>
+                {% if env %}
+                  <span class="badge bg-{{ env.status_color }}">{{ env.get_status_display }}</span>
+                  <span class="badge bg-light text-dark border" title="eSign envelope ID">
+                    {{ env.short_id }}
+                  </span>
+                {% elif doc.signature_fields.exists %}
+                  <span class="badge {% if doc.status == 'signed' %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                    Legacy package signing · {{ doc.get_status_display }}
+                  </span>
+                {% else %}
+                  <span class="badge bg-secondary">Not prepared in eSign</span>
+                {% endif %}
               </div>
 
-              <!-- Signature fields -->
-              {% if doc.signature_fields.exists %}
-              <div class="d-flex flex-wrap gap-3">
-                {% for field in doc.signature_fields.all %}
-                <div class="d-flex align-items-center gap-1 small">
-                  {% if field.is_signed %}
-                    <i class="bi bi-patch-check-fill text-success"></i>
-                    <span class="text-success fw-semibold">Signed</span>
-                  {% else %}
-                    <i class="bi bi-hourglass text-warning"></i>
-                    <span class="text-muted">Awaiting</span>
-                  {% endif %}
-                  <span class="text-muted">—</span>
-                  <span>{{ field.label|default:"Signature" }}</span>
-                  {% if field.assigned_to %}
-                    <span class="badge bg-light text-dark border" style="font-size:.65rem;">
-                      {{ field.assigned_to.get_full_name|default:field.assigned_to.username }}
-                    </span>
-                  {% endif %}
-                </div>
+              <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <span class="badge bg-light text-dark border small">Step: {{ log.step_name }}</span>
+                <span class="text-muted small">Uploaded {{ doc.uploaded_at|date:"M d, Y H:i" }}</span>
+                {% if doc.file_hash %}
+                <span class="text-muted small" title="Original package-file SHA-256">
+                  <i class="bi bi-shield-check me-1"></i>{{ doc.file_hash|slice:":12" }}…
+                </span>
+                {% endif %}
+              </div>
+
+              {% if env %}
+              <div class="small text-muted">
+                <i class="bi bi-people me-1"></i>
+                {{ env.progress.done }} of {{ env.progress.total }} signer{{ env.progress.total|pluralize }} complete
+                {% if env.reference %}&nbsp;·&nbsp;Reference {{ env.reference }}{% endif %}
+                {% for signer in env.signers %}
+                  <div class="mt-1"><i class="bi bi-person-check me-1"></i>{{ signer.name }} · {{ signer.email }}</div>
                 {% endfor %}
               </div>
               {% else %}
-              <div class="small text-muted fst-italic">
-                No signature fields placed yet.
+              <div class="small text-muted">
+                The original package file is retained here. eSign will create its own signing copy,
+                audit trail and Certificate of Completion.
               </div>
               {% endif %}
             </div>
 
-            <!-- Action buttons -->
             <div class="flex-shrink-0 d-flex flex-column gap-2 align-items-end">
-              {% if doc.status == 'uploaded' or doc.status == 'annotation_ready' %}
-                <a href="{% url 'vehicles:document_annotate' doc.pk %}"
-                   class="btn btn-sm btn-outline-primary">
-                  <i class="bi bi-cursor me-1"></i>Place Fields
-                </a>
-              {% endif %}
-
-              {% if doc.status == 'annotation_ready' %}
-                <form method="post"
-                      action="{% url 'vehicles:document_send_for_signing' doc.pk %}">
-                  {% csrf_token %}
-                  <button class="btn btn-sm btn-warning text-dark w-100">
-                    <i class="bi bi-send me-1"></i>Send for Signing
-                  </button>
-                </form>
-              {% endif %}
-
-              {% if doc.status == 'pending_signature' %}
-                <a href="{% url 'vehicles:document_sign' doc.pk %}"
-                   class="btn btn-sm btn-primary">
-                  <i class="bi bi-pen me-1"></i>Sign Now
-                </a>
-              {% endif %}
-
-              {% if doc.status == 'signed' %}
-                <a href="{% url 'vehicles:document_sign' doc.pk %}"
-                   class="btn btn-sm btn-outline-success">
-                  <i class="bi bi-eye me-1"></i>View Signed
-                </a>
-              {% endif %}
-
-              <a href="{% url 'vehicles:document_audit' doc.pk %}"
-                 class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-shield-check me-1"></i>Audit Trail
+              {% if not env or env.status != 'completed' %}
+              <a href="{{ doc.file.url }}" target="_blank" class="btn btn-sm btn-outline-secondary w-100">
+                <i class="bi bi-file-earmark me-1"></i>Source Document
               </a>
-            </div>
+              {% endif %}
 
+              {% if features.mailroom_signing %}
+                {% if not env and doc.signature_fields.exists %}
+                  {% if doc.status == 'pending_signature' or doc.status == 'signed' %}
+                  <a href="{% url 'vehicles:document_sign' doc.pk %}"
+                     class="btn btn-sm btn-outline-primary w-100">
+                    <i class="bi bi-archive me-1"></i>Open Legacy Signing
+                  </a>
+                  {% else %}
+                  <a href="{% url 'vehicles:document_annotate' doc.pk %}"
+                     class="btn btn-sm btn-outline-warning w-100">
+                    <i class="bi bi-archive me-1"></i>Continue Legacy Draft
+                  </a>
+                  {% endif %}
+                  <a href="{% url 'vehicles:document_audit' doc.pk %}"
+                     class="btn btn-sm btn-outline-dark w-100">
+                    <i class="bi bi-shield-check me-1"></i>Legacy Audit
+                  </a>
+                {% elif not env %}
+                <a href="{% url 'vehicles:document_annotate' doc.pk %}"
+                   class="btn btn-sm btn-primary w-100">
+                  <i class="bi bi-pen me-1"></i>Prepare in eSign
+                </a>
+                {% elif env.status == 'draft' or env.status == 'returned' %}
+                <a href="{% url 'accounts:esign_prepare' env.pk %}"
+                   class="btn btn-sm btn-primary w-100">
+                  <i class="bi bi-layout-text-window-reverse me-1"></i>Prepare in eSign
+                </a>
+                {% elif env.status != 'completed' %}
+                <a href="{% url 'vehicles:document_sign' doc.pk %}"
+                   class="btn btn-sm btn-outline-primary w-100">
+                  <i class="bi bi-box-arrow-up-right me-1"></i>Open eSign
+                </a>
+                {% endif %}
+
+                {% if env and env.status == 'completed' %}
+                <a href="{% url 'accounts:esign_download' env.pk 'signed' %}"
+                   class="btn btn-sm btn-success w-100">
+                  <i class="bi bi-download me-1"></i>Signed PDF
+                </a>
+                <a href="{% url 'accounts:esign_download' env.pk 'certificate' %}"
+                   class="btn btn-sm btn-outline-success w-100">
+                  <i class="bi bi-patch-check me-1"></i>Certificate
+                </a>
+                {% endif %}
+
+                {% if env %}
+                <a href="{% url 'vehicles:document_audit' doc.pk %}"
+                   class="btn btn-sm btn-outline-dark w-100">
+                  <i class="bi bi-shield-check me-1"></i>Audit Trail
+                </a>
+                {% endif %}
+              {% endif %}
+            </div>
           </div>
         </div>
-
+        {% endwith %}
         {% empty %}
         {% endfor %}
       {% endfor %}
 
-      {# Empty state — check if no documents exist across all logs #}
-      {% with has_any_doc=False %}
-      {% for log in step_logs %}{% for doc in log.documents.all %}
-        {% if not has_any_doc %}{% with has_any_doc=True %}{% endwith %}{% endif %}
-      {% endfor %}{% endfor %}
-      {% endwith %}
-
-      {% comment %}Simpler empty check{% endcomment %}
       {% if not step_logs %}
       <div class="text-center text-muted py-5">
         <i class="bi bi-file-earmark fs-2 d-block mb-2"></i>
         <div class="small">No documents uploaded yet.</div>
-        <div class="small mt-1 text-muted">
-          Complete a step that requires a scan to attach documents here.
-        </div>
       </div>
-      {% else %}
-        {# Show empty state only when all logs have no documents #}
-        {% with doc_exists=False %}
-        {% for log in step_logs %}
-          {% for doc in log.documents.all %}{% endfor %}
-        {% endfor %}
-        {% endwith %}
       {% endif %}
 
-      <!-- Upload button for current step log -->
       {% if package.current_step and not package.is_complete %}
       {% for log in step_logs %}
         {% if log.step_id == package.current_step_id and forloop.last %}
@@ -486,17 +524,15 @@
              class="btn btn-outline-dark btn-sm">
             <i class="bi bi-upload me-2"></i>Upload Document for Current Step
           </a>
-          <span class="text-muted small ms-2">
-            (or upload automatically by completing a Scan step above)
-          </span>
+          {% if features.mailroom_signing %}
+          <span class="text-muted small ms-2">The document will be prepared by the shared eSign engine.</span>
+          {% endif %}
         </div>
         {% endif %}
       {% endfor %}
       {% endif %}
-
     </div>
   </div><!-- /Documents card -->
-
 </div><!-- /container -->
 
 <style>
