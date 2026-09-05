@@ -1,4 +1,24 @@
 
+{% if user.is_authenticated %}
+<script>
+/* Apply the saved desktop sidebar state before the navigation markup paints.
+   This prevents the expanded menu from flashing briefly before icon-rail mode. */
+(function () {
+  var body = document.body;
+  var KEY = 'unpass:nav:rail';
+
+  body.classList.add('appnav-has-sidebar', 'appnav-nav-preload');
+  try {
+    if (localStorage.getItem(KEY) === '1') {
+      body.classList.add('appnav-rail');
+    }
+  } catch (e) {
+    /* Storage may be unavailable in private/restricted browser modes. */
+  }
+})();
+</script>
+{% endif %}
+
 <style>
   :root{
     --appnav-w: 264px;
@@ -12,6 +32,27 @@
     --appnav-fg-on: #fff;
     --appnav-accent: #009EDB;
     --appnav-border: rgba(255,255,255,.10);
+  }
+
+  /* ── Sidebar state/flicker guard ──────────────────────────────────────── */
+  /* During first paint, do not animate from the default expanded width to
+     the saved icon-rail width. The correct state has already been applied by
+     the tiny script above. */
+  body.appnav-nav-preload .appnav-sidebar,
+  body.appnav-nav-preload .appnav-caret{
+    transition:none !important;
+  }
+
+  /* While the rail toggle is changing state, suppress Bootstrap collapse
+     animation and the rail hover label. This prevents a submenu/caret from
+     appearing for one frame while the sidebar is shrinking or expanding. */
+  body.appnav-nav-switching #appnavSidebar .collapse,
+  body.appnav-nav-switching #appnavSidebar .collapsing,
+  body.appnav-nav-switching #appnavSidebar .appnav-caret{
+    transition:none !important;
+  }
+  body.appnav-nav-switching #appnavSidebar .appnav-link:hover::after{
+    display:none !important;
   }
 
   /* ── Top bar ───────────────────────────────────────────────────────── */
@@ -360,38 +401,132 @@
 <script>
 (function () {
   var body = document.body;
+  var sidebar = document.getElementById('appnavSidebar');
+  var toggle = document.getElementById('appnavRailToggle');
   var KEY = 'unpass:nav:rail';
 
-  if (document.getElementById('appnavSidebar')) {
+  if (sidebar) {
     body.classList.add('appnav-has-sidebar');
   }
-  try {
-    if (localStorage.getItem(KEY) === '1') body.classList.add('appnav-rail');
-  } catch (e) { /* private mode — just start expanded */ }
 
-  var toggle = document.getElementById('appnavRailToggle');
-  if (toggle) {
-    toggle.addEventListener('click', function () {
-      var railed = body.classList.toggle('appnav-rail');
-      toggle.setAttribute('aria-pressed', railed ? 'true' : 'false');
-      try { localStorage.setItem(KEY, railed ? '1' : '0'); } catch (e) {}
+  function setToggleState(railed) {
+    if (!toggle) return;
+    toggle.setAttribute('aria-pressed', railed ? 'true' : 'false');
+    toggle.setAttribute(
+      'aria-label',
+      railed ? 'Expand the sidebar' : 'Collapse the sidebar to icons'
+    );
+  }
+
+  function controlFor(group) {
+    if (!group || !group.id) return null;
+    return document.querySelector('[data-bs-target="#' + group.id + '"]');
+  }
+
+  function closeGroupImmediately(group) {
+    if (!group) return;
+
+    /* Remove every transient Bootstrap collapse state without running the
+       height animation. This is intentional during rail switching. */
+    group.classList.remove('show', 'collapsing');
+    group.classList.add('collapse');
+    group.style.height = '';
+
+    var btn = controlFor(group);
+    if (btn) {
+      btn.classList.add('collapsed');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function closeSidebarGroupsImmediately() {
+    if (!sidebar) return;
+    sidebar.querySelectorAll('.collapse.show, .collapse.collapsing').forEach(function (group) {
+      closeGroupImmediately(group);
     });
   }
 
-  // Open the group containing the current page, in both sidebar and drawer.
-  document.querySelectorAll('.appnav-link.is-active').forEach(function (link) {
-    var group = link.closest('.collapse');
+  function openGroupImmediately(group) {
     if (!group) return;
-    group.classList.add('show');
-    var btn = document.querySelector('[data-bs-target="#' + group.id + '"]');
-    if (btn) { btn.classList.remove('collapsed'); btn.setAttribute('aria-expanded', 'true'); }
-  });
+    group.classList.remove('collapsing');
+    group.classList.add('collapse', 'show');
+    group.style.height = '';
 
-  // Give every rail item a tooltip label from its own text.
-  document.querySelectorAll('#appnavSidebar .appnav-link').forEach(function (link) {
-    if (link.hasAttribute('data-appnav-label')) return;
-    var span = link.querySelector('span');
-    if (span) link.setAttribute('data-appnav-label', span.textContent.trim());
+    var btn = controlFor(group);
+    if (btn) {
+      btn.classList.remove('collapsed');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  function openActiveGroups() {
+    document.querySelectorAll('.appnav-link.is-active').forEach(function (link) {
+      var group = link.closest('.collapse');
+      if (!group) return;
+
+      /* In icon-rail mode the desktop sidebar must stay completely closed.
+         The mobile drawer may still open its active group normally. */
+      if (sidebar && sidebar.contains(group) && body.classList.contains('appnav-rail')) {
+        closeGroupImmediately(group);
+        return;
+      }
+
+      openGroupImmediately(group);
+    });
+  }
+
+  setToggleState(body.classList.contains('appnav-rail'));
+  openActiveGroups();
+
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      var goingToRail = !body.classList.contains('appnav-rail');
+
+      body.classList.add('appnav-nav-switching');
+
+      /* Critical ordering: close submenus BEFORE the rail class hides labels
+         and changes width. This removes the one-frame dropdown flash. */
+      if (goingToRail) {
+        closeSidebarGroupsImmediately();
+      }
+
+      body.classList.toggle('appnav-rail', goingToRail);
+      setToggleState(goingToRail);
+
+      try {
+        localStorage.setItem(KEY, goingToRail ? '1' : '0');
+      } catch (e) {
+        /* Ignore storage failures; the visual toggle still works. */
+      }
+
+      if (!goingToRail) {
+        /* Let the sidebar finish its 160 ms width expansion first. Reopening
+           the active group afterward avoids a submenu popping in mid-resize. */
+        window.setTimeout(openActiveGroups, 175);
+      }
+
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(function () {
+          body.classList.remove('appnav-nav-switching');
+        });
+      });
+    });
+  }
+
+  /* Give every rail item a tooltip label from its own text. */
+  if (sidebar) {
+    sidebar.querySelectorAll('.appnav-link').forEach(function (link) {
+      if (link.hasAttribute('data-appnav-label')) return;
+      var span = link.querySelector('span');
+      if (span) link.setAttribute('data-appnav-label', span.textContent.trim());
+    });
+  }
+
+  /* Initial state is now stable; future user toggles may animate normally. */
+  window.requestAnimationFrame(function () {
+    window.requestAnimationFrame(function () {
+      body.classList.remove('appnav-nav-preload');
+    });
   });
 })();
 </script>

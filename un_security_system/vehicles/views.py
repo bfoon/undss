@@ -48,6 +48,13 @@ User = get_user_model()
 
 logger = logging.getLogger(__name__)
 
+from .package_access import (
+    can_log_incoming_package,
+    can_view_package,
+    get_visible_package_or_404,
+    visible_packages_for,
+)
+
 def is_lsa(u): return u.is_authenticated and (getattr(u, 'role', '') == 'lsa' or u.is_superuser)
 def is_lsa_or_soc(user):
     return user.is_authenticated and (getattr(user, "role", "") in ("lsa", "soc") or user.is_superuser)
@@ -83,14 +90,8 @@ def is_agency_approver_for(user, agency_name: str) -> bool:
 
 
 def can_view_all_packages(user):
-    """
-    Reception, Registry, Agency FP, LSA, SOC, Superuser can see all packages.
-    Everyone else is restricted to their own packages.
-    """
-    if not user.is_authenticated:
-        return False
-    role = getattr(user, "role", "") or ""
-    return user.is_superuser or role in ("reception", "registry", "agency_fp", "lsa", "soc")
+    """Only superusers have global Package/Mailroom visibility."""
+    return bool(user and user.is_authenticated and user.is_superuser)
 
 def _is_lsa(user):
     return user.is_authenticated and (getattr(user, "role", "") == "lsa" or user.is_superuser)
@@ -1804,9 +1805,10 @@ def _new_tracking_code():
 
 @login_required
 def package_list(request):
-    qs = Package.objects.select_related(
+    base_qs = Package.objects.select_related(
         'flow_template', 'flow_template__agency', 'current_step', 'logged_by'
-    ).order_by('-logged_at')
+    )
+    qs = visible_packages_for(request.user, base_qs).order_by('-logged_at')
 
     q = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', '').strip()
@@ -1833,7 +1835,10 @@ def package_list(request):
         all_templates = all_templates.filter(agency=user_agency)
 
     status_choices = (
-        Package.objects.values_list('status', flat=True).distinct().order_by('status')
+        visible_packages_for(request.user)
+        .values_list('status', flat=True)
+        .distinct()
+        .order_by('status')
     )
 
     return render(request, 'vehicles/packages/package_list.html', {
@@ -1844,6 +1849,7 @@ def package_list(request):
         'direction_filter': direction_filter,
         'all_templates': all_templates,
         'status_choices': status_choices,
+        'can_log_incoming': can_log_incoming_package(request.user),
     })
 
 
@@ -1851,6 +1857,13 @@ def package_list(request):
 
 @login_required
 def package_log_new(request):
+    if not can_log_incoming_package(request.user):
+        messages.error(
+            request,
+            "Only Reception or Registry staff can log incoming packages."
+        )
+        return redirect('vehicles:package_list')
+
     user_agency = _user_agency(request.user)
     flow_templates = (
         PackageFlowTemplate.objects
@@ -1985,11 +1998,12 @@ def package_log_outgoing(request):
 
 @login_required
 def package_detail(request, pk):
-    package = get_object_or_404(
+    package = get_visible_package_or_404(
+        request.user,
+        pk,
         Package.objects.select_related(
             'flow_template', 'flow_template__agency', 'current_step', 'logged_by'
         ),
-        pk=pk,
     )
 
     step_logs = (
@@ -2045,7 +2059,7 @@ def package_detail(request, pk):
 
 @login_required
 def package_advance_step(request, pk):
-    package = get_object_or_404(Package, pk=pk)
+    package = get_visible_package_or_404(request.user, pk)
     current_step = package.current_step
 
     if not current_step:
@@ -2496,6 +2510,8 @@ def signature_delete(request, pk):
 def document_upload(request, step_log_pk):
     """Upload a scanned document to a step log, compute its hash."""
     step_log = get_object_or_404(PackageStepLog, pk=step_log_pk)
+    if not can_view_package(request.user, step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
 
     form = PackageDocumentUploadForm(request.POST or None, request.FILES or None)
     if request.method == 'POST' and form.is_valid():
@@ -2527,6 +2543,8 @@ def document_annotate(request, pk):
     signature field placer. Fields are saved via AJAX.
     """
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     package = doc.step_log.package
     agency = getattr(package.flow_template, 'agency', None) if package.flow_template else None
 
@@ -2553,6 +2571,8 @@ def document_annotate(request, pk):
 def signature_field_save(request, doc_pk):
     """AJAX: save a signature field placement."""
     doc = get_object_or_404(PackageDocument, pk=doc_pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     agency = getattr(doc.step_log.package.flow_template, 'agency', None)
     data = json.loads(request.body)
 
@@ -2586,6 +2606,8 @@ def signature_field_save(request, doc_pk):
 def signature_field_delete(request, field_pk):
     """AJAX: remove a signature field."""
     field = get_object_or_404(SignatureField, pk=field_pk)
+    if not can_view_package(request.user, field.document.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     field.delete()
     return JsonResponse({'ok': True})
 
@@ -2594,6 +2616,8 @@ def signature_field_delete(request, field_pk):
 def document_send_for_signing(request, pk):
     """Mark document as sent for signing and notify assignees."""
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
 
     if request.method == 'POST':
         doc.status = 'pending_signature'
@@ -2652,6 +2676,8 @@ def document_sign(request, pk):
     and lets them apply their active signature (or draw a new one inline).
     """
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
 
     # Find this user's pending fields
     my_fields = doc.signature_fields.filter(
@@ -2733,6 +2759,8 @@ def document_sign(request, pk):
 def document_audit(request, pk):
     """Show full audit trail of all signatures on a document."""
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     records = SignatureRecord.objects.filter(
         field__document=doc
     ).select_related('field', 'signed_by', 'sig_profile').order_by('signed_at')

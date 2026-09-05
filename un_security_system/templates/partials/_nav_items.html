@@ -259,10 +259,16 @@
       <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
         <i class="bi bi-box-seam" aria-hidden="true"></i><span>Packages</span>
       </a>
-      {% if user.role == 'data_entry' or user.role == 'lsa' or user.role == 'soc' %}
+
+      {% url 'vehicles:package_log_outgoing' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
+        <i class="bi bi-send" aria-hidden="true"></i><span>Log Outgoing Package</span>
+      </a>
+
+      {% if user.is_superuser or user.role == 'reception' or user.role == 'registry' %}
         {% url 'vehicles:package_log_new' as u %}
         <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
-          <i class="bi bi-journal-plus" aria-hidden="true"></i><span>Log New Package (Gate)</span>
+          <i class="bi bi-journal-plus" aria-hidden="true"></i><span>Log Incoming Package</span>
         </a>
       {% endif %}
     {% endif %}

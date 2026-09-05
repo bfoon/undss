@@ -1,0 +1,27 @@
+<style>
+  .form-control.is-invalid,
+  .form-select.is-invalid { border-color: #dc3545; }
+  .form-control:focus,
+  .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 .25rem rgba(13,110,253,.25);
+  }
+  .form-label .text-danger { font-weight: 400; }
+</style>
+
+<script>
+(function () {
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.invalid-feedback').forEach(function (feedback) {
+      var group = feedback.closest('.col-md-6, .col-md-4, .col-12, .mb-3, .mb-4');
+      var control = group && group.querySelector('.form-control, .form-select');
+      if (control) { control.classList.add('is-invalid'); }
+    });
+
+    var firstBad = document.querySelector('.is-invalid');
+    if (firstBad && typeof firstBad.focus === 'function') {
+      firstBad.focus({ preventScroll: false });
+    }
+  });
+})();
+</script>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Agency Users{% endblock %}
+{% block title %}Users{% endblock %}
 
 {% block content %}
 <div class="container py-4">
@@ -7,13 +7,24 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
   <div>
     <h2 class="mb-1">
-      <i class="bi bi-people me-2"></i> Agency Users
+      <i class="bi bi-people me-2"></i> Users
     </h2>
     <p class="text-muted mb-0">
       <i class="bi bi-building me-1"></i>
       <span class="fw-semibold">{{ my_agency|default:"No Agency Assigned" }}</span>
-      {% if total_agency_users %}
-        <span class="badge bg-secondary ms-2">{{ total_agency_users }} total</span>
+      {% if my_office %}
+        <span class="mx-1">·</span>
+        <i class="bi bi-geo-alt me-1"></i>{{ my_office.name }}
+      {% endif %}
+      {% if total_scoped_users %}
+        <span class="badge bg-secondary ms-2">{{ total_scoped_users }} user{{ total_scoped_users|pluralize }}</span>
+        <span class="badge bg-success ms-1">{{ total_active_users }} active</span>
+      {% endif %}
+      {% if unassigned_count %}
+        <a href="?office=none" class="badge bg-warning text-dark ms-1 text-decoration-none"
+           title="Users with no country office — their module access falls back to agency defaults">
+          {{ unassigned_count }} without an office
+        </a>
       {% endif %}
     </p>
   </div>
@@ -40,26 +51,59 @@
     </div>
     <div class="card-body">
       <div class="row g-3">
-        <div class="col-md-8">
+        <div class="col-lg-4 col-md-6">
           <label for="search" class="form-label fw-semibold">
             <i class="bi bi-search me-1"></i>Search
           </label>
-          <input type="text"
-                 id="search"
-                 name="q"
-                 value="{{ q }}"
-                 class="form-control"
-                 placeholder="Search by username, name, email, or employee ID..."
-                 autofocus>
+          <input type="text" id="search" name="q" value="{{ q }}" class="form-control"
+                 placeholder="Username, name, email or employee ID" autofocus>
         </div>
-        <div class="col-md-4 d-flex align-items-end gap-2">
-          <button type="submit" class="btn btn-primary flex-grow-1">
-            <i class="bi bi-search me-1"></i> Search
+
+        {% if show_office_column %}
+          <div class="col-lg-3 col-md-6">
+            <label for="office" class="form-label fw-semibold">
+              <i class="bi bi-geo-alt me-1"></i>Country office
+            </label>
+            <select id="office" name="office" class="form-select">
+              <option value="">All offices</option>
+              {% for o in offices %}
+                <option value="{{ o.pk }}" {% if selected_office == o.pk|stringformat:"s" %}selected{% endif %}>
+                  {{ o }}
+                </option>
+              {% endfor %}
+              <option value="none" {% if selected_office == 'none' %}selected{% endif %}>
+                — no office assigned —
+              </option>
+            </select>
+          </div>
+        {% endif %}
+
+        <div class="col-lg-2 col-md-4">
+          <label for="role" class="form-label fw-semibold">Role</label>
+          <select id="role" name="role" class="form-select">
+            <option value="">All roles</option>
+            {% for value, label in role_choices %}
+              <option value="{{ value }}" {% if selected_role == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-lg-2 col-md-4">
+          <label for="status" class="form-label fw-semibold">Status</label>
+          <select id="status" name="status" class="form-select">
+            <option value="">All</option>
+            <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+
+        <div class="{% if show_office_column %}col-lg-1{% else %}col-lg-4{% endif %} col-md-4 d-flex align-items-end gap-2">
+          <button type="submit" class="btn btn-primary flex-grow-1" title="Apply filters">
+            <i class="bi bi-search"></i>
           </button>
-          {% if q %}
-            <a href="{% url 'accounts:ict_user_list' %}"
-               class="btn btn-outline-secondary"
-               title="Clear search">
+          {% if q or selected_office or selected_role or selected_status %}
+            <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-outline-secondary"
+               title="Clear all filters">
               <i class="bi bi-x-circle"></i>
             </a>
           {% endif %}
@@ -86,11 +130,12 @@
         <table class="table table-hover align-middle mb-0">
           <thead class="table-light">
             <tr>
-              <th style="width:18%">Username</th>
-              <th style="width:22%">Full Name</th>
-              <th style="width:26%">Email Address</th>
-              <th style="width:16%">Role</th>
-              <th style="width:18%">Employee ID</th>
+              <th>Username</th>
+              <th>Full Name</th>
+              <th>Email Address</th>
+              <th>Role</th>
+              {% if show_office_column %}<th>Country Office</th>{% endif %}
+              <th>Employee ID</th>
             </tr>
           </thead>
           <tbody>
@@ -137,6 +182,15 @@
                   <span class="badge bg-secondary">No Role</span>
                 {% endif %}
               </td>
+              {% if show_office_column %}
+                <td>
+                  {% if u.country_office %}
+                    <span class="text-nowrap">{{ u.country_office.name }}</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">No office</span>
+                  {% endif %}
+                </td>
+              {% endif %}
               <td>
                 {% if u.employee_id %}
                   <span class="font-monospace text-dark">{{ u.employee_id }}</span>
@@ -158,14 +212,14 @@
               {% if page_obj.has_previous %}
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
+                     href="?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
                      aria-label="First">
                     <i class="bi bi-chevron-double-left"></i>
                   </a>
                 </li>
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+                     href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
                      aria-label="Previous">
                     <i class="bi bi-chevron-left"></i>
                   </a>
@@ -188,14 +242,14 @@
               {% if page_obj.has_next %}
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+                     href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
                      aria-label="Next">
                     <i class="bi bi-chevron-right"></i>
                   </a>
                 </li>
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+                     href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
                      aria-label="Last">
                     <i class="bi bi-chevron-double-right"></i>
                   </a>
@@ -221,18 +275,22 @@
         </div>
         <h5 class="mb-2">No Users Found</h5>
         <p class="text-muted mb-4">
-          {% if q %}
-            No users match your search criteria for "<strong>{{ q }}</strong>".
+          {% if q or selected_office or selected_role or selected_status %}
+            No users match the current filters.
+          {% elif my_office %}
+            There are no users in {{ my_office }} yet.
           {% elif my_agency %}
-            There are no users registered under {{ my_agency }}.
+            There are no users under {{ my_agency }} yet.
           {% else %}
-            You are not assigned to an agency or there are no users in your agency.
+            Your account is not assigned to an agency or country office, so
+            there is nobody for you to administer. Ask the platform superuser
+            to assign you to an office.
           {% endif %}
         </p>
         <div class="d-flex gap-2 justify-content-center">
-          {% if q %}
+          {% if q or selected_office or selected_role or selected_status %}
             <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-outline-primary">
-              <i class="bi bi-x-circle me-1"></i> Clear Search
+              <i class="bi bi-x-circle me-1"></i> Clear Filters
             </a>
           {% endif %}
           <a href="{% url 'accounts:ict_user_create' %}" class="btn btn-primary">

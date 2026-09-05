@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if form.instance.pk %}Edit{% else %}Create{% endif %} User{% endblock %}
 
+{% block extra_css %}{% include "accounts/_form_assets.html" %}{% endblock %}
+
 {% block content %}
 <div class="container py-4" style="max-width:900px;">
   <!-- Header -->
@@ -255,36 +257,5 @@
     </div>
   {% endif %}
 </div>
-
-<!-- Add Bootstrap form validation styles -->
-<style>
-  .form-control.is-invalid,
-  .form-select.is-invalid {
-    border-color: #dc3545;
-  }
-
-  .form-control:focus,
-  .form-select:focus {
-    border-color: #86b7fe;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-  }
-</style>
-
-<script>
-  // Mark inputs that have errors.
-  //
-  // This used to look only at the element immediately before .invalid-feedback,
-  // so any field with help text between the input and the error — which is most
-  // of them — never got the red border. Search the whole group instead.
-  document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.invalid-feedback').forEach(function (feedback) {
-      var group = feedback.closest('.col-md-6, .col-12, .mb-3, .mb-4');
-      var control = group && group.querySelector('.form-control, .form-select');
-      if (control) {
-        control.classList.add('is-invalid');
-      }
-    });
-  });
-</script>
 
 {% endblock %}

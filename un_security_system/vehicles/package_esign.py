@@ -30,6 +30,7 @@ from accounts.views_esign import MAX_DOC_BYTES, allowed_doc_ext, esign_send
 from tenancy.services import has_all
 
 from .models import Package, PackageDocument, PackageEvent, PackageStepLog
+from .package_access import can_view_package
 
 
 REQUIRED_FEATURES = ("mailroom", "mailroom_signing", "esign")
@@ -147,6 +148,9 @@ def _ensure_package_recipient(envelope: Envelope, step_log: PackageStepLog):
 
 def ensure_document_envelope(doc: PackageDocument, actor, request=None) -> Envelope:
     """Return the eSign envelope linked to ``doc``, creating it once if needed."""
+
+    if not can_view_package(actor, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
 
     agency = _package_agency(doc)
     if agency is None:
@@ -329,6 +333,8 @@ def complete_package_step_from_envelope(envelope: Envelope) -> bool:
 @login_required
 def document_annotate(request, pk):
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     if not getattr(doc, "esign_envelope_id", None) and _has_legacy_fields(doc):
         # An in-flight pre-cutover document keeps its original field coordinates.
         return _legacy_view("document_annotate")(request, pk)
@@ -349,6 +355,8 @@ def document_annotate(request, pk):
 def document_send_for_signing(request, pk):
     """Legacy package send route; delegate to the canonical eSign send view."""
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     if not getattr(doc, "esign_envelope_id", None) and _has_legacy_fields(doc):
         return _legacy_view("document_send_for_signing")(request, pk)
     try:
@@ -366,6 +374,8 @@ def document_send_for_signing(request, pk):
 def document_sign(request, pk):
     """Legacy package signing URL -> this user's eSign tokenized signing/review URL."""
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     envelope = getattr(doc, "esign_envelope", None)
     if envelope is None and _has_legacy_fields(doc):
         return _legacy_view("document_sign")(request, pk)
@@ -390,6 +400,8 @@ def document_sign(request, pk):
 def document_audit(request, pk):
     """Legacy package audit URL -> canonical eSign envelope audit/detail page."""
     doc = get_object_or_404(PackageDocument, pk=pk)
+    if not can_view_package(request.user, doc.step_log.package):
+        raise PermissionDenied("You do not have access to this package.")
     envelope = getattr(doc, "esign_envelope", None)
     if envelope is None and _has_legacy_fields(doc):
         return _legacy_view("document_audit")(request, pk)
