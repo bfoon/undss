@@ -1,6 +1,7 @@
 from django.urls import path
-from . import views
+
 from . import package_esign
+from . import views
 
 app_name = 'vehicles'
 
@@ -51,7 +52,6 @@ urlpatterns = [
     path('asset-exit/<int:pk>/cancel/', views.asset_exit_cancel, name='asset_exit_cancel'),
     path('asset-exit/<int:pk>/agency-approve/', views.asset_exit_agency_approve, name='asset_exit_agency_approve'),
     path('asset-exit/<int:pk>/edit/', views.asset_exit_edit, name='asset_exit_edit'),
-    path('asset-exit/verify/page', views.asset_exit_verify_page, name='asset_exit_verify_page'),
     # Review/Queue for LSA & SOC
     path('asset-exit/queue/', views.AssetExitQueueView.as_view(), name='asset_exit_queue'),
 
@@ -76,6 +76,11 @@ urlpatterns = [
     path('parking-cards/request/<int:pk>/cancel/', views.pc_request_cancel, name='pc_request_cancel'),
 
     # Guard verify + sign in/out
+    #
+    # This name was registered twice: once as 'asset-exit/verify/page' (no
+    # trailing slash) and once as 'asset-exit/verify/'. Django keeps the last
+    # one, so reverse() always produced the second and the first path was dead
+    # — a 404 for anyone who had bookmarked it. The duplicate is gone.
     path('asset-exit/verify/', views.asset_exit_verify_page, name='asset_exit_verify_page'),
     path('api/asset-exit/lookup/', views.asset_exit_lookup_api, name='asset_exit_lookup_api'),
     path('asset-exit/<int:pk>/sign-out/', views.asset_exit_mark_signed_out, name='asset_exit_mark_signed_out'),

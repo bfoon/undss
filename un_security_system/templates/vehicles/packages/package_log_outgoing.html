@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Register Outgoing Mail{% endblock %}
 
+{% block extra_css %}{% include "vehicles/_package_styles.html" %}{% endblock %}
+
 {% block content %}
-<div class="container py-4" style="max-width:820px;">
+<div class="container py-4 pkg-outgoing" style="max-width:820px;">
 
   <!-- Header -->
   <div class="mb-4">
@@ -22,7 +24,7 @@
 
     <!-- ── 1 · Select Outgoing Workflow ──────────────────────────────────── -->
     <div class="card shadow-sm border-0 mb-3">
-      <div class="card-header py-3" style="background:linear-gradient(135deg,#38a169,#276749);">
+      <div class="card-header pkg-band pkg-band-out py-3">
         <h5 class="mb-0 text-white">
           <i class="bi bi-diagram-3 me-2"></i>1 · Select Outgoing Workflow
         </h5>
@@ -220,27 +222,9 @@
   </form>
 </div>
 
-<style>
-  .card { border-radius:.75rem; overflow:hidden; }
-  .form-control, .form-select { border-radius:.5rem; border:1.5px solid #e2e8f0; }
-  .form-control:focus, .form-select:focus {
-    border-color:#38a169;
-    box-shadow:0 0 0 3px rgba(56,161,105,.15);
-  }
-  .flow-card-inner {
-    border-radius:.5rem !important;
-    transition: all .2s ease;
-    cursor: pointer;
-  }
-  .flow-radio:checked + .flow-card-inner,
-  .flow-card:hover .flow-card-inner {
-    border-color:#38a169 !important;
-    background:#f0fff4;
-    box-shadow:0 0 0 3px rgba(56,161,105,.15);
-  }
-  .flow-radio:checked + .flow-card-inner { background:#dcfce7; }
-</style>
+{% endblock %}
 
+{% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.flow-radio').forEach(function (radio) {

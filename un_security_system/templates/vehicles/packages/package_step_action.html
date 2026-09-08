@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 
+{% block extra_css %}{% include "vehicles/_package_styles.html" %}{% endblock %}
+
 {% block content %}
 <div class="container py-4" style="max-width:720px;">
 
@@ -25,8 +27,7 @@
   </div>
 
   <!-- ── Package Summary ────────────────────────────────────────────────── -->
-  <div class="card border-0 mb-4"
-       style="background:linear-gradient(135deg,#667eea,#764ba2);">
+  <div class="card border-0 mb-4 pkg-band">
     <div class="card-body p-3 text-white">
       <div class="row g-2 align-items-center">
         <div class="col-auto">
@@ -66,8 +67,7 @@
 
   <!-- ── Shared eSign engine (scan steps) ───────────────────────────────── -->
   {% if step.requires_scan and features.mailroom_signing %}
-  <div class="alert border-0 mb-4 py-3 px-4 d-flex align-items-start gap-3"
-       style="background:#ede9fe;border-left:4px solid #667eea!important;">
+  <div class="alert border-0 mb-4 py-3 px-4 d-flex align-items-start gap-3 pkg-esign-note">
     <i class="bi bi-pen-fill text-primary fs-4 flex-shrink-0 mt-1"></i>
     <div>
       <div class="fw-semibold mb-1">eSign is connected to this package step</div>
@@ -250,33 +250,9 @@
 
 </div><!-- /container -->
 
-<style>
-  .card { border-radius:.75rem; overflow:hidden; }
+{% endblock %}
 
-  .form-control,
-  .form-select {
-    border-radius:.5rem;
-    border:1.5px solid #e2e8f0;
-  }
-  .form-control:focus,
-  .form-select:focus {
-    border-color:#667eea;
-    box-shadow:0 0 0 3px rgba(102,126,234,.15);
-  }
-
-  /* Upload zone */
-  .upload-zone { cursor:pointer; }
-  .upload-zone:hover .zone-inner,
-  .upload-zone.dragover .zone-inner {
-    border-color:#667eea !important;
-    background:#f5f3ff !important;
-  }
-  .upload-zone.has-file .zone-inner {
-    border-color:#38a169 !important;
-    background:#f0fff4 !important;
-  }
-</style>
-
+{% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
