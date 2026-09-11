@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load esign_studio_tags %}
 {% block title %}eSign | UN PASS {% endblock %}
 {% block extra_js %}
 <script>
@@ -32,6 +33,12 @@ document.querySelectorAll('.es-del').forEach(btn => {
   .es-row{ transition:background .12s ease; }
   .es-row:hover{ background:rgba(0,158,219,.04); }
   .es-token{ font-family:ui-monospace,Menlo,monospace; font-size:.7rem; color:var(--un-gray); }
+  .es-studio{ display:flex; gap:.8rem; align-items:center; padding:.9rem 1rem; border:1px solid #E2E8F0; border-radius:.6rem; background:#fff;
+               color:inherit; text-decoration:none; height:100%; transition:border-color .12s, box-shadow .12s, transform .12s; }
+  .es-studio:hover{ border-color:rgba(0,158,219,.55); box-shadow:0 4px 14px rgba(0,90,139,.08); transform:translateY(-1px); color:inherit; }
+  .es-studio .ico{ width:44px; height:44px; flex:0 0 44px; border-radius:.6rem; display:flex; align-items:center; justify-content:center; font-size:1.3rem; }
+  .es-studio .t{ font-weight:600; color:#0F172A; }
+  .es-studio .d{ font-size:.8rem; color:#64748B; }
   .es-avatars .es-av{ width:26px;height:26px;border-radius:50%;background:#E2E8F0;color:#475569;
     font-size:.65rem;display:inline-flex;align-items:center;justify-content:center;
     margin-left:-6px;border:2px solid #fff;font-weight:700; }
@@ -66,6 +73,30 @@ document.querySelectorAll('.es-del').forEach(btn => {
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- eSign Studio -->
+  {% esign_studio_summary as studio %}
+  <div class="col-md-4">
+    <a class="es-studio" href="{% url 'accounts:esign_studio' %}">
+      <span class="ico" style="background:rgba(0,158,219,.10);color:#005A8B"><i class="bi bi-tools"></i></span>
+      <span class="flex-grow-1"><span class="t d-block">PDF tools</span><span class="d d-block">Convert Word to PDF, merge, remove or rotate pages, edit{% if studio.files %} · {{ studio.files }} file{{ studio.files|pluralize }}{% endif %}</span></span>
+      <i class="bi bi-chevron-right text-muted"></i>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a class="es-studio" href="{% url 'accounts:esign_workflows' %}">
+      <span class="ico" style="background:rgba(217,119,6,.10);color:#B45309"><i class="bi bi-diagram-3"></i></span>
+      <span class="flex-grow-1"><span class="t d-block">Workflows {% if studio.task_count %}<span class="badge rounded-pill bg-warning text-dark">{{ studio.task_count }}</span>{% endif %}</span><span class="d d-block">Approvals and signatures, designed by drag and drop{% if studio.open_runs %} · {{ studio.open_runs }} in progress{% endif %}</span></span>
+      <i class="bi bi-chevron-right text-muted"></i>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a class="es-studio" href="{% url 'accounts:esign_forms' %}">
+      <span class="ico" style="background:rgba(124,58,237,.10);color:#6D28D9"><i class="bi bi-ui-checks-grid"></i></span>
+      <span class="flex-grow-1"><span class="t d-block">Forms</span><span class="d d-block">Build forms with tables and colours, route and sign them{% if studio.forms %} · {{ studio.forms }} available{% endif %}</span></span>
+      <i class="bi bi-chevron-right text-muted"></i>
+    </a>
   </div>
 
   <!-- KPIs -->
@@ -110,6 +141,36 @@ document.querySelectorAll('.es-del').forEach(btn => {
           </div>
           <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_sign' r.token %}">
             <i class="bi bi-pen me-1"></i> Review & sign
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if studio.tasks %}
+  <div class="col-12">
+    <div class="card border-warning">
+      <div class="card-header bg-white fw-bold text-un-primary d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-diagram-3 text-warning me-2"></i>Workflow steps waiting on you</span>
+        {% if studio.task_count > studio.tasks|length %}<a class="small" href="{% url 'accounts:esign_workflows' %}">All {{ studio.task_count }}</a>{% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for t in studio.tasks %}
+        <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+          <i class="bi {{ t.icon }} text-un-primary"></i>
+          <div class="flex-grow-1">
+            <div class="fw-semibold">{{ t.run.subject }}</div>
+            <div class="small text-muted">
+              {{ t.get_kind_display }} · {{ t.node_label }}
+              · from {{ t.run.initiator.get_full_name|default:t.run.initiator.username }}
+              · <span class="es-token">{{ t.run.reference }}</span>
+              {% if t.is_overdue %}<span class="badge bg-danger">Overdue</span>{% endif %}
+            </div>
+          </div>
+          <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_wf_task' t.token %}">
+            <i class="bi bi-arrow-right-circle me-1"></i> Open
           </a>
         </div>
         {% endfor %}

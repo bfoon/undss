@@ -327,14 +327,35 @@ def pdf_page_count(doc_or_file) -> int:
         return 1
 
 
+def _normalise_rotation(page):
+    """
+    Move a page's /Rotate into its content stream, so the page looks the same
+    but its coordinate space matches what a viewer shows. Anything drawn on top
+    afterwards (fields, stamps) then lands where it was placed.
+    """
+    try:
+        if int(page.get("/Rotate", 0) or 0) % 360:
+            page.transfer_rotation_to_content()
+    except Exception:  # noqa: BLE001 - never block signing over a cosmetic step
+        logging.getLogger(__name__).warning("eSign: could not normalise page rotation", exc_info=True)
+    return page
+
+
 def pdf_page_sizes(doc_or_file):
-    """Returns [(width_pt, height_pt), ...] used by the placement UI."""
+    """
+    Returns [(width_pt, height_pt), ...] used by the placement UI — the page as
+    it is DISPLAYED: the crop box, with width and height swapped for pages
+    turned 90° or 270°.
+    """
     try:
         raw = _bytes_for(doc_or_file)
         sizes = []
         for p in PdfReader(io.BytesIO(raw)).pages:
-            box = p.mediabox
-            sizes.append((float(box.width), float(box.height)))
+            box = p.cropbox
+            w, h = float(box.width), float(box.height)
+            if (int(p.get("/Rotate", 0) or 0) % 180) == 90:
+                w, h = h, w
+            sizes.append((w, h))
         return sizes
     except Exception:
         return [(float(A4[0]), float(A4[1]))]
@@ -492,11 +513,27 @@ def build_final_pdf(envelope: Envelope) -> bytes:
         reader = PdfReader(io.BytesIO(raw))
 
         for page_index, page in enumerate(reader.pages, start=1):
-            box = page.mediabox
+            # Fields are placed on the page as the signer SAW it. A page with
+            # /Rotate (common on scans) is shown turned, but a plain overlay is
+            # drawn in its unturned space — so a field placed top-left landed
+            # top-right, sideways. Bake the rotation into the content first.
+            _normalise_rotation(page)
+
+            # The crop box is the visible page, and what field fractions are
+            # measured against. The overlay page spans every coordinate the
+            # original uses, or anything outside its own box is clipped.
+            box = page.cropbox
             width, height = float(box.width), float(box.height)
 
             overlay_buf = io.BytesIO()
-            c = rl_canvas.Canvas(overlay_buf, pagesize=(width, height))
+            c = rl_canvas.Canvas(
+                overlay_buf,
+                pagesize=(
+                    max(float(page.mediabox.right), float(box.right), width),
+                    max(float(page.mediabox.top), float(box.top), height),
+                ),
+            )
+            c.translate(float(box.left), float(box.bottom))
             _draw_envelope_token(c, width, height, envelope)
 
             for f in fields:

@@ -1,0 +1,10 @@
+{# accounts/templates/accounts/esign/studio/_nav.html — one bar across eSign and the Studio #}
+{% load esign_studio_tags %}{% esign_studio_summary as st_nav %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+  <ul class="nav st-nav">
+    <li class="nav-item"><a class="nav-link" href="{% url 'accounts:esign_dashboard' %}"><i class="bi bi-pen-fill me-1"></i>Envelopes{% if esign_action_count %} <span class="badge rounded-pill bg-warning text-dark">{{ esign_badge_label }}</span>{% endif %}</a></li>
+    <li class="nav-item"><a class="nav-link {% if studio_section == 'pdf' %}active{% endif %}" href="{% url 'accounts:esign_studio' %}"><i class="bi bi-tools me-1"></i>PDF tools</a></li>
+    <li class="nav-item"><a class="nav-link {% if studio_section == 'flows' %}active{% endif %}" href="{% url 'accounts:esign_workflows' %}"><i class="bi bi-diagram-3 me-1"></i>Workflows{% if st_nav.task_count %} <span class="badge rounded-pill bg-warning text-dark">{{ st_nav.task_count }}</span>{% endif %}</a></li>
+    <li class="nav-item"><a class="nav-link {% if studio_section == 'forms' %}active{% endif %}" href="{% url 'accounts:esign_forms' %}"><i class="bi bi-ui-checks-grid me-1"></i>Forms</a></li>
+  </ul>
+</div>

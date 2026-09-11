@@ -1,0 +1,58 @@
+{% comment %}
+  accounts/templates/accounts/esign/email/workflow_task.html
+  A workflow task is waiting for someone: approve, review, fill in, place fields, resubmit.
+{% endcomment %}<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ subject }}</title></head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#0F172A;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:24px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;border:1px solid #E2E8F0;">
+      <tr><td style="background:#005A8B;padding:18px 28px;border-bottom:3px solid #009EDB;">
+        <span style="color:#FFFFFF;font-size:15px;font-weight:700;letter-spacing:.2px;">{{ brand }}</span>
+        <span style="color:#BAE6FD;font-size:12px;float:right;">Workflow {{ reference }}</span>
+      </td></tr>
+      <tr><td style="padding:28px 28px 8px;">
+        <p style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:{% if is_reminder %}#B45309{% else %}#0284C7{% endif %};font-weight:700;">{{ verb }}</p>
+        <h1 style="margin:0 0 14px;font-size:21px;line-height:1.3;color:#0F172A;">{{ subject_line }}</h1>
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#334155;">
+          {% if recipient_name %}Hello {{ recipient_name }},<br>{% endif %}
+          {% if task.kind == "resubmit" %}
+            A step in <strong>{{ flow_name }}</strong> was returned to you for changes. Update the document or form and send it back on its way.
+          {% elif task.kind == "prepare" %}
+            The document is ready for signature at <strong>{{ step_label }}</strong>. Place the signature fields and send it.
+          {% else %}
+            <strong>{{ initiator_name }}</strong> started <strong>{{ flow_name }}</strong> and it has reached <strong>{{ step_label }}</strong>, which is waiting for you.
+          {% endif %}
+        </p>
+        {% if instructions %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
+          <td style="background:#F0F9FF;border-left:3px solid #009EDB;padding:10px 14px;font-size:13px;line-height:1.55;color:#0C4A6E;">{{ instructions|linebreaksbr }}</td>
+        </tr></table>
+        {% endif %}
+        {% if summary %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #E2E8F0;border-radius:6px;">
+          {% for label, value in summary %}
+          <tr><td style="padding:7px 12px;font-size:12px;color:#64748B;width:40%;border-bottom:1px solid #F1F5F9;">{{ label }}</td>
+              <td style="padding:7px 12px;font-size:13px;color:#0F172A;border-bottom:1px solid #F1F5F9;">{{ value|truncatechars:120 }}</td></tr>
+          {% endfor %}
+        </table>
+        {% endif %}
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 20px;"><tr>
+          <td style="background:#009EDB;border-radius:6px;">
+            <a href="{{ action_url }}" style="display:inline-block;padding:12px 26px;color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;">
+              {% if task.kind == "approval" %}Review and decide{% elif task.kind == "review" %}Open and acknowledge{% elif task.kind == "fill" %}Complete the form{% elif task.kind == "prepare" %}Place fields{% elif task.kind == "resubmit" %}Update and resubmit{% else %}Open{% endif %}
+            </a>
+          </td>
+        </tr></table>
+        {% if due_at %}<p style="margin:0 0 14px;font-size:12px;color:#B45309;">Please respond by {{ due_at|date:"j M Y" }}.</p>{% endif %}
+      </td></tr>
+      <tr><td style="padding:14px 28px 22px;border-top:1px solid #F1F5F9;font-size:11px;line-height:1.5;color:#94A3B8;">
+        This link is personal to you — please don't forward it. If the button doesn't work, copy this address into your browser:<br>
+        <span style="color:#64748B;word-break:break-all;">{{ action_url }}</span>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

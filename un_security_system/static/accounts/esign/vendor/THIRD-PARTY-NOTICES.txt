@@ -1,0 +1,19 @@
+eSign Studio bundles these unmodified front-end libraries so that no page
+depends on a third-party CDN. Source-map comments were removed from the
+Bootstrap files so collectstatic works with ManifestStaticFilesStorage.
+
+pdfjs/pdf.min.js, pdfjs/pdf.worker.min.js
+  PDF.js 3.11.174 — Copyright Mozilla Foundation
+  Apache License 2.0 — https://github.com/mozilla/pdf.js/blob/master/LICENSE
+
+jszip/jszip.min.js
+  JSZip 3.10.1 — Copyright Stuart Knightley and contributors
+  MIT License (dual-licensed MIT or GPLv3) — https://github.com/Stuk/jszip/blob/main/LICENSE.markdown
+
+bootstrap/bootstrap.min.css, bootstrap/bootstrap.bundle.min.js
+  Bootstrap 5.3.3 (bundle includes Popper) — Copyright The Bootstrap Authors
+  MIT License — https://github.com/twbs/bootstrap/blob/main/LICENSE
+
+bootstrap-icons/bootstrap-icons.min.css, bootstrap-icons/fonts/*
+  Bootstrap Icons 1.11.3 — Copyright The Bootstrap Authors
+  MIT License — https://github.com/twbs/icons/blob/main/LICENSE

@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/tool.html — one page for every tool; the options section changes per tool #}
+{% block title %}{{ tool.label }} | PDF tools | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .st-queue .list-group-item{ cursor:grab; }
+  .st-queue .list-group-item.dragging{ opacity:.5; }
+  .st-opt-card{ border:1px solid var(--st-line); border-radius:.5rem; padding:.7rem .8rem; cursor:pointer; height:100%; }
+  .btn-check:checked + .st-opt-card{ border-color:var(--st-blue); background:rgba(0,158,219,.06); box-shadow:0 0 0 1px var(--st-blue) inset; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<nav aria-label="breadcrumb" class="small mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="{% url 'accounts:esign_studio' %}">PDF tools</a></li>
+    <li class="breadcrumb-item active">{{ tool.label }}</li>
+  </ol>
+</nav>
+
+<div class="row justify-content-center">
+  <div class="col-xl-8 col-lg-10">
+    <form method="post" enctype="multipart/form-data" id="toolForm" class="card">
+      {% csrf_token %}
+      <div class="card-body p-4">
+        <div class="d-flex gap-3 align-items-center mb-3">
+          <span class="st-ico" style="width:52px;height:52px;border-radius:.7rem;background:rgba(0,158,219,.1);display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:#005A8B"><i class="bi {{ tool.icon }}"></i></span>
+          <div>
+            <h4 class="mb-0 text-un-primary fw-bold">{{ tool.label }}</h4>
+            <div class="text-muted">{{ tool.blurb }}</div>
+          </div>
+        </div>
+
+        {# ---------------- input ---------------- #}
+        {% if existing %}
+          <input type="hidden" name="file" value="{{ existing.pk }}">
+          <div class="alert alert-light border d-flex align-items-center gap-2 mb-3">
+            <i class="bi bi-file-earmark-pdf text-danger fs-4"></i>
+            <div class="flex-grow-1"><div class="fw-semibold">{{ existing.name }}</div><div class="small text-muted">{{ existing.page_count }} pages · version {{ existing.current.number }}</div></div>
+            <a class="small" href="{% url 'accounts:esign_studio_tool' tool.key %}">Use another file</a>
+          </div>
+        {% elif tool.multiple %}
+          <label class="st-drop d-block" id="dropZone">
+            <i class="bi bi-files"></i>
+            <div class="fw-semibold mt-1">Drop files here or click to choose</div>
+            <div class="small text-muted">Up to {{ max_mb }} MB each{% if tool.key == 'merge' %} · drag to set the order{% endif %}</div>
+            <input type="file" name="files" multiple accept="{{ accept_attr }}" class="d-none" id="fileInput">
+          </label>
+          <div class="list-group st-queue mt-2" id="queue"></div>
+          <input type="hidden" name="order" id="orderInput">
+          {% if tool.key == 'merge' and my_files %}
+          <details class="mt-3">
+            <summary class="small fw-semibold text-un-primary">Add files already in My files</summary>
+            <div class="row g-1 mt-1">
+              {% for f in my_files %}
+              <div class="col-md-6"><label class="form-check small"><input class="form-check-input" type="checkbox" name="workbench" value="{{ f.pk }}"> {{ f.name }} <span class="text-muted">({{ f.page_count }}p)</span></label></div>
+              {% endfor %}
+            </div>
+            <div class="form-text">Workbench files go first, in the order listed, then uploads.</div>
+          </details>
+          {% endif %}
+        {% else %}
+          <label class="st-drop d-block" id="dropZone">
+            <i class="bi bi-file-earmark-arrow-up"></i>
+            <div class="fw-semibold mt-1" id="dropLabel">Drop a file here or click to choose</div>
+            <div class="small text-muted">Up to {{ max_mb }} MB</div>
+            <input type="file" name="file_upload" accept="{{ accept_attr }}" class="d-none" id="fileInput">
+          </label>
+          {% if my_files and tool.key != 'unlock' %}
+          <div class="small text-muted mt-2">Or pick from My files:
+            <select class="form-select form-select-sm d-inline-block w-auto ms-1" onchange="if(this.value){location='?file='+this.value}">
+              <option value="">—</option>
+              {% for f in my_files %}<option value="{{ f.pk }}">{{ f.name|truncatechars:50 }}</option>{% endfor %}
+            </select>
+          </div>
+          {% endif %}
+        {% endif %}
+
+        {# ---------------- options ---------------- #}
+        <div class="mt-4">
+        {% if tool.key == 'images' %}
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label small fw-semibold">Page size</label>
+              <select name="page" class="form-select"><option value="a4">A4 — turned landscape for wide images</option><option value="fit">Fit each page to its image</option></select></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">Margin (mm)</label><input type="number" name="margin" value="10" min="0" max="40" class="form-control"></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">File name</label><input type="text" name="name" class="form-control" placeholder="scans.pdf"></div>
+          </div>
+        {% elif tool.key == 'merge' %}
+          <label class="form-label small fw-semibold">Name of the merged file</label>
+          <input type="text" name="name" class="form-control" placeholder="Leave empty to use the first file's name">
+        {% elif tool.key == 'split' %}
+          <div class="row g-2 mb-2">
+            <div class="col-md-6"><input type="radio" class="btn-check" name="mode" id="mRanges" value="ranges" checked>
+              <label class="st-opt-card d-block" for="mRanges"><div class="fw-semibold"><i class="bi bi-list-ol me-1"></i>By page ranges</div><div class="small text-muted">One file per range</div></label></div>
+            <div class="col-md-6"><input type="radio" class="btn-check" name="mode" id="mEvery" value="every">
+              <label class="st-opt-card d-block" for="mEvery"><div class="fw-semibold"><i class="bi bi-layout-split me-1"></i>Every few pages</div><div class="small text-muted">Equal chunks</div></label></div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-8"><label class="form-label small fw-semibold">Ranges</label><input type="text" name="ranges" class="form-control" placeholder="1-3, 4-6, 7-"><div class="form-text">Commas separate files. “7-” runs to the end; “last” works too.</div></div>
+            <div class="col-md-4"><label class="form-label small fw-semibold">Pages per file</label><input type="number" name="every" value="1" min="1" class="form-control"></div>
+          </div>
+        {% elif tool.key == 'compress' %}
+          <div class="row g-2">
+            <div class="col-md-4"><input type="radio" class="btn-check" name="level" id="lvLight" value="light">
+              <label class="st-opt-card d-block" for="lvLight"><div class="fw-semibold">Light</div><div class="small text-muted">Best quality, smaller file</div></label></div>
+            <div class="col-md-4"><input type="radio" class="btn-check" name="level" id="lvBal" value="balanced" checked>
+              <label class="st-opt-card d-block" for="lvBal"><div class="fw-semibold">Balanced <span class="badge bg-light text-dark border">Recommended</span></div><div class="small text-muted">Good for email</div></label></div>
+            <div class="col-md-4"><input type="radio" class="btn-check" name="level" id="lvStrong" value="strong">
+              <label class="st-opt-card d-block" for="lvStrong"><div class="fw-semibold">Strong</div><div class="small text-muted">Smallest; photos soften</div></label></div>
+          </div>
+          <div class="form-text mt-2">Text and drawings stay sharp and searchable; only embedded images are recompressed.</div>
+        {% elif tool.key == 'watermark' %}
+          <div class="row g-3">
+            <div class="col-md-8"><label class="form-label small fw-semibold">Text</label>
+              <input type="text" name="text" class="form-control" value="DRAFT" required list="wmSuggest" maxlength="80">
+              <datalist id="wmSuggest"><option>DRAFT</option><option>CONFIDENTIAL</option><option>FOR INTERNAL USE ONLY</option><option>COPY</option><option>NOT FOR DISTRIBUTION</option></datalist></div>
+            <div class="col-md-4"><label class="form-label small fw-semibold">Position</label>
+              <select name="position" class="form-select"><option value="center">Centre, diagonal</option><option value="tile">Repeated across the page</option><option value="top">Top</option><option value="bottom">Bottom</option></select></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">Size</label><input type="number" name="size" value="54" min="8" max="200" class="form-control"></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">Angle</label><input type="number" name="angle" value="45" min="-90" max="90" class="form-control"></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">Opacity <span id="opVal" class="text-muted">18%</span></label><input type="range" name="opacity" min="0.05" max="0.8" step="0.01" value="0.18" class="form-range" oninput="opVal.textContent=Math.round(this.value*100)+'%'"></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">Colour</label><input type="color" name="color" value="#6B7280" class="form-control form-control-color w-100"></div>
+            <div class="col-12"><label class="form-label small fw-semibold">Pages</label><input type="text" name="pages" class="form-control" placeholder="All pages — or e.g. 1, 3-5"></div>
+          </div>
+        {% elif tool.key == 'numbers' %}
+          <div class="row g-3">
+            <div class="col-md-5"><label class="form-label small fw-semibold">Position</label>
+              <select name="position" class="form-select">
+                <option value="bottom-center">Bottom centre</option><option value="bottom-right">Bottom right</option><option value="bottom-left">Bottom left</option>
+                <option value="top-center">Top centre</option><option value="top-right">Top right</option><option value="top-left">Top left</option></select></div>
+            <div class="col-md-4"><label class="form-label small fw-semibold">Format</label>
+              <select name="fmt" class="form-select"><option value="Page {n} of {total}">Page 1 of 12</option><option value="{n}">1</option><option value="{n} / {total}">1 / 12</option><option value="- {n} -">- 1 -</option></select></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">Start at</label><input type="number" name="start" value="1" min="0" class="form-control"></div>
+            <div class="col-md-3"><label class="form-label small fw-semibold">Size</label><input type="number" name="size" value="9" min="6" max="24" class="form-control"></div>
+            <div class="col-md-9 d-flex align-items-end"><label class="form-check"><input type="checkbox" class="form-check-input" name="skip_first" value="1"> Don't number the first page (cover)</label></div>
+          </div>
+        {% elif tool.key == 'protect' %}
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label small fw-semibold">Password</label><input type="password" name="password" class="form-control" minlength="4" required autocomplete="new-password"></div>
+            <div class="col-md-6"><label class="form-label small fw-semibold">Repeat password</label><input type="password" name="password2" class="form-control" minlength="4" required autocomplete="new-password"></div>
+            <div class="col-12"><label class="form-check"><input type="checkbox" class="form-check-input" name="allow_print" value="1" checked> Allow printing</label></div>
+          </div>
+          <div class="alert alert-info small mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>
+            This downloads a protected copy. Your workbench copy stays unlocked so you can keep working on it —
+            and a password-protected PDF can't be sent for eSign, so protect last.</div>
+        {% elif tool.key == 'unlock' %}
+          <label class="form-label small fw-semibold">Password</label>
+          <input type="password" name="password" class="form-control" required autocomplete="off">
+          <div class="form-text">You need the password. This removes it; it doesn't break it.</div>
+        {% elif tool.key == 'convert' %}
+          <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Each document becomes its own PDF, using the same converter eSign uses for envelopes.</div>
+        {% elif visual %}
+          <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>After uploading you'll work on the pages visually.</div>
+        {% endif %}
+        </div>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-between align-items-center p-3">
+        <a class="btn btn-link text-decoration-none" href="{% url 'accounts:esign_studio' %}"><i class="bi bi-arrow-left me-1"></i>All tools</a>
+        <button class="btn btn-un-primary px-4" id="goBtn" type="submit">
+          <i class="bi {{ tool.icon }} me-1"></i>
+          {% if tool.key == 'protect' %}Download protected copy{% elif visual %}Open{% else %}{{ tool.label }}{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const zone = document.getElementById("dropZone"), input = document.getElementById("fileInput");
+  const queue = document.getElementById("queue"), order = document.getElementById("orderInput");
+  const form = document.getElementById("toolForm"), go = document.getElementById("goBtn");
+  if (zone && input){
+    ["dragenter","dragover"].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add("over"); }));
+    ["dragleave","drop"].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove("over"); }));
+    zone.addEventListener("drop", e => { input.files = e.dataTransfer.files; refresh(); });
+    input.addEventListener("change", refresh);
+  }
+  function fmt(n){ return n > 1048576 ? (n/1048576).toFixed(1) + " MB" : Math.ceil(n/1024) + " KB"; }
+  function refresh(){
+    const label = document.getElementById("dropLabel");
+    if (label && input.files[0]) label.textContent = input.files[0].name;
+    if (!queue) return;
+    queue.innerHTML = "";
+    [...input.files].forEach((f, i) => {
+      const row = document.createElement("div");
+      row.className = "list-group-item d-flex align-items-center gap-2"; row.draggable = true; row.dataset.i = i;
+      row.innerHTML = `<i class="bi bi-grip-vertical text-muted"></i><i class="bi bi-file-earmark text-un-primary"></i><span class="flex-grow-1 text-truncate"></span><span class="small text-muted">${fmt(f.size)}</span>`;
+      row.querySelector(".text-truncate").textContent = f.name;
+      queue.appendChild(row);
+    });
+    syncOrder();
+  }
+  let dragging = null;
+  if (queue){
+    queue.addEventListener("dragstart", e => { dragging = e.target.closest(".list-group-item"); dragging.classList.add("dragging"); });
+    queue.addEventListener("dragend", () => { dragging && dragging.classList.remove("dragging"); dragging = null; syncOrder(); });
+    queue.addEventListener("dragover", e => {
+      e.preventDefault(); if (!dragging) return;
+      const after = [...queue.querySelectorAll(".list-group-item:not(.dragging)")].find(el => e.clientY < el.getBoundingClientRect().top + el.offsetHeight / 2);
+      after ? queue.insertBefore(dragging, after) : queue.appendChild(dragging);
+    });
+  }
+  function syncOrder(){ if (order) order.value = [...queue.children].map(r => r.dataset.i).join(","); }
+  form.addEventListener("submit", () => {
+    {% if tool.key != 'protect' %}setTimeout(() => { go.disabled = true; go.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Working…'; }, 10);{% endif %}
+  });
+})();
+</script>
+{% endblock %}

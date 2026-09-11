@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/form_designer.html — drag-and-drop form builder #}
+{% block title %}{{ form.name }} — Form designer | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/studio/_form_styles.html" %}
+<style>
+  .fb{ display:grid; grid-template-columns:250px 1fr 320px; height:calc(100vh - 190px); min-height:560px; border:1px solid var(--st-line); border-radius:.6rem; overflow:hidden; background:#fff; }
+  @media (max-width: 1199px){ .fb{ grid-template-columns:210px 1fr 280px; } }
+  .fb-left, .fb-right{ overflow:auto; }
+  .fb-left{ border-right:1px solid var(--st-line); background:#FBFCFD; }
+  .fb-right{ border-left:1px solid var(--st-line); padding:14px; }
+  .fb-left .nav-link{ font-size:.8rem; padding:.5rem .6rem; color:#475569; border-radius:0; }
+  .fb-left .nav-link.active{ color:#005A8B; background:#fff; border-bottom:2px solid #009EDB; font-weight:600; }
+  .fb-pal{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .fb-pal-item{ border:1px solid var(--st-line); border-radius:.45rem; background:#fff; padding:.5rem .35rem; text-align:center; font-size:.75rem; cursor:grab; user-select:none; color:#334155; }
+  .fb-pal-item i{ display:block; font-size:1.1rem; color:#005A8B; margin-bottom:.1rem; }
+  .fb-pal-item:hover{ border-color:rgba(0,158,219,.55); box-shadow:0 2px 6px rgba(15,23,42,.06); }
+  .fb-stage{ overflow:auto; background:#E9EEF3; padding:24px; }
+  .fb-paper{ max-width:820px; margin:0 auto; }
+  .fb-el{ position:relative; border-radius:.35rem; outline:1px dashed transparent; outline-offset:4px; cursor:pointer; min-height:28px; }
+  .fb-el:hover{ outline-color:#94A3B8; }
+  .fb-el.sel{ outline:2px solid #009EDB; }
+  .fb-el.dragging{ opacity:.35; }
+  .fb-el .fb-tools{ position:absolute; top:-15px; right:0; display:none; gap:2px; z-index:5; }
+  .fb-el.sel .fb-tools, .fb-el:hover .fb-tools{ display:flex; }
+  .fb-tools button{ height:24px; min-width:24px; border:1px solid #CBD5E1; background:#fff; border-radius:4px; font-size:.72rem; padding:0 5px; color:#334155; }
+  .fb-tools button:hover{ background:#EEF6FB; color:#005A8B; }
+  .fb-tools .w{ font-weight:700; color:#005A8B; background:#EEF6FB; }
+  .fb-resize{ position:absolute; top:0; bottom:0; right:-10px; width:8px; cursor:ew-resize; display:none; z-index:4; }
+  .fb-resize:after{ content:""; position:absolute; top:35%; bottom:35%; left:3px; width:3px; border-radius:2px; background:#009EDB; }
+  .fb-el.sel .fb-resize{ display:block; }
+  .fb-el .fb-step{ position:absolute; left:0; top:-15px; font-size:.65rem; background:#2563EB; color:#fff; border-radius:3px; padding:0 5px; display:none; }
+  .fb-el:hover .fb-step, .fb-el.sel .fb-step{ display:block; }
+  .fb-drop{ position:absolute; background:#009EDB; border-radius:2px; z-index:10; pointer-events:none; box-shadow:0 0 0 2px rgba(0,158,219,.25); }
+  .fb-el input, .fb-el select, .fb-el textarea{ pointer-events:none; }
+  .fb-empty{ border:2px dashed #B6C6D4; border-radius:.5rem; padding:2.5rem 1rem; text-align:center; color:#64748B; }
+  .fb-opt-row{ display:flex; gap:4px; margin-bottom:4px; }
+  .fb-opt-row .form-control{ font-size:.8rem; }
+  .fb-save-state{ font-size:.78rem; color:#64748B; }
+  .fb-name{ font-size:1.15rem; font-weight:700; color:#005A8B; border:1px solid transparent; border-radius:.35rem; padding:.15rem .4rem; min-width:220px; background:transparent; }
+  .fb-name:hover{ border-color:var(--st-line); } .fb-name:focus{ outline:0; border-color:#86b7fe; background:#fff; }
+  .fb-color{ width:34px; height:30px; padding:2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+  <a class="btn btn-sm btn-link text-decoration-none px-1" href="{% url 'accounts:esign_forms' %}" title="Back to forms"><i class="bi bi-arrow-left"></i></a>
+  <input class="fb-name" id="formName" maxlength="150" aria-label="Form name">
+  <div class="form-check form-switch ms-2 mb-0"><input class="form-check-input" type="checkbox" id="published"><label class="form-check-label small" for="published">Published</label></div>
+  <span class="fb-save-state ms-2" id="saveState">Saved</span>
+  <div class="ms-auto d-flex flex-wrap gap-2">
+    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#tplModal"><i class="bi bi-grid-1x2 me-1"></i>Templates</button>
+    <button class="btn btn-sm btn-outline-secondary" id="undo" disabled title="Undo (Ctrl+Z)"><i class="bi bi-arrow-90deg-left"></i></button>
+    <button class="btn btn-sm btn-outline-secondary" id="redo" disabled title="Redo (Ctrl+Y)"><i class="bi bi-arrow-90deg-right"></i></button>
+    <button class="btn btn-sm btn-outline-primary" id="previewBtn"><i class="bi bi-file-earmark-pdf me-1"></i>PDF preview</button>
+    <button class="btn btn-sm btn-outline-primary" id="testBtn"><i class="bi bi-play me-1"></i>Try it</button>
+    <button class="btn btn-sm btn-un-primary" id="saveBtn"><i class="bi bi-cloud-check me-1"></i>Save</button>
+  </div>
+</div>
+
+<div class="fb">
+  <div class="fb-left">
+    <ul class="nav nav-fill border-bottom" role="tablist">
+      <li class="nav-item"><button class="nav-link active w-100" data-bs-toggle="tab" data-bs-target="#tabAdd" type="button"><i class="bi bi-plus-square d-block"></i>Add</button></li>
+      <li class="nav-item"><button class="nav-link w-100" data-bs-toggle="tab" data-bs-target="#tabTheme" type="button"><i class="bi bi-palette d-block"></i>Look</button></li>
+      <li class="nav-item"><button class="nav-link w-100" data-bs-toggle="tab" data-bs-target="#tabSettings" type="button"><i class="bi bi-gear d-block"></i>Settings</button></li>
+    </ul>
+    <div class="tab-content p-2">
+      <div class="tab-pane fade show active" id="tabAdd">
+        <div class="st-group-label my-2">Questions</div><div class="fb-pal" id="palInputs"></div>
+        <div class="st-group-label mt-3 mb-2">Layout</div><div class="fb-pal" id="palLayout"></div>
+        <div class="small text-muted mt-3">Drag onto the form, or click to add below the selected item.</div>
+      </div>
+      <div class="tab-pane fade" id="tabTheme"><div id="themePanel"></div></div>
+      <div class="tab-pane fade" id="tabSettings"><div id="settingsPanel"></div></div>
+    </div>
+  </div>
+
+  <div class="fb-stage" id="stage">
+    <div class="fb-paper" id="paper"></div>
+  </div>
+
+  <aside class="fb-right" id="inspector" aria-label="Inspector"></aside>
+</div>
+
+<div class="modal fade" id="tplModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title text-un-primary"><i class="bi bi-grid-1x2 me-2"></i>Start from a template</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><div class="row g-3" id="tplList"></div><div class="small text-muted mt-3">Choosing a template replaces the fields and look. You can undo.</div></div>
+</div></div></div>
+
+<div class="modal fade" id="pdfModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title text-un-primary"><i class="bi bi-file-earmark-pdf me-2"></i>PDF preview</h5>
+    <a class="btn btn-sm btn-outline-primary ms-3" id="pdfDownload" download="form-preview.pdf"><i class="bi bi-download me-1"></i>Download</a>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body st-viewer" style="max-height:none"><div class="st-pages" id="pdfPages"></div></div>
+</div></div></div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_pdf_viewer.html" %}
+<script>
+(function(){
+  const CFG = {{ config_json|safe }}, INIT = {{ payload|safe }}, CSRF = "{{ csrf_token }}";
+  const WIDTHS = CFG.widths;
+  const INPUTS = [
+    ["text", "Short answer", "bi-input-cursor"], ["textarea", "Paragraph", "bi-textarea-t"], ["number", "Number", "bi-123"], ["email", "Email", "bi-at"],
+    ["date", "Date", "bi-calendar3"], ["select", "Dropdown", "bi-menu-button-wide"], ["radio", "One choice", "bi-ui-radios"], ["checkboxes", "Several choices", "bi-ui-checks"],
+    ["yesno", "Yes / No", "bi-toggles"], ["table", "Table", "bi-table"],
+  ];
+  const LAYOUT = [["heading", "Heading", "bi-type-h2"], ["paragraph", "Text", "bi-text-paragraph"], ["divider", "Divider", "bi-hr"], ["spacer", "Space", "bi-arrows-vertical"],
+    ["image", "Image / logo", "bi-image"], ["signature", "Signature box", "bi-pen"]];
+  const LABELS = Object.fromEntries([...INPUTS, ...LAYOUT].map(([k, l]) => [k, l]));
+  const INPUT_TYPES = INPUTS.map(i => i[0]);
+
+  let meta = {name: INIT.name, description: INIT.description, category: INIT.category, workflow_id: INIT.workflow_id, share_scope: INIT.share_scope,
+              access: INIT.access, is_published: INIT.is_published, owner_sees_submissions: INIT.owner_sees_submissions,
+              reference_prefix: INIT.reference_prefix, submit_message: INIT.submit_message};
+  let schema = INIT.schema, version = INIT.version, selId = null, dirty = false;
+  let undoStack = [], redoStack = [];
+  const fresh = new Set();              // element ids whose key still follows the label
+
+  const paper = document.getElementById("paper"), inspector = document.getElementById("inspector");
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const uid = () => "el_" + Math.random().toString(36).slice(2, 10);
+  const slug = t => (String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)) || "field";
+  const byId = id => schema.elements.find(e => e.id === id);
+  const flow = () => CFG.flows.find(f => f.id === +meta.workflow_id) || null;
+
+  // ─── history ──────────────────────────────────────────────
+  const snap = () => JSON.stringify({schema, meta});
+  function change(fn, keepInspector){ undoStack.push(snap()); if (undoStack.length > 150) undoStack.shift(); redoStack = []; fn(); markDirty(); renderPaper(); if (!keepInspector) renderInspector(); renderSettings(); }
+  function markDirty(){ dirty = true; document.getElementById("saveState").textContent = "Unsaved changes"; syncHist(); }
+  function syncHist(){ document.getElementById("undo").disabled = !undoStack.length; document.getElementById("redo").disabled = !redoStack.length; }
+  function restore(s){ const o = JSON.parse(s); schema = o.schema; meta = o.meta; if (selId && !byId(selId)) selId = null; markDirty(); renderAll(); }
+  document.getElementById("undo").onclick = () => { if (undoStack.length){ redoStack.push(snap()); restore(undoStack.pop()); } };
+  document.getElementById("redo").onclick = () => { if (redoStack.length){ undoStack.push(snap()); restore(redoStack.pop()); } };
+
+  // ─── element defaults ────────────────────────────────────
+  function uniqueKey(base, selfId){
+    let k = slug(base), n = 2; const taken = new Set(schema.elements.filter(e => e.id !== selfId && e.key).map(e => e.key));
+    const root = k; while (taken.has(k)) k = `${root}_${n++}`; return k;
+  }
+  function make(type){
+    const el = {id: uid(), type, width: 12};
+    if (INPUT_TYPES.includes(type)){
+      Object.assign(el, {label: LABELS[type], required: false, help: "", placeholder: "", fill_by: "submitter", prefill: ""});
+      el.key = uniqueKey(el.label); fresh.add(el.id);
+      if (["text", "email", "date", "number", "select"].includes(type)) el.width = 6;
+      if (["select", "radio", "checkboxes"].includes(type)) el.options = ["Option 1", "Option 2", "Option 3"];
+      if (type === "number"){ el.min = null; el.max = null; el.decimals = 0; }
+      if (type === "textarea") el.rows = 4;
+      if (type === "yesno") el.width = 4;
+      if (type === "table"){ el.label = "Items"; el.key = uniqueKey("items"); el.columns = [{key: "item", label: "Item", kind: "text", width: 4}, {key: "qty", label: "Qty", kind: "number", width: 1}, {key: "amount", label: "Amount", kind: "number", width: 2}]; el.rows = 3; el.show_total = true; el.allow_add = true; }
+    }
+    if (type === "heading") Object.assign(el, {text: "Section", style: {size: "md", color: schema.theme.accent === "#009EDB" ? "#005A8B" : schema.theme.accent, bg: "", align: "left"}});
+    if (type === "paragraph") Object.assign(el, {text: "Write instructions or terms here.", style: {color: "#334155", size: "md", bg: "", align: "left"}});
+    if (type === "divider") el.style = {color: "#CBD5E1"};
+    if (type === "spacer") el.height = 16;
+    if (type === "image") Object.assign(el, {src: "", height: 64, align: "left"});
+    if (type === "signature") Object.assign(el, {label: "Signature", role: "", step: "", show_date: true, width: 6});
+    return el;
+  }
+
+  // ─── palette (drag or click) ─────────────────────────────
+  function palette(host, list){
+    list.forEach(([type, label, icon]) => {
+      const it = document.createElement("div");
+      it.className = "fb-pal-item"; it.innerHTML = `<i class="bi ${icon}"></i>${label}`; it.tabIndex = 0;
+      it.addEventListener("pointerdown", e => startDrag(e, {newType: type, label, icon}));
+      it.addEventListener("keydown", e => { if (e.key === "Enter") insert(make(type)); });
+      host.appendChild(it);
+    });
+  }
+  palette(document.getElementById("palInputs"), INPUTS);
+  palette(document.getElementById("palLayout"), LAYOUT);
+
+  function insert(el, index){
+    change(() => {
+      if (index === undefined){ const i = schema.elements.findIndex(e => e.id === selId); index = i >= 0 ? i + 1 : schema.elements.length; }
+      schema.elements.splice(index, 0, el); selId = el.id;
+    });
+    const node = paper.querySelector(`[data-id="${el.id}"]`); if (node) node.scrollIntoView({block: "nearest", behavior: "smooth"});
+  }
+
+  // ─── rendering the sheet ─────────────────────────────────
+  function fieldPreview(el){
+    const ph = esc(el.placeholder || "");
+    switch (el.type){
+      case "textarea": return `<textarea class="form-control" rows="${Math.min(el.rows, 6)}" placeholder="${ph}" tabindex="-1"></textarea>`;
+      case "select": return `<select class="form-select" tabindex="-1"><option>${ph || "Choose…"}</option></select>`;
+      case "radio": return (el.options || []).map(o => `<label class="form-check form-check-inline"><input class="form-check-input" type="radio" tabindex="-1"> ${esc(o)}</label>`).join("");
+      case "checkboxes": return (el.options || []).map(o => `<label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" tabindex="-1"> ${esc(o)}</label>`).join("");
+      case "yesno": return `<div class="btn-group"><span class="btn btn-outline-primary btn-sm px-3">Yes</span><span class="btn btn-outline-primary btn-sm px-3">No</span></div>`;
+      case "table": return `<table class="table table-sm table-bordered fs-table mb-0"><thead><tr>${el.columns.map(c => `<th>${esc(c.label)}</th>`).join("")}</tr></thead><tbody>${Array.from({length: Math.min(el.rows, 4)}, () => `<tr>${el.columns.map(() => "<td>&nbsp;</td>").join("")}</tr>`).join("")}</tbody>${el.show_total ? `<tfoot><tr>${el.columns.map((c, i) => `<th class="small">${c.kind === "number" ? "0" : i === 0 ? "Total" : ""}</th>`).join("")}</tr></tfoot>` : ""}</table>${el.rows > 4 ? `<div class="small text-muted">${el.rows} rows${el.allow_add ? ", more can be added" : ""}</div>` : ""}`;
+      default: return `<input class="form-control" placeholder="${ph}" type="${el.type === "date" ? "date" : "text"}" tabindex="-1">`;
+    }
+  }
+  function elementHtml(el){
+    const s = el.style || {};
+    switch (el.type){
+      case "heading": return `<div class="fs-heading fs-h-${s.size}" style="color:${s.color};text-align:${s.align};${s.bg ? `background:${s.bg};padding:.35rem .6rem;border-radius:.3rem;` : "border-bottom:2px solid var(--fs-accent);"}">${esc(el.text)}</div>`;
+      case "paragraph": return `<div class="fs-para ${s.size === "sm" ? "small" : ""}" style="color:${s.color};text-align:${s.align};${s.bg ? `background:${s.bg};padding:.5rem .7rem;border-radius:.3rem;` : ""}white-space:pre-wrap">${esc(el.text) || '<span class="text-muted">Empty text</span>'}</div>`;
+      case "divider": return `<hr class="my-2" style="border-color:${s.color};opacity:1">`;
+      case "spacer": return `<div style="height:${el.height}px;background:repeating-linear-gradient(45deg,transparent,transparent 6px,#F1F5F9 6px,#F1F5F9 12px)"></div>`;
+      case "image": return el.src ? `<div style="text-align:${el.align}"><img src="${el.src}" style="max-height:${el.height}px;max-width:100%" alt=""></div>` : `<div class="fs-sig" style="height:${el.height}px"><i class="bi bi-image me-1"></i>Choose an image</div>`;
+      case "signature": return `<div class="fs-label">${esc(el.label)}${el.role ? ` <span class="fw-normal text-muted">— ${esc(el.role)}</span>` : ""}</div><div class="fs-sig"><i class="bi bi-pen me-1"></i>Signed electronically</div>${el.show_date ? '<div class="small text-muted mt-1">Date: ____________</div>' : ""}`;
+    }
+    return `<label class="fs-label">${esc(el.label)}${el.required ? ' <span class="text-danger">*</span>' : ""}</label>${fieldPreview(el)}${el.help ? `<div class="form-text">${esc(el.help)}</div>` : ""}`;
+  }
+  function stepName(id){ const f = flow(); const s = f && f.steps.find(x => x.id === id); return s ? s.label : id; }
+
+  function renderPaper(){
+    const th = schema.theme, hd = schema.header;
+    const font = th.font === "times" ? "'Times New Roman',Times,serif" : th.font === "courier" ? "'Courier New',monospace" : "'Segoe UI',Helvetica,Arial,sans-serif";
+    let h = `<div class="fs-sheet ${th.density === "compact" ? "compact" : ""} ${th.rounded ? "rounded-fields" : ""}" style="--fs-accent:${th.accent};--fs-hbg:${th.header_bg};--fs-htext:${th.header_text};--fs-label:${th.label_color};font-family:${font}">
+      <div class="fs-header" style="text-align:${hd.align};cursor:pointer" id="headerBlock" title="Change in Look">
+        ${hd.logo ? `<img src="${hd.logo}" class="fs-logo ${hd.align === "center" ? "mx-auto d-block" : ""}" alt="">` : ""}
+        <div class="fs-title">${esc(hd.title)}</div>${hd.subtitle ? `<div class="fs-subtitle">${esc(hd.subtitle)}</div>` : ""}
+        ${hd.show_reference ? `<div class="small mt-1" style="opacity:.7">Reference: ${esc(meta.reference_prefix)}-2026-0001</div>` : ""}
+      </div><div class="row g-3 fs-body" id="grid">`;
+    schema.elements.forEach(el => {
+      const step = INPUT_TYPES.includes(el.type) && el.fill_by && el.fill_by !== "submitter" ? `<span class="fb-step"><i class="bi bi-input-cursor-text"></i> ${esc(stepName(el.fill_by))}</span>`
+        : el.type === "signature" && (el.step || el.role) ? `<span class="fb-step" style="background:#009EDB"><i class="bi bi-pen"></i> ${esc(el.step ? stepName(el.step) : el.role)}</span>` : "";
+      h += `<div class="col-md-${el.width}"><div class="fb-el ${el.id === selId ? "sel" : ""}" data-id="${el.id}" tabindex="0">
+        ${step}
+        <div class="fb-tools">
+          <button type="button" data-cmd="narrow" title="Narrower">−</button><button type="button" class="w" data-cmd="wide" title="Width: ${el.width}/12">${el.width}/12</button><button type="button" data-cmd="widen" title="Wider">+</button>
+          <button type="button" data-cmd="up" title="Move up"><i class="bi bi-arrow-up"></i></button><button type="button" data-cmd="down" title="Move down"><i class="bi bi-arrow-down"></i></button>
+          <button type="button" data-cmd="dup" title="Duplicate"><i class="bi bi-copy"></i></button><button type="button" data-cmd="del" title="Delete"><i class="bi bi-trash"></i></button>
+        </div>
+        ${elementHtml(el)}<span class="fb-resize" title="Drag to change the width"></span></div></div>`;
+    });
+    if (!schema.elements.length) h += `<div class="col-12"><div class="fb-empty"><i class="bi bi-arrow-left-circle fs-2 d-block mb-1"></i>Drag questions and layout blocks here — or pick a template.</div></div>`;
+    h += `</div></div>`;
+    paper.innerHTML = h;
+    document.getElementById("formName").value = meta.name;
+    document.getElementById("published").checked = !!meta.is_published;
+  }
+
+  // ─── canvas interaction ──────────────────────────────────
+  paper.addEventListener("pointerdown", e => {
+    const cmd = e.target.closest("[data-cmd]"), elNode = e.target.closest(".fb-el");
+    if (e.target.closest("#headerBlock")){ bootstrap.Tab.getOrCreateInstance(document.querySelector('[data-bs-target="#tabTheme"]')).show(); return; }
+    if (!elNode){ if (selId){ selId = null; renderPaper(); renderInspector(); } return; }
+    const id = elNode.dataset.id, el = byId(id);
+    if (cmd){ e.preventDefault(); e.stopPropagation(); return command(cmd.dataset.cmd, id); }
+    if (e.target.closest(".fb-resize")) return resizeWidth(e, el, elNode);
+    if (selId !== id){ selId = id; renderPaper(); renderInspector(); }
+    startDrag(e, {id});
+  });
+  function command(cmd, id){
+    const i = schema.elements.findIndex(e => e.id === id), el = schema.elements[i];
+    const wi = WIDTHS.indexOf(el.width);
+    change(() => {
+      if (cmd === "narrow" && wi > 0) el.width = WIDTHS[wi - 1];
+      if (cmd === "widen" && wi < WIDTHS.length - 1) el.width = WIDTHS[wi + 1];
+      if (cmd === "wide") el.width = el.width === 12 ? 6 : 12;
+      if (cmd === "up" && i > 0) [schema.elements[i - 1], schema.elements[i]] = [schema.elements[i], schema.elements[i - 1]];
+      if (cmd === "down" && i < schema.elements.length - 1) [schema.elements[i + 1], schema.elements[i]] = [schema.elements[i], schema.elements[i + 1]];
+      if (cmd === "dup"){ const c = JSON.parse(JSON.stringify(el)); c.id = uid(); if (c.key) c.key = uniqueKey(c.key); if (c.label) c.label += " (copy)"; schema.elements.splice(i + 1, 0, c); selId = c.id; }
+      if (cmd === "del"){ schema.elements.splice(i, 1); if (selId === id) selId = null; }
+      selId = cmd === "del" ? selId : (cmd === "dup" ? selId : id);
+    });
+  }
+  function resizeWidth(e, el, node){
+    e.preventDefault(); e.stopPropagation();
+    const grid = document.getElementById("grid").getBoundingClientRect(), start = el.width, before = snap();
+    const col = node.parentElement.getBoundingClientRect();
+    const moveH = ev => {
+      const cols = Math.round((ev.clientX - col.left) / grid.width * 12);
+      const w = WIDTHS.reduce((a, b) => Math.abs(b - cols) < Math.abs(a - cols) ? b : a);
+      if (w !== el.width){ el.width = w; renderPaper(); }
+    };
+    const up = () => { window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up);
+      if (el.width !== start){ undoStack.push(before); redoStack = []; markDirty(); renderInspector(); } };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+
+  // Drag: reorder existing items, or drop new ones from the palette
+  let marker = null;
+  function dropIndex(x, y){
+    const nodes = [...paper.querySelectorAll(".fb-el")].filter(n => !n.classList.contains("dragging"));
+    for (let i = 0; i < nodes.length; i++){
+      const r = nodes[i].getBoundingClientRect();
+      if (y < r.top - 6 || (y <= r.bottom && x < r.left + r.width / 2)) return {index: schema.elements.findIndex(e => e.id === nodes[i].dataset.id), rect: r, before: true};
+    }
+    const last = nodes[nodes.length - 1];
+    return {index: schema.elements.length, rect: last ? last.getBoundingClientRect() : null, before: false};
+  }
+  function showMarker(x, y){
+    const stage = document.getElementById("stage").getBoundingClientRect(), {rect, before} = dropIndex(x, y);
+    if (!marker){ marker = document.createElement("div"); marker.className = "fb-drop"; document.body.appendChild(marker); }
+    Object.assign(marker.style, {position: "fixed"});
+    if (!rect){ const g = document.getElementById("grid").getBoundingClientRect(); Object.assign(marker.style, {left: g.left + 20 + "px", top: g.top + 20 + "px", width: g.width - 40 + "px", height: "4px"}); return; }
+    if (before) Object.assign(marker.style, {left: rect.left - 8 + "px", top: rect.top + "px", width: "4px", height: rect.height + "px"});
+    else Object.assign(marker.style, {left: rect.left + "px", top: rect.bottom + 8 + "px", width: rect.width + "px", height: "4px"});
+  }
+  function startDrag(e, what){
+    const sx = e.clientX, sy = e.clientY; let active = false, proxy = null;
+    const node = what.id ? paper.querySelector(`[data-id="${what.id}"]`) : null;
+    const moveH = ev => {
+      if (!active && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      if (!active){
+        active = true;
+        if (node) node.classList.add("dragging");
+        proxy = document.createElement("div"); proxy.className = "fb-pal-item"; proxy.style.cssText = "position:fixed;z-index:3000;pointer-events:none;width:130px;box-shadow:0 8px 20px rgba(0,0,0,.15)";
+        proxy.innerHTML = what.newType ? `<i class="bi ${what.icon}"></i>${what.label}` : `<i class="bi bi-arrows-move"></i>${esc(LABELS[byId(what.id).type])}`;
+        document.body.appendChild(proxy);
+      }
+      proxy.style.left = ev.clientX + 10 + "px"; proxy.style.top = ev.clientY + 10 + "px";
+      const stage = document.getElementById("stage").getBoundingClientRect();
+      if (ev.clientX > stage.left && ev.clientX < stage.right && ev.clientY > stage.top && ev.clientY < stage.bottom) showMarker(ev.clientX, ev.clientY);
+      else if (marker){ marker.remove(); marker = null; }
+      if (ev.clientY > stage.bottom - 40) document.getElementById("stage").scrollTop += 12;
+      if (ev.clientY < stage.top + 40) document.getElementById("stage").scrollTop -= 12;
+    };
+    const up = ev => {
+      window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up);
+      if (proxy) proxy.remove();
+      const hadMarker = !!marker; if (marker){ marker.remove(); marker = null; }
+      if (node) node.classList.remove("dragging");
+      if (!active){ if (what.newType) insert(make(what.newType)); return; }
+      if (!hadMarker) return renderPaper();
+      const {index} = dropIndex(ev.clientX, ev.clientY);
+      if (what.newType) return insert(make(what.newType), index);
+      const from = schema.elements.findIndex(x => x.id === what.id);
+      let to = index; if (to > from) to -= 1;
+      if (to === from) return renderPaper();
+      change(() => { const [moved] = schema.elements.splice(from, 1); schema.elements.splice(to, 0, moved); });
+    };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+
+  // ─── inspector ───────────────────────────────────────────
+  function field(label, html, help){ return `<div class="mb-2"><label class="form-label small fw-semibold mb-1">${label}</label>${html}${help ? `<div class="form-text">${help}</div>` : ""}</div>`; }
+  const input = (k, v, attrs = "") => `<input class="form-control form-control-sm" data-k="${k}" value="${esc(v ?? "")}" ${attrs}>`;
+  const select = (k, v, opts) => `<select class="form-select form-select-sm" data-k="${k}">${opts.map(([val, lab]) => `<option value="${esc(val)}" ${String(v) === String(val) ? "selected" : ""}>${esc(lab)}</option>`).join("")}</select>`;
+  const colour = (k, v) => `<input type="color" class="form-control form-control-color fb-color" data-k="${k}" value="${v || "#000000"}">`;
+  const check = (k, v, label) => `<label class="form-check small mb-2"><input class="form-check-input" type="checkbox" data-k="${k}" ${v ? "checked" : ""}> ${label}</label>`;
+
+  function renderInspector(){
+    const el = selId && byId(selId);
+    if (!el){
+      const inputs = schema.elements.filter(e => INPUT_TYPES.includes(e.type)).length;
+      inspector.innerHTML = `<div class="fw-bold text-un-primary mb-2"><i class="bi bi-info-circle me-1"></i>Your form</div>
+        <div class="small text-muted mb-3">${inputs} question${inputs === 1 ? "" : "s"} · ${schema.elements.length} block${schema.elements.length === 1 ? "" : "s"}</div>
+        <div class="small mb-3">Click anything on the form to change it. Drag to reorder; drag the blue handle on the right to resize. What you see here is the layout of the PDF too.</div>
+        ${flow() ? `<div class="alert alert-info small py-2"><i class="bi bi-diagram-3 me-1"></i>Runs <strong>${esc(flow().name)}</strong>. Set <em>Filled in at</em> on questions a later step completes, and <em>Signed at</em> on signature boxes.</div>` : `<div class="alert alert-light border small py-2">Link a workflow in <strong>Settings</strong> to route submissions for approval and signature.</div>`}`;
+      return;
+    }
+    const isInput = INPUT_TYPES.includes(el.type), s = el.style || {};
+    let h = `<div class="d-flex align-items-center mb-2"><div class="fw-bold text-un-primary">${esc(LABELS[el.type])}</div>
+      <div class="ms-auto"><button class="btn btn-sm btn-outline-secondary" data-cmd2="dup" title="Duplicate"><i class="bi bi-copy"></i></button> <button class="btn btn-sm btn-outline-danger" data-cmd2="del" title="Delete"><i class="bi bi-trash"></i></button></div></div>`;
+    h += field("Width", `<div class="btn-group btn-group-sm w-100">${WIDTHS.map(w => `<button type="button" class="btn btn-outline-primary ${el.width === w ? "active" : ""}" data-width="${w}">${w === 12 ? "Full" : w === 6 ? "½" : w === 4 ? "⅓" : w === 3 ? "¼" : w === 8 ? "⅔" : "¾"}</button>`).join("")}</div>`);
+    if (isInput){
+      h += field("Question", input("label", el.label, 'maxlength="200"'));
+      h += `<div class="row g-2"><div class="col-7">${field("Placeholder", input("placeholder", el.placeholder, 'maxlength="120"'))}</div><div class="col-5 d-flex align-items-end pb-2">${check("required", el.required, "Required")}</div></div>`;
+      h += field("Help text", input("help", el.help, 'maxlength="300"'));
+      if (["select", "radio", "checkboxes"].includes(el.type)){
+        h += `<div class="mb-2"><label class="form-label small fw-semibold mb-1">Options</label><div id="optList">${(el.options || []).map((o, i) => `<div class="fb-opt-row"><input class="form-control form-control-sm" data-opt="${i}" value="${esc(o)}"><button class="btn btn-sm btn-outline-secondary" data-optdel="${i}" title="Remove"><i class="bi bi-x"></i></button></div>`).join("")}</div>
+          <button class="btn btn-sm btn-link px-0" id="optAdd"><i class="bi bi-plus-lg"></i> Add option</button> <button class="btn btn-sm btn-link px-0 ms-2" id="optBulk">Paste a list</button></div>`;
+      }
+      if (el.type === "number") h += `<div class="row g-2">${["min", "max"].map(k => `<div class="col-4">${field(k === "min" ? "Min" : "Max", input(k, el[k], 'type="number" step="any"'))}</div>`).join("")}<div class="col-4">${field("Decimals", input("decimals", el.decimals, 'type="number" min="0" max="4"'))}</div></div>`;
+      if (el.type === "textarea") h += field("Rows", input("rows", el.rows, 'type="number" min="2" max="12"'));
+      if (el.type === "table"){
+        h += `<div class="mb-2"><label class="form-label small fw-semibold mb-1">Columns</label>${el.columns.map((c, i) => `<div class="fb-opt-row">
+          <input class="form-control form-control-sm" data-col="${i}" data-ck="label" value="${esc(c.label)}" style="flex:2">
+          <select class="form-select form-select-sm" data-col="${i}" data-ck="kind" style="flex:1.3">${["text", "number", "date"].map(k => `<option ${c.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select>
+          <input class="form-control form-control-sm" data-col="${i}" data-ck="width" type="number" min="1" max="6" value="${c.width}" title="Relative width" style="flex:.8">
+          <button class="btn btn-sm btn-outline-secondary" data-coldel="${i}"><i class="bi bi-x"></i></button></div>`).join("")}
+          <button class="btn btn-sm btn-link px-0" id="colAdd" ${el.columns.length >= 10 ? "disabled" : ""}><i class="bi bi-plus-lg"></i> Add column</button></div>
+          <div class="row g-2"><div class="col-5">${field("Starting rows", input("rows", el.rows, 'type="number" min="1" max="50"'))}</div>
+          <div class="col-7 pt-4">${check("show_total", el.show_total, "Total number columns")}${check("allow_add", el.allow_add, "People can add rows")}</div></div>`;
+      }
+      h += `<hr class="my-2">`;
+      h += field("Filled in automatically with", select("prefill", el.prefill, Object.entries(CFG.prefill)), "Only for people signed in to UN PASS; they can still change it.");
+      const steps = flow() ? flow().steps.filter(x => x.type === "fill") : [];
+      h += field("Filled in at", select("fill_by", el.fill_by, [["submitter", "When the form is submitted"], ...steps.map(x => [x.id, `Workflow step: ${x.label}`])]),
+        flow() ? (steps.length ? "A later step can complete this field — e.g. ICT adds the username." : "Add a “Fill in” step to the linked workflow to use this.") : "Link a workflow in Settings to have a later step complete this.");
+      h += `<details class="small mt-2"><summary class="text-muted">Advanced</summary>${field("Field key", input("key", el.key, 'maxlength="40"'), "Used in workflow conditions and CSV exports. Changing it breaks conditions that use it.")}</details>`;
+    }
+    if (el.type === "heading" || el.type === "paragraph"){
+      h += field("Text", el.type === "heading" ? input("text", el.text, 'maxlength="200"') : `<textarea class="form-control form-control-sm" rows="5" data-k="text" maxlength="4000">${esc(el.text)}</textarea>`);
+      h += `<div class="row g-2"><div class="col-6">${field("Size", select("style.size", s.size, el.type === "heading" ? [["sm", "Small"], ["md", "Medium"], ["lg", "Large"]] : [["sm", "Small"], ["md", "Normal"]]))}</div>
+        <div class="col-6">${field("Align", select("style.align", s.align, [["left", "Left"], ["center", "Centre"], ["right", "Right"]]))}</div></div>
+        <div class="d-flex gap-3 align-items-end mb-2"><div><label class="form-label small fw-semibold mb-1 d-block">Colour</label>${colour("style.color", s.color)}</div>
+        <div><label class="form-label small fw-semibold mb-1 d-block">Background</label><div class="d-flex gap-1">${colour("style.bg", s.bg || "#F1F5F9")}<button class="btn btn-sm btn-outline-secondary" data-clear="style.bg" ${s.bg ? "" : "disabled"}>None</button></div></div></div>`;
+    }
+    if (el.type === "divider") h += `<label class="form-label small fw-semibold mb-1 d-block">Colour</label>${colour("style.color", s.color)}`;
+    if (el.type === "spacer") h += field(`Height <span class="text-muted">${el.height}px</span>`, `<input type="range" class="form-range" min="4" max="160" step="4" data-k="height" value="${el.height}">`);
+    if (el.type === "image"){
+      h += `<div class="mb-2"><input type="file" accept="image/png,image/jpeg,image/webp" class="form-control form-control-sm" id="imgPick">${el.src ? `<button class="btn btn-sm btn-link text-danger px-0" data-clear="src">Remove image</button>` : ""}</div>`;
+      h += field(`Height <span class="text-muted">${el.height}px</span>`, `<input type="range" class="form-range" min="16" max="320" step="4" data-k="height" value="${el.height}">`);
+      h += field("Align", select("align", el.align, [["left", "Left"], ["center", "Centre"], ["right", "Right"]]));
+    }
+    if (el.type === "signature"){
+      const steps = flow() ? flow().steps.filter(x => x.type === "signature") : [];
+      h += field("Caption", input("label", el.label, 'maxlength="120"'));
+      h += field("Role", input("role", el.role, 'maxlength="80" placeholder="e.g. Supervisor"'), "Matched to the workflow's “chosen at start” role of the same name.");
+      if (steps.length) h += field("Signed at", select("step", el.step, [["", "Any signature step (match by role)"], ...steps.map(x => [x.id, x.label])]));
+      h += check("show_date", el.show_date, "Show the date signed");
+      h += `<div class="small text-muted">When the form reaches a signature step, the signature is placed exactly in this box.</div>`;
+    }
+    inspector.innerHTML = h;
+    bindInspector(el);
+  }
+
+  function setPath(obj, path, val){ const p = path.split("."); let o = obj; for (let i = 0; i < p.length - 1; i++) o = o[p[i]] = o[p[i]] || {}; o[p[p.length - 1]] = val; }
+  function bindInspector(el){
+    inspector.querySelectorAll("[data-k]").forEach(inp => {
+      const ev = inp.type === "range" || inp.type === "color" ? "input" : "change";
+      inp.addEventListener(ev, () => {
+        let v = inp.type === "checkbox" ? inp.checked : inp.value;
+        if (inp.type === "number" || inp.type === "range") v = inp.value === "" ? null : +inp.value;
+        const k = inp.dataset.k;
+        if (ev === "input"){                      // live without flooding history
+          if (!inp._snap){ undoStack.push(snap()); redoStack = []; inp._snap = true; }
+          setPath(el, k, v); markDirty(); renderPaper(); return;
+        }
+        change(() => {
+          if (k === "key") v = uniqueKey(v, el.id);
+          setPath(el, k, v);
+          if (k === "label" && fresh.has(el.id)) el.key = uniqueKey(v, el.id);
+          if (k === "key") fresh.delete(el.id);
+        });
+      });
+      if (inp.type === "range" || inp.type === "color") inp.addEventListener("change", () => { inp._snap = false; renderInspector(); });
+    });
+    inspector.querySelectorAll("[data-width]").forEach(b => b.onclick = () => change(() => el.width = +b.dataset.width));
+    inspector.querySelectorAll("[data-clear]").forEach(b => b.onclick = () => change(() => setPath(el, b.dataset.clear, "")));
+    inspector.querySelectorAll("[data-cmd2]").forEach(b => b.onclick = () => command(b.dataset.cmd2, el.id));
+    inspector.querySelectorAll("[data-opt]").forEach(i => i.onchange = () => change(() => el.options[+i.dataset.opt] = i.value.trim() || el.options[+i.dataset.opt]));
+    inspector.querySelectorAll("[data-optdel]").forEach(b => b.onclick = () => { if (el.options.length > 1) change(() => el.options.splice(+b.dataset.optdel, 1)); });
+    const add = inspector.querySelector("#optAdd"); if (add) add.onclick = () => change(() => el.options.push(`Option ${el.options.length + 1}`));
+    const bulk = inspector.querySelector("#optBulk"); if (bulk) bulk.onclick = () => { const t = prompt("One option per line:", el.options.join("\n")); if (t !== null){ const list = t.split(/\n/).map(x => x.trim()).filter(Boolean).slice(0, 50); if (list.length) change(() => el.options = list); } };
+    inspector.querySelectorAll("[data-col]").forEach(i => i.onchange = () => change(() => { const c = el.columns[+i.dataset.col], k = i.dataset.ck; c[k] = k === "width" ? Math.max(1, Math.min(6, +i.value || 1)) : i.value; if (k === "label" && c.label) c.key = slug(c.label); }));
+    inspector.querySelectorAll("[data-coldel]").forEach(b => b.onclick = () => { if (el.columns.length > 1) change(() => el.columns.splice(+b.dataset.coldel, 1)); });
+    const colAdd = inspector.querySelector("#colAdd"); if (colAdd) colAdd.onclick = () => change(() => el.columns.push({key: `c${el.columns.length + 1}`, label: `Column ${el.columns.length + 1}`, kind: "text", width: 2}));
+    const img = inspector.querySelector("#imgPick"); if (img) img.onchange = () => readImage(img.files[0], src => change(() => el.src = src));
+  }
+
+  function readImage(file, done, max = 900){
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => { const im = new Image(); im.onload = () => {
+      const k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+      let out = c.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
+      if (out.length > 540000) out = c.toDataURL("image/jpeg", 0.7);
+      if (out.length > 540000){ alert("That image is too large even after shrinking. Try a smaller one."); return; }
+      done(out);
+    }; im.src = r.result; };
+    r.readAsDataURL(file);
+  }
+
+  // ─── look (theme + header) ───────────────────────────────
+  function renderTheme(){
+    const th = schema.theme, hd = schema.header;
+    const presets = [["UN blue", "#009EDB", "#005A8B", "#FFFFFF"], ["Deep navy", "#1E3A8A", "#0F172A", "#FFFFFF"], ["Emerald", "#059669", "#064E3B", "#FFFFFF"], ["Amber", "#D97706", "#FFFBEB", "#78350F"], ["Plain", "#334155", "#FFFFFF", "#0F172A"], ["Crimson", "#B91C1C", "#7F1D1D", "#FFFFFF"]];
+    document.getElementById("themePanel").innerHTML = `
+      <div class="st-group-label my-2">Colour sets</div>
+      <div class="d-flex flex-wrap gap-1 mb-3">${presets.map((p, i) => `<button class="btn btn-sm border" data-preset="${i}" title="${p[0]}" style="background:linear-gradient(135deg,${p[2]} 50%,${p[1]} 50%);width:34px;height:28px"></button>`).join("")}</div>
+      <div class="row g-2 mb-2">
+        <div class="col-6"><label class="small fw-semibold d-block">Accent</label><input type="color" class="form-control form-control-color w-100" data-t="theme.accent" value="${th.accent}"></div>
+        <div class="col-6"><label class="small fw-semibold d-block">Labels</label><input type="color" class="form-control form-control-color w-100" data-t="theme.label_color" value="${th.label_color}"></div>
+        <div class="col-6"><label class="small fw-semibold d-block">Header</label><input type="color" class="form-control form-control-color w-100" data-t="theme.header_bg" value="${th.header_bg}"></div>
+        <div class="col-6"><label class="small fw-semibold d-block">Header text</label><input type="color" class="form-control form-control-color w-100" data-t="theme.header_text" value="${th.header_text}"></div>
+      </div>
+      <label class="small fw-semibold">Font</label><select class="form-select form-select-sm mb-2" data-t="theme.font"><option value="helvetica" ${th.font === "helvetica" ? "selected" : ""}>Sans (Helvetica)</option><option value="times" ${th.font === "times" ? "selected" : ""}>Serif (Times)</option><option value="courier" ${th.font === "courier" ? "selected" : ""}>Typewriter (Courier)</option></select>
+      <label class="small fw-semibold">Spacing</label><select class="form-select form-select-sm mb-2" data-t="theme.density"><option value="comfortable" ${th.density !== "compact" ? "selected" : ""}>Comfortable</option><option value="compact" ${th.density === "compact" ? "selected" : ""}>Compact — fits more per page</option></select>
+      <label class="form-check small mb-3"><input class="form-check-input" type="checkbox" data-t="theme.rounded" ${th.rounded ? "checked" : ""}> Rounded boxes</label>
+      <div class="st-group-label mb-2">Header</div>
+      <label class="small fw-semibold">Title</label><input class="form-control form-control-sm mb-2" data-t="header.title" value="${esc(hd.title)}" maxlength="200">
+      <label class="small fw-semibold">Subtitle</label><input class="form-control form-control-sm mb-2" data-t="header.subtitle" value="${esc(hd.subtitle)}" maxlength="300">
+      <label class="small fw-semibold">Logo</label><input type="file" accept="image/png,image/jpeg,image/webp" class="form-control form-control-sm mb-1" id="logoPick">
+      ${hd.logo ? `<button class="btn btn-sm btn-link text-danger px-0 mb-1" id="logoClear">Remove logo</button>` : ""}
+      <label class="small fw-semibold d-block mt-1">Align</label><select class="form-select form-select-sm mb-2" data-t="header.align"><option value="left" ${hd.align === "left" ? "selected" : ""}>Left</option><option value="center" ${hd.align === "center" ? "selected" : ""}>Centre</option></select>
+      <label class="form-check small"><input class="form-check-input" type="checkbox" data-t="header.show_reference" ${hd.show_reference ? "checked" : ""}> Show the reference number</label>`;
+    const panel = document.getElementById("themePanel");
+    panel.querySelectorAll("[data-t]").forEach(inp => {
+      const live = inp.type === "color";
+      inp.addEventListener(live ? "input" : "change", () => {
+        const v = inp.type === "checkbox" ? inp.checked : inp.value;
+        if (live){ if (!inp._snap){ undoStack.push(snap()); redoStack = []; inp._snap = true; } setPath(schema, inp.dataset.t, v.toUpperCase()); markDirty(); renderPaper(); }
+        else change(() => setPath(schema, inp.dataset.t, v), true);
+      });
+      if (live) inp.addEventListener("change", () => inp._snap = false);
+    });
+    panel.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { const p = presets[+b.dataset.preset]; change(() => Object.assign(schema.theme, {accent: p[1], header_bg: p[2], header_text: p[3], label_color: p[2] === "#FFFFFF" || p[2] === "#FFFBEB" ? "#334155" : p[2]}), true); renderTheme(); });
+    panel.querySelector("#logoPick").onchange = e => readImage(e.target.files[0], src => { change(() => schema.header.logo = src, true); renderTheme(); }, 600);
+    const lc = panel.querySelector("#logoClear"); if (lc) lc.onclick = () => { change(() => schema.header.logo = "", true); renderTheme(); };
+  }
+
+  // ─── settings ────────────────────────────────────────────
+  function renderSettings(){
+    const f = flow();
+    document.getElementById("settingsPanel").innerHTML = `
+      <label class="small fw-semibold mt-2">Description</label><textarea class="form-control form-control-sm mb-2" rows="2" data-m="description" maxlength="2000">${esc(meta.description)}</textarea>
+      <div class="row g-2"><div class="col-7"><label class="small fw-semibold">Category</label><input class="form-control form-control-sm mb-2" data-m="category" value="${esc(meta.category)}" maxlength="60"></div>
+      <div class="col-5"><label class="small fw-semibold">Ref. prefix</label><input class="form-control form-control-sm mb-2 text-uppercase" data-m="reference_prefix" value="${esc(meta.reference_prefix)}" maxlength="16"></div></div>
+      <label class="small fw-semibold">After submitting, say</label><input class="form-control form-control-sm mb-3" data-m="submit_message" value="${esc(meta.submit_message)}" maxlength="300" placeholder="Thank you — we'll be in touch.">
+
+      <div class="st-group-label mb-2">Workflow</div>
+      <select class="form-select form-select-sm mb-1" data-m="workflow_id"><option value="">None — just collect answers</option>${CFG.flows.map(w => `<option value="${w.id}" ${+meta.workflow_id === w.id ? "selected" : ""}>${esc(w.name)}</option>`).join("")}</select>
+      ${f ? `<a class="small d-inline-block mb-2" href="${CFG.designer_url.replace("/0/", "/" + f.id + "/")}" target="_blank"><i class="bi bi-box-arrow-up-right me-1"></i>Open “${esc(f.name)}” in the designer</a>`
+          : `<form method="post" action="${CFG.flow_new_url}" class="mb-2" id="newFlowForm"><input type="hidden" name="csrfmiddlewaretoken" value="${CSRF}"><input type="hidden" name="form" value="${INIT.id}"><input type="hidden" name="attach" value="1">
+             <select class="form-select form-select-sm mb-1" name="template"><option value="approve_then_sign">Approve, then sign</option><option value="single_approval">Single approval</option><option value="threshold">Approval by amount</option><option value="ict_request">ICT request with fill-in step</option><option value="blank">Blank</option></select>
+             <button class="btn btn-sm btn-outline-primary w-100" type="submit"><i class="bi bi-diagram-3 me-1"></i>Create a flow for this form</button></form>`}
+      <div class="form-text mb-3">Each submission starts the flow automatically.</div>
+
+      <div class="st-group-label mb-2">Who can fill it in</div>
+      <select class="form-select form-select-sm mb-2" data-m="access"><option value="internal" ${meta.access === "internal" ? "selected" : ""}>Signed-in colleagues it's shared with</option><option value="link" ${meta.access === "link" ? "selected" : ""}>Anyone with the link</option></select>
+      ${meta.access === "link" ? `<div class="input-group input-group-sm mb-1"><input class="form-control" readonly value="${esc(CFG.public_url)}" id="pubLink"><button class="btn btn-outline-secondary" id="copyLink" type="button"><i class="bi bi-clipboard"></i></button></div><div class="form-text mb-2">${meta.is_published ? "Live." : "Works once the form is published."} People without an account give their name and email.</div>` : ""}
+      <label class="small fw-semibold">Shared with</label>
+      <select class="form-select form-select-sm mb-2" data-m="share_scope"><option value="private" ${meta.share_scope === "private" ? "selected" : ""}>Only me</option><option value="office" ${meta.share_scope === "office" ? "selected" : ""}>My country office</option><option value="agency" ${meta.share_scope === "agency" ? "selected" : ""}>My whole agency</option></select>
+      <label class="form-check small"><input class="form-check-input" type="checkbox" data-m="owner_sees_submissions" ${meta.owner_sees_submissions ? "checked" : ""}> I can see every submission</label>`;
+    const panel = document.getElementById("settingsPanel");
+    panel.querySelectorAll("[data-m]").forEach(inp => inp.addEventListener("change", () => {
+      let v = inp.type === "checkbox" ? inp.checked : inp.value;
+      if (inp.dataset.m === "workflow_id") v = v ? +v : null;
+      if (inp.dataset.m === "reference_prefix") v = v.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+      change(() => meta[inp.dataset.m] = v, true);
+    }));
+    const copy = panel.querySelector("#copyLink"); if (copy) copy.onclick = () => navigator.clipboard.writeText(CFG.public_url).then(() => copy.innerHTML = '<i class="bi bi-check2"></i>');
+    const nf = panel.querySelector("#newFlowForm"); if (nf) nf.addEventListener("submit", async e => { if (dirty){ e.preventDefault(); if (await save()) nf.submit(); } });
+  }
+
+  // ─── templates ───────────────────────────────────────────
+  const tplList = document.getElementById("tplList");
+  CFG.templates.forEach(t => {
+    const col = document.createElement("div"); col.className = "col-md-6";
+    col.innerHTML = `<div class="st-card p-3 h-100" style="cursor:pointer"><div class="d-flex gap-3"><span class="d-inline-flex align-items-center justify-content-center rounded" style="width:40px;height:40px;background:rgba(0,158,219,.1);color:#005A8B;flex:0 0 40px"><i class="bi ${t.icon} fs-5"></i></span>
+      <div><div class="fw-semibold">${esc(t.name)}</div><div class="small text-muted">${esc(t.description)}</div></div></div></div>`;
+    col.firstChild.onclick = () => {
+      change(() => { schema = JSON.parse(JSON.stringify(t.schema)); selId = null; if (!meta.name || meta.name === "Untitled form") meta.name = t.name; });
+      bootstrap.Modal.getInstance(document.getElementById("tplModal")).hide(); renderTheme();
+    };
+    tplList.appendChild(col);
+  });
+
+  // ─── name, publish, keyboard ─────────────────────────────
+  const nameInput = document.getElementById("formName");
+  nameInput.addEventListener("change", () => change(() => { meta.name = nameInput.value.trim() || meta.name; if (schema.header.title === "Untitled form") schema.header.title = meta.name; }, true));
+  nameInput.addEventListener("keydown", e => { if (e.key === "Enter") nameInput.blur(); });
+  document.getElementById("published").addEventListener("change", e => change(() => meta.is_published = e.target.checked, true));
+  document.addEventListener("keydown", e => {
+    if (/input|textarea|select/i.test(e.target.tagName)) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === "s"){ e.preventDefault(); save(); }
+    else if (mod && e.key.toLowerCase() === "z"){ e.preventDefault(); document.getElementById(e.shiftKey ? "redo" : "undo").click(); }
+    else if (mod && e.key.toLowerCase() === "y"){ e.preventDefault(); document.getElementById("redo").click(); }
+    else if (selId && mod && e.key.toLowerCase() === "d"){ e.preventDefault(); command("dup", selId); }
+    else if (selId && (e.key === "Delete" || e.key === "Backspace")){ e.preventDefault(); command("del", selId); }
+    else if (selId && (e.key === "ArrowUp" || e.key === "ArrowDown") && e.altKey){ e.preventDefault(); command(e.key === "ArrowUp" ? "up" : "down", selId); }
+    else if (e.key === "Escape" && selId){ selId = null; renderPaper(); renderInspector(); }
+  });
+
+  // ─── save, preview, test ─────────────────────────────────
+  async function save(){
+    const btn = document.getElementById("saveBtn"), st = document.getElementById("saveState");
+    btn.disabled = true; st.textContent = "Saving…";
+    try {
+      const r = await fetch(CFG.save_url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF}, body: JSON.stringify({...meta, schema, version})});
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || "Could not save.");
+      version = data.version; schema = data.schema; fresh.clear(); dirty = false;
+      st.textContent = `Saved at ${data.saved_at}` + (data.flow_warnings.length ? ` · ${data.flow_warnings.length} workflow note${data.flow_warnings.length === 1 ? "" : "s"}` : "");
+      st.title = data.flow_warnings.join("\n");
+      if (selId && !byId(selId)) selId = null;
+      renderAll(); return true;
+    } catch (err){ st.textContent = err.message; st.classList.add("text-danger"); setTimeout(() => st.classList.remove("text-danger"), 4000); return false; }
+    finally { btn.disabled = false; }
+  }
+  document.getElementById("saveBtn").onclick = save;
+  document.getElementById("previewBtn").onclick = async () => {
+    const btn = document.getElementById("previewBtn"); btn.disabled = true;
+    try {
+      const r = await fetch(CFG.preview_url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF}, body: JSON.stringify({schema})});
+      if (!r.ok) throw new Error("The preview could not be made.");
+      const blob = await r.blob(), url = URL.createObjectURL(blob);
+      document.getElementById("pdfDownload").href = url;
+      new bootstrap.Modal(document.getElementById("pdfModal")).show();
+      // Hand the bytes over directly: no second request, even for a blob URL.
+      StudioPDF.renderInto(document.getElementById("pdfPages"), {bytes: new Uint8Array(await blob.arrayBuffer())}, {width: 760});
+    } catch (e){ alert(e.message); }
+    btn.disabled = false;
+  };
+  document.getElementById("testBtn").onclick = async () => { if (dirty && !(await save())) return; window.open(CFG.fill_url, "_blank"); };
+  window.onbeforeunload = () => dirty ? "You have unsaved changes." : undefined;
+
+  function renderAll(){ renderPaper(); renderInspector(); renderTheme(); renderSettings(); syncHist(); }
+  renderAll();
+})();
+</script>
+{% endblock %}

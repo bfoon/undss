@@ -76,6 +76,7 @@ from .utils_esign import (
     log_event,
     pdf_page_count,
     pdf_page_sizes,
+    _normalise_rotation,
 )
 from .view_asset_management import _is_ict, _is_ops_manager, _managed_unit_ids
 from .esign_access import (
@@ -919,10 +920,16 @@ def esign_document_pages(request, pk, doc_id):
         if rotate not in (0, 90, 180, 270):
             return JsonResponse({"ok": False, "error": "Rotation must be 0/90/180/270."}, status=400)
 
-        page = reader.pages[src]
+        writer.add_page(reader.pages[src])
+        # Work on the writer's copy: rotating the shared reader page would
+        # compound the rotation when the same page appears twice in the plan.
+        page = writer.pages[-1]
         if rotate:
             page.rotate(rotate)
-        writer.add_page(page)
+        # rotate() only sets /Rotate. Signature fields and the envelope stamp
+        # are drawn later in the page's unturned space, which put them in the
+        # wrong corner, sideways. Bake the rotation into the content instead.
+        _normalise_rotation(page)
         mapping.setdefault(src, (new_index, rotate))
 
     out = io.BytesIO()

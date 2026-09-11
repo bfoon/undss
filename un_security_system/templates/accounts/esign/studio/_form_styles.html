@@ -1,0 +1,18 @@
+{# accounts/templates/accounts/esign/studio/_form_styles.html — the on-screen form sheet #}
+<style>
+  .fs-sheet{ background:#fff; border:1px solid #E2E8F0; border-radius:.6rem; overflow:hidden; box-shadow:0 1px 3px rgba(15,23,42,.06); }
+  .fs-header{ background:var(--fs-hbg); color:var(--fs-htext); padding:1.1rem 1.4rem; border-bottom:3px solid var(--fs-accent); }
+  .fs-logo{ max-height:48px; margin-bottom:.5rem; }
+  .fs-title{ font-size:1.35rem; font-weight:700; line-height:1.25; }
+  .fs-subtitle{ opacity:.85; margin-top:.15rem; }
+  .fs-body{ padding:1.2rem 1.4rem 1.5rem; }
+  .fs-sheet.compact .fs-body{ --bs-gutter-y:.6rem; padding:.9rem 1.1rem 1.1rem; }
+  .fs-label{ display:block; font-weight:600; font-size:.82rem; color:var(--fs-label); margin-bottom:.25rem; }
+  .fs-value{ border-bottom:1px solid #E2E8F0; min-height:1.8rem; padding:.2rem 0; }
+  .fs-heading{ font-weight:700; padding-bottom:.25rem; margin-top:.35rem; }
+  .fs-h-sm{ font-size:.95rem; } .fs-h-md{ font-size:1.1rem; } .fs-h-lg{ font-size:1.35rem; }
+  .fs-sig{ border:1.5px dashed #94A3B8; border-radius:.35rem; height:64px; display:flex; align-items:center; justify-content:center; color:#64748B; font-size:.82rem; background:#F8FAFC; }
+  .fs-table th{ background:color-mix(in srgb, var(--fs-accent) 12%, white); font-size:.78rem; color:#0F172A; }
+  .fs-sheet:not(.rounded-fields) .form-control, .fs-sheet:not(.rounded-fields) .form-select{ border-radius:0; }
+  .fs-sheet .form-control:focus, .fs-sheet .form-select:focus{ border-color:var(--fs-accent); box-shadow:0 0 0 .2rem color-mix(in srgb, var(--fs-accent) 20%, transparent); }
+</style>

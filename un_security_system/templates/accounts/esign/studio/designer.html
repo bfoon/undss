@@ -1,0 +1,621 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/designer.html — drag-and-drop flow designer #}
+{% block title %}{{ workflow.name }} — Flow designer | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .fd{ display:grid; grid-template-columns:210px 1fr 320px; height:calc(100vh - 190px); min-height:560px; border:1px solid var(--st-line); border-radius:.6rem; overflow:hidden; background:#fff; }
+  @media (max-width: 1199px){ .fd{ grid-template-columns:170px 1fr 280px; } }
+  .fd-top{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-bottom:.6rem; }
+  .fd-name{ font-size:1.15rem; font-weight:700; color:#005A8B; border:1px solid transparent; border-radius:.35rem; padding:.15rem .4rem; min-width:220px; background:transparent; }
+  .fd-name:hover{ border-color:var(--st-line); } .fd-name:focus{ outline:0; border-color:#86b7fe; background:#fff; }
+  .fd-pal{ border-right:1px solid var(--st-line); overflow:auto; padding:10px; background:#FBFCFD; }
+  .fd-pal-item{ display:flex; gap:.55rem; align-items:center; padding:.45rem .5rem; border:1px solid var(--st-line); border-radius:.45rem; background:#fff; margin-bottom:.4rem;
+                cursor:grab; user-select:none; font-size:.85rem; }
+  .fd-pal-item:hover{ border-color:rgba(0,158,219,.5); box-shadow:0 2px 6px rgba(15,23,42,.06); }
+  .fd-pal-item .ico{ width:28px; height:28px; border-radius:.4rem; display:flex; align-items:center; justify-content:center; color:#fff; flex:0 0 28px; }
+  .fd-pal-item small{ display:block; color:#94A3B8; font-size:.7rem; line-height:1.2; }
+  .fd-stage{ position:relative; overflow:hidden; background:radial-gradient(#D5DFE9 1px, transparent 1px) 0 0/20px 20px, #F6F9FB; cursor:grab; touch-action:none; }
+  .fd-stage.panning{ cursor:grabbing; }
+  .fd-world{ position:absolute; left:0; top:0; transform-origin:0 0; }
+  .fd-edges{ position:absolute; left:0; top:0; width:1px; height:1px; overflow:visible; }
+  .fd-edge{ fill:none; stroke:#94A3B8; stroke-width:2; }
+  .fd-edge.bad{ stroke:#F87171; stroke-dasharray:6 4; }
+  .fd-edge-hit{ fill:none; stroke:transparent; stroke-width:14; cursor:pointer; pointer-events:stroke; }
+  .fd-edge-g.sel .fd-edge{ stroke:#009EDB; stroke-width:3; stroke-dasharray:none; }
+  .fd-edge-g:hover .fd-edge{ stroke:#64748B; }
+  .fd-elabel{ font:600 11px "Segoe UI",Helvetica,Arial; paint-order:stroke; stroke:#F6F9FB; stroke-width:4px; }
+  .fd-node{ position:absolute; width:200px; height:76px; background:#fff; border:1.5px solid #CBD5E1; border-radius:10px; box-shadow:0 1px 3px rgba(15,23,42,.08);
+            cursor:move; user-select:none; }
+  .fd-node.condition{ border-radius:18px; }
+  .fd-node.sel{ border-color:#009EDB; box-shadow:0 0 0 3px rgba(0,158,219,.25), 0 4px 14px rgba(15,23,42,.1); }
+  .fd-node.has-error{ border-color:#F87171; }
+  .fd-node .strip{ position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:9px 0 0 9px; }
+  .fd-node .type{ position:absolute; left:14px; top:8px; font:700 10px "Segoe UI",Helvetica,Arial; letter-spacing:.5px; text-transform:uppercase; }
+  .fd-node .title{ position:absolute; left:14px; right:26px; top:24px; font-weight:600; font-size:.88rem; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fd-node .sub{ position:absolute; left:14px; right:10px; top:46px; font-size:.72rem; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fd-node.multi .title, .fd-node.multi .sub{ right:64px; }
+  .fd-node.multi .flag{ right:64px; }
+  .fd-node .flag{ position:absolute; right:8px; top:7px; font-size:.8rem; }
+  .fd-port{ position:absolute; width:14px; height:14px; border-radius:50%; background:#fff; border:2px solid #94A3B8; z-index:2; }
+  .fd-port.in{ left:-8px; top:31px; }
+  .fd-port.out{ right:-8px; cursor:crosshair; }
+  .fd-port.out:hover, .fd-port.in.target{ background:#009EDB; border-color:#009EDB; transform:scale(1.25); }
+  .fd-port-label{ position:absolute; right:12px; font-size:.62rem; color:#64748B; transform:translateY(-50%); pointer-events:none; }
+  .fd-zoom{ position:absolute; right:12px; bottom:12px; display:flex; gap:4px; z-index:5; }
+  .fd-zoom button{ width:34px; height:34px; border-radius:.4rem; border:1px solid var(--st-line); background:#fff; }
+  .fd-help{ position:absolute; left:12px; bottom:12px; font-size:.72rem; color:#64748B; background:rgba(255,255,255,.85); padding:.3rem .55rem; border-radius:.35rem; z-index:5; }
+  .fd-side{ border-left:1px solid var(--st-line); overflow:auto; padding:14px; }
+  .fd-issue{ font-size:.8rem; padding:.35rem .5rem; border-radius:.35rem; margin-bottom:.3rem; cursor:pointer; }
+  .fd-issue.err{ background:#FEF2F2; color:#991B1B; } .fd-issue.warn{ background:#FFFBEB; color:#92400E; }
+  .fd-issue:hover{ filter:brightness(.97); }
+  .fd-save-state{ font-size:.78rem; color:#64748B; }
+  .fd-empty-hint{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; color:#94A3B8; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="fd-top">
+  <a class="btn btn-sm btn-link text-decoration-none px-1" href="{% url 'accounts:esign_workflows' %}?tab=flows" title="Back to flows"><i class="bi bi-arrow-left"></i></a>
+  <input class="fd-name" id="flowName" maxlength="150" aria-label="Flow name">
+  <span class="badge bg-light text-dark border" id="issueBadge"></span>
+  <span class="fd-save-state ms-1" id="saveState">Saved</span>
+  <div class="ms-auto d-flex flex-wrap gap-2">
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-grid-1x2 me-1"></i>Templates</button>
+      <ul class="dropdown-menu dropdown-menu-end shadow-sm" id="tplMenu"></ul>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" id="tidy" title="Arrange the steps neatly"><i class="bi bi-magic me-1"></i>Tidy up</button>
+    <button class="btn btn-sm btn-outline-secondary" id="undo" title="Undo (Ctrl+Z)" disabled><i class="bi bi-arrow-90deg-left"></i></button>
+    <button class="btn btn-sm btn-outline-secondary" id="redo" title="Redo (Ctrl+Y)" disabled><i class="bi bi-arrow-90deg-right"></i></button>
+    <button class="btn btn-sm btn-outline-primary" id="saveBtn"><i class="bi bi-cloud-check me-1"></i>Save</button>
+    <button class="btn btn-sm btn-un-primary" id="launchBtn"><i class="bi bi-play-fill me-1"></i>Save & start</button>
+  </div>
+</div>
+
+<div class="fd">
+  <div class="fd-pal" id="palette" aria-label="Steps">
+    <div class="st-group-label mb-2">Drag onto the canvas</div>
+  </div>
+
+  <div class="fd-stage" id="stage" tabindex="0" aria-label="Flow canvas">
+    <div class="fd-world" id="world">
+      <svg class="fd-edges" id="edges" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="fdArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+          <marker id="fdArrowSel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#009EDB"/></marker>
+        </defs>
+        <g id="edgeLayer"></g>
+        <path id="ghost" class="fd-edge" style="stroke:#009EDB;stroke-dasharray:5 4" d=""/>
+      </svg>
+      <div id="nodeLayer"></div>
+    </div>
+    <div class="fd-empty-hint d-none" id="emptyHint"><div class="text-center"><i class="bi bi-diagram-3 fs-1 d-block"></i>Drag a Start step here, or choose a template.</div></div>
+    <div class="fd-help st-desktop-only">Drag from a dot on the right of a step to connect it · drag the background to move around · Ctrl + scroll to zoom</div>
+    <div class="fd-zoom">
+      <button id="zOut" title="Zoom out"><i class="bi bi-dash-lg"></i></button>
+      <button id="zFit" title="Fit to screen"><i class="bi bi-arrows-fullscreen"></i></button>
+      <button id="zIn" title="Zoom in"><i class="bi bi-plus-lg"></i></button>
+    </div>
+  </div>
+
+  <aside class="fd-side" id="side" aria-label="Inspector"></aside>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_people_picker.html" %}
+<script>
+(function(){
+  const CFG = {{ config_json|safe }};
+  const INIT = {{ payload|safe }};
+  const CSRF = "{{ csrf_token }}";
+  const T = CFG.node_types, PL = CFG.port_labels, OPS = CFG.condition_ops, MODES = CFG.assign_modes;
+  const W = 200, H = 76, GRID = 20;
+  const PAL_ORDER = ["start", "approval", "review", "fill", "signature", "condition", "notify", "parallel", "join", "end"];
+
+  const stage = document.getElementById("stage"), world = document.getElementById("world");
+  const nodeLayer = document.getElementById("nodeLayer"), edgeLayer = document.getElementById("edgeLayer"), ghost = document.getElementById("ghost");
+  const side = document.getElementById("side"), nameInput = document.getElementById("flowName");
+
+  let flow = {name: INIT.name, description: INIT.description, share_scope: INIT.share_scope, monitor_runs: INIT.monitor_runs, form_id: INIT.form_id};
+  let graph = JSON.parse(JSON.stringify(INIT.graph));
+  let version = INIT.version, report = INIT.report;
+  let sel = null;                          // {kind: "node"|"edge", id}
+  let view = {x: 40, y: 40, z: 1};
+  let dirty = false, undoStack = [], redoStack = [];
+
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const uid = p => p + Math.random().toString(36).slice(2, 8);
+  const byId = id => graph.nodes.find(n => n.id === id);
+  const snap = v => Math.round(v / GRID) * GRID;
+  const form = () => CFG.forms.find(f => f.id === +flow.form_id) || null;
+  const fields = () => (form() || {fields: []}).fields.filter(f => f.type !== "table");
+
+  // ─── history ──────────────────────────────────────────────
+  function state(){ return JSON.stringify({graph, flow}); }
+  function change(fn){
+    undoStack.push(state()); if (undoStack.length > 150) undoStack.shift(); redoStack = [];
+    fn(); markDirty(); render();
+  }
+  function markDirty(){ dirty = true; document.getElementById("saveState").textContent = "Unsaved changes"; syncHistory(); }
+  function syncHistory(){ document.getElementById("undo").disabled = !undoStack.length; document.getElementById("redo").disabled = !redoStack.length; }
+  function restore(s){ const o = JSON.parse(s); graph = o.graph; flow = o.flow; if (sel && sel.kind === "node" && !byId(sel.id)) sel = null; markDirty(); render(); }
+  document.getElementById("undo").onclick = () => { if (undoStack.length){ redoStack.push(state()); restore(undoStack.pop()); } };
+  document.getElementById("redo").onclick = () => { if (redoStack.length){ undoStack.push(state()); restore(redoStack.pop()); } };
+
+  // ─── view ────────────────────────────────────────────────
+  function applyView(){ world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`; }
+  function toWorld(cx, cy){ const r = stage.getBoundingClientRect(); return [(cx - r.left - view.x) / view.z, (cy - r.top - view.y) / view.z]; }
+  function zoomAt(z, cx, cy){
+    const r = stage.getBoundingClientRect(); cx = cx ?? r.left + r.width / 2; cy = cy ?? r.top + r.height / 2;
+    const [wx, wy] = toWorld(cx, cy); view.z = Math.max(0.3, Math.min(2, z));
+    view.x = cx - r.left - wx * view.z; view.y = cy - r.top - wy * view.z; applyView();
+  }
+  function fit(){
+    if (!graph.nodes.length){ view = {x: 40, y: 40, z: 1}; return applyView(); }
+    const r = stage.getBoundingClientRect();
+    const minX = Math.min(...graph.nodes.map(n => n.x)) - 40, minY = Math.min(...graph.nodes.map(n => n.y)) - 40;
+    const maxX = Math.max(...graph.nodes.map(n => n.x)) + W + 60, maxY = Math.max(...graph.nodes.map(n => n.y)) + H + 60;
+    view.z = Math.max(0.3, Math.min(1.1, Math.min(r.width / (maxX - minX), r.height / (maxY - minY))));
+    view.x = (r.width - (maxX - minX) * view.z) / 2 - minX * view.z; view.y = (r.height - (maxY - minY) * view.z) / 2 - minY * view.z;
+    applyView();
+  }
+  document.getElementById("zIn").onclick = () => zoomAt(view.z * 1.2);
+  document.getElementById("zOut").onclick = () => zoomAt(view.z / 1.2);
+  document.getElementById("zFit").onclick = fit;
+  stage.addEventListener("wheel", e => {
+    if (e.ctrlKey || e.metaKey){ e.preventDefault(); zoomAt(view.z * (e.deltaY < 0 ? 1.1 : 0.9), e.clientX, e.clientY); }
+    else { e.preventDefault(); view.x -= e.deltaX; view.y -= e.deltaY; applyView(); }
+  }, {passive: false});
+
+  // ─── rendering ───────────────────────────────────────────
+  function portY(n, port){ const ports = T[n.type].ports; return H * (ports.indexOf(port) + 1) / (ports.length + 1); }
+
+  function summary(n){
+    const c = n.config || {}, a = c.assign || {};
+    const who = () => {
+      if (!a.mode) return "";
+      if (a.mode === "initiator") return "The initiator";
+      if (a.mode === "chosen") return a.slot ? `Chosen at start: ${a.slot}` : "Role not named yet";
+      if (a.mode === "field") { const f = fields().find(x => x.key === a.field); return f ? `From form: ${f.label}` : "Form field not chosen"; }
+      const count = (a.users || []).length + (a.emails || []).length;
+      return count ? `${count} ${count === 1 ? "person" : "people"}` : "Nobody chosen yet";
+    };
+    switch (n.type){
+      case "start": return "Runs begin here";
+      case "approval": case "review": return who() + ((a.mode === "people" && ((a.users||[]).length + (a.emails||[]).length) > 1) || a.mode === "chosen" ? (c.rule === "any" ? " · any one" : " · everyone") : "");
+      case "fill": return who();
+      case "signature": return who() + (c.placement === "manual" ? " · place fields" : "");
+      case "notify": return "Email " + who().toLowerCase();
+      case "condition": { const f = fields().find(x => x.key === c.field); return f ? `${f.label} ${OPS[c.op] || ""} ${["empty","not_empty"].includes(c.op) ? "" : (c.value || "…")}` : "Choose a form field"; }
+      case "parallel": return "Branches run together";
+      case "join": return "Waits for all branches";
+      case "end": return c.outcome === "rejected" ? "Outcome: rejected" : "Outcome: completed";
+    }
+    return "";
+  }
+
+  function issuesFor(id){ return {err: report.errors.filter(i => i.node === id), warn: report.warnings.filter(i => i.node === id)}; }
+
+  function render(){
+    nameInput.value = flow.name;
+    nodeLayer.innerHTML = "";
+    graph.nodes.forEach(n => {
+      const t = T[n.type], iss = issuesFor(n.id);
+      const el = document.createElement("div");
+      el.className = `fd-node ${n.type}` + (t.ports.length > 1 ? " multi" : "") + (sel && sel.kind === "node" && sel.id === n.id ? " sel" : "") + (iss.err.length ? " has-error" : "");
+      el.style.left = n.x + "px"; el.style.top = n.y + "px"; el.dataset.id = n.id; el.tabIndex = 0;
+      el.setAttribute("aria-label", `${t.label}: ${n.label}`);
+      let h = `<div class="strip" style="background:${t.color}"></div><div class="type" style="color:${t.color}"><i class="bi ${t.icon} me-1"></i>${t.label}</div>`
+        + `<div class="title">${esc(n.label)}</div><div class="sub">${esc(summary(n))}</div>`;
+      if (iss.err.length) h += `<span class="flag text-danger" title="${esc(iss.err.map(i => i.text).join("\n"))}"><i class="bi bi-exclamation-circle-fill"></i></span>`;
+      else if (iss.warn.length) h += `<span class="flag text-warning" title="${esc(iss.warn.map(i => i.text).join("\n"))}"><i class="bi bi-exclamation-triangle-fill"></i></span>`;
+      if (n.type !== "start") h += `<span class="fd-port in" data-in="${n.id}"></span>`;
+      t.ports.forEach(p => {
+        const y = portY(n, p);
+        h += `<span class="fd-port out" data-port="${p}" style="top:${y - 7}px" title="Drag to connect: ${esc(PL[p])}"></span>`;
+        if (t.ports.length > 1 || p !== "next") h += `<span class="fd-port-label" style="top:${y}px;color:${["rejected","declined"].includes(p) ? "#B91C1C" : "#475569"}">${esc(PL[p])}</span>`;
+      });
+      el.innerHTML = h;
+      nodeLayer.appendChild(el);
+    });
+    renderEdges();
+    document.getElementById("emptyHint").classList.toggle("d-none", graph.nodes.length > 0);
+    const e = report.errors.length, w = report.warnings.length;
+    const badge = document.getElementById("issueBadge");
+    badge.className = "badge " + (e ? "bg-danger" : w ? "bg-warning text-dark" : "bg-success");
+    badge.innerHTML = e ? `<i class="bi bi-x-circle me-1"></i>${e} to fix` : w ? `<i class="bi bi-exclamation-triangle me-1"></i>${w} note${w === 1 ? "" : "s"}` : `<i class="bi bi-check-circle me-1"></i>Ready`;
+    renderSide();
+  }
+
+  function edgeD(x1, y1, x2, y2){
+    if (x2 >= x1 - 10){ const dx = Math.max(50, (x2 - x1) * 0.5); return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`; }
+    const off = 50, ym = Math.abs(y2 - y1) > H ? (y1 + y2) / 2 : Math.max(y1, y2) + H * 0.9, mx = (x1 + x2) / 2;
+    return `M${x1},${y1} C${x1 + off},${y1} ${x1 + off},${ym} ${mx},${ym} S${x2 - off},${y2} ${x2},${y2}`;
+  }
+  function edgePath(a, b, port){
+    const x1 = a.x + W, y1 = a.y + portY(a, port), x2 = b.x, y2 = b.y + H / 2;
+    return {d: edgeD(x1, y1, x2, y2), lx: x1 + 14, ly: y1 - 6};
+  }
+  function renderEdges(){
+    edgeLayer.innerHTML = "";
+    graph.edges.forEach(e => {
+      const a = byId(e.from), b = byId(e.to); if (!a || !b) return;
+      const {d, lx, ly} = edgePath(a, b, e.port);
+      const bad = ["rejected", "declined"].includes(e.port);
+      const isSel = sel && sel.kind === "edge" && sel.id === e.id;
+      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      g.setAttribute("class", "fd-edge-g" + (isSel ? " sel" : "")); g.dataset.id = e.id;
+      g.innerHTML = `<path class="fd-edge ${bad ? "bad" : ""}" d="${d}" marker-end="url(#${isSel ? "fdArrowSel" : "fdArrow"})"/><path class="fd-edge-hit" d="${d}" data-edge="${e.id}"/>`;
+      edgeLayer.appendChild(g);
+    });
+  }
+
+  // ─── palette ─────────────────────────────────────────────
+  const pal = document.getElementById("palette");
+  PAL_ORDER.forEach(k => {
+    const t = T[k], item = document.createElement("div");
+    item.className = "fd-pal-item"; item.dataset.type = k; item.title = t.hint; item.tabIndex = 0;
+    item.innerHTML = `<span class="ico" style="background:${t.color}"><i class="bi ${t.icon}"></i></span><span>${t.label}<small>${esc(t.hint)}</small></span>`;
+    item.addEventListener("pointerdown", e => paletteDrag(e, k));
+    item.addEventListener("keydown", e => { if (e.key === "Enter"){ const r = stage.getBoundingClientRect(); const [x, y] = toWorld(r.left + r.width / 2, r.top + r.height / 2); addNode(k, x - W / 2, y - H / 2); } });
+    pal.appendChild(item);
+  });
+  function defaults(type){
+    const cfg = {};
+    if (["approval", "review", "fill", "signature", "notify"].includes(type)) cfg.assign = {mode: type === "notify" ? "initiator" : "chosen", users: [], emails: [], slot: "", field: ""};
+    if (["approval", "review", "fill"].includes(type)){ cfg.rule = type === "fill" ? "any" : "all"; cfg.instructions = ""; cfg.due_days = 0; cfg.allow_return = true; }
+    if (type === "signature"){ cfg.order = "sequential"; cfg.placement = "auto"; cfg.message = ""; }
+    if (type === "condition"){ cfg.field = ""; cfg.op = "gt"; cfg.value = ""; }
+    if (type === "notify"){ cfg.message = ""; cfg.attach_pdf = true; }
+    if (type === "end") cfg.outcome = "completed";
+    return cfg;
+  }
+  function addNode(type, x, y){
+    if (type === "start" && graph.nodes.some(n => n.type === "start")){ flash("A flow has only one Start."); return; }
+    const n = {id: uid("n"), type, label: T[type].label, x: snap(x), y: snap(y), config: defaults(type)};
+    if (type === "end" && graph.nodes.some(m => m.type === "end" && m.config.outcome === "completed")){ n.config.outcome = "rejected"; n.label = "Rejected"; }
+    change(() => { graph.nodes.push(n); sel = {kind: "node", id: n.id}; });
+    return n;
+  }
+  function paletteDrag(e, type){
+    e.preventDefault();
+    const proxy = document.createElement("div");
+    proxy.className = "fd-pal-item"; proxy.style.cssText = "position:fixed;z-index:3000;pointer-events:none;opacity:.9;width:180px;box-shadow:0 8px 20px rgba(0,0,0,.15)";
+    proxy.innerHTML = e.currentTarget.innerHTML; document.body.appendChild(proxy);
+    const moveH = ev => { proxy.style.left = ev.clientX - 20 + "px"; proxy.style.top = ev.clientY - 16 + "px"; };
+    const up = ev => {
+      window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up); proxy.remove();
+      const r = stage.getBoundingClientRect();
+      if (ev.clientX > r.left && ev.clientX < r.right && ev.clientY > r.top && ev.clientY < r.bottom){ const [x, y] = toWorld(ev.clientX, ev.clientY); addNode(type, x - W / 2, y - H / 2); }
+      else if (Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4){ const [x, y] = toWorld(r.left + r.width / 2, r.top + r.height / 2); addNode(type, x - W / 2 + (Math.random() * 60 - 30), y - H / 2); }
+    };
+    moveH(e); window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+
+  // ─── canvas interaction ──────────────────────────────────
+  stage.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    const out = e.target.closest(".fd-port.out"), nodeEl = e.target.closest(".fd-node"), edgeHit = e.target.closest("[data-edge]");
+    if (out && nodeEl) return connect(e, byId(nodeEl.dataset.id), out.dataset.port);
+    if (nodeEl) return dragNode(e, byId(nodeEl.dataset.id));
+    if (edgeHit){ sel = {kind: "edge", id: edgeHit.dataset.edge}; render(); return; }
+    // pan
+    const sx = e.clientX, sy = e.clientY, vx = view.x, vy = view.y; let moved = false;
+    stage.classList.add("panning");
+    const moveH = ev => { if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) moved = true; view.x = vx + ev.clientX - sx; view.y = vy + ev.clientY - sy; applyView(); };
+    const up = () => { window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up); stage.classList.remove("panning"); if (!moved && sel){ sel = null; render(); } };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  });
+
+  function dragNode(e, n){
+    const [sx, sy] = toWorld(e.clientX, e.clientY), ox = n.x, oy = n.y; let moved = false, before = null;
+    if (!sel || sel.id !== n.id){ sel = {kind: "node", id: n.id}; render(); }
+    const el = nodeLayer.querySelector(`[data-id="${n.id}"]`);
+    const moveH = ev => {
+      const [x, y] = toWorld(ev.clientX, ev.clientY);
+      if (!moved && Math.hypot(x - sx, y - sy) < 3) return;
+      if (!moved){ before = state(); moved = true; }
+      n.x = snap(ox + x - sx); n.y = snap(oy + y - sy);
+      el.style.left = n.x + "px"; el.style.top = n.y + "px"; renderEdges();
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up);
+      if (moved && (n.x !== ox || n.y !== oy)){ undoStack.push(before); redoStack = []; markDirty(); }
+    };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+
+  function connect(e, from, port){
+    e.stopPropagation(); e.preventDefault();
+    const x1 = from.x + W, y1 = from.y + portY(from, port);
+    let target = null;
+    const moveH = ev => {
+      const [x2, y2] = toWorld(ev.clientX, ev.clientY);
+      ghost.setAttribute("d", edgeD(x1, y1, x2, y2));
+      nodeLayer.querySelectorAll(".fd-port.in.target").forEach(p => p.classList.remove("target"));
+      const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+      const node = hit && hit.closest(".fd-node");
+      target = node && node.dataset.id !== from.id && byId(node.dataset.id).type !== "start" ? byId(node.dataset.id) : null;
+      if (target) node.querySelector(".fd-port.in").classList.add("target");
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up); ghost.setAttribute("d", "");
+      if (!target) return;
+      if (graph.edges.some(x => x.from === from.id && x.port === port && x.to === target.id)) return render();
+      change(() => {
+        if (from.type !== "parallel") graph.edges = graph.edges.filter(x => !(x.from === from.id && x.port === port));
+        const edge = {id: uid("e"), from: from.id, port, to: target.id};
+        graph.edges.push(edge); sel = {kind: "edge", id: edge.id};
+      });
+    };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+
+  function removeSelected(){
+    if (!sel) return;
+    change(() => {
+      if (sel.kind === "node"){ graph.nodes = graph.nodes.filter(n => n.id !== sel.id); graph.edges = graph.edges.filter(e => e.from !== sel.id && e.to !== sel.id); }
+      else graph.edges = graph.edges.filter(e => e.id !== sel.id);
+      sel = null;
+    });
+  }
+  function duplicateSelected(){
+    if (!sel || sel.kind !== "node") return;
+    const n = byId(sel.id); if (n.type === "start") return flash("A flow has only one Start.");
+    const c = JSON.parse(JSON.stringify(n)); c.id = uid("n"); c.x += 40; c.y += 100; c.label = n.label + " (copy)";
+    change(() => { graph.nodes.push(c); sel = {kind: "node", id: c.id}; });
+  }
+
+  // Layered layout: each step one column to the right of whatever leads into it
+  document.getElementById("tidy").onclick = () => {
+    if (!graph.nodes.length) return;
+    change(() => {
+      const level = {}, start = graph.nodes.find(n => n.type === "start");
+      const queue = start ? [[start.id, 0]] : graph.nodes.map(n => [n.id, 0]);
+      let guard = 0;
+      while (queue.length && guard++ < 2000){
+        const [id, l] = queue.shift();
+        if (level[id] !== undefined && level[id] >= l) continue;
+        level[id] = l;
+        graph.edges.filter(e => e.from === id).forEach(e => { if ((level[e.to] ?? -1) < l + 1 && l < graph.nodes.length) queue.push([e.to, l + 1]); });
+      }
+      const max = Math.max(0, ...Object.values(level));
+      graph.nodes.forEach(n => { if (level[n.id] === undefined) level[n.id] = max + 1; });
+      const cols = {};
+      const portRank = e => { const a = byId(e.from); return a ? T[a.type].ports.indexOf(e.port) : 0; };
+      const order = n => { const inc = graph.edges.filter(e => e.to === n.id); return inc.length ? Math.min(...inc.map(e => (byId(e.from)?.y || 0) + portRank(e) * 10)) : 0; };
+      Object.keys(level).sort((a, b) => level[a] - level[b]).forEach(id => { (cols[level[id]] = cols[level[id]] || []).push(byId(id)); });
+      Object.entries(cols).forEach(([l, list]) => {
+        list.sort((a, b) => order(a) - order(b));
+        const total = list.length * (H + 60) - 60;
+        list.forEach((n, i) => { n.x = snap(40 + l * 270); n.y = snap(220 - total / 2 + i * (H + 60)); });
+      });
+    });
+    setTimeout(fit, 0);
+  };
+
+  // ─── inspector ───────────────────────────────────────────
+  let pickers = [];
+  function renderSide(){
+    pickers = [];
+    const node = sel && sel.kind === "node" ? byId(sel.id) : null;
+    const edge = sel && sel.kind === "edge" ? graph.edges.find(e => e.id === sel.id) : null;
+    if (node) return nodeInspector(node);
+    if (edge) return edgeInspector(edge);
+    flowInspector();
+  }
+
+  function issuesHtml(){
+    const list = [...report.errors.map(i => ({...i, cls: "err", icon: "x-circle"})), ...report.warnings.map(i => ({...i, cls: "warn", icon: "exclamation-triangle"}))];
+    if (!list.length) return `<div class="small text-success mb-3"><i class="bi bi-check-circle me-1"></i>No problems found.</div>`;
+    return list.map(i => `<div class="fd-issue ${i.cls}" data-goto="${i.node || ""}"><i class="bi bi-${i.icon} me-1"></i>${esc(i.text)}</div>`).join("") + `<div class="small text-muted mt-1 mb-3">Checked when you save.</div>`;
+  }
+  function bindIssues(){ side.querySelectorAll("[data-goto]").forEach(el => el.onclick = () => { if (el.dataset.goto && byId(el.dataset.goto)){ sel = {kind: "node", id: el.dataset.goto}; render(); centreOn(byId(el.dataset.goto)); } }); }
+  function centreOn(n){ const r = stage.getBoundingClientRect(); view.x = r.width / 2 - (n.x + W / 2) * view.z; view.y = r.height / 2 - (n.y + H / 2) * view.z; applyView(); }
+
+  function flowInspector(){
+    side.innerHTML = `
+      <div class="fw-bold text-un-primary mb-2"><i class="bi bi-sliders me-1"></i>Flow settings</div>
+      <label class="form-label small fw-semibold mb-1">Description</label>
+      <textarea class="form-control form-control-sm mb-3" rows="2" id="fDesc" maxlength="2000" placeholder="What this flow is for">${esc(flow.description)}</textarea>
+      <label class="form-label small fw-semibold mb-1">Runs from a form</label>
+      <select class="form-select form-select-sm mb-1" id="fForm"><option value="">No — start it with any document</option>${CFG.forms.map(f => `<option value="${f.id}" ${+flow.form_id === f.id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select>
+      <div class="form-text mb-3">Linking a form lets steps use its answers: conditions, “email from the form”, and fill-in steps.</div>
+      <label class="form-label small fw-semibold mb-1">Who can use it</label>
+      <select class="form-select form-select-sm mb-2" id="fShare">
+        <option value="private" ${flow.share_scope === "private" ? "selected" : ""}>Only me</option>
+        <option value="office" ${flow.share_scope === "office" ? "selected" : ""}>My country office</option>
+        <option value="agency" ${flow.share_scope === "agency" ? "selected" : ""}>My whole agency</option></select>
+      <label class="form-check small mb-3"><input class="form-check-input" type="checkbox" id="fMon" ${flow.monitor_runs ? "checked" : ""}> I can see and manage every run of this flow</label>
+      <div class="st-group-label mb-2">Check</div>
+      ${issuesHtml()}
+      <div class="small text-muted"><i class="bi bi-lightbulb me-1"></i>Select a step to set who handles it. Select a connection to remove it. <kbd>Del</kbd> deletes, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates.</div>`;
+    const on = (id, ev, fn) => side.querySelector(id).addEventListener(ev, fn);
+    on("#fDesc", "change", e => change(() => flow.description = e.target.value));
+    on("#fForm", "change", e => change(() => flow.form_id = e.target.value ? +e.target.value : null));
+    on("#fShare", "change", e => change(() => flow.share_scope = e.target.value));
+    on("#fMon", "change", e => change(() => flow.monitor_runs = e.target.checked));
+    bindIssues();
+  }
+
+  function edgeInspector(e){
+    const a = byId(e.from), b = byId(e.to);
+    side.innerHTML = `<div class="fw-bold text-un-primary mb-2"><i class="bi bi-arrow-right me-1"></i>Connection</div>
+      <div class="small mb-3">From <strong>${esc(a.label)}</strong> <span class="badge bg-light text-dark border">${esc(PL[e.port])}</span> to <strong>${esc(b.label)}</strong></div>
+      <button class="btn btn-sm btn-outline-danger w-100" id="delEdge"><i class="bi bi-trash me-1"></i>Remove connection</button>
+      <div class="small text-muted mt-3">To reroute, drag from the dot on <strong>${esc(a.label)}</strong> to another step.</div>`;
+    side.querySelector("#delEdge").onclick = removeSelected;
+  }
+
+  function nodeInspector(n){
+    const t = T[n.type], c = n.config, iss = issuesFor(n.id);
+    let h = `<div class="d-flex align-items-center gap-2 mb-2"><span class="d-inline-flex align-items-center justify-content-center rounded" style="width:28px;height:28px;background:${t.color};color:#fff"><i class="bi ${t.icon}"></i></span>
+      <div class="fw-bold" style="color:${t.color}">${t.label}</div>
+      <div class="ms-auto">${n.type !== "start" ? `<button class="btn btn-sm btn-outline-secondary" id="dupNode" title="Duplicate"><i class="bi bi-copy"></i></button>` : ""}
+      <button class="btn btn-sm btn-outline-danger" id="delNode" title="Delete"><i class="bi bi-trash"></i></button></div></div>
+      <div class="small text-muted mb-2">${esc(t.hint)}</div>`;
+    h += [...iss.err.map(i => `<div class="fd-issue err">${esc(i.text)}</div>`), ...iss.warn.map(i => `<div class="fd-issue warn">${esc(i.text)}</div>`)].join("");
+    h += `<label class="form-label small fw-semibold mb-1 mt-1">Name</label><input class="form-control form-control-sm mb-3" data-f="label" value="${esc(n.label)}" maxlength="120">`;
+
+    if (c.assign){
+      const a = c.assign;
+      h += `<div class="st-group-label mb-1">${n.type === "notify" ? "Who gets the email" : n.type === "signature" ? "Who signs" : "Who handles it"}</div>
+        <select class="form-select form-select-sm mb-2" data-a="mode">${Object.entries(MODES).map(([k, v]) => `<option value="${k}" ${a.mode === k ? "selected" : ""}>${v}</option>`).join("")}</select>`;
+      if (a.mode === "chosen"){
+        const slots = [...new Set(graph.nodes.map(m => ((m.config || {}).assign || {}).slot).filter(Boolean))];
+        h += `<input class="form-control form-control-sm mb-1" data-a="slot" value="${esc(a.slot)}" placeholder="Role, e.g. Supervisor" list="slotList" maxlength="60">
+          <datalist id="slotList">${slots.map(s => `<option value="${esc(s)}">`).join("")}</datalist>
+          <div class="form-text mb-2">Whoever starts the flow picks the ${esc(a.slot || "person")}. Steps with the same role get the same people.</div>`;
+      } else if (a.mode === "people"){
+        h += `<div id="peoplePick" class="mb-1"></div><div class="form-text mb-2">Colleagues from the directory, or anyone's email.</div>`;
+      } else if (a.mode === "field"){
+        const fl = fields();
+        h += fl.length ? `<select class="form-select form-select-sm mb-2" data-a="field"><option value="">Choose a field…</option>${fl.map(f => `<option value="${esc(f.key)}" ${a.field === f.key ? "selected" : ""}>${esc(f.label)}${f.type === "email" ? " ✉" : ""}</option>`).join("")}</select>`
+          : `<div class="alert alert-warning small py-2">Link a form in Flow settings (click the empty canvas) to use its fields.</div>`;
+      } else {
+        h += `<div class="form-text mb-2">The person who starts the run${form() ? " (or submits the form)" : ""}.</div>`;
+      }
+    }
+    if (["approval", "review", "fill"].includes(n.type)){
+      h += `<div class="st-group-label mb-1 mt-2">When several people are assigned</div>
+        <div class="btn-group btn-group-sm w-100 mb-3" role="group">
+          <input type="radio" class="btn-check" name="rule" id="rAll" value="all" ${c.rule === "all" ? "checked" : ""}><label class="btn btn-outline-primary" for="rAll">Everyone</label>
+          <input type="radio" class="btn-check" name="rule" id="rAny" value="any" ${c.rule === "any" ? "checked" : ""}><label class="btn btn-outline-primary" for="rAny">Any one</label></div>
+        <label class="form-label small fw-semibold mb-1">Instructions</label>
+        <textarea class="form-control form-control-sm mb-2" rows="2" data-f="instructions" maxlength="1000" placeholder="Shown to them and in the email">${esc(c.instructions)}</textarea>
+        <div class="row g-2 mb-2"><div class="col-6"><label class="form-label small fw-semibold mb-1">Due in (days)</label><input type="number" min="0" max="90" class="form-control form-control-sm" data-f="due_days" value="${c.due_days || 0}"></div>
+        ${n.type !== "fill" ? `<div class="col-6 d-flex align-items-end"><label class="form-check small"><input class="form-check-input" type="checkbox" data-f="allow_return" ${c.allow_return ? "checked" : ""}> Can return for changes</label></div>` : ""}</div>`;
+    }
+    if (n.type === "signature"){
+      h += `<div class="st-group-label mb-1 mt-2">Signing</div>
+        <select class="form-select form-select-sm mb-2" data-f="order"><option value="sequential" ${c.order === "sequential" ? "selected" : ""}>One after another</option><option value="parallel" ${c.order === "parallel" ? "selected" : ""}>All at the same time</option></select>
+        <select class="form-select form-select-sm mb-1" data-f="placement"><option value="auto" ${c.placement === "auto" ? "selected" : ""}>Place signature fields automatically</option><option value="manual" ${c.placement === "manual" ? "selected" : ""}>The initiator places them</option></select>
+        <div class="form-text mb-2">${c.placement === "auto" ? "Uses the form's signature boxes for this step; anyone without one gets a signature page added at the end." : "The initiator gets a task to place fields, then the envelope is sent."}</div>
+        <label class="form-label small fw-semibold mb-1">Message to signers</label><textarea class="form-control form-control-sm mb-2" rows="2" data-f="message" maxlength="1000">${esc(c.message)}</textarea>`;
+    }
+    if (n.type === "condition"){
+      const fl = fields(), f = fl.find(x => x.key === c.field);
+      h += `<div class="st-group-label mb-1 mt-2">Rule</div>`;
+      if (!fl.length) h += `<div class="alert alert-warning small py-2">Conditions read form answers. Link a form in Flow settings first.</div>`;
+      else {
+        h += `<select class="form-select form-select-sm mb-2" data-f="field"><option value="">If this field…</option>${fl.map(x => `<option value="${esc(x.key)}" ${c.field === x.key ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>
+          <select class="form-select form-select-sm mb-2" data-f="op">${Object.entries(OPS).map(([k, v]) => `<option value="${k}" ${c.op === k ? "selected" : ""}>${v}</option>`).join("")}</select>`;
+        if (!["empty", "not_empty"].includes(c.op)){
+          h += f && f.options && f.options.length
+            ? `<select class="form-select form-select-sm mb-2" data-f="value"><option value="">Value…</option>${f.options.map(o => `<option ${c.value === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`
+            : f && f.type === "yesno" ? `<select class="form-select form-select-sm mb-2" data-f="value"><option ${c.value === "Yes" ? "selected" : ""}>Yes</option><option ${c.value === "No" ? "selected" : ""}>No</option></select>`
+            : `<input class="form-control form-control-sm mb-2" data-f="value" value="${esc(c.value)}" placeholder="Value" ${f && f.type === "number" ? 'inputmode="decimal"' : ""}>`;
+        }
+        h += `<div class="small text-muted">Then follow <strong>Yes</strong>, otherwise <strong>No</strong>.</div>`;
+      }
+    }
+    if (n.type === "notify"){
+      h += `<label class="form-label small fw-semibold mb-1 mt-2">Message</label><textarea class="form-control form-control-sm mb-2" rows="3" data-f="message" maxlength="1000">${esc(c.message)}</textarea>
+        <label class="form-check small"><input class="form-check-input" type="checkbox" data-f="attach_pdf" ${c.attach_pdf ? "checked" : ""}> Attach the current PDF</label>`;
+    }
+    if (n.type === "end"){
+      h += `<div class="st-group-label mb-1 mt-2">Outcome</div><div class="btn-group btn-group-sm w-100" role="group">
+        <input type="radio" class="btn-check" name="outcome" id="oC" value="completed" ${c.outcome !== "rejected" ? "checked" : ""}><label class="btn btn-outline-success" for="oC">Completed</label>
+        <input type="radio" class="btn-check" name="outcome" id="oR" value="rejected" ${c.outcome === "rejected" ? "checked" : ""}><label class="btn btn-outline-danger" for="oR">Rejected</label></div>
+        <div class="form-text">A finished run's PDF includes the full record of every decision.</div>`;
+    }
+    side.innerHTML = h;
+
+    side.querySelector("#delNode").onclick = removeSelected;
+    const dup = side.querySelector("#dupNode"); if (dup) dup.onclick = duplicateSelected;
+    side.querySelectorAll("[data-f]").forEach(el => el.addEventListener("change", () => {
+      const k = el.dataset.f, v = el.type === "checkbox" ? el.checked : el.type === "number" ? +el.value : el.value;
+      change(() => { if (k === "label") n.label = v.trim() || T[n.type].label; else n.config[k] = v; });
+    }));
+    side.querySelectorAll("[data-a]").forEach(el => el.addEventListener("change", () => change(() => { n.config.assign[el.dataset.a] = el.value.trim(); })));
+    side.querySelectorAll('input[name="rule"]').forEach(el => el.addEventListener("change", () => change(() => n.config.rule = el.value)));
+    side.querySelectorAll('input[name="outcome"]').forEach(el => el.addEventListener("change", () => change(() => { n.config.outcome = el.value; if (["End", "Completed", "Rejected"].includes(n.label)) n.label = el.value === "rejected" ? "Rejected" : "Completed"; })));
+    const pp = side.querySelector("#peoplePick");
+    if (pp){
+      const a = n.config.assign;
+      new PeoplePicker(pp, {directory: CFG.directory, multiple: true,
+        value: [...(a.users || []).map(id => ({user_id: id})), ...(a.emails || []).map(e => ({email: e}))],
+        onChange: list => {
+          const users = list.filter(p => p.user_id).map(p => p.user_id), emails = list.filter(p => p.email).map(p => p.email);
+          if (JSON.stringify(users) === JSON.stringify(a.users || []) && JSON.stringify(emails) === JSON.stringify(a.emails || [])) return;
+          undoStack.push(state()); redoStack = []; a.users = users; a.emails = emails; markDirty();
+          const el = nodeLayer.querySelector(`[data-id="${n.id}"] .sub`); if (el) el.textContent = summary(n);
+        }});
+    }
+  }
+
+  // ─── templates, name, keyboard ───────────────────────────
+  const tplMenu = document.getElementById("tplMenu");
+  CFG.templates.forEach(t => {
+    const li = document.createElement("li");
+    li.innerHTML = `<a class="dropdown-item" href="#"><i class="bi ${t.icon} me-2 text-un-primary"></i>${esc(t.name)}<div class="small text-muted text-wrap" style="max-width:280px">${esc(t.description)}</div></a>`;
+    li.querySelector("a").onclick = ev => {
+      ev.preventDefault();
+      if (graph.nodes.length > 1 && !confirm("Replace the current design with this template? You can undo.")) return;
+      change(() => { graph = JSON.parse(JSON.stringify(t.graph)); sel = null; });
+      setTimeout(fit, 0);
+    };
+    tplMenu.appendChild(li);
+  });
+  nameInput.addEventListener("change", () => change(() => flow.name = nameInput.value.trim() || flow.name));
+  nameInput.addEventListener("keydown", e => { if (e.key === "Enter") nameInput.blur(); });
+
+  document.addEventListener("keydown", e => {
+    if (/input|textarea|select/i.test(e.target.tagName) || e.target.isContentEditable) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === "s"){ e.preventDefault(); save(); }
+    else if (mod && e.key.toLowerCase() === "z"){ e.preventDefault(); document.getElementById(e.shiftKey ? "redo" : "undo").click(); }
+    else if (mod && e.key.toLowerCase() === "y"){ e.preventDefault(); document.getElementById("redo").click(); }
+    else if (mod && e.key.toLowerCase() === "d"){ e.preventDefault(); duplicateSelected(); }
+    else if ((e.key === "Delete" || e.key === "Backspace") && sel){ e.preventDefault(); removeSelected(); }
+    else if (e.key === "Escape" && sel){ sel = null; render(); }
+    else if (sel && sel.kind === "node" && e.key.startsWith("Arrow")){
+      e.preventDefault(); const n = byId(sel.id), d = GRID;
+      change(() => { if (e.key === "ArrowLeft") n.x -= d; if (e.key === "ArrowRight") n.x += d; if (e.key === "ArrowUp") n.y -= d; if (e.key === "ArrowDown") n.y += d; });
+    }
+  });
+
+  function flash(msg){
+    const el = document.getElementById("saveState"), before = el.textContent;
+    el.textContent = msg; el.classList.add("text-danger"); setTimeout(() => { el.textContent = dirty ? "Unsaved changes" : before; el.classList.remove("text-danger"); }, 2500);
+  }
+
+  // ─── save ────────────────────────────────────────────────
+  async function save(){
+    const btn = document.getElementById("saveBtn"), state = document.getElementById("saveState");
+    btn.disabled = true; state.textContent = "Saving…";
+    try {
+      const r = await fetch(CFG.save_url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF},
+        body: JSON.stringify({...flow, graph, version})});
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || "Could not save.");
+      version = data.version; report = data.report;
+      const ids = new Set(data.graph.nodes.map(n => n.id));
+      graph = data.graph; if (sel && sel.kind === "node" && !ids.has(sel.id)) sel = null;
+      dirty = false; state.textContent = `Saved at ${data.saved_at}`;
+      render(); return true;
+    } catch (err){ state.textContent = err.message; state.classList.add("text-danger"); setTimeout(() => state.classList.remove("text-danger"), 4000); return false; }
+    finally { btn.disabled = false; }
+  }
+  document.getElementById("saveBtn").onclick = save;
+  document.getElementById("launchBtn").onclick = async () => {
+    if (dirty && !(await save())) return;
+    if (report.errors.length){ flow_select_first_error(); return; }
+    window.onbeforeunload = null; location = CFG.launch_url;
+  };
+  function flow_select_first_error(){
+    const first = report.errors.find(i => i.node && byId(i.node));
+    sel = first ? {kind: "node", id: first.node} : null; render(); if (first) centreOn(byId(first.node));
+    flash(`Fix ${report.errors.length} problem${report.errors.length === 1 ? "" : "s"} before starting.`);
+  }
+  window.onbeforeunload = () => dirty ? "You have unsaved changes." : undefined;
+
+  render();
+  requestAnimationFrame(fit);
+  window.addEventListener("resize", () => applyView());
+})();
+</script>
+{% endblock %}

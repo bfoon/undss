@@ -1,0 +1,73 @@
+{% extends base_template %}
+{# accounts/templates/accounts/esign/studio/form_fill.html — fill in a form (signed in, or through its public link) #}
+{% load esign_studio_tags %}
+{% block title %}{{ form.name }}{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/studio/_form_styles.html" %}{% endblock %}
+
+{% block content %}
+{% if not public %}{% include "accounts/esign/studio/_nav.html" %}{% endif %}
+<div class="mx-auto" style="max-width:900px">
+  {% if test_mode %}<div class="alert alert-warning small"><i class="bi bi-cone-striped me-1"></i>Test mode — this form isn't published, so only you can see it. Submissions are real and start the workflow.
+    <a href="{% url 'accounts:esign_form_designer' form.pk %}">Back to the designer</a></div>{% endif %}
+
+  <form method="post" id="fillForm" novalidate>
+    {% csrf_token %}
+    {% if public %}<div style="position:absolute;left:-5000px" aria-hidden="true"><label>Leave empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>{% endif %}
+
+    {% if form.description %}<p class="text-muted">{{ form.description }}</p>{% endif %}
+
+    {% if public and not request.user.is_authenticated %}
+    <div class="card mb-3"><div class="card-body">
+      <div class="st-group-label mb-2">About you</div>
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label small fw-semibold">Your name <span class="text-danger">*</span></label>
+          <input class="form-control {% if errors|get_item:"__name" %}is-invalid{% endif %}" name="submitter_name" value="{{ request.POST.submitter_name }}" required maxlength="150">{% if errors|get_item:"__name" %}<div class="invalid-feedback">{{ errors|get_item:"__name" }}</div>{% endif %}</div>
+        <div class="col-md-6"><label class="form-label small fw-semibold">Your email <span class="text-danger">*</span></label>
+          <input class="form-control {% if errors|get_item:"__email" %}is-invalid{% endif %}" type="email" name="submitter_email" value="{{ request.POST.submitter_email }}" required maxlength="254">{% if errors|get_item:"__email" %}<div class="invalid-feedback">{{ errors|get_item:"__email" }}</div>{% else %}<div class="form-text">A PDF copy is sent here.</div>{% endif %}</div>
+      </div>
+    </div></div>
+    {% endif %}
+
+    {% include "accounts/esign/studio/_form_sheet.html" with schema=schema values=values errors=errors scope="submitter" %}
+
+    {% if slots %}
+    <div class="card mt-3"><div class="card-body">
+      <div class="st-group-label mb-1">Who should handle your request</div>
+      <div class="small text-muted mb-3">This form goes through <strong>{{ workflow.name }}</strong>.{% if public %} Enter their email addresses.{% endif %}</div>
+      {% for s in slots %}
+      <div class="mb-3">
+        <label class="form-label small fw-semibold mb-1">{{ s.label }} {% if s.signs %}<span class="badge bg-light text-dark border"><i class="bi bi-pen"></i> signs</span>{% endif %} <span class="text-danger">*</span></label>
+        <div class="st-slot" data-key="{{ s.key }}"></div>
+        <input type="hidden" name="slot_{{ s.key }}" id="slot_{{ s.key }}" value="{{ posted_slots|get_item:s.key|default:'' }}">
+        {% with err_key="__slot_"|add:s.key %}{% if errors|get_item:err_key %}<div class="invalid-feedback d-block">{{ errors|get_item:err_key }}</div>{% endif %}{% endwith %}
+      </div>
+      {% endfor %}
+    </div></div>
+    {% endif %}
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 mb-5">
+      <div class="small text-muted">{% if workflow %}<i class="bi bi-diagram-3 me-1"></i>After you submit, it goes through {{ workflow.step_count }} step{{ workflow.step_count|pluralize }} and you'll be kept informed.{% else %}<i class="bi bi-lock me-1"></i>Your answers go to the form's owner.{% endif %}</div>
+      <button class="btn btn-un-primary btn-lg px-5" id="submitBtn"><i class="bi bi-send me-2"></i>Submit</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_people_picker.html" %}
+{% include "accounts/esign/studio/_form_script.html" %}
+<script>
+(function(){
+  const DIR = {{ directory_json|safe }};
+  document.querySelectorAll(".st-slot").forEach(host => new PeoplePicker(host, {directory: DIR, multiple: true, input: document.getElementById("slot_" + host.dataset.key),
+    placeholder: DIR.length ? "Name or email" : "Email address"}));
+  const form = document.getElementById("fillForm"), btn = document.getElementById("submitBtn");
+  form.addEventListener("submit", e => {
+    if (!form.checkValidity()){ e.preventDefault(); form.reportValidity(); const bad = form.querySelector(":invalid"); if (bad) bad.scrollIntoView({block: "center", behavior: "smooth"}); return; }
+    const missing = [...document.querySelectorAll('input[id^="slot_"]')].find(i => !i.value || i.value === "[]");
+    if (missing){ e.preventDefault(); missing.previousElementSibling.querySelector("input").focus(); alert("Please choose who should handle each step."); return; }
+    setTimeout(() => { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting…'; }, 10);
+  });
+})();
+</script>
+{% endblock %}

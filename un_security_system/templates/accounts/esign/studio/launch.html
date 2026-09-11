@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/launch.html — start a run: document + the people chosen at start #}
+{% load esign_studio_tags %}
+{% block title %}Start “{{ workflow.name }}” | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .src-opt{ border:1px solid var(--st-line); border-radius:.5rem; padding:.7rem .8rem; cursor:pointer; height:100%; }
+  .btn-check:checked + .src-opt{ border-color:var(--st-blue); background:rgba(0,158,219,.06); box-shadow:0 0 0 1px var(--st-blue) inset; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<nav aria-label="breadcrumb" class="small mb-2"><ol class="breadcrumb mb-0">
+  <li class="breadcrumb-item"><a href="{% url 'accounts:esign_workflows' %}?tab=flows">Workflows</a></li>
+  <li class="breadcrumb-item active">Start “{{ workflow.name }}”</li>
+</ol></nav>
+
+<form method="post" enctype="multipart/form-data" id="launchForm">
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-body p-4">
+          <h4 class="text-un-primary fw-bold mb-1"><i class="bi bi-play-circle me-2"></i>{{ workflow.name }}</h4>
+          {% if workflow.description %}<p class="text-muted">{{ workflow.description }}</p>{% endif %}
+
+          {% if report.errors %}
+          <div class="alert alert-danger small">
+            <div class="fw-semibold mb-1">This flow can't start yet:</div>
+            <ul class="mb-1 ps-3">{% for i in report.errors %}<li>{{ i.text }}</li>{% endfor %}</ul>
+            {% if workflow.created_by_id == request.user.id %}<a href="{% url 'accounts:esign_workflow_designer' workflow.pk %}">Open the designer</a>{% else %}Ask {{ workflow.created_by.get_full_name|default:workflow.created_by.username }} to fix it.{% endif %}
+          </div>
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Subject</label>
+            <input class="form-control" name="subject" maxlength="200" value="{{ posted.subject|default:'' }}" placeholder="Leave empty to use the document's name">
+          </div>
+
+          <div class="st-group-label mb-2">Document</div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6"><input type="radio" class="btn-check" name="source" id="srcUp" value="upload" {% if not preset_file %}checked{% endif %}>
+              <label class="src-opt d-block" for="srcUp"><div class="fw-semibold"><i class="bi bi-upload me-1"></i>Upload</div><div class="small text-muted">PDF, Office or image</div></label></div>
+            <div class="col-md-6"><input type="radio" class="btn-check" name="source" id="srcFile" value="studio" {% if preset_file %}checked{% endif %} {% if not my_files %}disabled{% endif %}>
+              <label class="src-opt d-block" for="srcFile"><div class="fw-semibold"><i class="bi bi-folder2-open me-1"></i>From My files</div><div class="small text-muted">{% if my_files %}{{ my_files|length }} available{% else %}No files yet{% endif %}</div></label></div>
+          </div>
+          <div id="upBox" class="mb-3"><input type="file" class="form-control" name="document" accept="{{ accept_attr }}"></div>
+          <div id="fileBox" class="mb-3 d-none">
+            <select class="form-select" name="studio_file" id="studioFile">
+              <option value="">Choose a file…</option>
+              {% for f in my_files %}<option value="{{ f.pk }}" {% if preset_file == f.pk|stringformat:"s" %}selected{% endif %}>{{ f.name }} ({{ f.page_count }} pages)</option>{% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Message <span class="text-muted fw-normal">(optional)</span></label>
+            <textarea class="form-control" name="message" rows="2" maxlength="2000" placeholder="Shown to everyone taking part">{{ posted.message|default:'' }}</textarea>
+          </div>
+
+          {% if slots %}
+          <div class="st-group-label mb-2 mt-4">Who does what</div>
+          {% for s in slots %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small mb-1">{{ s.label }} {% if s.signs %}<span class="badge bg-light text-dark border"><i class="bi bi-pen"></i> signs</span>{% endif %}</label>
+            <div class="st-slot" data-key="{{ s.key }}"></div>
+            <input type="hidden" name="slot_{{ s.key }}" id="slot_{{ s.key }}" value="{{ posted_slots|get_item:s.key|default:'' }}">
+            <div class="form-text">For: {{ s.steps|join:", " }}</div>
+          </div>
+          {% endfor %}
+          {% endif %}
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between p-3">
+          <a class="btn btn-link text-decoration-none" href="{% url 'accounts:esign_workflows' %}?tab=flows">Cancel</a>
+          <button class="btn btn-un-primary px-4" id="go" {% if report.errors %}disabled{% endif %}><i class="bi bi-play-fill me-1"></i>Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-diagram-3 me-2"></i>The route</div>
+        <div class="card-body"><div class="st-map" id="map"></div>
+          {% if report.warnings %}<ul class="small text-muted mt-3 mb-0 ps-3">{% for w in report.warnings %}<li>{{ w.text }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_people_picker.html" %}
+{% include "accounts/esign/studio/_flow_map.html" %}
+<script>
+(function(){
+  const DIR = {{ directory_json|safe }};
+  FlowMap(document.getElementById("map"), {{ graph_json|safe }}, {nodeTypes: {{ node_types_json|safe }}, portLabels: {{ port_labels_json|safe }}});
+  document.querySelectorAll(".st-slot").forEach(host => {
+    const input = document.getElementById("slot_" + host.dataset.key);
+    new PeoplePicker(host, {directory: DIR, multiple: true, input});
+  });
+  const up = document.getElementById("srcUp"), file = document.getElementById("srcFile");
+  function sync(){ document.getElementById("upBox").classList.toggle("d-none", !up.checked); document.getElementById("fileBox").classList.toggle("d-none", !file.checked);
+    if (up.checked) document.getElementById("studioFile").value = ""; }
+  up.addEventListener("change", sync); file.addEventListener("change", sync); sync();
+  document.getElementById("launchForm").addEventListener("submit", e => {
+    const empty = [...document.querySelectorAll('input[id^="slot_"]')].filter(i => !i.value || i.value === "[]");
+    if (empty.length){ e.preventDefault(); alert("Choose someone for every role."); return; }
+    const go = document.getElementById("go"); setTimeout(() => { go.disabled = true; go.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting…'; }, 10);
+  });
+})();
+</script>
+{% endblock %}

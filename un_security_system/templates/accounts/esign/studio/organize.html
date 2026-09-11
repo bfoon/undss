@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/organize.html — reorder, rotate, delete, duplicate, insert blank, extract #}
+{% block title %}Organise pages — {{ file.name }} | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .org-bar{ position:sticky; top:0; z-index:20; background:#fff; border-bottom:1px solid var(--st-line); }
+  .org-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:16px; padding:18px; background:#E9EEF3; min-height:60vh; }
+  .org-card{ position:relative; background:#fff; border:2px solid transparent; border-radius:.55rem; padding:10px 10px 8px; box-shadow:0 1px 3px rgba(15,23,42,.12);
+             user-select:none; cursor:pointer; transition:border-color .1s, opacity .1s, transform .1s; }
+  .org-card:hover{ border-color:rgba(0,158,219,.4); }
+  .org-card.sel{ border-color:var(--st-blue); box-shadow:0 0 0 3px rgba(0,158,219,.18); }
+  .org-card.dragging{ opacity:.35; }
+  .org-card.drop-before:before{ content:""; position:absolute; left:-10px; top:6px; bottom:6px; width:4px; border-radius:2px; background:var(--st-blue); }
+  .org-thumb{ height:170px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .org-thumb canvas, .org-thumb .blank{ max-width:140px; max-height:140px; box-shadow:0 0 0 1px #E2E8F0; transition:transform .18s ease; background:#fff; }
+  .org-thumb .blank{ width:105px; height:140px; display:flex; align-items:center; justify-content:center; color:#94A3B8; font-size:.75rem; }
+  .org-meta{ display:flex; justify-content:space-between; align-items:center; font-size:.78rem; margin-top:6px; }
+  .org-num{ font-weight:700; color:#0F172A; }
+  .org-src{ color:#94A3B8; }
+  .org-tools{ position:absolute; top:6px; right:6px; display:flex; gap:3px; opacity:0; transition:opacity .1s; }
+  .org-card:hover .org-tools, .org-card.sel .org-tools{ opacity:1; }
+  .org-tools button{ width:28px; height:28px; border-radius:6px; border:1px solid #E2E8F0; background:#fff; color:#334155; padding:0; font-size:.85rem; }
+  .org-tools button:hover{ background:#EEF6FB; color:#005A8B; }
+  .org-tools button.del:hover{ background:#FEF2F2; color:#B91C1C; }
+  .org-check{ position:absolute; top:8px; left:8px; }
+  .org-rot{ position:absolute; bottom:34px; right:10px; font-size:.68rem; background:#0F172A; color:#fff; border-radius:4px; padding:0 4px; }
+  .org-add{ border:2px dashed #B6C6D4; border-radius:.55rem; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#64748B; min-height:212px; cursor:pointer; background:transparent; }
+  .org-add:hover{ border-color:var(--st-blue); color:#005A8B; background:rgba(255,255,255,.5); }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="card">
+  <div class="org-bar px-3 py-2 d-flex flex-wrap gap-2 align-items-center">
+    <a class="btn btn-sm btn-link text-decoration-none" href="{% url 'accounts:esign_studio_file' file.pk %}"><i class="bi bi-arrow-left"></i></a>
+    <div class="me-2 min-w-0">
+      <div class="fw-bold text-un-primary text-truncate" style="max-width:260px">{{ file.name }}</div>
+      <div class="small text-muted" id="summary">Loading pages…</div>
+    </div>
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-secondary" id="selAll">Select all</button>
+      <button class="btn btn-outline-secondary" id="selNone">None</button>
+    </div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Selected pages">
+      <button class="btn btn-outline-primary need-sel" data-act="rotL" title="Rotate left"><i class="bi bi-arrow-counterclockwise"></i></button>
+      <button class="btn btn-outline-primary need-sel" data-act="rotR" title="Rotate right"><i class="bi bi-arrow-clockwise"></i></button>
+      <button class="btn btn-outline-primary need-sel" data-act="dup" title="Duplicate"><i class="bi bi-copy"></i></button>
+      <button class="btn btn-outline-danger need-sel" data-act="del" title="Delete"><i class="bi bi-trash"></i> Delete</button>
+    </div>
+    <button class="btn btn-sm btn-outline-primary need-sel" data-act="extract"><i class="bi bi-file-earmark-arrow-up me-1"></i>Extract to new file</button>
+    <div class="ms-auto d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" id="undo" title="Undo (Ctrl+Z)" disabled><i class="bi bi-arrow-90deg-left"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" id="reset">Reset</button>
+      <button class="btn btn-sm btn-un-primary px-3" id="save" disabled><i class="bi bi-check2 me-1"></i>Save</button>
+    </div>
+  </div>
+
+  {% if focus != "organize" %}
+  <div class="alert alert-info rounded-0 border-0 border-bottom small mb-0 py-2">
+    <i class="bi bi-lightbulb me-1"></i>
+    {% if focus == "remove" %}Click the pages you want to remove (Shift-click for a range), then <strong>Delete</strong> and <strong>Save</strong>.
+    {% elif focus == "rotate" %}Select pages and use the rotate buttons — or hover a page and rotate just that one. Then <strong>Save</strong>.
+    {% elif focus == "extract" %}Select the pages you want, then <strong>Extract to new file</strong>. The original stays as it is.{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="org-grid" id="grid" aria-label="Pages"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_pdf_viewer.html" %}
+{{ pdf_inline|json_script:"pdfInline" }}
+<script>
+(function(){
+  const PDF_URL = "{% url 'accounts:esign_studio_file_pdf' file.pk %}?v={{ file.current.number }}";
+  const SAVE_URL = "{% url 'accounts:esign_studio_organize_save' file.pk %}";
+  const SIZES = {{ page_sizes_json|safe }};
+  const CSRF = "{{ csrf_token }}";
+  const grid = document.getElementById("grid"), summary = document.getElementById("summary");
+  const saveBtn = document.getElementById("save"), undoBtn = document.getElementById("undo");
+
+  // One entry per page in the current arrangement.
+  let seq = 0;
+  const initial = () => SIZES.map((s, i) => ({key: "p" + (seq++), src: i, rotate: 0, blank: false}));
+  let pages = initial(), history = [], selected = new Set(), lastClicked = null;
+  const thumbs = {};   // src index -> canvas (rendered once, cloned for duplicates)
+
+  function snapshot(){ history.push(JSON.stringify(pages)); if (history.length > 80) history.shift(); undoBtn.disabled = false; }
+  function undo(){ if (!history.length) return; pages = JSON.parse(history.pop()); undoBtn.disabled = !history.length; selected.clear(); render(); }
+  function dirty(){ return JSON.stringify(pages.map(p => [p.src, p.rotate, p.blank])) !== JSON.stringify(SIZES.map((s, i) => [i, 0, false])); }
+
+  function thumbFor(p){
+    if (p.blank) { const d = document.createElement("div"); d.className = "blank"; d.textContent = "Blank page"; return d; }
+    const src = thumbs[p.src];
+    if (!src) { const d = document.createElement("div"); d.className = "blank"; d.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; return d; }
+    const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
+    c.getContext("2d").drawImage(src, 0, 0); c.style.width = src.style.width;
+    return c;
+  }
+
+  function render(){
+    grid.innerHTML = "";
+    pages.forEach((p, idx) => {
+      const card = document.createElement("div");
+      card.className = "org-card" + (selected.has(p.key) ? " sel" : "");
+      card.draggable = true; card.dataset.key = p.key; card.tabIndex = 0;
+      card.setAttribute("aria-label", `Page ${idx + 1}`);
+      card.innerHTML = `
+        <input class="form-check-input org-check" type="checkbox" tabindex="-1" ${selected.has(p.key) ? "checked" : ""} aria-hidden="true">
+        <div class="org-tools">
+          <button type="button" data-a="rotL" title="Rotate left"><i class="bi bi-arrow-counterclockwise"></i></button>
+          <button type="button" data-a="rotR" title="Rotate right"><i class="bi bi-arrow-clockwise"></i></button>
+          <button type="button" data-a="dup" title="Duplicate"><i class="bi bi-copy"></i></button>
+          <button type="button" data-a="blank" title="Insert a blank page after"><i class="bi bi-file-earmark-plus"></i></button>
+          <button type="button" class="del" data-a="del" title="Delete"><i class="bi bi-trash"></i></button>
+        </div>
+        <div class="org-thumb"></div>
+        ${p.rotate ? `<span class="org-rot">${p.rotate}°</span>` : ""}
+        <div class="org-meta"><span class="org-num">${idx + 1}</span><span class="org-src">${p.blank ? "new" : "was " + (p.src + 1)}</span></div>`;
+      const t = thumbFor(p); t.style.transform = `rotate(${p.rotate}deg)`;
+      card.querySelector(".org-thumb").appendChild(t);
+      grid.appendChild(card);
+    });
+    const add = document.createElement("button");
+    add.type = "button"; add.className = "org-add"; add.innerHTML = '<i class="bi bi-plus-lg fs-3"></i><span class="small">Blank page at the end</span>';
+    add.addEventListener("click", () => { snapshot(); pages.push(blankLike(pages[pages.length - 1])); render(); });
+    grid.appendChild(add);
+    refreshBar();
+  }
+
+  function blankLike(neighbour){
+    const size = neighbour && !neighbour.blank ? SIZES[neighbour.src] : [595.28, 841.89];
+    const turned = neighbour && neighbour.rotate % 180 === 90;
+    return {key: "p" + (seq++), blank: true, rotate: 0, size: turned ? [size[1], size[0]] : size};
+  }
+
+  function refreshBar(){
+    const n = selected.size, removed = SIZES.length - pages.filter(p => !p.blank && pages.indexOf(p) >= 0).length;
+    document.querySelectorAll(".need-sel").forEach(b => b.disabled = !n);
+    const rotated = pages.filter(p => p.rotate).length, blanks = pages.filter(p => p.blank).length;
+    const bits = [`${pages.length} page${pages.length === 1 ? "" : "s"}`];
+    if (n) bits.push(`${n} selected`);
+    if (rotated) bits.push(`${rotated} rotated`);
+    if (blanks) bits.push(`${blanks} blank added`);
+    summary.textContent = bits.join(" · ");
+    saveBtn.disabled = !dirty() || !pages.length;
+  }
+
+  function apply(act, keys){
+    const set = new Set(keys);
+    if (!set.size) return;
+    if (act === "extract") return extract([...pages].filter(p => set.has(p.key)));
+    snapshot();
+    if (act === "rotL" || act === "rotR") pages.forEach(p => { if (set.has(p.key)) p.rotate = (p.rotate + (act === "rotR" ? 90 : 270)) % 360; });
+    if (act === "del"){
+      if (pages.every(p => set.has(p.key))) { history.pop(); alert("A PDF needs at least one page."); return; }
+      pages = pages.filter(p => !set.has(p.key)); selected = new Set([...selected].filter(k => !set.has(k)));
+    }
+    if (act === "dup"){
+      const out = [];
+      pages.forEach(p => { out.push(p); if (set.has(p.key)) out.push(Object.assign({}, p, {key: "p" + (seq++)})); });
+      pages = out;
+    }
+    if (act === "blank"){
+      const i = pages.findIndex(p => set.has(p.key));
+      pages.splice(i + 1, 0, blankLike(pages[i]));
+    }
+    render();
+  }
+
+  grid.addEventListener("click", e => {
+    const card = e.target.closest(".org-card"); if (!card) return;
+    const tool = e.target.closest("[data-a]");
+    if (tool){ e.stopPropagation(); apply(tool.dataset.a, [card.dataset.key]); return; }
+    const key = card.dataset.key;
+    if (e.shiftKey && lastClicked){
+      const a = pages.findIndex(p => p.key === lastClicked), b = pages.findIndex(p => p.key === key);
+      pages.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(p => selected.add(p.key));
+    } else {
+      selected.has(key) ? selected.delete(key) : selected.add(key);
+      lastClicked = key;
+    }
+    render();
+  });
+
+  document.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", () => apply(b.dataset.act, pages.filter(p => selected.has(p.key)).map(p => p.key))));
+  document.getElementById("selAll").addEventListener("click", () => { pages.forEach(p => selected.add(p.key)); render(); });
+  document.getElementById("selNone").addEventListener("click", () => { selected.clear(); render(); });
+  document.getElementById("reset").addEventListener("click", () => { snapshot(); pages = initial(); selected.clear(); render(); });
+  undoBtn.addEventListener("click", undo);
+  document.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"){ e.preventDefault(); undo(); }
+    if ((e.key === "Delete" || e.key === "Backspace") && selected.size && !/input|textarea/i.test(e.target.tagName)){ e.preventDefault(); apply("del", [...selected]); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !/input|textarea/i.test(e.target.tagName)){ e.preventDefault(); pages.forEach(p => selected.add(p.key)); render(); }
+  });
+
+  // Drag to reorder (moves the whole selection when you drag a selected page)
+  let dragKeys = null;
+  grid.addEventListener("dragstart", e => {
+    const card = e.target.closest(".org-card"); if (!card) return;
+    dragKeys = selected.has(card.dataset.key) ? pages.filter(p => selected.has(p.key)).map(p => p.key) : [card.dataset.key];
+    dragKeys.forEach(k => grid.querySelector(`[data-key="${k}"]`).classList.add("dragging"));
+    e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", "pages");
+  });
+  function dropTarget(e){
+    const cards = [...grid.querySelectorAll(".org-card")];
+    let best = null, bestD = Infinity;
+    cards.forEach(c => { const r = c.getBoundingClientRect(); const d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2)); if (d < bestD){ bestD = d; best = c; } });
+    if (!best) return {card: null, before: false};
+    const r = best.getBoundingClientRect();
+    return {card: best, before: e.clientX < r.left + r.width / 2};
+  }
+  grid.addEventListener("dragover", e => {
+    if (!dragKeys) return; e.preventDefault();
+    grid.querySelectorAll(".drop-before").forEach(c => c.classList.remove("drop-before"));
+    const {card, before} = dropTarget(e);
+    if (card){ const target = before ? card : card.nextElementSibling; if (target && target.classList.contains("org-card")) target.classList.add("drop-before"); }
+  });
+  grid.addEventListener("drop", e => {
+    if (!dragKeys) return; e.preventDefault();
+    const {card, before} = dropTarget(e);
+    const moving = pages.filter(p => dragKeys.includes(p.key));
+    if (card && !dragKeys.includes(card.dataset.key)){
+      snapshot();
+      const rest = pages.filter(p => !dragKeys.includes(p.key));
+      let at = rest.findIndex(p => p.key === card.dataset.key);
+      if (!before) at += 1;
+      rest.splice(at, 0, ...moving);
+      pages = rest;
+    }
+    dragKeys = null; render();
+  });
+  grid.addEventListener("dragend", () => { dragKeys = null; render(); });
+
+  function plan(list){ return list.map(p => p.blank ? {blank: true, size: p.size} : {src: p.src, rotate: p.rotate}); }
+  async function post(body, btn){
+    const label = btn.innerHTML; btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving';
+    try {
+      const r = await fetch(SAVE_URL, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF}, body: JSON.stringify(body)});
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || "Could not save.");
+      window.onbeforeunload = null; location = data.redirect;
+    } catch (err){ alert(err.message); btn.disabled = false; btn.innerHTML = label; }
+  }
+  function extract(list){
+    if (!list.length) return;
+    post({plan: plan(list), as_new: true}, document.querySelector('[data-act="extract"]'));
+  }
+  saveBtn.addEventListener("click", () => {
+    const removed = SIZES.length - new Set(pages.filter(p => !p.blank).map(p => p.src)).size;
+    const bits = [];
+    if (removed > 0) bits.push(`removed ${removed} page${removed === 1 ? "" : "s"}`);
+    const rot = pages.filter(p => p.rotate).length; if (rot) bits.push(`rotated ${rot}`);
+    const blanks = pages.filter(p => p.blank).length; if (blanks) bits.push(`added ${blanks} blank`);
+    const dups = pages.filter(p => !p.blank).length - new Set(pages.filter(p => !p.blank).map(p => p.src)).size; if (dups > 0) bits.push(`duplicated ${dups}`);
+    const order = pages.filter(p => !p.blank).map(p => p.src);
+    if (order.some((v, i) => i && v < order[i - 1])) bits.push("reordered");
+    post({plan: plan(pages), summary: bits.length ? bits.join(", ").replace(/^./, c => c.toUpperCase()) : "Pages reorganised"}, saveBtn);
+  });
+  window.onbeforeunload = () => dirty() ? "You have unsaved changes." : undefined;
+
+  render();
+  (async () => {
+    const pdf = await StudioPDF.load({url: PDF_URL, data: JSON.parse(document.getElementById("pdfInline").textContent)});
+    for (let i = 1; i <= pdf.numPages; i++){
+      const {canvas} = await StudioPDF.renderPage(pdf, i, {width: 140});
+      thumbs[i - 1] = canvas;
+      grid.querySelectorAll(".org-card").forEach(card => {
+        const p = pages.find(x => x.key === card.dataset.key);
+        if (p && !p.blank && p.src === i - 1){ const box = card.querySelector(".org-thumb"); box.innerHTML = ""; const t = thumbFor(p); t.style.transform = `rotate(${p.rotate}deg)`; box.appendChild(t); }
+      });
+    }
+  })().catch(e => { summary.textContent = "Page previews couldn't be shown: " + StudioPDF.explain(e) + " You can still arrange pages by number."; console.error(e); });
+})();
+</script>
+{% endblock %}

@@ -67,12 +67,13 @@ def bump_envelope_badges(envelope):
 
 def esign_action_count(user) -> int:
     """
-    Envelopes this person can sign right now.
+    Things this person can act on right now: envelopes to sign, plus eSign
+    Studio workflow steps (approve, review, fill in, resubmit) waiting on them.
 
-    Counts the same rows the dashboard's "Waiting on me" panel shows, so the
-    badge and the page can never disagree — and only those the person can
-    actually act on, so a queued signer waiting on an earlier one is not told
-    they have something to do.
+    Counts the same rows the dashboard's "Needs your signature" and "Workflow
+    steps waiting on you" panels show, so the badge and the page can never
+    disagree — and only those the person can actually act on, so a queued
+    signer waiting on an earlier one is not told they have something to do.
     """
     if not user or not getattr(user, "is_authenticated", False):
         return 0
@@ -89,6 +90,15 @@ def esign_action_count(user) -> int:
         count = sum(1 for row in rows if row.can_sign_now())
     except Exception:  # noqa: BLE001
         count = 0
+
+    # Workflow steps. Separate try: the Studio tables may not be migrated yet,
+    # and a missing table must not zero the signing count above.
+    try:
+        from .views_esign_workflow import _my_open_tasks
+
+        count += _my_open_tasks(user).count()
+    except Exception:  # noqa: BLE001
+        pass
 
     cache.set(key, count, BADGE_TTL)
     return count

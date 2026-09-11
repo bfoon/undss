@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/home.html — PDF tools hub #}
+{% block title %}PDF tools | eSign | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card es-hero">
+      <div class="card-body p-4">
+        <div class="row g-4 align-items-center">
+          <div class="col-lg-6">
+            <h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-tools me-2"></i>PDF tools</h4>
+            <p class="text-muted mb-3">
+              Convert, combine, tidy up and edit documents before they go for signature.
+              Everything you make lands in <a href="{% url 'accounts:esign_studio_files' %}">My files</a>,
+              every change is kept as a version you can go back to, and any file can go straight on to
+              signing or a workflow.
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-un-primary" href="{% url 'accounts:esign_studio_files' %}"><i class="bi bi-folder2-open me-1"></i> My files <span class="badge bg-white text-dark ms-1">{{ file_count }}</span></a>
+              <a class="btn btn-outline-primary" href="{% url 'accounts:esign_workflows' %}"><i class="bi bi-diagram-3 me-1"></i> Workflows</a>
+              <a class="btn btn-outline-primary" href="{% url 'accounts:esign_forms' %}"><i class="bi bi-ui-checks-grid me-1"></i> Forms</a>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <form id="dropForm" method="post" action="{% url 'accounts:esign_studio_upload' %}" enctype="multipart/form-data">
+              {% csrf_token %}
+              <label class="st-drop d-block mb-0" id="dropZone">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <div class="fw-semibold mt-1">Drop a document here to open it</div>
+                <div class="small text-muted">PDF, Word, Excel, PowerPoint or images · up to {{ max_mb }} MB each</div>
+                <input type="file" name="files" multiple accept="{{ accept_attr }}" class="d-none" id="dropInput">
+              </label>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    {% for group, tools in tool_groups %}
+      <div class="st-group-label mb-2 {% if not forloop.first %}mt-4{% endif %}">{{ group }}</div>
+      <div class="row g-2">
+        {% for t in tools %}
+        <div class="col-sm-6 col-xl-4">
+          <a class="st-tile" href="{% url 'accounts:esign_studio_tool' t.key %}">
+            <span class="st-ico"><i class="bi {{ t.icon }}"></i></span>
+            <span><span class="st-t d-block">{{ t.label }}</span><span class="st-d d-block">{{ t.blurb }}</span></span>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-white fw-bold text-un-primary d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history me-2"></i>Recent files</span>
+        <a class="small" href="{% url 'accounts:esign_studio_files' %}">All</a>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for f in recent_files %}
+        <a class="list-group-item list-group-item-action es-row d-flex gap-2 align-items-center" href="{% url 'accounts:esign_studio_file' f.pk %}">
+          <i class="bi bi-file-earmark-pdf text-danger fs-4"></i>
+          <span class="flex-grow-1 text-truncate">
+            <span class="d-block fw-semibold text-truncate">{{ f.name }}</span>
+            <span class="small text-muted">{{ f.page_count }} page{{ f.page_count|pluralize }} · {{ f.last_operation|truncatechars:34 }}</span>
+          </span>
+          <span class="small text-muted text-nowrap">{{ f.updated_at|timesince }}</span>
+        </a>
+        {% empty %}
+        <div class="st-empty"><i class="bi bi-folder2"></i>Nothing yet. Drop a file above or pick a tool.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const zone = document.getElementById("dropZone"), input = document.getElementById("dropInput"), form = document.getElementById("dropForm");
+  ["dragenter","dragover"].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add("over"); }));
+  ["dragleave","drop"].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove("over"); }));
+  zone.addEventListener("drop", e => { if (e.dataTransfer.files.length){ input.files = e.dataTransfer.files; submit(); } });
+  input.addEventListener("change", () => input.files.length && submit());
+  function submit(){ zone.innerHTML = '<span class="spinner-border text-primary"></span><div class="fw-semibold mt-2">Opening…</div><div class="small text-muted">Office files take a few seconds to convert.</div>'; form.appendChild(input); form.submit(); }
+})();
+</script>
+{% endblock %}

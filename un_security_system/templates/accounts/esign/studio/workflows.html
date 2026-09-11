@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/workflows.html — my tasks, runs and flows #}
+{% load esign_studio_tags %}
+{% block title %}Workflows | eSign | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .wf-tpl{ cursor:pointer; }
+  .wf-tpl .st-map{ height:120px; pointer-events:none; overflow:hidden; }
+  .wf-mini{ overflow:hidden; }
+  .wf-tpl.on{ border-color:var(--st-blue)!important; box-shadow:0 0 0 2px rgba(0,158,219,.25); }
+  .nav-tabs .nav-link{ color:#475569; }
+  .nav-tabs .nav-link.active{ color:#005A8B; font-weight:600; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card es-hero">
+      <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+          <h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-diagram-3 me-2"></i>Workflows</h4>
+          <div class="text-muted">Route a document or form through approvals, reviews and signatures — in order, in parallel, or depending on the answers.</div>
+        </div>
+        <button class="btn btn-un-primary" data-bs-toggle="modal" data-bs-target="#newFlow"><i class="bi bi-plus-circle me-1"></i> New flow</button>
+      </div>
+    </div>
+  </div>
+
+  {% if launch_file %}
+  <div class="col-12"><div class="alert alert-info d-flex align-items-center gap-2 mb-0">
+    <i class="bi bi-file-earmark-pdf fs-4"></i><div>Pick a flow to start with <strong>{{ launch_file.name }}</strong>.</div>
+  </div></div>
+  {% endif %}
+
+  <div class="col-6 col-lg-3"><div class="card es-kpi warn h-100"><div class="card-body"><div class="text-muted small">Waiting on me</div><div class="h3 fw-bold mb-0">{{ counts.tasks }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card es-kpi h-100"><div class="card-body"><div class="text-muted small">Runs in progress</div><div class="h3 fw-bold mb-0">{{ counts.open_runs }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card es-kpi h-100" style="border-left-color:#7C3AED"><div class="card-body"><div class="text-muted small">Flows I can use</div><div class="h3 fw-bold mb-0">{{ counts.flows }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card es-kpi h-100" style="border-left-color:#94A3B8"><div class="card-body"><div class="text-muted small">My flows</div><div class="h3 fw-bold mb-0">{{ my_flows|length }}</div></div></div></div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-white pb-0">
+        <ul class="nav nav-tabs card-header-tabs">
+          <li class="nav-item"><a class="nav-link {% if tab == 'tasks' %}active{% endif %}" href="?tab=tasks{% if launch_file %}&file={{ launch_file.pk }}{% endif %}"><i class="bi bi-inbox me-1"></i>My tasks {% if counts.tasks %}<span class="badge rounded-pill bg-warning text-dark">{{ counts.tasks }}</span>{% endif %}</a></li>
+          <li class="nav-item"><a class="nav-link {% if tab == 'runs' %}active{% endif %}" href="?tab=runs"><i class="bi bi-activity me-1"></i>Runs</a></li>
+          <li class="nav-item"><a class="nav-link {% if tab == 'flows' %}active{% endif %}" href="?tab=flows{% if launch_file %}&file={{ launch_file.pk }}{% endif %}"><i class="bi bi-diagram-3 me-1"></i>Flows</a></li>
+        </ul>
+      </div>
+
+      {% if tab == 'tasks' %}
+      <div class="list-group list-group-flush">
+        {% for t in tasks %}
+        <div class="list-group-item es-row d-flex flex-wrap align-items-center gap-3">
+          <span class="st-ico" style="width:38px;height:38px;border-radius:.5rem;display:flex;align-items:center;justify-content:center;background:rgba(0,158,219,.1);color:#005A8B"><i class="bi {{ t.icon }}"></i></span>
+          <div class="flex-grow-1 min-w-0">
+            <div class="fw-semibold">{{ t.run.subject }}</div>
+            <div class="small text-muted">
+              {{ t.get_kind_display }} · <strong>{{ t.node_label }}</strong> · from {{ t.run.initiator.get_full_name|default:t.run.initiator.username }}
+              · {{ t.created_at|timesince }} ago · <span class="es-token">{{ t.run.reference }}</span>
+              {% if t.round > 1 %}<span class="badge bg-light text-dark border">Round {{ t.round }}</span>{% endif %}
+              {% if t.is_overdue %}<span class="badge bg-danger">Overdue</span>{% elif t.due_at %}<span class="text-warning">· due {{ t.due_at|date:"d M" }}</span>{% endif %}
+            </div>
+          </div>
+          <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_wf_task' t.token %}">
+            {% if t.kind == 'approval' %}<i class="bi bi-check2-circle me-1"></i>Review & decide{% elif t.kind == 'review' %}<i class="bi bi-eye me-1"></i>Review{% elif t.kind == 'fill' %}<i class="bi bi-input-cursor-text me-1"></i>Complete{% elif t.kind == 'prepare' %}<i class="bi bi-bounding-box me-1"></i>Place fields{% else %}<i class="bi bi-arrow-repeat me-1"></i>Update & resubmit{% endif %}
+          </a>
+        </div>
+        {% empty %}
+        <div class="st-empty"><i class="bi bi-inbox"></i>Nothing is waiting on you.<div class="small mt-1">Signature steps show up under <a href="{% url 'accounts:esign_dashboard' %}">Envelopes</a>, like any other signing request.</div></div>
+        {% endfor %}
+      </div>
+
+      {% elif tab == 'runs' %}
+      <div class="card-body border-bottom py-2">
+        <form class="row g-2" method="get">
+          <input type="hidden" name="tab" value="runs">
+          <div class="col-md-5"><input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" placeholder="Subject, reference or flow"></div>
+          <div class="col-md-4"><select class="form-select form-select-sm" name="status" onchange="this.form.submit()">
+            <option value="">All statuses</option><option value="open" {% if status == 'open' %}selected{% endif %}>In progress (any)</option>
+            {% for k, label in run_statuses %}<option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select></div>
+          <div class="col-md-3"><button class="btn btn-sm btn-outline-primary w-100">Filter</button></div>
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="small text-muted"><tr><th>Subject</th><th class="d-none d-md-table-cell">Flow</th><th>Progress</th><th>Status</th><th class="text-end">Started</th></tr></thead>
+          <tbody>
+          {% for r in runs %}
+            <tr class="es-row" style="cursor:pointer" onclick="location='{% url 'accounts:esign_run_detail' r.pk %}'">
+              <td><div class="fw-semibold">{{ r.subject }}</div><div class="es-token">{{ r.reference }} · {{ r.initiator.get_full_name|default:r.initiator.username }}</div></td>
+              <td class="small d-none d-md-table-cell">{{ r.workflow_name }}</td>
+              <td style="min-width:120px">{% with p=r.progress %}<div class="progress" style="height:6px"><div class="progress-bar bg-{{ r.status_color }}" style="width:{{ p.percent }}%"></div></div><div class="small text-muted mt-1">{{ p.done }} of {{ p.total }} steps</div>{% endwith %}</td>
+              <td><span class="badge bg-{{ r.status_color }}{% if r.status_color == 'warning' %} text-dark{% endif %}">{{ r.get_status_display }}</span></td>
+              <td class="text-end small text-muted text-nowrap">{{ r.started_at|date:"d M Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="st-empty"><i class="bi bi-activity"></i>No runs{% if q or status %} match{% else %} yet{% endif %}.</div></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% else %}
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="st-group-label">My flows</div>
+          <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#newFlow"><i class="bi bi-plus-lg me-1"></i>New flow</button>
+        </div>
+        <div class="row g-3 mb-4">
+          {% for wf in my_flows %}
+          <div class="col-md-6 col-xl-4">
+            <div class="st-card p-3 h-100 d-flex flex-column">
+              <div class="d-flex justify-content-between gap-2">
+                <div class="fw-semibold text-truncate">{{ wf.name }}</div>
+                <span class="badge bg-light text-dark border text-nowrap">{% if wf.share_scope == 'private' %}<i class="bi bi-lock"></i> Only me{% elif wf.share_scope == 'office' %}<i class="bi bi-building"></i> Office{% else %}<i class="bi bi-globe2"></i> Agency{% endif %}</span>
+              </div>
+              <div class="small text-muted mb-2">{{ wf.step_count }} step{{ wf.step_count|pluralize }} · v{{ wf.version }} · {{ wf.run_total }} run{{ wf.run_total|pluralize }}{% if wf.form %} · <i class="bi bi-ui-checks-grid"></i> {{ wf.form.name }}{% endif %}</div>
+              <div class="st-map mb-2 wf-mini" style="height:110px;overflow:hidden" data-graph='{{ wf.graph|to_json|force_escape }}'></div>
+              <div class="mt-auto d-flex flex-wrap gap-1">
+                <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_workflow_launch' wf.pk %}{% if launch_file %}?file={{ launch_file.pk }}{% endif %}"><i class="bi bi-play-fill"></i> Start</a>
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_workflow_designer' wf.pk %}"><i class="bi bi-pencil"></i> Design</a>
+                <form method="post" action="{% url 'accounts:esign_workflow_duplicate' wf.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" title="Duplicate"><i class="bi bi-copy"></i></button></form>
+                <form method="post" action="{% url 'accounts:esign_workflow_delete' wf.pk %}" class="d-inline ms-auto" onsubmit="return confirm('{% if wf.run_total %}Archive this flow? Its runs are kept.{% else %}Delete this flow?{% endif %}')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button></form>
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12"><div class="st-empty"><i class="bi bi-diagram-3"></i>You haven't designed a flow yet. Start from a template — it takes a minute.</div></div>
+          {% endfor %}
+        </div>
+
+        {% if shared_flows %}
+        <div class="st-group-label mb-2">Shared with me</div>
+        <div class="list-group">
+          {% for wf in shared_flows %}
+          <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+            <div class="flex-grow-1"><div class="fw-semibold">{{ wf.name }}</div>
+              <div class="small text-muted">by {{ wf.created_by.get_full_name|default:wf.created_by.username }} · {{ wf.step_count }} steps{% if wf.form %} · runs from the form “{{ wf.form.name }}”{% endif %}</div></div>
+            <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_workflow_launch' wf.pk %}{% if launch_file %}?file={{ launch_file.pk }}{% endif %}"><i class="bi bi-play-fill"></i> Start</a>
+            <form method="post" action="{% url 'accounts:esign_workflow_duplicate' wf.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary"><i class="bi bi-copy me-1"></i>Make my own copy</button></form>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="newFlow" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <form class="modal-content" method="post" action="{% url 'accounts:esign_workflow_new' %}">
+      {% csrf_token %}
+      <div class="modal-header"><h5 class="modal-title text-un-primary"><i class="bi bi-diagram-3 me-2"></i>New flow</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-3"><label class="form-label small fw-semibold">Name</label><input class="form-control" name="name" placeholder="Leave empty to use the template's name" maxlength="150"></div>
+        <input type="hidden" name="template" id="tplKey" value="blank">
+        <div class="row g-3">
+          {% for t in templates %}
+          <div class="col-md-6 col-lg-4">
+            <div class="st-card p-2 h-100 wf-tpl {% if forloop.first %}on{% endif %}" data-key="{{ t.key }}" tabindex="0">
+              <div class="st-map mb-2 wf-mini" data-graph='{{ t.graph|to_json|force_escape }}'></div>
+              <div class="px-1"><div class="fw-semibold"><i class="bi {{ t.icon }} me-1 text-un-primary"></i>{{ t.name }}</div><div class="small text-muted">{{ t.description }}</div></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button><button class="btn btn-un-primary"><i class="bi bi-pencil me-1"></i>Open in the designer</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_flow_map.html" %}
+<script>
+(function(){
+  const TYPES = {{ node_types|to_json }};
+  function draw(){ document.querySelectorAll(".wf-mini").forEach(el => { if (el.dataset.drawn || !el.offsetParent) return; try { FlowMap(el, JSON.parse(el.dataset.graph), {nodeTypes: TYPES, portLabels: {}, fit: true}); el.dataset.drawn = 1; } catch(e){} }); }
+  draw();
+  document.getElementById("newFlow").addEventListener("shown.bs.modal", draw);
+  document.querySelectorAll(".wf-tpl").forEach(card => {
+    const pick = () => { document.querySelectorAll(".wf-tpl").forEach(c => c.classList.remove("on")); card.classList.add("on"); document.getElementById("tplKey").value = card.dataset.key; };
+    card.addEventListener("click", pick); card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); pick(); } });
+    card.addEventListener("dblclick", () => { pick(); card.closest("form").submit(); });
+  });
+})();
+</script>
+{% endblock %}

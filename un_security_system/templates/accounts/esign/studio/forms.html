@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/forms.html — my forms, forms to fill, submissions #}
+{% block title %}Forms | eSign | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .fm-card{ border:1px solid var(--st-line); border-radius:.6rem; background:#fff; overflow:hidden; height:100%; display:flex; flex-direction:column; }
+  .fm-card .bar{ height:6px; }
+  .fm-tpl{ cursor:pointer; }
+  .fm-tpl.on{ border-color:var(--st-blue); box-shadow:0 0 0 2px rgba(0,158,219,.25); }
+  .nav-tabs .nav-link{ color:#475569; } .nav-tabs .nav-link.active{ color:#005A8B; font-weight:600; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card es-hero"><div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div><h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-ui-checks-grid me-2"></i>Forms</h4>
+        <div class="text-muted">Design a form once — fields, tables, colours and signature boxes — then collect answers, route them through a workflow and get a signed PDF at the end.</div></div>
+      <button class="btn btn-un-primary" data-bs-toggle="modal" data-bs-target="#newForm"><i class="bi bi-plus-circle me-1"></i> New form</button>
+    </div></div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-white pb-0">
+        <ul class="nav nav-tabs card-header-tabs">
+          <li class="nav-item"><a class="nav-link {% if tab == 'forms' %}active{% endif %}" href="?tab=forms"><i class="bi bi-pencil-square me-1"></i>My forms <span class="badge bg-light text-dark border">{{ my_forms|length }}</span></a></li>
+          <li class="nav-item"><a class="nav-link {% if tab == 'fill' %}active{% endif %}" href="?tab=fill"><i class="bi bi-input-cursor-text me-1"></i>Fill in a form <span class="badge bg-light text-dark border">{{ fillable|length }}</span></a></li>
+          <li class="nav-item"><a class="nav-link {% if tab == 'submissions' %}active{% endif %}" href="?tab=submissions"><i class="bi bi-inboxes me-1"></i>Submissions</a></li>
+        </ul>
+      </div>
+
+      {% if tab == 'forms' %}
+      <div class="card-body"><div class="row g-3">
+        {% for f in my_forms %}
+        <div class="col-md-6 col-xl-4">
+          <div class="fm-card">
+            <div class="bar" style="background:{{ f.schema.theme.accent|default:'#009EDB' }}"></div>
+            <div class="p-3 d-flex flex-column flex-grow-1">
+              <div class="d-flex justify-content-between gap-2">
+                <div class="fw-semibold text-truncate">{{ f.name }}</div>
+                {% if f.is_published %}<span class="badge bg-success-subtle text-success border border-success-subtle">Published</span>{% else %}<span class="badge bg-light text-muted border">Draft</span>{% endif %}
+              </div>
+              <div class="small text-muted mb-2">{{ f.field_count }} field{{ f.field_count|pluralize }} · {{ f.submission_total }} submission{{ f.submission_total|pluralize }}{% if f.category %} · {{ f.category }}{% endif %}</div>
+              <div class="small mb-3">
+                {% if f.workflow %}<i class="bi bi-diagram-3 text-un-primary me-1"></i>Runs “{{ f.workflow.name }}”{% else %}<span class="text-muted"><i class="bi bi-diagram-3 me-1"></i>No workflow</span>{% endif %}
+                · {% if f.access == 'link' %}<i class="bi bi-link-45deg"></i> Anyone with the link{% else %}<i class="bi bi-people"></i> {% if f.share_scope == 'agency' %}Agency{% elif f.share_scope == 'office' %}Office{% else %}Only me{% endif %}{% endif %}
+              </div>
+              <div class="mt-auto d-flex flex-wrap gap-1">
+                <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_form_designer' f.pk %}"><i class="bi bi-pencil"></i> Design</a>
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_form_fill' f.pk %}"><i class="bi bi-input-cursor-text"></i> {% if f.is_published %}Fill{% else %}Test{% endif %}</a>
+                {% if f.submission_total %}<a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_form_submissions' f.pk %}"><i class="bi bi-inboxes"></i></a>{% endif %}
+                {% if f.access == 'link' and f.is_published %}<button class="btn btn-sm btn-outline-secondary st-copy" data-link="{{ request.scheme }}://{{ request.get_host }}{% url 'accounts:esign_form_public' f.public_token %}" title="Copy public link"><i class="bi bi-link-45deg"></i></button>{% endif %}
+                <form method="post" action="{% url 'accounts:esign_form_duplicate' f.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" title="Duplicate"><i class="bi bi-copy"></i></button></form>
+                <form method="post" action="{% url 'accounts:esign_form_delete' f.pk %}" class="d-inline ms-auto" onsubmit="return confirm('{% if f.submission_total %}Unpublish this form? Submissions are kept.{% else %}Delete this form?{% endif %}')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="col-12"><div class="st-empty"><i class="bi bi-ui-checks-grid"></i>No forms yet. Start from a template — ICT access, asset handover, leave, travel, purchase or visitor.</div></div>
+        {% endfor %}
+      </div></div>
+
+      {% elif tab == 'fill' %}
+      <div class="list-group list-group-flush">
+        {% for f in fillable %}
+        <div class="list-group-item es-row d-flex flex-wrap align-items-center gap-3">
+          <span class="d-inline-flex align-items-center justify-content-center rounded" style="width:40px;height:40px;background:{{ f.schema.theme.accent|default:'#009EDB' }}1a;color:{{ f.schema.theme.accent|default:'#009EDB' }}"><i class="bi bi-file-earmark-text fs-5"></i></span>
+          <div class="flex-grow-1"><div class="fw-semibold">{{ f.name }}</div>
+            <div class="small text-muted">{{ f.description|default:f.category|truncatechars:120 }}{% if f.workflow %} · goes through {{ f.workflow.step_count }} step{{ f.workflow.step_count|pluralize }}{% endif %}</div></div>
+          <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_form_fill' f.pk %}">Fill in</a>
+        </div>
+        {% empty %}
+        <div class="st-empty"><i class="bi bi-inbox"></i>No forms have been shared with you yet.</div>
+        {% endfor %}
+      </div>
+
+      {% else %}
+      <div class="table-responsive"><table class="table align-middle mb-0">
+        <thead class="small text-muted"><tr><th>Reference</th><th>Form</th><th>Submitted by</th><th>Status</th><th class="text-end">Date</th></tr></thead>
+        <tbody>
+        {% for s in submissions %}
+          <tr class="es-row" style="cursor:pointer" onclick="location='{% url 'accounts:esign_submission_detail' s.pk %}'">
+            <td class="es-token">{{ s.reference }}</td><td class="fw-semibold">{{ s.form_name }}</td><td class="small">{{ s.submitter_name }}</td>
+            <td><span class="badge bg-{{ s.status_color }}{% if s.status_color == 'warning' %} text-dark{% endif %}">{{ s.get_status_display }}</span></td>
+            <td class="text-end small text-muted">{{ s.created_at|date:"d M Y H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5"><div class="st-empty"><i class="bi bi-inboxes"></i>No submissions yet.</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="newForm" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <form class="modal-content" method="post" action="{% url 'accounts:esign_form_new' %}">{% csrf_token %}
+    <div class="modal-header"><h5 class="modal-title text-un-primary"><i class="bi bi-ui-checks-grid me-2"></i>New form</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <input type="hidden" name="template" id="tplKey" value="blank">
+      <div class="row g-3">
+        {% for t in templates %}
+        <div class="col-md-6"><div class="st-card p-3 h-100 fm-tpl {% if forloop.first %}on{% endif %}" data-key="{{ t.key }}" tabindex="0">
+          <div class="d-flex gap-3"><span class="d-inline-flex align-items-center justify-content-center rounded" style="width:42px;height:42px;background:rgba(0,158,219,.1);color:#005A8B;flex:0 0 42px"><i class="bi {{ t.icon }} fs-5"></i></span>
+          <div><div class="fw-semibold">{{ t.name }}</div><div class="small text-muted">{{ t.description }}</div>{% if t.category %}<span class="badge bg-light text-dark border mt-1">{{ t.category }}</span>{% endif %}</div></div>
+        </div></div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button><button class="btn btn-un-primary"><i class="bi bi-pencil me-1"></i>Open in the designer</button></div>
+  </form></div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll(".fm-tpl").forEach(card => {
+  const pick = () => { document.querySelectorAll(".fm-tpl").forEach(c => c.classList.remove("on")); card.classList.add("on"); document.getElementById("tplKey").value = card.dataset.key; };
+  card.addEventListener("click", pick); card.addEventListener("dblclick", () => { pick(); card.closest("form").submit(); });
+  card.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); pick(); } });
+});
+document.querySelectorAll(".st-copy").forEach(b => b.addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(b.dataset.link); b.innerHTML = '<i class="bi bi-check2"></i>'; setTimeout(() => b.innerHTML = '<i class="bi bi-link-45deg"></i>', 1500); }
+  catch(e){ prompt("Copy this link:", b.dataset.link); }
+}));
+</script>
+{% endblock %}

@@ -213,3 +213,11 @@ ESIGN_BRAND = "UNDP eSign"       # or "UNDP SoftSign"
 # Raise CUT if a grey background survives; lower it if pale ink is eaten.
 ESIGN_SIGNATURE_CUT = 232        # at/above this brightness -> fully transparent
 ESIGN_SIGNATURE_KEEP = 150       # at/below this            -> fully opaque
+
+ESIGN_STUDIO_MAX_VERSIONS = 15       # versions kept per workbench file
+ESIGN_STUDIO_RETENTION_DAYS = 90     # delete workbench files untouched this long; 0 keeps them
+ESIGN_WF_REMINDER_DAYS = 3           # remind a pending step after this many days; 0 turns reminders off
+
+# Non-Latin text in form PDFs (e.g. Arabic names, French accents beyond Latin-1): TTF paths
+ESIGN_PDF_FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+ESIGN_PDF_FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"

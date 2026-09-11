@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/run_detail.html — one run: where it is, who did what, the document #}
+{% load esign_studio_tags %}
+{% block title %}{{ run.reference }} — {{ run.subject }} | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<nav aria-label="breadcrumb" class="small mb-2"><ol class="breadcrumb mb-0">
+  <li class="breadcrumb-item"><a href="{% url 'accounts:esign_workflows' %}?tab=runs">Runs</a></li>
+  <li class="breadcrumb-item active">{{ run.reference }}</li>
+</ol></nav>
+
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card es-hero">
+      <div class="card-body p-4 d-flex flex-wrap gap-3 justify-content-between align-items-start">
+        <div class="min-w-0">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h4 class="mb-0 text-un-primary fw-bold">{{ run.subject }}</h4>
+            <span class="badge bg-{{ run.status_color }}{% if run.status_color == 'warning' %} text-dark{% endif %}">{{ run.get_status_display }}</span>
+          </div>
+          <div class="text-muted small mt-1"><span class="es-token">{{ run.reference }}</span> · {{ run.workflow_name }} (v{{ run.workflow_version }}) · started by {{ run.initiator.get_full_name|default:run.initiator.username }} on {{ run.started_at|date:"d M Y H:i" }}{% if run.completed_at %} · finished {{ run.completed_at|date:"d M Y H:i" }}{% endif %}</div>
+          <div class="progress mt-3" style="height:8px;max-width:420px"><div class="progress-bar bg-{{ run.status_color }}" style="width:{{ progress.percent }}%"></div></div>
+          <div class="small text-muted mt-1">{{ progress.done }} of {{ progress.total }} steps done</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          {% if my_task %}<a class="btn btn-warning" href="{% url 'accounts:esign_wf_task' my_task.token %}"><i class="bi bi-hand-index me-1"></i>Your turn: {{ my_task.node_label }}</a>{% endif %}
+          {% if run.final_pdf %}<a class="btn btn-un-primary" href="{% url 'accounts:esign_run_pdf' run.pk 'final' %}?download=1"><i class="bi bi-download me-1"></i>Final PDF</a>{% endif %}
+          <a class="btn btn-outline-primary" href="{% url 'accounts:esign_run_pdf' run.pk 'document' %}?download=1"><i class="bi bi-file-earmark-pdf me-1"></i>Current document</a>
+          {% if can_manage %}<button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal"><i class="bi bi-x-circle me-1"></i>Cancel run</button>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if run.status == 'blocked' %}
+  <div class="col-12">
+    <div class="alert alert-danger d-flex flex-wrap gap-3 align-items-center mb-0">
+      <i class="bi bi-exclamation-octagon fs-3"></i>
+      <div class="flex-grow-1"><div class="fw-semibold">Stopped{% if blocked_node %} at “{{ blocked_node.label }}”{% endif %}</div><div class="small">{{ run.block_reason }}</div></div>
+      {% if can_manage %}
+      <form method="post" action="{% url 'accounts:esign_run_retry' run.pk %}" class="d-flex flex-wrap gap-2 align-items-center" id="retryForm">
+        {% csrf_token %}<div id="retryPick" style="min-width:260px"></div><input type="hidden" name="people" id="retryPeople">
+        <button class="btn btn-danger"><i class="bi bi-arrow-repeat me-1"></i>Retry</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% elif run.status == 'returned' %}
+  <div class="col-12"><div class="alert alert-warning mb-0"><i class="bi bi-arrow-return-left me-1"></i><strong>Returned for changes</strong>{% if returned.by %} by {{ returned.by }}{% endif %}{% if returned.comment %}: “{{ returned.comment }}”{% endif %}. {% if run.initiator_id == request.user.id %}Update it from your task to send it back on its way.{% endif %}</div></div>
+  {% elif run.outcome_note and not run.is_open %}
+  <div class="col-12"><div class="alert alert-{{ run.status_color }} mb-0">{{ run.outcome_note }}</div></div>
+  {% endif %}
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-diagram-3 me-2"></i>Where it is</div>
+      <div class="card-body"><div class="st-map" id="map"></div>
+        <div class="small text-muted mt-2"><span class="badge" style="background:#FFFBEB;color:#B45309;border:1px solid #F59E0B">In progress</span> <span class="badge" style="background:#F0FDF4;color:#15803D;border:1px solid #16A34A">Done</span> <span class="badge" style="background:#FEF2F2;color:#B91C1C;border:1px solid #DC2626">Rejected / needs attention</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-people me-2"></i>Steps and people</div>
+      <div class="list-group list-group-flush">
+        {% for t in tasks %}
+        <div class="list-group-item">
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <i class="bi {{ t.icon }} text-un-primary"></i>
+            <div class="flex-grow-1 min-w-0">
+              <div><span class="fw-semibold">{{ t.node_label }}</span> · {{ t.name }} <span class="small text-muted">{{ t.email }}</span>
+                {% if t.round > 1 %}<span class="badge bg-light text-dark border">Round {{ t.round }}</span>{% endif %}</div>
+              <div class="small text-muted">{{ t.get_kind_display }} · assigned {{ t.created_at|date:"d M H:i" }}{% if t.decided_at %} · {{ t.get_status_display|lower }} {{ t.decided_at|date:"d M H:i" }}{% endif %}{% if t.is_overdue %} · <span class="text-danger">overdue</span>{% endif %}</div>
+              {% if t.comment %}<div class="small mt-1 p-2 rounded" style="background:#F8FAFC">“{{ t.comment }}”</div>{% endif %}
+            </div>
+            <span class="badge bg-{{ t.status_color }}{% if t.status_color == 'warning' %} text-dark{% endif %}">{{ t.get_status_display }}</span>
+            {% if t.envelope_id %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_envelope_detail' t.envelope_id %}" title="Open the envelope"><i class="bi bi-envelope-paper"></i></a>{% endif %}
+            {% if can_manage and t.is_open and t.kind != 'signature' %}
+              <button class="btn btn-sm btn-outline-secondary st-reassign" data-url="{% url 'accounts:esign_run_reassign' run.pk t.pk %}" data-label="{{ t.node_label }}" data-name="{{ t.name }}" title="Give this to someone else"><i class="bi bi-person-gear"></i></button>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="st-empty"><i class="bi bi-hourglass"></i>No one has been asked anything yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if summary %}
+    <div class="card mb-4">
+      <div class="card-header bg-white fw-bold text-un-primary d-flex justify-content-between"><span><i class="bi bi-ui-checks-grid me-2"></i>{{ run.submission.form_name }} <span class="es-token">{{ run.submission.reference }}</span></span>
+        <a class="small" href="{% url 'accounts:esign_submission_detail' run.submission_id %}">Open submission</a></div>
+      <div class="table-responsive"><table class="table table-sm mb-0">
+        {% for label, value in summary %}<tr><th class="small text-muted fw-normal ps-3" style="width:40%">{{ label }}</th><td class="small">{{ value|default:"—" }}</td></tr>{% endfor %}
+      </table></div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header bg-white fw-bold text-un-primary d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-file-earmark-pdf me-2"></i>{% if run.final_pdf %}Final document{% else %}Document{% endif %}</span>
+      </div>
+      <div class="st-viewer" style="border-radius:0 0 .5rem .5rem"><div class="st-pages" id="viewer"></div></div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-journal-text me-2"></i>Audit trail</div>
+      <div class="card-body">
+        <ul class="st-timeline">
+          {% for e in events %}
+          <li>
+            <span class="st-dot"><i class="bi {% if e.event == 'approved' or e.event == 'signed' or e.event == 'completed' %}bi-check-lg{% elif e.event == 'rejected' or e.event == 'declined' or e.event == 'blocked' or e.event == 'cancelled' %}bi-x-lg{% elif e.event == 'returned' %}bi-arrow-return-left{% elif e.event == 'viewed' %}bi-eye{% elif e.event == 'notified' or e.event == 'assigned' %}bi-envelope{% else %}bi-dot{% endif %}"></i></span>
+            <div class="small"><span class="fw-semibold">{{ e.get_event_display }}</span> <span class="text-muted">· {{ e.at|date:"d M Y H:i" }}</span></div>
+            <div class="small text-muted">{{ e.note }}{% if e.ip %} <span class="es-token">({{ e.ip }})</span>{% endif %}</div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if can_manage %}
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog">
+  <form class="modal-content" method="post" action="{% url 'accounts:esign_run_cancel' run.pk %}">{% csrf_token %}
+    <div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-x-circle me-2"></i>Cancel this run</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><p class="small">Open tasks close, any envelope out for signature is voided, and everyone waiting is told.</p>
+      <label class="form-label small fw-semibold">Reason</label><textarea class="form-control" name="reason" rows="2" maxlength="300"></textarea></div>
+    <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Keep it running</button><button class="btn btn-danger">Cancel run</button></div>
+  </form></div></div>
+<div class="modal fade" id="reassignModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog">
+  <form class="modal-content" method="post" id="reassignForm">{% csrf_token %}
+    <div class="modal-header"><h5 class="modal-title text-un-primary"><i class="bi bi-person-gear me-2"></i>Reassign</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><p class="small" id="reassignText"></p><div id="reassignPick"></div><input type="hidden" name="people" id="reassignPeople"></div>
+    <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button><button class="btn btn-un-primary">Reassign</button></div>
+  </form></div></div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_pdf_viewer.html" %}
+{{ pdf_inline|json_script:"pdfInline" }}
+{% include "accounts/esign/studio/_flow_map.html" %}
+{% include "accounts/esign/studio/_people_picker.html" %}
+<script>
+(function(){
+  FlowMap(document.getElementById("map"), {{ graph_json|safe }}, {nodeTypes: {{ node_types_json|safe }}, portLabels: {{ port_labels_json|safe }}, states: {{ states_json|safe }}});
+  StudioPDF.renderInto(document.getElementById("viewer"), {url: "{% if run.final_pdf %}{% url 'accounts:esign_run_pdf' run.pk 'final' %}{% else %}{% url 'accounts:esign_run_pdf' run.pk 'document' %}{% endif %}", data: JSON.parse(document.getElementById("pdfInline").textContent)}, {maxPages: 30});
+  {% if can_manage %}
+  const DIR = {{ directory_json|safe }};
+  const retry = document.getElementById("retryPick");
+  if (retry) new PeoplePicker(retry, {directory: DIR, multiple: true, input: document.getElementById("retryPeople"), placeholder: "Who should handle it?"});
+  const modalEl = document.getElementById("reassignModal"), pickHost = document.getElementById("reassignPick");
+  document.querySelectorAll(".st-reassign").forEach(b => b.addEventListener("click", () => {
+    document.getElementById("reassignForm").action = b.dataset.url;
+    document.getElementById("reassignText").textContent = `“${b.dataset.label}” is with ${b.dataset.name}. Who should do it instead?`;
+    new PeoplePicker(pickHost, {directory: DIR, multiple: false, input: document.getElementById("reassignPeople")});
+    new bootstrap.Modal(modalEl).show();
+  }));
+  {% endif %}
+})();
+</script>
+{% endblock %}

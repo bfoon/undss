@@ -1008,3 +1008,4 @@ class ConsumableStockLogAdmin(admin.ModelAdmin):
         return False
 
 from .admin_esign import *  # noqa: F401,F403
+from .admin_esign_studio import *  # noqa: F401,F403

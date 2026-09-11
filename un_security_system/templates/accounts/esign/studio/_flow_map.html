@@ -1,0 +1,72 @@
+{# accounts/templates/accounts/esign/studio/_flow_map.html — FlowMap: read-only drawing of a flow, coloured by progress #}
+<script>
+(function(){
+  if (window.FlowMap) return;
+  const W = 200, H = 76;
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  function portY(node, port, types){
+    const ports = (types[node.type] || {}).ports || [];
+    const i = Math.max(0, ports.indexOf(port));
+    return node.y + H * (i + 1) / (ports.length + 1);
+  }
+  /** A connector from an output port to an input port. Forward edges are a
+   *  single smooth curve; edges that point back to the left take an S-route
+   *  out to the right and back in, so they never look like they start at the
+   *  wrong step. Shared shape with the designer. */
+  function edgeD(x1, y1, x2, y2){
+    if (x2 >= x1 - 10){
+      const dx = Math.max(40, (x2 - x1) * 0.5);
+      return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+    }
+    const off = 50, ym = Math.abs(y2 - y1) > H ? (y1 + y2) / 2 : Math.max(y1, y2) + H * 0.9, mx = (x1 + x2) / 2;
+    return `M${x1},${y1} C${x1 + off},${y1} ${x1 + off},${ym} ${mx},${ym} S${x2 - off},${y2} ${x2},${y2}`;
+  }
+  window.FlowEdgePath = edgeD;
+  const STATE = {
+    active:   {stroke:"#F59E0B", fill:"#FFFBEB", badge:"In progress"},
+    done:     {stroke:"#16A34A", fill:"#F0FDF4", badge:"Done"},
+    rejected: {stroke:"#DC2626", fill:"#FEF2F2", badge:"Rejected"},
+    returned: {stroke:"#D97706", fill:"#FFF7ED", badge:"Returned"},
+    blocked:  {stroke:"#DC2626", fill:"#FEF2F2", badge:"Needs attention"},
+  };
+  window.FlowMap = function(host, graph, opts){
+    opts = opts || {};
+    const types = opts.nodeTypes || {}, labels = opts.portLabels || {}, states = opts.states || {};
+    const nodes = graph.nodes || [], edges = graph.edges || [];
+    if (!nodes.length){ host.innerHTML = '<div class="st-empty"><i class="bi bi-diagram-3"></i>Empty flow</div>'; return; }
+    const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+    const minX = Math.min(...nodes.map(n => n.x)) - 40, minY = Math.min(...nodes.map(n => n.y)) - 40;
+    const maxX = Math.max(...nodes.map(n => n.x)) + W + 60, maxY = Math.max(...nodes.map(n => n.y)) + H + 40;
+    // opts.fit: shrink the whole flow into the box (thumbnails). Otherwise keep
+    // a readable minimum width and let the container scroll.
+    const size = opts.fit ? `width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block"`
+                          : `width="100%" style="min-width:${Math.min(900, maxX-minX)}px;display:block"`;
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${maxX-minX} ${maxY-minY}" ${size} role="img" aria-label="Flow diagram">`;
+    svg += `<defs><marker id="fmArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker></defs>`;
+    edges.forEach(e => {
+      const a = byId[e.from], b = byId[e.to]; if (!a || !b) return;
+      const x1 = a.x + W, y1 = portY(a, e.port, types), x2 = b.x, y2 = b.y + H / 2;
+      const bad = ["rejected","declined"].includes(e.port);
+      const lit = states[a.id] && states[b.id] && states[a.id] !== "blocked";
+      svg += `<path d="${edgeD(x1, y1, x2, y2)}" fill="none" stroke="${lit ? '#16A34A' : (bad ? '#FCA5A5' : '#94A3B8')}" stroke-width="${lit ? 2.2 : 1.6}" ${bad && !lit ? 'stroke-dasharray="5 4"' : ''} marker-end="url(#fmArrow)"/>`;
+      if (e.port !== "next"){
+        const mx = x1 + 12, my = y1 - 5;
+        svg += `<text x="${mx}" y="${my}" font-size="10.5" fill="${bad ? '#B91C1C' : '#475569'}" font-family="Segoe UI,Helvetica,Arial">${esc(labels[e.port] || e.port)}</text>`;
+      }
+    });
+    nodes.forEach(n => {
+      const t = types[n.type] || {color:"#64748B", label:n.type};
+      const st = STATE[states[n.id]];
+      const round = ["condition"].includes(n.type) ? 16 : 10;
+      svg += `<g><rect x="${n.x}" y="${n.y}" width="${W}" height="${H}" rx="${round}" fill="${st ? st.fill : '#FFFFFF'}" stroke="${st ? st.stroke : '#CBD5E1'}" stroke-width="${st ? 2 : 1}"/>`;
+      svg += `<rect x="${n.x}" y="${n.y}" width="5" height="${H}" rx="2" fill="${t.color}"/>`;
+      svg += `<text x="${n.x+16}" y="${n.y+22}" font-size="10" font-weight="700" fill="${t.color}" letter-spacing=".5" font-family="Segoe UI,Helvetica,Arial">${esc((t.label||'').toUpperCase())}</text>`;
+      const name = n.label.length > 26 ? n.label.slice(0, 25) + "…" : n.label;
+      svg += `<text x="${n.x+16}" y="${n.y+42}" font-size="13" font-weight="600" fill="#0F172A" font-family="Segoe UI,Helvetica,Arial">${esc(name)}</text>`;
+      if (st) svg += `<text x="${n.x+16}" y="${n.y+61}" font-size="10.5" fill="${st.stroke}" font-family="Segoe UI,Helvetica,Arial">${st.badge}</text>`;
+      svg += `</g>`;
+    });
+    host.innerHTML = svg + "</svg>";
+  };
+})();
+</script>

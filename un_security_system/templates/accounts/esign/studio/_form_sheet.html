@@ -1,0 +1,99 @@
+{% load esign_studio_tags %}
+{% comment %}
+  accounts/templates/accounts/esign/studio/_form_sheet.html
+  Renders a form schema on the same 12-column grid the PDF uses.
+
+  include with: schema, values, errors, scope
+    scope = "submitter" | a workflow node id  → those fields are editable
+    scope = None                               → everything read-only
+{% endcomment %}
+{% with th=schema.theme hd=schema.header %}
+<div class="fs-sheet {% if th.density == 'compact' %}compact{% endif %} {% if th.rounded %}rounded-fields{% endif %}"
+     style="--fs-accent:{{ th.accent }};--fs-hbg:{{ th.header_bg }};--fs-htext:{{ th.header_text }};--fs-label:{{ th.label_color }};font-family:{% if th.font == 'times' %}'Times New Roman',Times,serif{% elif th.font == 'courier' %}'Courier New',monospace{% else %}'Segoe UI',Helvetica,Arial,sans-serif{% endif %}">
+  <div class="fs-header" style="text-align:{{ hd.align }}">
+    {% if hd.logo %}<img src="{{ hd.logo }}" alt="" class="fs-logo {% if hd.align == 'center' %}mx-auto d-block{% endif %}">{% endif %}
+    <div class="fs-title">{{ hd.title }}</div>
+    {% if hd.subtitle %}<div class="fs-subtitle">{{ hd.subtitle }}</div>{% endif %}
+  </div>
+  <div class="row g-3 fs-body">
+  {% for el in schema.elements %}
+    <div class="col-md-{{ el.width }}">
+    {% if el.type == 'heading' %}
+      <div class="fs-heading fs-h-{{ el.style.size }}" style="color:{{ el.style.color }};text-align:{{ el.style.align }};{% if el.style.bg %}background:{{ el.style.bg }};padding:.35rem .6rem;border-radius:.3rem;{% else %}border-bottom:2px solid var(--fs-accent);{% endif %}">{{ el.text }}</div>
+    {% elif el.type == 'paragraph' %}
+      <div class="fs-para {% if el.style.size == 'sm' %}small{% endif %}" style="color:{{ el.style.color }};text-align:{{ el.style.align }};{% if el.style.bg %}background:{{ el.style.bg }};padding:.5rem .7rem;border-radius:.3rem;{% endif %}">{{ el.text|linebreaksbr }}</div>
+    {% elif el.type == 'divider' %}
+      <hr class="my-1" style="border-color:{{ el.style.color }};opacity:1">
+    {% elif el.type == 'spacer' %}
+      <div style="height:{{ el.height }}px"></div>
+    {% elif el.type == 'image' %}
+      {% if el.src %}<div style="text-align:{{ el.align }}"><img src="{{ el.src }}" alt="" style="max-height:{{ el.height }}px;max-width:100%"></div>{% endif %}
+    {% elif el.type == 'signature' %}
+      <div class="fs-label">{{ el.label }}{% if el.role %} <span class="fw-normal text-muted">— {{ el.role }}</span>{% endif %}</div>
+      <div class="fs-sig"><i class="bi bi-pen me-1"></i>Signed electronically{% if el.step or el.role %} during the workflow{% endif %}</div>
+      {% if el.show_date %}<div class="small text-muted mt-1">Date: ____________</div>{% endif %}
+    {% else %}
+      {% with val=values|get_item:el.key err=errors|get_item:el.key fb=el.fill_by|default:"submitter" %}
+      {% if scope and fb == scope %}
+        <label class="fs-label" for="f_{{ el.key }}">{{ el.label }}{% if el.required %} <span class="text-danger">*</span>{% endif %}</label>
+        {% if el.type == 'textarea' %}
+          <textarea class="form-control {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" rows="{{ el.rows }}" placeholder="{{ el.placeholder }}" {% if el.required %}required{% endif %}>{{ val }}</textarea>
+        {% elif el.type == 'select' %}
+          <select class="form-select {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" {% if el.required %}required{% endif %}>
+            <option value="">{{ el.placeholder|default:"Choose…" }}</option>
+            {% for o in el.options %}<option {% if o == val %}selected{% endif %}>{{ o }}</option>{% endfor %}
+          </select>
+        {% elif el.type == 'radio' %}
+          <div class="{% if err %}is-invalid{% endif %}">{% for o in el.options %}
+            <label class="form-check form-check-inline"><input class="form-check-input" type="radio" name="f_{{ el.key }}" value="{{ o }}" {% if o == val %}checked{% endif %} {% if el.required %}required{% endif %}> {{ o }}</label>
+          {% endfor %}</div>
+        {% elif el.type == 'checkboxes' %}
+          <div>{% for o in el.options %}
+            <label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="f_{{ el.key }}" value="{{ o }}" {% if o|in_list:val %}checked{% endif %}> {{ o }}</label>
+          {% endfor %}</div>
+        {% elif el.type == 'yesno' %}
+          <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="f_{{ el.key }}" id="f_{{ el.key }}_y" value="yes" {% if val == 'yes' %}checked{% endif %} {% if el.required %}required{% endif %}><label class="btn btn-outline-primary btn-sm px-3" for="f_{{ el.key }}_y">Yes</label>
+            <input type="radio" class="btn-check" name="f_{{ el.key }}" id="f_{{ el.key }}_n" value="no" {% if val == 'no' %}checked{% endif %}><label class="btn btn-outline-primary btn-sm px-3" for="f_{{ el.key }}_n">No</label>
+          </div>
+        {% elif el.type == 'table' %}
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered fs-table mb-1" data-table="f_{{ el.key }}">
+              <thead><tr>{% for c in el.columns %}<th>{{ c.label }}</th>{% endfor %}<th style="width:34px"></th></tr></thead>
+              <tbody>
+                {% for row in val|blank_rows:el.rows %}
+                <tr>{% for c in el.columns %}<td><input class="form-control form-control-sm" data-col="{{ c.key }}" data-kind="{{ c.kind }}" type="{% if c.kind == 'date' %}date{% else %}text{% endif %}" {% if c.kind == 'number' %}inputmode="decimal"{% endif %} name="f_{{ el.key }}__{{ forloop.parentloop.counter0 }}__{{ c.key }}" value="{{ row|get_item:c.key }}"></td>{% endfor %}
+                  <td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0 fs-row-del" title="Remove row"><i class="bi bi-x-lg"></i></button></td></tr>
+                {% endfor %}
+              </tbody>
+              {% if el.show_total %}<tfoot><tr>{% for c in el.columns %}<th class="small">{% if c.kind == 'number' %}<span data-total="{{ c.key }}">0</span>{% elif forloop.first %}Total{% endif %}</th>{% endfor %}<th></th></tr></tfoot>{% endif %}
+            </table>
+            <input type="hidden" name="f_{{ el.key }}__rows" value="{{ val|blank_rows:el.rows|length }}">
+            {% if el.allow_add %}<button type="button" class="btn btn-sm btn-outline-primary fs-row-add"><i class="bi bi-plus-lg me-1"></i>Add row</button>{% endif %}
+          </div>
+        {% else %}
+          <input class="form-control {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" value="{{ val }}" placeholder="{{ el.placeholder }}"
+                 type="{% if el.type == 'email' %}email{% elif el.type == 'date' %}date{% else %}text{% endif %}" {% if el.type == 'number' %}inputmode="decimal"{% endif %} {% if el.required %}required{% endif %}>
+        {% endif %}
+        {% if err %}<div class="invalid-feedback d-block">{{ err }}</div>{% elif el.help %}<div class="form-text">{{ el.help }}</div>{% endif %}
+      {% else %}
+        <div class="fs-label">{{ el.label }}</div>
+        {% if el.type == 'table' %}
+          {% if val %}
+          <div class="table-responsive"><table class="table table-sm table-bordered fs-table mb-0">
+            <thead><tr>{% for c in el.columns %}<th>{{ c.label }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in val %}<tr>{% for c in el.columns %}<td>{{ row|get_item:c.key }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+            {% if el.show_total %}<tfoot><tr>{% for c in el.columns %}<th>{% if c.kind == 'number' %}{{ val|table_total:c.key }}{% elif forloop.first %}Total{% endif %}</th>{% endfor %}</tr></tfoot>{% endif %}
+          </table></div>
+          {% else %}<div class="fs-value text-muted">—</div>{% endif %}
+        {% else %}
+          <div class="fs-value">{% with shown=el|form_display:val %}{% if shown %}{{ shown|linebreaksbr }}{% elif fb != 'submitter' %}<span class="text-muted fst-italic">Completed later in the workflow</span>{% else %}<span class="text-muted">—</span>{% endif %}{% endwith %}</div>
+        {% endif %}
+      {% endif %}
+      {% endwith %}
+    {% endif %}
+    </div>
+  {% endfor %}
+  </div>
+</div>
+{% endwith %}

@@ -1,0 +1,94 @@
+{# accounts/templates/accounts/esign/studio/_people_picker.html — PeoplePicker: colleagues from the directory, or any email #}
+<script>
+(function(){
+  if (window.PeoplePicker) return;
+  const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+  /**
+   * new PeoplePicker(hostElement, {directory, multiple, input, placeholder, onChange, value})
+   * `input` is a hidden <input>; it always holds JSON: [{user_id}|{email}, ...]
+   */
+  function PeoplePicker(host, opts){
+    this.host = host; this.opts = Object.assign({multiple: true, directory: [], placeholder: "Name or email"}, opts || {});
+    this.value = [];
+    host.classList.add("st-picker");
+    host.innerHTML = '<div class="st-box"><span class="st-chips"></span><input type="text" autocomplete="off"></div><div class="st-menu" role="listbox"></div>';
+    this.box = host.querySelector(".st-box"); this.chips = host.querySelector(".st-chips");
+    this.field = host.querySelector("input"); this.menu = host.querySelector(".st-menu");
+    this.field.placeholder = this.opts.placeholder;
+    this.hl = -1;
+    const self = this;
+    this.box.addEventListener("click", () => self.field.focus());
+    this.field.addEventListener("input", () => self.search());
+    this.field.addEventListener("focus", () => self.search());
+    this.field.addEventListener("blur", () => setTimeout(() => { self.menu.classList.remove("show"); self.commitTyped(); }, 150));
+    this.field.addEventListener("keydown", e => self.key(e));
+    let initial = this.opts.value;
+    if (!initial && this.opts.input && this.opts.input.value) { try { initial = JSON.parse(this.opts.input.value); } catch(_){} }
+    (initial || []).forEach(p => this.add(p, true));
+    this.sync();
+  }
+  PeoplePicker.prototype.label = function(p){
+    if (p.user_id){ const u = this.opts.directory.find(d => d.id === p.user_id); return u ? u.name : (p.name || "Colleague"); }
+    return p.email;
+  };
+  PeoplePicker.prototype.search = function(){
+    const q = this.field.value.trim().toLowerCase();
+    const taken = new Set(this.value.filter(v => v.user_id).map(v => v.user_id));
+    let rows = this.opts.directory.filter(u => !taken.has(u.id) && (!q || (u.name + " " + u.email + " " + (u.title||"")).toLowerCase().includes(q))).slice(0, 12);
+    let html = rows.map((u, i) => `<div class="st-opt" data-id="${u.id}"><div class="fw-semibold">${esc(u.name)}</div><div class="small text-muted">${esc(u.title ? u.title + " · " : "")}${esc(u.email)}</div></div>`).join("");
+    if (EMAIL.test(q)) html += `<div class="st-opt" data-email="${esc(q)}"><i class="bi bi-envelope me-1"></i>Use <strong>${esc(q)}</strong></div>`;
+    if (!html) html = `<div class="px-3 py-2 small text-muted">${this.opts.directory.length ? "No one matches. Type a full email address to add anyone." : "Type an email address."}</div>`;
+    this.menu.innerHTML = html; this.hl = -1;
+    this.menu.classList.toggle("show", document.activeElement === this.field);
+    this.menu.querySelectorAll(".st-opt").forEach(o => o.addEventListener("mousedown", ev => { ev.preventDefault(); this.pick(o); }));
+  };
+  PeoplePicker.prototype.pick = function(o){
+    if (o.dataset.id) this.add({user_id: parseInt(o.dataset.id, 10)});
+    else if (o.dataset.email) this.add({email: o.dataset.email});
+    this.field.value = ""; this.search();
+  };
+  PeoplePicker.prototype.key = function(e){
+    const opts = [...this.menu.querySelectorAll(".st-opt")];
+    if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+      e.preventDefault(); if (!opts.length) return;
+      this.hl = (this.hl + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
+      opts.forEach((o, i) => o.classList.toggle("hl", i === this.hl));
+    } else if (e.key === "Enter" || e.key === "," || e.key === ";"){
+      if (this.hl >= 0 && opts[this.hl]) { e.preventDefault(); this.pick(opts[this.hl]); }
+      else if (this.commitTyped()) e.preventDefault();
+      else if (e.key === "Enter") e.preventDefault();
+    } else if (e.key === "Backspace" && !this.field.value && this.value.length){
+      this.value.pop(); this.sync();
+    }
+  };
+  PeoplePicker.prototype.commitTyped = function(){
+    const v = this.field.value.trim().replace(/[,;]$/, "");
+    if (EMAIL.test(v)){ this.add({email: v.toLowerCase()}); this.field.value = ""; return true; }
+    return false;
+  };
+  PeoplePicker.prototype.add = function(p, silent){
+    if (!p || (!p.user_id && !p.email)) return;
+    if (p.email && !p.user_id){
+      const match = this.opts.directory.find(d => d.email && d.email.toLowerCase() === p.email.toLowerCase());
+      if (match) p = {user_id: match.id};
+    }
+    const dup = this.value.some(v => (p.user_id && v.user_id === p.user_id) || (p.email && v.email === p.email));
+    if (dup) return;
+    if (!this.opts.multiple) this.value = [];
+    this.value.push(p.user_id ? {user_id: p.user_id} : {email: p.email});
+    if (!silent) this.sync();
+  };
+  PeoplePicker.prototype.sync = function(){
+    this.chips.innerHTML = this.value.map((p, i) =>
+      `<span class="st-chip">${p.user_id ? '<i class="bi bi-person"></i>' : '<i class="bi bi-envelope"></i>'} ${esc(this.label(p))}<button type="button" data-i="${i}" aria-label="Remove">&times;</button></span>`).join("");
+    this.chips.querySelectorAll("button").forEach(b => b.addEventListener("click", ev => { ev.stopPropagation(); this.value.splice(+b.dataset.i, 1); this.sync(); }));
+    this.field.placeholder = this.value.length && !this.opts.multiple ? "" : this.opts.placeholder;
+    if (this.opts.input) this.opts.input.value = JSON.stringify(this.value);
+    if (this.opts.onChange) this.opts.onChange(this.value);
+  };
+  PeoplePicker.prototype.set = function(list){ this.value = []; (list || []).forEach(p => this.add(p, true)); this.sync(); };
+  window.PeoplePicker = PeoplePicker;
+})();
+</script>

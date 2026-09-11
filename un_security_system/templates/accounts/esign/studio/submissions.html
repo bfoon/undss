@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/submissions.html — every response to one form #}
+{% load esign_studio_tags %}
+{% block title %}Submissions — {{ form.name }} | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<nav aria-label="breadcrumb" class="small mb-2"><ol class="breadcrumb mb-0">
+  <li class="breadcrumb-item"><a href="{% url 'accounts:esign_forms' %}">Forms</a></li>
+  <li class="breadcrumb-item"><a href="{% url 'accounts:esign_form_designer' form.pk %}">{{ form.name }}</a></li>
+  <li class="breadcrumb-item active">Submissions</li>
+</ol></nav>
+<div class="card">
+  <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+    <div class="fw-bold text-un-primary"><i class="bi bi-inboxes me-2"></i>{{ form.name }} <span class="badge bg-light text-dark border">{{ submissions|length }}</span></div>
+    <div class="d-flex gap-2">
+      <input type="search" class="form-control form-control-sm" id="filter" placeholder="Filter" style="max-width:200px">
+      <a class="btn btn-sm btn-outline-primary text-nowrap" href="?format=csv"><i class="bi bi-filetype-csv me-1"></i>Export CSV</a>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table align-middle mb-0" id="subTable">
+      <thead class="small text-muted"><tr><th>Reference</th><th>Submitted by</th>{% for c in columns %}<th class="d-none d-lg-table-cell">{{ c.label|truncatechars:24 }}</th>{% endfor %}<th>Status</th><th class="text-end">Date</th></tr></thead>
+      <tbody>
+      {% for s in submissions %}
+        <tr class="es-row" style="cursor:pointer" onclick="location='{% url 'accounts:esign_submission_detail' s.pk %}'">
+          <td class="es-token">{{ s.reference }}</td>
+          <td><div class="small fw-semibold">{{ s.submitter_name }}</div><div class="small text-muted">{{ s.submitter_email }}</div></td>
+          {% for c in columns %}<td class="small d-none d-lg-table-cell">{{ c|form_cell:s.values|truncatechars:40 }}</td>{% endfor %}
+          <td><span class="badge bg-{{ s.status_color }}{% if s.status_color == 'warning' %} text-dark{% endif %}">{{ s.get_status_display }}</span></td>
+          <td class="text-end small text-muted text-nowrap">{{ s.created_at|date:"d M Y H:i" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="{{ columns|length|add:4 }}"><div class="st-empty"><i class="bi bi-inboxes"></i>No submissions yet.</div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.getElementById("filter").addEventListener("input", e => { const q = e.target.value.toLowerCase(); document.querySelectorAll("#subTable tbody tr").forEach(tr => tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none"); });
+</script>
+{% endblock %}

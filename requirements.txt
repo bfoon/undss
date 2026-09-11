@@ -18,3 +18,4 @@ pypdf
 icalendar
 openpyxl
 python-docx
+cryptography>=41

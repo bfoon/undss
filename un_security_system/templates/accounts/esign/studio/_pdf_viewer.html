@@ -1,0 +1,206 @@
+{% comment %}
+  accounts/templates/accounts/esign/studio/_pdf_viewer.html — StudioPDF
+
+  StudioPDF.renderInto(container, source, {maxPages, width, onPage})
+  StudioPDF.load(source) -> pdf.js document        (organiser, editor, image export)
+  StudioPDF.renderPage(pdf, pageNumber, {width|scale})
+
+  source is a URL string, or {url, data, bytes}:
+    data   base64 PDF embedded in the page (see inline_pdf in studio_common_esign)
+    bytes  a Uint8Array already in memory (e.g. a preview)
+    url    where the PDF can also be fetched / opened
+
+  Why it is built this way — each layer covers a failure seen in the field:
+    1. Embedded bytes first, so no separate request is needed (CSP connect-src,
+       proxies, extensions, interrupted downloads). URL fetches are checked:
+       status, a sign-in page instead of a PDF, or not a PDF at all.
+    2. pdf.js is served from this site's static files, not a CDN. If its worker
+       can't start, pdf.js runs it on the page instead.
+    3. If pdf.js still can't draw it, the browser's own PDF viewer shows the
+       document, and the reason is written under it — never a dead end.
+{% endcomment %}
+<script src="{{ pdfjs_url }}"></script>
+<script>
+(function(){
+  if (window.StudioPDF) return;
+  const WORKER_URL = "{{ pdfjs_worker_url|escapejs }}";
+  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_URL;
+  const TIMEOUT_MS = 30000;
+  const cache = new Map();
+
+  class ViewerError extends Error {
+    constructor(kind, detail, cause){ super(detail || kind); this.kind = kind; this.cause = cause; }
+  }
+  const REASONS = {
+    library:  "The PDF viewer library (pdf.js) didn't load — a network filter or security policy may be blocking it.",
+    worker:   "The PDF viewer couldn't start.",
+    fetch:    "The request for the document was blocked or interrupted.",
+    status:   "The server couldn't provide the document",
+    login:    "The server sent a web page instead of the PDF — usually a sign-in or access page.",
+    notpdf:   "The server's answer wasn't a PDF.",
+    password: "This PDF is password-protected, so it can't be previewed.",
+    damaged:  "This PDF appears to be damaged.",
+    timeout:  "The document took too long to load.",
+    render:   "The PDF viewer couldn't draw this document.",
+  };
+
+  function normalise(source){
+    return typeof source === "string" ? {url: source} : Object.assign({}, source || {});
+  }
+  function keyOf(src){
+    if (src.url) return "u:" + src.url;
+    if (src.data) return "d:" + src.data.length + ":" + src.data.slice(0, 64) + src.data.slice(-64);
+    return null;                                    // raw bytes: never cached
+  }
+  function decodeBase64(b64){
+    const bin = atob(b64), out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function looksLikePdf(bytes){
+    // The spec allows a little junk before the header; check the first 1 KB.
+    const head = new TextDecoder("latin1").decode(bytes.subarray(0, 1024));
+    return head.indexOf("%PDF-") !== -1;
+  }
+  function withTimeout(promise, ms){
+    let timer;
+    return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new ViewerError("timeout")), ms); })])
+      .finally(() => clearTimeout(timer));
+  }
+
+  async function getBytes(src){
+    if (src.bytes) return src.bytes;
+    if (src.data){
+      try { return decodeBase64(src.data); } catch (e){ throw new ViewerError("damaged", "embedded data unreadable", e); }
+    }
+    if (!src.url) throw new ViewerError("fetch", "no document source");
+    let res;
+    try { res = await fetch(src.url, {credentials: "same-origin", cache: "no-store"}); }
+    catch (e){ throw new ViewerError("fetch", String(e && e.message || e), e); }
+    const type = (res.headers.get("Content-Type") || "").toLowerCase();
+    if (!res.ok) throw new ViewerError("status", `HTTP ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (looksLikePdf(bytes)) return bytes;
+    if (type.indexOf("html") !== -1 || res.redirected) throw new ViewerError("login", `${res.status} ${type}${res.redirected ? " after redirect" : ""}`);
+    throw new ViewerError("notpdf", type || "unknown content type");
+  }
+
+  async function open(src){
+    if (!window.pdfjsLib) throw new ViewerError("library", "pdfjsLib is not defined ({{ pdfjs_url|escapejs }})");
+    const bytes = await getBytes(src);
+    try {
+      // pdf.js may transfer the buffer to its worker, so give it a copy.
+      return await pdfjsLib.getDocument({data: bytes.slice(0), isEvalSupported: false}).promise;
+    } catch (e){
+      const name = (e && e.name) || "", msg = String((e && e.message) || e);
+      if (name === "PasswordException") throw new ViewerError("password", msg, e);
+      if (name === "InvalidPDFException") throw new ViewerError("damaged", msg, e);
+      if (/worker/i.test(msg)) throw new ViewerError("worker", msg, e);
+      throw new ViewerError("render", msg, e);
+    }
+  }
+
+  function load(source){
+    const src = normalise(source), key = keyOf(src);
+    if (key && cache.has(key)) return cache.get(key);
+    const promise = withTimeout(open(src), TIMEOUT_MS);
+    if (key){
+      cache.set(key, promise);
+      promise.catch(() => cache.delete(key));       // a failure must not stick for the page's lifetime
+    }
+    return promise;
+  }
+
+  async function renderPage(pdf, number, opts){
+    opts = opts || {};
+    const page = await pdf.getPage(number);
+    const base = page.getViewport({scale: 1});
+    const scale = opts.width ? opts.width / base.width : (opts.scale || 1);
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const vp = page.getViewport({scale: scale * ratio});
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(vp.width); canvas.height = Math.floor(vp.height);
+    canvas.style.width = (vp.width / ratio) + "px";
+    await page.render({canvasContext: canvas.getContext("2d"), viewport: vp}).promise;
+    return {canvas, page, base};
+  }
+
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+  /** When pdf.js can't be used: the browser's own viewer, or a clear message. */
+  function fallback(container, src, err){
+    const kind = (err && err.kind) || "render";
+    let reason = REASONS[kind] || REASONS.render;
+    if (kind === "status" && err.message) reason += ` (${err.message}).`;
+    console.warn("eSign Studio PDF viewer:", kind, err && err.message, err && err.cause);
+
+    // A native viewer can't help when the server itself didn't send a PDF.
+    const serverProblem = ["status", "login", "notpdf", "password", "damaged"].indexOf(kind) !== -1;
+    const canEmbed = navigator.pdfViewerEnabled !== false;
+    let frameSrc = "";
+    if (!serverProblem && canEmbed){
+      if (src.url) frameSrc = src.url;
+      else if (src.data || src.bytes){
+        try { frameSrc = URL.createObjectURL(new Blob([src.bytes || decodeBase64(src.data)], {type: "application/pdf"})); } catch (_){}
+      }
+    }
+    const openLink = src.url ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(src.url)}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Open</a>` : "";
+    const download = src.url ? `<a class="btn btn-sm btn-outline-secondary" href="${esc(src.url)}${src.url.indexOf("?") === -1 ? "?" : "&"}download=1"><i class="bi bi-download me-1"></i>Download</a>` : "";
+
+    if (frameSrc){
+      container.innerHTML =
+        `<iframe class="st-native-pdf" src="${esc(frameSrc)}#view=FitH" title="Document" style="width:100%;height:78vh;border:0;border-radius:4px;background:#fff"></iframe>
+         <div class="small text-muted mt-2 w-100 d-flex flex-wrap gap-2 align-items-center">
+           <span class="flex-grow-1"><i class="bi bi-info-circle me-1"></i>Shown with your browser's PDF viewer. ${esc(reason)}</span>${openLink}
+         </div>`;
+      return "native";
+    }
+    container.innerHTML =
+      `<div class="alert alert-warning m-0 w-100">
+         <div class="fw-semibold mb-1">The preview couldn't be shown.</div>
+         <div class="small mb-2">${esc(reason)}</div>
+         <div class="d-flex flex-wrap gap-2">${openLink}${download}</div>
+       </div>`;
+    return "message";
+  }
+
+  async function renderInto(container, source, opts){
+    opts = opts || {};
+    const src = normalise(source);
+    container.innerHTML = '<div class="text-muted small py-4 text-center"><span class="spinner-border spinner-border-sm me-2"></span>Loading document…</div>';
+    let pdf;
+    try {
+      pdf = await load(src);
+    } catch (err){
+      fallback(container, src, err);
+      return null;
+    }
+    try {
+      const frag = document.createDocumentFragment();
+      const max = Math.min(pdf.numPages, opts.maxPages || pdf.numPages);
+      const width = opts.width || Math.max(280, Math.min(container.clientWidth - 28, 860));
+      container.innerHTML = "";
+      for (let i = 1; i <= max; i++){
+        const {canvas} = await renderPage(pdf, i, {width});
+        canvas.setAttribute("aria-label", "Page " + i);
+        container.appendChild(canvas);
+        if (opts.onPage) opts.onPage(i, canvas, pdf);
+      }
+      if (pdf.numPages > max){
+        const more = document.createElement("div");
+        more.className = "small text-muted";
+        more.textContent = (pdf.numPages - max) + " more page(s) — open or download to see all.";
+        container.appendChild(more);
+      }
+      return pdf;
+    } catch (err){
+      fallback(container, src, err instanceof ViewerError ? err : new ViewerError("render", String(err && err.message || err), err));
+      return null;
+    }
+  }
+
+  function explain(err){ return REASONS[(err && err.kind) || "render"] || REASONS.render; }
+
+  window.StudioPDF = {load, renderPage, renderInto, explain, ViewerError};
+})();
+</script>

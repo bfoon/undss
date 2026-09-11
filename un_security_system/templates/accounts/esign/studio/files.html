@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/files.html — My files #}
+{% load esign_studio_tags %}
+{% block title %}My files | PDF tools | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="card">
+  <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+    <div class="fw-bold text-un-primary"><i class="bi bi-folder2-open me-2"></i>My files
+      {% if highlight %}<span class="badge bg-light text-dark border ms-1">Showing {{ files|length }} new file{{ files|length|pluralize }}</span> <a class="small ms-1" href="{% url 'accounts:esign_studio_files' %}">Show all</a>{% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      <form class="d-flex" method="get"><input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" placeholder="Search files"></form>
+      <a class="btn btn-sm btn-un-primary text-nowrap" href="{% url 'accounts:esign_studio' %}"><i class="bi bi-plus-lg me-1"></i>New</a>
+    </div>
+  </div>
+
+  <form method="post" action="{% url 'accounts:esign_studio_files_bulk' %}" id="bulkForm">
+    {% csrf_token %}
+    <div class="px-3 py-2 border-bottom bg-light d-none align-items-center gap-2" id="bulkBar">
+      <span class="small fw-semibold" id="bulkCount">0 selected</span>
+      <button class="btn btn-sm btn-outline-primary" name="action" value="zip"><i class="bi bi-file-zip me-1"></i>Download as ZIP</button>
+      <button class="btn btn-sm btn-outline-primary" name="action" value="merge"><i class="bi bi-union me-1"></i>Merge</button>
+      <button class="btn btn-sm btn-outline-danger" name="action" value="delete" onclick="return confirm('Delete the selected files and their history?')"><i class="bi bi-trash me-1"></i>Delete</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead class="small text-muted"><tr>
+          <th style="width:36px"><input class="form-check-input" type="checkbox" id="checkAll" aria-label="Select all"></th>
+          <th>Name</th><th class="d-none d-md-table-cell">Last change</th><th class="text-end">Pages</th><th class="text-end d-none d-md-table-cell">Size</th><th class="text-end">Updated</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for f in files %}
+          <tr class="es-row">
+            <td><input class="form-check-input st-check" type="checkbox" name="ids" value="{{ f.pk }}" aria-label="Select {{ f.name }}"></td>
+            <td><a class="fw-semibold text-decoration-none" href="{% url 'accounts:esign_studio_file' f.pk %}"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>{{ f.name }}</a>
+              <div class="small text-muted">v{{ f.current.number }}</div></td>
+            <td class="small text-muted d-none d-md-table-cell">{{ f.last_operation|truncatechars:60 }}</td>
+            <td class="text-end">{{ f.page_count }}</td>
+            <td class="text-end small text-muted d-none d-md-table-cell">{{ f.size|human_size }}</td>
+            <td class="text-end small text-muted text-nowrap">{{ f.updated_at|date:"d M H:i" }}</td>
+            <td class="text-end text-nowrap">
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_studio_file_pdf' f.pk %}?download=1" title="Download"><i class="bi bi-download"></i></a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7"><div class="st-empty"><i class="bi bi-folder2"></i>{% if q %}No files match “{{ q }}”.{% else %}No files yet. <a href="{% url 'accounts:esign_studio' %}">Open a document</a> to start.{% endif %}</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+  <div class="card-footer bg-white small text-muted"><i class="bi bi-lock me-1"></i>Only you can see these files.{% if retention_days %} Files not changed for {{ retention_days }} days are removed automatically.{% endif %}</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const all = document.getElementById("checkAll"), bar = document.getElementById("bulkBar"), count = document.getElementById("bulkCount");
+  const boxes = () => [...document.querySelectorAll(".st-check")];
+  function sync(){ const n = boxes().filter(b => b.checked).length; bar.classList.toggle("d-none", !n); bar.classList.toggle("d-flex", !!n); count.textContent = n + " selected"; }
+  all && all.addEventListener("change", () => { boxes().forEach(b => b.checked = all.checked); sync(); });
+  boxes().forEach(b => b.addEventListener("change", sync));
+})();
+</script>
+{% endblock %}

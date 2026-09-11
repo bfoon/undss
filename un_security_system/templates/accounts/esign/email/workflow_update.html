@@ -1,0 +1,50 @@
+{% comment %}
+  accounts/templates/accounts/esign/email/workflow_update.html
+  Status news about a run: a decision, a return, needs attention, a notify step, finished.
+{% endcomment %}<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ subject }}</title></head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#0F172A;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:24px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#FFFFFF;border-radius:10px;overflow:hidden;border:1px solid #E2E8F0;">
+      <tr><td style="background:#005A8B;padding:18px 28px;border-bottom:3px solid {% if tone == 'success' %}#16A34A{% elif tone == 'danger' %}#DC2626{% elif tone == 'warning' %}#F59E0B{% else %}#009EDB{% endif %};">
+        <span style="color:#FFFFFF;font-size:15px;font-weight:700;">{{ brand }}</span>
+        <span style="color:#BAE6FD;font-size:12px;float:right;">Workflow {{ reference }}</span>
+      </td></tr>
+      <tr><td style="padding:28px 28px 8px;">
+        <p style="margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;color:{% if tone == 'success' %}#15803D{% elif tone == 'danger' %}#B91C1C{% elif tone == 'warning' %}#B45309{% else %}#0284C7{% endif %};">{{ headline }}</p>
+        <h1 style="margin:0 0 14px;font-size:21px;line-height:1.3;color:#0F172A;">{{ subject_line }}</h1>
+        <p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#334155;">
+          {% if recipient_name %}Hello {{ recipient_name }},<br>{% endif %}
+          Flow: <strong>{{ flow_name }}</strong>{% if step_label %} &middot; Step: <strong>{{ step_label }}</strong>{% endif %}
+          {% if initiator_name %}<br>Started by {{ initiator_name }}{% endif %}
+        </p>
+        {% if detail %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
+          <td style="background:#F8FAFC;border-left:3px solid #94A3B8;padding:10px 14px;font-size:13px;line-height:1.55;color:#1E293B;">{{ detail|linebreaksbr }}</td>
+        </tr></table>
+        {% endif %}
+        {% if summary and not action_url %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #E2E8F0;border-radius:6px;">
+          {% for label, value in summary %}
+          <tr><td style="padding:7px 12px;font-size:12px;color:#64748B;width:40%;border-bottom:1px solid #F1F5F9;">{{ label }}</td>
+              <td style="padding:7px 12px;font-size:13px;color:#0F172A;border-bottom:1px solid #F1F5F9;">{{ value|truncatechars:120 }}</td></tr>
+          {% endfor %}
+        </table>
+        {% endif %}
+        {% if attached %}<p style="margin:0 0 14px;font-size:13px;color:#15803D;">The PDF is attached to this email.</p>{% endif %}
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 22px;"><tr>
+          <td style="background:#009EDB;border-radius:6px;">
+            <a href="{% if action_url %}{{ action_url }}{% else %}{{ run_link }}{% endif %}" style="display:inline-block;padding:12px 26px;color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;">{{ action_label|default:"Open the run" }}</a>
+          </td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:14px 28px 22px;border-top:1px solid #F1F5F9;font-size:11px;color:#94A3B8;">
+        Sent by {{ brand }} on {{ now|date:"j M Y, H:i" }}.
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

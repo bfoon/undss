@@ -1,0 +1,20 @@
+{% extends base_template %}
+{# accounts/templates/accounts/esign/studio/form_done.html — after submitting through a public link, or a closed link #}
+{% block title %}{{ form.name }}{% endblock %}
+{% block content %}
+<div class="mx-auto text-center py-5" style="max-width:560px">
+  {% if closed %}
+    <i class="bi bi-lock text-muted" style="font-size:3rem"></i>
+    <h3 class="fw-bold mt-3">This form isn't open</h3>
+    <p class="text-muted">The link may have been closed by the person who shared it. Please contact them.</p>
+  {% else %}
+    <i class="bi bi-check-circle-fill text-success" style="font-size:3.5rem"></i>
+    <h3 class="fw-bold mt-3 text-un-primary">Thank you</h3>
+    <p class="lead mb-1">{{ form.submit_message|default:"Your form has been received." }}</p>
+    <p class="text-muted">Your reference is <strong class="font-monospace">{{ sub.reference }}</strong>.
+      {% if sub.submitter_email %}A PDF copy has been sent to {{ sub.submitter_email }}.{% endif %}</p>
+    {% if run %}<p class="small text-muted"><i class="bi bi-diagram-3 me-1"></i>It is now going through <strong>{{ run.workflow_name }}</strong>. You'll get an email if anything is needed from you.</p>{% endif %}
+    <a class="btn btn-outline-primary mt-2" href="{{ request.path }}">Submit another response</a>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{# accounts/templates/accounts/esign/studio/public_base.html — for people without an account: task links and public forms #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>{% block title %}{{ brand|default:"UNDP eSign" }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ bootstrap_css_url }}">
+  <link rel="stylesheet" href="{{ icons_css_url }}">
+  <style>
+    :root{ --un-blue:#009EDB; --un-gray:#6B7280; }
+    body{ background:#F4F7FA; font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+    .text-un-primary{ color:#005A8B!important; }
+    .btn-un-primary{ background:#009EDB; border-color:#009EDB; color:#fff; }
+    .btn-un-primary:hover{ background:#0087BD; border-color:#0087BD; color:#fff; }
+    .pb-top{ background:#005A8B; border-bottom:3px solid #009EDB; }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="pb-top py-2 px-3 text-white d-flex justify-content-between align-items-center">
+    <span class="fw-bold"><i class="bi bi-shield-check me-2"></i>{{ brand|default:"UNDP eSign" }}</span>
+    <span class="small opacity-75">Secure link</span>
+  </div>
+  <main class="container py-4" style="max-width:1100px">
+    {% for m in messages %}<div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags|default:'info' }}{% endif %} py-2">{{ m }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ bootstrap_js_url }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

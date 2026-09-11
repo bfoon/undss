@@ -1,0 +1,141 @@
+{% extends base_template %}
+{# accounts/templates/accounts/esign/studio/task.html — the page behind a task link (works with or without an account) #}
+{% load esign_studio_tags %}
+{% block title %}{{ task.node_label }} — {{ run.subject }}{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/studio/_form_styles.html" %}
+<style>
+  .tk-decide .btn{ padding:.6rem 1rem; }
+  .tk-sticky{ position:sticky; top:1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if request.user.is_authenticated %}{% include "accounts/esign/studio/_nav.html" %}{% endif %}
+
+<div class="card es-hero mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex flex-wrap gap-3 align-items-center">
+      <span class="d-inline-flex align-items-center justify-content-center rounded-3" style="width:52px;height:52px;background:#fff;color:#005A8B;font-size:1.5rem;border:1px solid rgba(0,158,219,.25)"><i class="bi {{ task.icon }}"></i></span>
+      <div class="flex-grow-1 min-w-0">
+        <div class="small text-uppercase fw-bold text-muted" style="letter-spacing:.06em">{{ task.get_kind_display }}{% if task.round > 1 %} · round {{ task.round }}{% endif %}</div>
+        <h4 class="mb-0 text-un-primary fw-bold">{{ task.node_label }}</h4>
+        <div class="text-muted small">{{ run.subject }} · <span class="es-token">{{ run.reference }}</span> · started by {{ run.initiator.get_full_name|default:run.initiator.username }}</div>
+      </div>
+      {% if can_open_run %}<a class="btn btn-outline-primary btn-sm" href="{% url 'accounts:esign_run_detail' run.pk %}"><i class="bi bi-diagram-3 me-1"></i>Whole run</a>{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if not task.is_open %}
+  <div class="alert alert-{{ task.status_color }} d-flex gap-2 align-items-center">
+    <i class="bi bi-info-circle fs-4"></i>
+    <div><strong>{{ task.get_status_display }}</strong>{% if task.decided_at %} on {{ task.decided_at|date:"d M Y H:i" }}{% endif %}.
+      {% if task.comment %}<div class="small">“{{ task.comment }}”</div>{% endif %}
+      <div class="small">Nothing more is needed from you here. The run is <strong>{{ run.get_status_display|lower }}</strong>.</div></div>
+  </div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" id="taskForm" novalidate>
+{% csrf_token %}
+<div class="row g-4">
+  <div class="col-lg-{% if scope %}8{% else %}7{% endif %}">
+    {% if run.message %}<div class="alert alert-light border small"><i class="bi bi-chat-left-text me-1"></i><strong>Message from {{ run.initiator.get_full_name|default:run.initiator.username }}:</strong> {{ run.message|linebreaksbr }}</div>{% endif %}
+    {% if cfg.instructions %}<div class="alert alert-info small"><i class="bi bi-info-circle me-1"></i>{{ cfg.instructions|linebreaksbr }}</div>{% endif %}
+    {% if task.kind == 'resubmit' and returned.comment %}<div class="alert alert-warning small"><i class="bi bi-arrow-return-left me-1"></i><strong>{{ returned.by|default:"A reviewer" }} asked for changes:</strong> {{ returned.comment }}</div>{% endif %}
+
+    {% if sub and task.is_open and scope %}
+      {% include "accounts/esign/studio/_form_sheet.html" with schema=schema values=values errors=errors scope=scope %}
+    {% else %}
+      <div class="card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <span class="fw-bold text-un-primary"><i class="bi bi-file-earmark-pdf me-2"></i>{% if sub %}{{ sub.form_name }} <span class="es-token">{{ sub.reference }}</span>{% else %}{{ run.document_name|default:"Document" }}{% endif %}</span>
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_wf_task_pdf' task.token %}" target="_blank"><i class="bi bi-box-arrow-up-right me-1"></i>Open</a>
+        </div>
+        <div class="st-viewer" style="border-radius:0 0 .5rem .5rem"><div class="st-pages" id="viewer"></div></div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-{% if scope %}4{% else %}5{% endif %}">
+    <div class="tk-sticky">
+    {% if task.is_open %}
+      <div class="card mb-3">
+        <div class="card-body tk-decide">
+          {% if task.kind == 'prepare' %}
+            <p class="small">The document is ready. Place each signer's fields on it and send it — the workflow continues when it's signed.</p>
+            {% if request.user.is_authenticated %}<a class="btn btn-un-primary w-100" href="{{ prepare_url }}"><i class="bi bi-bounding-box me-1"></i>Place fields and send</a>
+            {% else %}<div class="alert alert-warning small mb-0">Sign in to UN PASS to place the fields.</div>{% endif %}
+          {% elif task.kind == 'signature' %}
+            <p class="small mb-0">Signing happens in eSign. Look for the signature request in your email or on the Envelopes page.</p>
+          {% else %}
+            {% if task.kind == 'resubmit' and not sub %}
+              <label class="form-label small fw-semibold">Replace the document <span class="text-muted fw-normal">(optional)</span></label>
+              <input type="file" class="form-control form-control-sm mb-3" name="document">
+            {% endif %}
+            <label class="form-label small fw-semibold" for="comment">Comment {% if 'reject' in actions or 'return' in actions %}<span class="text-muted fw-normal">(needed to reject or return)</span>{% endif %}</label>
+            <textarea class="form-control mb-3" id="comment" name="comment" rows="3" maxlength="4000" placeholder="{% if task.kind == 'approval' %}Why you approved, rejected or returned it{% else %}Anything to add{% endif %}"></textarea>
+            <div class="d-grid gap-2">
+              {% if 'approve' in actions %}<button class="btn btn-success" name="action" value="approve"><i class="bi bi-check-circle me-1"></i>Approve</button>{% endif %}
+              {% if 'acknowledge' in actions %}<button class="btn btn-un-primary" name="action" value="acknowledge"><i class="bi bi-check2 me-1"></i>I've reviewed it</button>{% endif %}
+              {% if 'submit' in actions %}<button class="btn btn-un-primary" name="action" value="submit"><i class="bi bi-send me-1"></i>Submit</button>{% endif %}
+              {% if 'resubmit' in actions %}<button class="btn btn-un-primary" name="action" value="resubmit"><i class="bi bi-arrow-repeat me-1"></i>Resubmit</button>{% endif %}
+              <div class="d-flex gap-2">
+                {% if 'return' in actions and allow_return %}<button class="btn btn-outline-warning flex-fill" name="action" value="return" data-needs-comment><i class="bi bi-arrow-return-left me-1"></i>Return for changes</button>{% endif %}
+                {% if 'reject' in actions %}<button class="btn btn-outline-danger flex-fill" name="action" value="reject" data-needs-comment><i class="bi bi-x-circle me-1"></i>Reject</button>{% endif %}
+              </div>
+              {% if 'cancel' in actions %}<button class="btn btn-link text-danger btn-sm" name="action" value="cancel" data-confirm="Withdraw this request? The run will be cancelled."><i class="bi bi-trash me-1"></i>Withdraw the request instead</button>{% endif %}
+            </div>
+          {% endif %}
+          {% if task.due_at %}<div class="small mt-3 {% if task.is_overdue %}text-danger{% else %}text-muted{% endif %}"><i class="bi bi-calendar-event me-1"></i>Due {{ task.due_at|date:"d M Y" }}</div>{% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if summary and not scope %}
+      <div class="card mb-3">
+        <div class="card-header bg-white fw-bold text-un-primary small"><i class="bi bi-list-check me-1"></i>Answers</div>
+        <div class="table-responsive" style="max-height:340px"><table class="table table-sm mb-0">
+          {% for label, value in summary %}<tr><th class="small text-muted fw-normal ps-3" style="width:45%">{{ label }}</th><td class="small">{{ value|default:"—" }}</td></tr>{% endfor %}
+        </table></div>
+      </div>
+    {% endif %}
+
+    {% if history %}
+      <div class="card">
+        <div class="card-header bg-white fw-bold text-un-primary small"><i class="bi bi-clock-history me-1"></i>So far</div>
+        <div class="card-body py-2"><ul class="st-timeline">
+          {% for h in history %}<li><span class="st-dot"><i class="bi {{ h.icon }}"></i></span>
+            <div class="small"><span class="fw-semibold">{{ h.node_label }}</span> · {{ h.name }} <span class="badge bg-{{ h.status_color }}{% if h.status_color == 'warning' %} text-dark{% endif %}">{{ h.get_status_display }}</span></div>
+            {% if h.comment %}<div class="small text-muted">“{{ h.comment|truncatechars:160 }}”</div>{% endif %}</li>{% endfor %}
+        </ul></div>
+      </div>
+    {% endif %}
+    </div>
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_pdf_viewer.html" %}
+{{ pdf_inline|json_script:"pdfInline" }}
+{% include "accounts/esign/studio/_form_script.html" %}
+<script>
+(function(){
+  const viewer = document.getElementById("viewer");
+  if (viewer) StudioPDF.renderInto(viewer, {url: "{% url 'accounts:esign_wf_task_pdf' task.token %}", data: JSON.parse(document.getElementById("pdfInline").textContent)}, {maxPages: 30});
+  const form = document.getElementById("taskForm");
+  form.addEventListener("submit", e => {
+    const btn = e.submitter;
+    if (!btn) return;
+    if (btn.hasAttribute("data-needs-comment") && !document.getElementById("comment").value.trim()){
+      e.preventDefault(); const c = document.getElementById("comment"); c.classList.add("is-invalid"); c.focus();
+      c.placeholder = "Please say what needs to change or why"; return;
+    }
+    if (btn.dataset.confirm && !confirm(btn.dataset.confirm)){ e.preventDefault(); return; }
+    if (["submit", "resubmit"].includes(btn.value) && !form.checkValidity()){ e.preventDefault(); form.reportValidity(); return; }
+    setTimeout(() => form.querySelectorAll("button").forEach(b => b.disabled = true), 10);
+  });
+})();
+</script>
+{% endblock %}

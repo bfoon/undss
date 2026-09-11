@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/file_detail.html — one workbench file: preview, history, next steps #}
+{% load esign_studio_tags %}
+{% block title %}{{ file.name }} | PDF tools | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .st-actions .btn{ text-align:left; }
+  .st-ver{ border-left:2px solid var(--st-line); padding-left:.8rem; margin-left:.35rem; }
+  .st-ver .item{ position:relative; padding:.35rem 0; }
+  .st-ver .item:before{ content:""; position:absolute; left:-1.08rem; top:.8rem; width:.55rem; height:.55rem; border-radius:50%; background:#CBD5E1; }
+  .st-ver .item.cur:before{ background:var(--st-blue); box-shadow:0 0 0 3px rgba(0,158,219,.2); }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<nav aria-label="breadcrumb" class="small mb-2"><ol class="breadcrumb mb-0">
+  <li class="breadcrumb-item"><a href="{% url 'accounts:esign_studio' %}">PDF tools</a></li>
+  <li class="breadcrumb-item"><a href="{% url 'accounts:esign_studio_files' %}">My files</a></li>
+  <li class="breadcrumb-item active text-truncate" style="max-width:320px">{{ file.name }}</li>
+</ol></nav>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header bg-white d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div class="min-w-0">
+          <div class="fw-bold text-un-primary text-truncate"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+            <span id="nameText">{{ file.name }}</span>
+            <button class="btn btn-sm btn-link p-0 ms-1" data-bs-toggle="collapse" data-bs-target="#renameBox" title="Rename"><i class="bi bi-pencil"></i></button>
+          </div>
+          <div class="small text-muted">{{ file.page_count }} page{{ file.page_count|pluralize }} · {{ file.size|human_size }} · version {{ file.current.number }} · {{ file.last_operation }}</div>
+        </div>
+        <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_studio_organize' file.pk %}"><i class="bi bi-grid-3x3-gap me-1"></i>Organise</a>
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_studio_edit' file.pk %}"><i class="bi bi-pencil-square me-1"></i>Edit</a>
+          <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_studio_file_pdf' file.pk %}?download=1"><i class="bi bi-download me-1"></i>Download</a>
+        </div>
+      </div>
+      <div class="collapse" id="renameBox">
+        <form method="post" action="{% url 'accounts:esign_studio_file_rename' file.pk %}" class="d-flex gap-2 p-3 border-bottom bg-light">
+          {% csrf_token %}<input class="form-control form-control-sm" name="name" value="{{ file.name }}" maxlength="200" required>
+          <button class="btn btn-sm btn-un-primary">Rename</button>
+        </form>
+      </div>
+      <div class="st-viewer" style="border-radius:0 0 .5rem .5rem">
+        <div class="st-pages" id="viewer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-send me-2"></i>Next step</div>
+      <div class="card-body d-grid gap-2 st-actions">
+        <form method="post" action="{% url 'accounts:esign_studio_to_sign' file.pk %}" class="d-grid">{% csrf_token %}
+          <button class="btn btn-un-primary" name="mode" value="self"><i class="bi bi-pen-fill me-2"></i>Sign it myself</button></form>
+        <form method="post" action="{% url 'accounts:esign_studio_to_sign' file.pk %}" class="d-grid">{% csrf_token %}
+          <button class="btn btn-outline-primary" name="mode" value="send"><i class="bi bi-envelope-paper me-2"></i>Send for signature</button></form>
+        <div class="dropdown d-grid">
+          <button class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-diagram-3 me-2"></i>Start a workflow</button>
+          <ul class="dropdown-menu w-100 shadow-sm">
+            {% for wf in flows %}
+              <li><a class="dropdown-item" href="{% url 'accounts:esign_workflow_launch' wf.pk %}?file={{ file.pk }}"><i class="bi bi-diagram-3 me-2 text-muted"></i>{{ wf.name }}</a></li>
+            {% empty %}
+              <li class="px-3 py-2 small text-muted">No document flows yet.</li>
+            {% endfor %}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{% url 'accounts:esign_workflows' %}?tab=flows"><i class="bi bi-plus-lg me-2"></i>Design a new flow</a></li>
+          </ul>
+        </div>
+        <button class="btn btn-outline-secondary" id="toImages"><i class="bi bi-images me-2"></i>Save pages as images</button>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-tools me-2"></i>More tools</div>
+      <div class="list-group list-group-flush">
+        {% for t in tools %}{% if t.key != 'to_images' %}
+        <a class="list-group-item list-group-item-action small" href="{% url 'accounts:esign_studio_tool' t.key %}?file={{ file.pk }}"><i class="bi {{ t.icon }} me-2 text-un-primary"></i>{{ t.label }}</a>
+        {% endif %}{% endfor %}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold text-un-primary"><i class="bi bi-clock-history me-2"></i>History</div>
+      <div class="card-body">
+        <div class="st-ver">
+          {% for v in versions %}
+          <div class="item {% if v.pk == file.current_id %}cur{% endif %}">
+            <div class="d-flex justify-content-between gap-2">
+              <div class="small"><span class="fw-semibold">v{{ v.number }}</span> · {{ v.operation }}
+                <div class="text-muted" style="font-size:.72rem">{{ v.created_at|date:"d M Y H:i" }} · {{ v.page_count }}p · {{ v.size|human_size }}</div></div>
+              <div class="text-nowrap">
+                <a class="btn btn-sm btn-link px-1" href="{% url 'accounts:esign_studio_file_pdf' file.pk %}?v={{ v.number }}" target="_blank" title="Open this version"><i class="bi bi-box-arrow-up-right"></i></a>
+                {% if v.pk != file.current_id %}
+                <form method="post" action="{% url 'accounts:esign_studio_file_revert' file.pk v.number %}" class="d-inline">{% csrf_token %}
+                  <button class="btn btn-sm btn-link px-1" title="Restore this version"><i class="bi bi-arrow-counterclockwise"></i></button></form>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'accounts:esign_studio_file_delete' file.pk %}" onsubmit="return confirm('Delete this file and all its versions?')">
+      {% csrf_token %}<button class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-trash me-1"></i>Delete file</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_pdf_viewer.html" %}
+{{ pdf_inline|json_script:"pdfInline" }}
+<script src="{{ jszip_url }}"></script>
+<script>
+(function(){
+  const url = "{% url 'accounts:esign_studio_file_pdf' file.pk %}?v={{ file.current.number }}";
+  const viewer = document.getElementById("viewer");
+  const SRC = {url, data: JSON.parse(document.getElementById("pdfInline").textContent)};
+  StudioPDF.renderInto(viewer, SRC, {maxPages: 40});
+
+  const btn = document.getElementById("toImages");
+  async function exportImages(){
+    btn.disabled = true;
+    const label = btn.innerHTML;
+    try {
+      const pdf = await StudioPDF.load(SRC);
+      const zip = new JSZip();
+      for (let i = 1; i <= pdf.numPages; i++){
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Page ${i} of ${pdf.numPages}`;
+        const page = await pdf.getPage(i);
+        const vp = page.getViewport({scale: 2});                       // ~144 dpi
+        const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+        await page.render({canvasContext: c.getContext("2d"), viewport: vp}).promise;
+        const blob = await new Promise(r => c.toBlob(r, "image/png"));
+        zip.file(`page-${String(i).padStart(3, "0")}.png`, blob);
+      }
+      const out = await zip.generateAsync({type: "blob"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(out);
+      a.download = {{ file.name|slice:":-4"|default:"document"|to_json }} + "-pages.zip";
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (e){ alert("The pages could not be exported. " + StudioPDF.explain(e)); console.error(e); }
+    btn.disabled = false; btn.innerHTML = label;
+  }
+  btn.addEventListener("click", exportImages);
+  {% if show_images %}exportImages();{% endif %}
+})();
+</script>
+{% endblock %}

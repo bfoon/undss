@@ -18,6 +18,9 @@ from .views_asset_verify import asset_verify, asset_verification_history
 from . import views_esign
 from . import views_esign_markup
 from . import views_esign_self
+from . import views_esign_studio
+from . import views_esign_workflow
+from . import views_esign_forms
 
 app_name = 'accounts'
 
@@ -307,6 +310,59 @@ urlpatterns = [
     path("esign/signatures/save/", views_esign.esign_signature_save, name="esign_signature_save"),
     path("esign/signatures/<int:pk>/delete/", views_esign.esign_signature_delete, name="esign_signature_delete"),
     path("esign/signatures/<int:pk>/default/", views_esign.esign_signature_default, name="esign_signature_default"),
+
+    # ------------------------------------------------------------------
+    # eSign Studio — PDF workbench
+    # ------------------------------------------------------------------
+    path("esign/studio/", views_esign_studio.esign_studio, name="esign_studio"),
+    path("esign/studio/upload/", views_esign_studio.esign_studio_upload, name="esign_studio_upload"),
+    path("esign/studio/tools/<slug:tool>/", views_esign_studio.esign_studio_tool, name="esign_studio_tool"),
+    path("esign/studio/files/", views_esign_studio.esign_studio_files, name="esign_studio_files"),
+    path("esign/studio/files/bulk/", views_esign_studio.esign_studio_files_bulk, name="esign_studio_files_bulk"),
+    path("esign/studio/files/<int:pk>/", views_esign_studio.esign_studio_file, name="esign_studio_file"),
+    path("esign/studio/files/<int:pk>/pdf/", views_esign_studio.esign_studio_file_pdf, name="esign_studio_file_pdf"),
+    path("esign/studio/files/<int:pk>/rename/", views_esign_studio.esign_studio_file_rename, name="esign_studio_file_rename"),
+    path("esign/studio/files/<int:pk>/delete/", views_esign_studio.esign_studio_file_delete, name="esign_studio_file_delete"),
+    path("esign/studio/files/<int:pk>/revert/<int:number>/", views_esign_studio.esign_studio_file_revert, name="esign_studio_file_revert"),
+    path("esign/studio/files/<int:pk>/organize/", views_esign_studio.esign_studio_organize, name="esign_studio_organize"),
+    path("esign/studio/files/<int:pk>/organize/save/", views_esign_studio.esign_studio_organize_save, name="esign_studio_organize_save"),
+    path("esign/studio/files/<int:pk>/edit/", views_esign_studio.esign_studio_edit, name="esign_studio_edit"),
+    path("esign/studio/files/<int:pk>/edit/save/", views_esign_studio.esign_studio_edit_save, name="esign_studio_edit_save"),
+    path("esign/studio/files/<int:pk>/sign/", views_esign_studio.esign_studio_to_sign, name="esign_studio_to_sign"),
+
+    # eSign Studio — workflows
+    path("esign/workflows/", views_esign_workflow.esign_workflows, name="esign_workflows"),
+    path("esign/workflows/new/", views_esign_workflow.esign_workflow_new, name="esign_workflow_new"),
+    path("esign/workflows/<int:pk>/design/", views_esign_workflow.esign_workflow_designer, name="esign_workflow_designer"),
+    path("esign/workflows/<int:pk>/save/", views_esign_workflow.esign_workflow_save, name="esign_workflow_save"),
+    path("esign/workflows/<int:pk>/duplicate/", views_esign_workflow.esign_workflow_duplicate, name="esign_workflow_duplicate"),
+    path("esign/workflows/<int:pk>/delete/", views_esign_workflow.esign_workflow_delete, name="esign_workflow_delete"),
+    path("esign/workflows/<int:pk>/start/", views_esign_workflow.esign_workflow_launch, name="esign_workflow_launch"),
+    path("esign/workflows/<int:pk>/slots/", views_esign_forms.esign_flow_slots, name="esign_flow_slots"),
+    path("esign/runs/<int:pk>/", views_esign_workflow.esign_run_detail, name="esign_run_detail"),
+    path("esign/runs/<int:pk>/pdf/<str:kind>/", views_esign_workflow.esign_run_pdf, name="esign_run_pdf"),
+    path("esign/runs/<int:pk>/cancel/", views_esign_workflow.esign_run_cancel, name="esign_run_cancel"),
+    path("esign/runs/<int:pk>/retry/", views_esign_workflow.esign_run_retry, name="esign_run_retry"),
+    path("esign/runs/<int:pk>/tasks/<int:task_id>/reassign/", views_esign_workflow.esign_run_reassign, name="esign_run_reassign"),
+    # Task links (tokenized, no login — like signing links)
+    path("esign/wf/t/<str:token>/", views_esign_workflow.esign_wf_task, name="esign_wf_task"),
+    path("esign/wf/t/<str:token>/pdf/", views_esign_workflow.esign_wf_task_pdf, name="esign_wf_task_pdf"),
+
+    # eSign Studio — forms
+    path("esign/forms/", views_esign_forms.esign_forms, name="esign_forms"),
+    path("esign/forms/new/", views_esign_forms.esign_form_new, name="esign_form_new"),
+    path("esign/forms/<int:pk>/design/", views_esign_forms.esign_form_designer, name="esign_form_designer"),
+    path("esign/forms/<int:pk>/save/", views_esign_forms.esign_form_save, name="esign_form_save"),
+    path("esign/forms/<int:pk>/preview.pdf", views_esign_forms.esign_form_preview_pdf, name="esign_form_preview_pdf"),
+    path("esign/forms/<int:pk>/duplicate/", views_esign_forms.esign_form_duplicate, name="esign_form_duplicate"),
+    path("esign/forms/<int:pk>/delete/", views_esign_forms.esign_form_delete, name="esign_form_delete"),
+    path("esign/forms/<int:pk>/fill/", views_esign_forms.esign_form_fill, name="esign_form_fill"),
+    path("esign/forms/<int:pk>/submissions/", views_esign_forms.esign_form_submissions, name="esign_form_submissions"),
+    path("esign/submissions/<int:pk>/", views_esign_forms.esign_submission_detail, name="esign_submission_detail"),
+    path("esign/submissions/<int:pk>/pdf/", views_esign_forms.esign_submission_pdf, name="esign_submission_pdf"),
+    path("esign/submissions/<int:pk>/action/", views_esign_forms.esign_submission_action, name="esign_submission_action"),
+    # Public form link (tokenized, no login)
+    path("esign/f/<str:token>/", views_esign_forms.esign_form_public, name="esign_form_public"),
 
     # Recipient side (tokenized, no login — signers, CC/BCC and viewers)
     path("esign/s/<str:token>/", views_esign.esign_sign, name="esign_sign"),

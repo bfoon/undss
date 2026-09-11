@@ -1,0 +1,34 @@
+{# accounts/templates/accounts/esign/studio/_form_script.html — table rows and live totals on fill pages #}
+<script>
+(function(){
+  function renumber(table){
+    const name = table.dataset.table, rows = [...table.tBodies[0].rows];
+    rows.forEach((tr, i) => tr.querySelectorAll("input[data-col]").forEach(inp => inp.name = `${name}__${i}__${inp.dataset.col}`));
+    const count = table.parentElement.querySelector(`input[name="${name}__rows"]`); if (count) count.value = rows.length;
+    totals(table);
+  }
+  function totals(table){
+    table.querySelectorAll("[data-total]").forEach(cell => {
+      let sum = 0; table.querySelectorAll(`tbody input[data-col="${cell.dataset.total}"]`).forEach(i => { const v = parseFloat((i.value || "").replace(/,/g, "")); if (!isNaN(v)) sum += v; });
+      cell.textContent = sum.toLocaleString(undefined, {maximumFractionDigits: 2});
+    });
+  }
+  document.querySelectorAll("table[data-table]").forEach(table => {
+    const wrap = table.parentElement;
+    table.addEventListener("input", () => totals(table));
+    table.addEventListener("click", e => {
+      const del = e.target.closest(".fs-row-del"); if (!del) return;
+      const tr = del.closest("tr");
+      if (table.tBodies[0].rows.length > 1) tr.remove(); else tr.querySelectorAll("input").forEach(i => i.value = "");
+      renumber(table);
+    });
+    const add = wrap.querySelector(".fs-row-add");
+    if (add) add.addEventListener("click", () => {
+      const body = table.tBodies[0], last = body.rows[body.rows.length - 1], tr = last.cloneNode(true);
+      tr.querySelectorAll("input").forEach(i => i.value = ""); body.appendChild(tr); renumber(table);
+      tr.querySelector("input").focus();
+    });
+    totals(table);
+  });
+})();
+</script>
