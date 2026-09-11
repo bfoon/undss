@@ -87,6 +87,14 @@ def blank_rows(rows, minimum):
     return rows + [{} for _ in range(max(0, minimum - len(rows)))]
 
 
+@register.simple_tag
+def esign_max_post_fields():
+    """Django's DATA_UPLOAD_MAX_NUMBER_FIELDS, or 0 when unlimited — fill pages stay under it."""
+    from django.conf import settings
+
+    return getattr(settings, "DATA_UPLOAD_MAX_NUMBER_FIELDS", 1000) or 0
+
+
 @register.simple_tag(takes_context=True)
 def esign_studio_summary(context):
     """What the eSign dashboard shows about the studio. Two cheap counts and a short task list."""

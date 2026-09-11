@@ -80,6 +80,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}
 {{ pdf_inline|json_script:"pdfInline" }}
 {% include "accounts/esign/studio/_people_picker.html" %}
@@ -92,7 +93,9 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   pick.addEventListener("change", async () => {
     box.innerHTML = ""; go.disabled = !pick.value; if (!pick.value) return;
-    const r = await fetch(pick.selectedOptions[0].dataset.slots); const data = await r.json();
+    let data;
+    try { data = await StudioNet.getJSON(pick.selectedOptions[0].dataset.slots); }
+    catch (e){ go.disabled = true; StudioNet.notify("The roles for this flow couldn't be loaded. " + e.message); return; }
     data.slots.forEach(s => {
       const wrap = document.createElement("div"); wrap.className = "mb-2";
       wrap.innerHTML = `<label class="form-label small mb-1">${esc(s.label)}</label><div></div><input type="hidden" name="slot_${esc(s.key)}">`;

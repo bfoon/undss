@@ -13,6 +13,7 @@ import json
 import logging
 
 from django.contrib import messages
+from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
@@ -185,12 +186,10 @@ def esign_form_save(request, pk):
     if bounce:
         return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
     form = get_object_or_404(FormTemplate, pk=pk, created_by=request.user)
-    if len(request.body) > 8 * 1024 * 1024:
-        return JsonResponse({"ok": False, "error": "This form is too large — use smaller images."}, status=400)
-    body = json_body(request)
-    if not isinstance(body, dict):
-        return JsonResponse({"ok": False, "error": "Invalid request."}, status=400)
-    if body.get("version") and int(body["version"]) != form.version:
+    body, problem = json_body(request, "form")
+    if problem:
+        return problem
+    if str(body.get("version") or "") not in ("", str(form.version)):
         return JsonResponse({"ok": False, "conflict": True,
                              "error": "This form was saved from another window. Reload to see the latest version."},
                             status=409)
@@ -234,8 +233,10 @@ def esign_form_preview_pdf(request, pk):
         raise Http404()
     schema = form.schema
     if request.method == "POST":
-        body = json_body(request)
-        if isinstance(body, dict) and body.get("schema"):
+        body, problem = json_body(request, "form")
+        if problem:
+            return problem
+        if body.get("schema"):
             schema = F.clean_schema(body["schema"])
     pdf, _ = F.render_form_pdf(F.clean_schema(schema), {}, reference=f"{form.reference_prefix}-PREVIEW", blank=True)
     resp = HttpResponse(pdf, content_type="application/pdf")
@@ -290,6 +291,13 @@ def _fill(request, form, *, public):
 
     if request.method == "GET":
         return render(request, "accounts/esign/studio/form_fill.html", ctx)
+
+    try:
+        request.POST
+    except (TooManyFieldsSent, RequestDataTooBig):
+        messages.error(request, "Your answers were too large for the server to accept in one submission, so "
+                                "they weren't saved. Please shorten the longest tables or texts and try again.")
+        return render(request, "accounts/esign/studio/form_fill.html", ctx, status=413)
 
     if request.POST.get("website"):          # honeypot on public links
         return redirect(request.path)

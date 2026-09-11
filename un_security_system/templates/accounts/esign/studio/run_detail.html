@@ -150,7 +150,7 @@
 <script>
 (function(){
   FlowMap(document.getElementById("map"), {{ graph_json|safe }}, {nodeTypes: {{ node_types_json|safe }}, portLabels: {{ port_labels_json|safe }}, states: {{ states_json|safe }}});
-  StudioPDF.renderInto(document.getElementById("viewer"), {url: "{% if run.final_pdf %}{% url 'accounts:esign_run_pdf' run.pk 'final' %}{% else %}{% url 'accounts:esign_run_pdf' run.pk 'document' %}{% endif %}", data: JSON.parse(document.getElementById("pdfInline").textContent)}, {maxPages: 30});
+  StudioPDF.renderInto(document.getElementById("viewer"), {url: "{% if run.final_pdf %}{% url 'accounts:esign_run_pdf' run.pk 'final' %}{% else %}{% url 'accounts:esign_run_pdf' run.pk 'document' %}{% endif %}", data: JSON.parse(document.getElementById("pdfInline").textContent)});
   {% if can_manage %}
   const DIR = {{ directory_json|safe }};
   const retry = document.getElementById("retryPick");

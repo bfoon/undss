@@ -105,6 +105,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_people_picker.html" %}
 <script>
 (function(){
@@ -588,16 +589,13 @@
     const btn = document.getElementById("saveBtn"), state = document.getElementById("saveState");
     btn.disabled = true; state.textContent = "Saving…";
     try {
-      const r = await fetch(CFG.save_url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF},
-        body: JSON.stringify({...flow, graph, version})});
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error || "Could not save.");
+      const data = await StudioNet.postJSON(CFG.save_url, {...flow, graph, version});
       version = data.version; report = data.report;
       const ids = new Set(data.graph.nodes.map(n => n.id));
       graph = data.graph; if (sel && sel.kind === "node" && !ids.has(sel.id)) sel = null;
-      dirty = false; state.textContent = `Saved at ${data.saved_at}`;
+      dirty = false; state.classList.remove("text-danger"); state.textContent = `Saved at ${data.saved_at}`;
       render(); return true;
-    } catch (err){ state.textContent = err.message; state.classList.add("text-danger"); setTimeout(() => state.classList.remove("text-danger"), 4000); return false; }
+    } catch (err){ state.textContent = "Not saved"; state.classList.add("text-danger"); StudioNet.notify(err.message); return false; }
     finally { btn.disabled = false; }
   }
   document.getElementById("saveBtn").onclick = save;

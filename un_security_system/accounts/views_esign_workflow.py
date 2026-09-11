@@ -11,6 +11,7 @@ import json
 import logging
 
 from django.contrib import messages
+from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.http import Http404, HttpResponse, JsonResponse
@@ -189,10 +190,10 @@ def esign_workflow_save(request, pk):
     if bounce:
         return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
     wf = get_object_or_404(DocumentWorkflow, pk=pk, created_by=request.user)
-    body = json_body(request)
-    if not isinstance(body, dict):
-        return JsonResponse({"ok": False, "error": "Invalid request."}, status=400)
-    if body.get("version") and int(body["version"]) != wf.version:
+    body, problem = json_body(request, "flow")
+    if problem:
+        return problem
+    if str(body.get("version") or "") not in ("", str(wf.version)):
         return JsonResponse({"ok": False, "conflict": True,
                              "error": "This flow was saved from another window. Reload to see the latest version."},
                             status=409)
@@ -489,6 +490,12 @@ def esign_wf_task(request, token):
     values = dict(sub.values) if sub else {}
 
     if request.method == "POST":
+        try:
+            request.POST
+        except (TooManyFieldsSent, RequestDataTooBig):
+            messages.error(request, "Your answers were too large for the server to accept in one go, so nothing was "
+                                    "saved. Please shorten the longest tables or texts and try again.")
+            return redirect("accounts:esign_wf_task", token=token)
         action = request.POST.get("action") or ""
         comment = request.POST.get("comment") or ""
         actor = request.user if authed else None

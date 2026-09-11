@@ -98,6 +98,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}
 <script>
 (function(){
@@ -561,29 +562,25 @@
     const btn = document.getElementById("saveBtn"), st = document.getElementById("saveState");
     btn.disabled = true; st.textContent = "Saving…";
     try {
-      const r = await fetch(CFG.save_url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF}, body: JSON.stringify({...meta, schema, version})});
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error || "Could not save.");
-      version = data.version; schema = data.schema; fresh.clear(); dirty = false;
+      const data = await StudioNet.postJSON(CFG.save_url, {...meta, schema, version});
+      version = data.version; schema = data.schema; fresh.clear(); dirty = false; st.classList.remove("text-danger");
       st.textContent = `Saved at ${data.saved_at}` + (data.flow_warnings.length ? ` · ${data.flow_warnings.length} workflow note${data.flow_warnings.length === 1 ? "" : "s"}` : "");
       st.title = data.flow_warnings.join("\n");
       if (selId && !byId(selId)) selId = null;
       renderAll(); return true;
-    } catch (err){ st.textContent = err.message; st.classList.add("text-danger"); setTimeout(() => st.classList.remove("text-danger"), 4000); return false; }
+    } catch (err){ st.textContent = "Not saved"; st.classList.add("text-danger"); StudioNet.notify(err.message); return false; }
     finally { btn.disabled = false; }
   }
   document.getElementById("saveBtn").onclick = save;
   document.getElementById("previewBtn").onclick = async () => {
     const btn = document.getElementById("previewBtn"); btn.disabled = true;
     try {
-      const r = await fetch(CFG.preview_url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF}, body: JSON.stringify({schema})});
-      if (!r.ok) throw new Error("The preview could not be made.");
-      const blob = await r.blob(), url = URL.createObjectURL(blob);
+      const blob = await StudioNet.postForBlob(CFG.preview_url, {schema}, "application/pdf"), url = URL.createObjectURL(blob);
       document.getElementById("pdfDownload").href = url;
       new bootstrap.Modal(document.getElementById("pdfModal")).show();
       // Hand the bytes over directly: no second request, even for a blob URL.
-      StudioPDF.renderInto(document.getElementById("pdfPages"), {bytes: new Uint8Array(await blob.arrayBuffer())}, {width: 760});
-    } catch (e){ alert(e.message); }
+      StudioPDF.renderInto(document.getElementById("pdfPages"), {bytes: new Uint8Array(await blob.arrayBuffer())}, {maxWidth: 820});
+    } catch (e){ StudioNet.notify("The PDF preview couldn't be made. " + e.message); }
     btn.disabled = false;
   };
   document.getElementById("testBtn").onclick = async () => { if (dirty && !(await save())) return; window.open(CFG.fill_url, "_blank"); };

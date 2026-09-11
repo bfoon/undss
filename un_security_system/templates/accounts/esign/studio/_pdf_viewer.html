@@ -1,7 +1,7 @@
 {% comment %}
   accounts/templates/accounts/esign/studio/_pdf_viewer.html — StudioPDF
 
-  StudioPDF.renderInto(container, source, {maxPages, width, onPage})
+  StudioPDF.renderInto(container, source, {toolbar, maxWidth, keepRendered, onPage})
   StudioPDF.load(source) -> pdf.js document        (organiser, editor, image export)
   StudioPDF.renderPage(pdf, pageNumber, {width|scale})
 
@@ -19,6 +19,15 @@
     3. If pdf.js still can't draw it, the browser's own PDF viewer shows the
        document, and the reason is written under it — never a dead end.
 {% endcomment %}
+<style>
+  .st-viewer > .st-pages{ align-items:center; }
+  .st-pdf-bar{ position:sticky; top:-14px; z-index:5; align-self:stretch; display:flex; gap:.6rem; align-items:center;
+               background:rgba(233,238,243,.94); backdrop-filter:blur(3px); padding:.35rem .25rem; margin:-.35rem 0 0; }
+  .st-page{ position:relative; flex:0 0 auto; background:#fff; box-shadow:0 1px 4px rgba(15,23,42,.14); border-radius:2px; overflow:hidden; }
+  .st-page > canvas{ position:absolute; left:0; top:0; display:block; }
+  .st-page-num{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:#CBD5E1; font-size:1.6rem; font-weight:600; }
+  .st-page-error{ position:absolute; left:0; right:0; top:45%; text-align:center; }
+</style>
 <script src="{{ pdfjs_url }}"></script>
 <script>
 (function(){
@@ -111,18 +120,35 @@
     return promise;
   }
 
+  /** Pin a canvas to an exact CSS size so no site-wide rule can squash it. */
+  function pin(el, w, h){
+    const set = (k, v) => el.style.setProperty(k, v, "important");
+    set("width", w + "px"); set("height", h + "px");
+    set("max-width", "none"); set("max-height", "none"); set("min-width", "0"); set("min-height", "0");
+  }
+  function pixelRatio(){ return Math.max(1, Math.min(window.devicePixelRatio || 1, 3)); }
+
+  /**
+   * Draw one page at an exact CSS width. The canvas is sized in whole CSS
+   * pixels × the screen's pixel ratio, so the browser never resamples the
+   * text (fractional sizes are what make rendered PDFs look soft).
+   * opts: {width} CSS pixels, or {scale}; {fill:true} leaves sizing to the caller's CSS.
+   */
   async function renderPage(pdf, number, opts){
     opts = opts || {};
     const page = await pdf.getPage(number);
     const base = page.getViewport({scale: 1});
-    const scale = opts.width ? opts.width / base.width : (opts.scale || 1);
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    const vp = page.getViewport({scale: scale * ratio});
+    const cssW = Math.max(1, Math.round(opts.width || base.width * (opts.scale || 1)));
+    const cssH = Math.max(1, Math.round(cssW * base.height / base.width));
+    const ratio = opts.ratio || pixelRatio();
+    const vp = page.getViewport({scale: (cssW * ratio) / base.width});
     const canvas = document.createElement("canvas");
-    canvas.width = Math.floor(vp.width); canvas.height = Math.floor(vp.height);
-    canvas.style.width = (vp.width / ratio) + "px";
-    await page.render({canvasContext: canvas.getContext("2d"), viewport: vp}).promise;
-    return {canvas, page, base};
+    canvas.width = Math.round(cssW * ratio); canvas.height = Math.round(cssH * ratio);
+    if (!opts.fill) pin(canvas, cssW, cssH);
+    const task = page.render({canvasContext: canvas.getContext("2d", {alpha: false}), viewport: vp});
+    if (opts.onTask) opts.onTask(task);
+    await task.promise;
+    return {canvas, page, base, cssW, cssH};
   }
 
   function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -164,34 +190,137 @@
     return "message";
   }
 
+  /**
+   * A scrollable, zoomable document view. Pages are laid out at their true
+   * size immediately, drawn when they come near the screen, and released when
+   * far away, so long documents don't exhaust memory.
+   * opts: {toolbar:true, maxWidth:1000, keepRendered:10}
+   */
   async function renderInto(container, source, opts){
-    opts = opts || {};
+    opts = Object.assign({toolbar: true, maxWidth: 1000, keepRendered: 10}, opts || {});
     const src = normalise(source);
+    if (container._studioView) container._studioView.destroy();
     container.innerHTML = '<div class="text-muted small py-4 text-center"><span class="spinner-border spinner-border-sm me-2"></span>Loading document…</div>';
     let pdf;
+    try { pdf = await load(src); }
+    catch (err){ fallback(container, src, err); return null; }
+
     try {
-      pdf = await load(src);
-    } catch (err){
-      fallback(container, src, err);
-      return null;
-    }
-    try {
-      const frag = document.createDocumentFragment();
-      const max = Math.min(pdf.numPages, opts.maxPages || pdf.numPages);
-      const width = opts.width || Math.max(280, Math.min(container.clientWidth - 28, 860));
+      const sizes = [];
+      for (let i = 1; i <= pdf.numPages; i++){
+        const vp = (await pdf.getPage(i)).getViewport({scale: 1});
+        sizes.push([vp.width, vp.height]);
+      }
+      const scroller = container.closest(".st-viewer") || container.parentElement || container;
+      const widest = Math.max(...sizes.map(s => s[0]));
+      const state = {zoom: 1, rendered: new Map(), current: 1, tasks: new Map(), timer: null, destroyed: false};
+
       container.innerHTML = "";
-      for (let i = 1; i <= max; i++){
-        const {canvas} = await renderPage(pdf, i, {width});
-        canvas.setAttribute("aria-label", "Page " + i);
-        container.appendChild(canvas);
-        if (opts.onPage) opts.onPage(i, canvas, pdf);
+      let bar = null, zoomLabel = null, pageLabel = null;
+      if (opts.toolbar){
+        bar = document.createElement("div");
+        bar.className = "st-pdf-bar";
+        bar.innerHTML = `
+          <div class="btn-group btn-group-sm" role="group" aria-label="Zoom">
+            <button type="button" class="btn btn-light border" data-z="out" title="Zoom out"><i class="bi bi-dash-lg"></i></button>
+            <button type="button" class="btn btn-light border st-pdf-zoom" data-z="fit" title="Fit to width">100%</button>
+            <button type="button" class="btn btn-light border" data-z="in" title="Zoom in"><i class="bi bi-plus-lg"></i></button>
+          </div>
+          <span class="small text-muted st-pdf-page">Page 1 of ${pdf.numPages}</span>
+          ${src.url ? `<a class="btn btn-sm btn-light border ms-auto" href="${esc(src.url)}" target="_blank" rel="noopener" title="Open in a new tab"><i class="bi bi-box-arrow-up-right"></i></a>` : ""}`;
+        container.appendChild(bar);
+        zoomLabel = bar.querySelector(".st-pdf-zoom"); pageLabel = bar.querySelector(".st-pdf-page");
       }
-      if (pdf.numPages > max){
-        const more = document.createElement("div");
-        more.className = "small text-muted";
-        more.textContent = (pdf.numPages - max) + " more page(s) — open or download to see all.";
-        container.appendChild(more);
+
+      const boxes = sizes.map((s, i) => {
+        const box = document.createElement("div");
+        box.className = "st-page"; box.dataset.page = i + 1;
+        box.setAttribute("aria-label", `Page ${i + 1}`);
+        box.innerHTML = `<span class="st-page-num">${i + 1}</span>`;
+        container.appendChild(box);
+        return box;
+      });
+
+      const fitWidth = () => Math.max(240, Math.min(scroller.clientWidth - 32, opts.maxWidth));
+      const widthOf = i => Math.round(fitWidth() * state.zoom * (sizes[i][0] / widest));
+
+      function layout(){
+        boxes.forEach((box, i) => {
+          const w = widthOf(i), h = Math.round(w * sizes[i][1] / sizes[i][0]);
+          pin(box, w, h);
+          const c = box.querySelector("canvas");
+          if (c) pin(c, w, h);                       // stretch the old drawing until it's redrawn sharp
+        });
+        if (zoomLabel) zoomLabel.textContent = Math.round(state.zoom * 100) + "%";
       }
+
+      async function draw(i){
+        if (state.destroyed) return;
+        const w = widthOf(i);
+        if (state.rendered.get(i) === w) return;
+        const prior = state.tasks.get(i); if (prior){ try { prior.cancel(); } catch (_){} }
+        try {
+          const {canvas} = await renderPage(pdf, i + 1, {width: w, onTask: t => state.tasks.set(i, t)});
+          if (state.destroyed || widthOf(i) !== w) return;
+          const old = boxes[i].querySelector("canvas"); if (old) old.remove();
+          boxes[i].appendChild(canvas);
+          state.rendered.set(i, w);
+          release(i);
+          if (opts.onPage) opts.onPage(i + 1, canvas, pdf);
+        } catch (e){
+          if (e && e.name === "RenderingCancelledException") return;
+          console.warn("eSign Studio PDF viewer: page", i + 1, "could not be drawn", e);
+          boxes[i].insertAdjacentHTML("beforeend", `<div class="st-page-error small text-muted"><i class="bi bi-exclamation-triangle me-1"></i>Page ${i + 1} couldn't be drawn.</div>`);
+        } finally { state.tasks.delete(i); }
+      }
+
+      function release(near){
+        if (state.rendered.size <= opts.keepRendered) return;
+        [...state.rendered.keys()].sort((a, b) => Math.abs(b - near) - Math.abs(a - near))
+          .slice(0, state.rendered.size - opts.keepRendered)
+          .forEach(i => { const c = boxes[i].querySelector("canvas"); if (c){ c.width = c.height = 0; c.remove(); } state.rendered.delete(i); });
+      }
+
+      const visible = new Set();
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(en => { const i = +en.target.dataset.page - 1; en.isIntersecting ? visible.add(i) : visible.delete(i); });
+        [...visible].sort((a, b) => a - b).forEach(draw);
+      }, {root: scroller === container ? null : scroller, rootMargin: "900px 0px"});
+
+      const pageWatch = new IntersectionObserver(entries => {
+        entries.forEach(en => { if (en.isIntersecting && en.intersectionRatio > 0.35) state.current = +en.target.dataset.page; });
+        if (pageLabel) pageLabel.textContent = `Page ${state.current} of ${pdf.numPages}`;
+      }, {root: scroller === container ? null : scroller, threshold: [0.35]});
+
+      function redraw(){
+        clearTimeout(state.timer);
+        state.timer = setTimeout(() => { state.rendered.clear(); [...visible].sort((a, b) => a - b).forEach(draw); }, 120);
+      }
+      function setZoom(z){
+        const anchor = boxes[state.current - 1], before = anchor.offsetTop - scroller.scrollTop;
+        state.zoom = Math.max(0.5, Math.min(3, z));
+        layout();
+        scroller.scrollTop = anchor.offsetTop - before;
+        redraw();
+      }
+      if (bar) bar.addEventListener("click", e => {
+        const b = e.target.closest("[data-z]"); if (!b) return;
+        const steps = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3];
+        if (b.dataset.z === "fit") return setZoom(1);
+        const idx = steps.findIndex(v => v >= state.zoom - 0.001);
+        setZoom(b.dataset.z === "in" ? steps[Math.min(steps.length - 1, (steps[idx] > state.zoom + 0.001 ? idx : idx + 1))] : steps[Math.max(0, idx - 1)]);
+      });
+
+      let lastFit = fitWidth();
+      const ro = new ResizeObserver(() => { const f = fitWidth(); if (Math.abs(f - lastFit) > 6){ lastFit = f; layout(); redraw(); } });
+      ro.observe(scroller);
+
+      layout();
+      boxes.forEach(b => { io.observe(b); pageWatch.observe(b); });
+      container._studioView = {
+        destroy(){ state.destroyed = true; io.disconnect(); pageWatch.disconnect(); ro.disconnect(); state.tasks.forEach(t => { try { t.cancel(); } catch (_){} }); },
+        setZoom, get zoom(){ return state.zoom; }, pdf,
+      };
       return pdf;
     } catch (err){
       fallback(container, src, err instanceof ViewerError ? err : new ViewerError("render", String(err && err.message || err), err));
@@ -201,6 +330,6 @@
 
   function explain(err){ return REASONS[(err && err.kind) || "render"] || REASONS.render; }
 
-  window.StudioPDF = {load, renderPage, renderInto, explain, ViewerError};
+  window.StudioPDF = {load, renderPage, renderInto, explain, pin, pixelRatio, ViewerError};
 })();
 </script>

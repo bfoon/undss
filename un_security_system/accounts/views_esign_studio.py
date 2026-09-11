@@ -564,9 +564,9 @@ def esign_studio_organize_save(request, pk):
     if bounce:
         return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
     sf = _own_file(request, pk)
-    body = json_body(request)
-    if not isinstance(body, dict):
-        return JsonResponse({"ok": False, "error": "Invalid request."}, status=400)
+    body, problem = json_body(request, "organize")
+    if problem:
+        return problem
     plan = body.get("plan")
     if not isinstance(plan, list) or len(plan) > 2000:
         return JsonResponse({"ok": False, "error": "Invalid page plan."}, status=400)
@@ -614,11 +614,9 @@ def esign_studio_edit_save(request, pk):
     if bounce:
         return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
     sf = _own_file(request, pk)
-    if len(request.body) > 60 * 1024 * 1024:
-        return JsonResponse({"ok": False, "error": "Too many edits in one save. Save in smaller batches."}, status=400)
-    body = json_body(request)
-    if not isinstance(body, dict):
-        return JsonResponse({"ok": False, "error": "Invalid request."}, status=400)
+    body, problem = json_body(request, "edit")
+    if problem:
+        return problem
     pages = body.get("pages") if isinstance(body.get("pages"), dict) else {}
     flattened = body.get("flattened") if isinstance(body.get("flattened"), dict) else {}
     count = sum(len(v) for v in pages.values() if isinstance(v, list))

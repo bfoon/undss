@@ -71,6 +71,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}
 {{ pdf_inline|json_script:"pdfInline" }}
 <script>
@@ -87,6 +88,7 @@
   const initial = () => SIZES.map((s, i) => ({key: "p" + (seq++), src: i, rotate: 0, blank: false}));
   let pages = initial(), history = [], selected = new Set(), lastClicked = null;
   const thumbs = {};   // src index -> canvas (rendered once, cloned for duplicates)
+  let thumbsFailed = false;
 
   function snapshot(){ history.push(JSON.stringify(pages)); if (history.length > 80) history.shift(); undoBtn.disabled = false; }
   function undo(){ if (!history.length) return; pages = JSON.parse(history.pop()); undoBtn.disabled = !history.length; selected.clear(); render(); }
@@ -95,9 +97,14 @@
   function thumbFor(p){
     if (p.blank) { const d = document.createElement("div"); d.className = "blank"; d.textContent = "Blank page"; return d; }
     const src = thumbs[p.src];
-    if (!src) { const d = document.createElement("div"); d.className = "blank"; d.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; return d; }
+    if (!src) {
+      const d = document.createElement("div"); d.className = "blank";
+      // Without a preview the page is still fully usable: show its number instead of spinning forever.
+      d.innerHTML = thumbsFailed ? `<span class="fw-semibold fs-5 text-secondary">Page ${p.src + 1}</span>` : '<span class="spinner-border spinner-border-sm"></span>';
+      return d;
+    }
     const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
-    c.getContext("2d").drawImage(src, 0, 0); c.style.width = src.style.width;
+    c.getContext("2d").drawImage(src, 0, 0); c.style.cssText = src.style.cssText;   // keeps the pinned size
     return c;
   }
 
@@ -240,11 +247,9 @@
     const label = btn.innerHTML; btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving';
     try {
-      const r = await fetch(SAVE_URL, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF}, body: JSON.stringify(body)});
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error || "Could not save.");
+      const data = await StudioNet.postJSON(SAVE_URL, body);
       window.onbeforeunload = null; location = data.redirect;
-    } catch (err){ alert(err.message); btn.disabled = false; btn.innerHTML = label; }
+    } catch (err){ StudioNet.notify(err.message); btn.disabled = false; btn.innerHTML = label; }
   }
   function extract(list){
     if (!list.length) return;
@@ -267,14 +272,16 @@
   (async () => {
     const pdf = await StudioPDF.load({url: PDF_URL, data: JSON.parse(document.getElementById("pdfInline").textContent)});
     for (let i = 1; i <= pdf.numPages; i++){
-      const {canvas} = await StudioPDF.renderPage(pdf, i, {width: 140});
+      // Fit inside a 140×140 box at the page's real proportions (portrait pages are narrower, not squashed).
+      const [pw, ph] = SIZES[i - 1] || [595, 842];
+      const {canvas} = await StudioPDF.renderPage(pdf, i, {width: Math.max(40, Math.round(140 * Math.min(1, pw / ph)))});
       thumbs[i - 1] = canvas;
       grid.querySelectorAll(".org-card").forEach(card => {
         const p = pages.find(x => x.key === card.dataset.key);
         if (p && !p.blank && p.src === i - 1){ const box = card.querySelector(".org-thumb"); box.innerHTML = ""; const t = thumbFor(p); t.style.transform = `rotate(${p.rotate}deg)`; box.appendChild(t); }
       });
     }
-  })().catch(e => { summary.textContent = "Page previews couldn't be shown: " + StudioPDF.explain(e) + " You can still arrange pages by number."; console.error(e); });
+  })().catch(e => { thumbsFailed = true; render(); summary.textContent = "Page previews couldn't be shown: " + StudioPDF.explain(e) + " You can still arrange pages by number."; console.error(e); });
 })();
 </script>
 {% endblock %}

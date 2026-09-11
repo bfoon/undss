@@ -29,7 +29,7 @@
             border-radius:999px; padding:.15rem .3rem .15rem .6rem; font-size:.8rem; margin:.15rem .25rem .15rem 0; }
   .st-chip button{ border:0; background:transparent; color:#0C4A6E; line-height:1; padding:0 .2rem; }
   .st-pages{ display:flex; flex-direction:column; align-items:center; gap:14px; }
-  .st-pages canvas{ max-width:100%; height:auto; background:#fff; box-shadow:0 1px 4px rgba(15,23,42,.14); border-radius:2px; }
+  /* page boxes and canvases inside .st-pages are sized by the viewer (see _pdf_viewer.html) */
   .st-viewer{ background:#E9EEF3; border-radius:.5rem; padding:14px; max-height:78vh; overflow:auto; }
   .st-empty{ text-align:center; color:var(--st-muted); padding:2.2rem 1rem; }
   .st-empty .bi{ font-size:2rem; opacity:.5; display:block; margin-bottom:.4rem; }
@@ -51,4 +51,21 @@
   .st-timeline .st-dot{ position:absolute; left:0; top:.1rem; width:1.3rem; height:1.3rem; border-radius:50%; background:#EEF6FB; color:var(--st-dark);
                         display:flex; align-items:center; justify-content:center; font-size:.7rem; }
   @media (max-width: 991px){ .st-desktop-only{ display:none!important; } }
+
+  /* ── Layout guard ────────────────────────────────────────────────────────
+     Site-wide rules such as `canvas { max-height: 450px }` (common for dashboard
+     charts) or `img, svg { height: auto }` squash document pages and misplace
+     edits. Everything whose exact size carries meaning is pinned here, with
+     enough specificity and !important to win over generic element rules.
+     Page canvases are also sized with inline !important styles in JavaScript. */
+  .st-viewer .st-page, .st-viewer .st-page canvas,
+  .ed-canvas .ed-page, .ed-canvas .ed-page canvas.pdf,
+  .org-grid .org-thumb canvas{ max-width:none!important; max-height:none!important; min-width:0!important; min-height:0!important; }
+  .ed-canvas .ed-page canvas.pdf{ width:100%!important; height:100%!important; }
+  .ed-canvas .ed-layer svg{ width:100%!important; height:100%!important; max-width:none!important; max-height:none!important; }
+  .ed-canvas .ed-item img, .ed-canvas .ed-item svg{ width:100%!important; height:100%!important; max-width:none!important; max-height:none!important; }
+  .fd-stage svg.fd-edges{ width:1px!important; height:1px!important; max-width:none!important; overflow:visible!important; }
+  .st-map svg{ max-width:none!important; }
+  .wf-mini svg, .wf-tpl .st-map svg{ height:100%!important; }
+  iframe.st-native-pdf{ height:78vh!important; max-height:none!important; width:100%!important; }
 </style>

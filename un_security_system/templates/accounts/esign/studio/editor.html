@@ -106,6 +106,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}
 {{ pdf_inline|json_script:"pdfInline" }}
 <script>
@@ -139,7 +140,9 @@
   let style = {color: "#DC2626", textColor: "#111827", hilite: "#FACC15", size: 12, font: "helvetica", bold: false, italic: false,
                stroke: 2, fill: "", fillOpacity: 0.2, opacity: 1};
   let pendingImage = null, seq = 1;
-  const pdfCanvases = {};
+  let pdfDoc = null;
+  const drawn = new Map();          // page number -> CSS width it was drawn at
+  const KEEP_DRAWN = 8;             // pages kept in memory at once; the rest are redrawn on scroll
 
   const uid = () => "i" + (seq++) + Math.random().toString(36).slice(2, 6);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -162,17 +165,62 @@
 
   function layoutPages(){
     baseWidth = Math.min(area.clientWidth - 48, 880);
+    const widest = Math.max(...SIZES.map(s => s[0]));
     pagesEl.querySelectorAll(".ed-page").forEach(box => {
       const n = +box.dataset.page, [w, h] = SIZES[n - 1];
-      const px = baseWidth * zoom * (w / Math.max(...SIZES.map(s => s[0])));
-      box.style.width = px + "px"; box.style.height = (px * h / w) + "px";
+      const px = Math.round(baseWidth * zoom * (w / widest));
+      // Whole pixels, pinned: edits are placed as fractions of this box, so it must
+      // match the drawn page exactly whatever the site's stylesheet says.
+      StudioPDF.pin(box, px, Math.round(px * h / w));
     });
     document.getElementById("zoomLbl").textContent = Math.round(zoom * 100) + "%";
     drawAll();
+    scheduleDraw();
+  }
+
+  // ─── page drawing: at the exact on-screen size, only near the screen ─────
+  const nearby = new Set();
+  let drawTimer = null, observer = null;
+  function scheduleDraw(){
+    clearTimeout(drawTimer);
+    drawTimer = setTimeout(() => [...nearby].sort((a, b) => a - b).forEach(drawEditorPage), 120);
+  }
+  async function drawEditorPage(n){
+    const box = pageBox(n); if (!box || !pdfDoc) return;
+    const width = Math.round(box.getBoundingClientRect().width);
+    if (drawn.get(n) === width) return;
+    drawn.set(n, width);
+    try {
+      const {canvas} = await StudioPDF.renderPage(pdfDoc, n, {width, fill: true});
+      if (drawn.get(n) !== width) return;               // zoom changed while drawing
+      canvas.className = "pdf";
+      const old = box.querySelector("canvas.pdf"); if (old){ old.width = old.height = 0; old.remove(); }
+      box.querySelectorAll(".ed-page-error").forEach(e => e.remove());
+      box.insertBefore(canvas, box.querySelector(".ed-layer"));
+      releaseFar(n);
+    } catch (e){
+      drawn.delete(n);
+      console.warn("eSign Studio editor: page", n, "could not be drawn", e);
+      if (!box.querySelector(".ed-page-error")){
+        const note = document.createElement("div");
+        note.className = "ed-page-error position-absolute top-50 start-50 translate-middle text-center text-muted small px-3";
+        note.innerHTML = `<i class="bi bi-exclamation-triangle d-block fs-4 mb-1"></i>Page ${n} couldn't be shown here.<br>You can still add items to it; they'll be placed on the page when you save.`;
+        box.insertBefore(note, box.querySelector(".ed-layer"));
+      }
+    }
+  }
+  function releaseFar(near){
+    if (drawn.size <= KEEP_DRAWN) return;
+    [...drawn.keys()].sort((a, b) => Math.abs(b - near) - Math.abs(a - near)).slice(0, drawn.size - KEEP_DRAWN).forEach(n => {
+      if (nearby.has(n)) return;
+      const c = pageBox(n) && pageBox(n).querySelector("canvas.pdf");
+      if (c){ c.width = c.height = 0; c.remove(); }
+      drawn.delete(n);
+    });
   }
 
   async function loadPdf(){
-    const pdf = await StudioPDF.load({url: PDF_URL, data: JSON.parse(document.getElementById("pdfInline").textContent)});
+    const pdf = pdfDoc = await StudioPDF.load({url: PDF_URL, data: JSON.parse(document.getElementById("pdfInline").textContent)});
     pagesEl.innerHTML = "";
     for (let n = 1; n <= pdf.numPages; n++){
       const box = document.createElement("div");
@@ -183,12 +231,11 @@
       bindLayer(box.querySelector(".ed-layer"), n);
     }
     layoutPages();
-    for (let n = 1; n <= pdf.numPages; n++){
-      const {canvas} = await StudioPDF.renderPage(pdf, n, {width: 1100});
-      canvas.className = "pdf"; canvas.style.width = "";
-      pdfCanvases[n] = canvas;
-      const box = pageBox(n); box.insertBefore(canvas, box.querySelector(".ed-layer"));
-    }
+    observer = new IntersectionObserver(entries => {
+      entries.forEach(en => { const n = +en.target.dataset.page; en.isIntersecting ? nearby.add(n) : nearby.delete(n); });
+      scheduleDraw();
+    }, {root: area, rootMargin: "1200px 0px"});
+    pagesEl.querySelectorAll(".ed-page").forEach(box => observer.observe(box));
   }
 
   // ─── drawing items into the DOM ──────────────────────────
@@ -551,13 +598,16 @@
   });
   document.getElementById("zoomIn").onclick = () => { zoom = Math.min(3, +(zoom + 0.15).toFixed(2)); layoutPages(); };
   document.getElementById("zoomOut").onclick = () => { zoom = Math.max(0.4, +(zoom - 0.15).toFixed(2)); layoutPages(); };
-  window.addEventListener("resize", () => layoutPages());
+  let resizeTimer = null;
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layoutPages, 150); });
 
   // ─── flatten: composite a page in the browser ────────────
   const imgCache = {};
   function loadImg(src){ return imgCache[src] || (imgCache[src] = new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = src; })); }
   async function flattenPage(n){
-    const base = pdfCanvases[n]; const [W, H] = SIZES[n - 1];
+    // A dedicated render at 2× the page's point size (~144 dpi), independent of zoom and screen.
+    const {canvas: base} = await StudioPDF.renderPage(pdfDoc, n, {scale: 2, ratio: 1, fill: true});
+    const [W, H] = SIZES[n - 1];
     const c = document.createElement("canvas"); c.width = base.width; c.height = base.height;
     const ctx = c.getContext("2d"); ctx.drawImage(base, 0, 0);
     const kx = c.width / W, ky = c.height / H;
@@ -607,15 +657,13 @@
       for (const [n, list] of Object.entries(items)){
         if (!list.length) continue;
         if (flatten){
-          if (!pdfCanvases[n]) throw new Error("Pages are still loading — try again in a moment.");
+          if (!pdfDoc) throw new Error("The document is still loading — try again in a moment.");
           body.flattened[n] = await flattenPage(+n);
         } else body.pages[n] = list;
       }
-      const r = await fetch(SAVE_URL, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF}, body: JSON.stringify(body)});
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error || "Could not save.");
+      const data = await StudioNet.postJSON(SAVE_URL, body);
       window.onbeforeunload = null; location = data.redirect;
-    } catch (err){ alert(err.message); saveBtn.disabled = false; saveBtn.innerHTML = label; }
+    } catch (err){ StudioNet.notify(err.message); saveBtn.disabled = false; saveBtn.innerHTML = label; }
   });
   window.onbeforeunload = () => countItems() ? "You have unsaved edits." : undefined;
 

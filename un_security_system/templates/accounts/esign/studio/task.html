@@ -123,7 +123,7 @@
 <script>
 (function(){
   const viewer = document.getElementById("viewer");
-  if (viewer) StudioPDF.renderInto(viewer, {url: "{% url 'accounts:esign_wf_task_pdf' task.token %}", data: JSON.parse(document.getElementById("pdfInline").textContent)}, {maxPages: 30});
+  if (viewer) StudioPDF.renderInto(viewer, {url: "{% url 'accounts:esign_wf_task_pdf' task.token %}", data: JSON.parse(document.getElementById("pdfInline").textContent)});
   const form = document.getElementById("taskForm");
   form.addEventListener("submit", e => {
     const btn = e.submitter;

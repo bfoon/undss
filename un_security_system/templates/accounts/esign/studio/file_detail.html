@@ -122,7 +122,7 @@
   const url = "{% url 'accounts:esign_studio_file_pdf' file.pk %}?v={{ file.current.number }}";
   const viewer = document.getElementById("viewer");
   const SRC = {url, data: JSON.parse(document.getElementById("pdfInline").textContent)};
-  StudioPDF.renderInto(viewer, SRC, {maxPages: 40});
+  StudioPDF.renderInto(viewer, SRC);
 
   const btn = document.getElementById("toImages");
   async function exportImages(){

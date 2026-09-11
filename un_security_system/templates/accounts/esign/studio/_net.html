@@ -1,0 +1,108 @@
+{% comment %}
+  accounts/templates/accounts/esign/studio/_net.html — StudioNet
+
+  StudioNet.postJSON(url, payload)  -> parsed JSON with ok: true, or throws
+  StudioNet.getJSON(url)            -> parsed JSON, or throws
+  StudioNet.postForBlob(url, payload, expectType) -> Blob, or throws
+
+  Every failure becomes an Error whose message a person can act on — signed
+  out, refused, too large, server error, offline — instead of "Unexpected
+  token '<'" when a proxy or Django answers with an HTML page. Thrown errors
+  carry .status, .conflict and .tooLarge for callers that want to react.
+{% endcomment %}
+<script>
+(function(){
+  if (window.StudioNet) return;
+  const CSRF = "{{ csrf_token }}";
+
+  function fail(message, extra){ return Object.assign(new Error(message), extra || {}); }
+
+  function explainStatus(status, isHtml){
+    if (status === 413) return "This is too large for the server to accept, so nothing was saved. Use smaller images or save fewer pages at a time. (If it keeps happening, ICT can raise the web server's upload limit.)";
+    if (status === 401 || status === 403) return "The server refused this — your session may have expired. Sign in again in a new tab, then come back and try again. Your changes are still on this page.";
+    if (status === 404) return "This item no longer exists, or you no longer have access to it.";
+    if (status === 429) return "Too many requests in a short time. Wait a moment and try again.";
+    if (status >= 500) return `The server hit a problem (HTTP ${status}) and nothing was saved. Try again in a moment; if it keeps happening, ICT can find the details in the server log.`;
+    return `The server gave an unexpected answer (HTTP ${status}${isHtml ? ", a web page" : ""}). Nothing was saved.`;
+  }
+
+  async function send(url, init){
+    let res;
+    try { res = await fetch(url, Object.assign({credentials: "same-origin"}, init)); }
+    catch (e){
+      throw fail("Couldn't reach the server — check your connection and try again. Nothing was saved.", {status: 0, cause: e});
+    }
+    return res;
+  }
+
+  async function readJSON(res){
+    const type = (res.headers.get("Content-Type") || "").toLowerCase();
+    if (type.indexOf("application/json") === -1){
+      const isHtml = type.indexOf("html") !== -1;
+      if (res.ok && (res.redirected || isHtml)){
+        throw fail("You've been signed out. Sign in again in a new tab, then come back and try again — your changes are still on this page.", {status: res.status});
+      }
+      throw fail(explainStatus(res.status, isHtml), {status: res.status});
+    }
+    let data;
+    try { data = await res.json(); }
+    catch (e){ throw fail(explainStatus(res.status, false), {status: res.status, cause: e}); }
+    return data;
+  }
+
+  async function postJSON(url, payload){
+    const res = await send(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF},
+                                 body: JSON.stringify(payload)});
+    const data = await readJSON(res);
+    if (!res.ok || data.ok === false){
+      throw fail(data.error || explainStatus(res.status, false),
+                 {status: res.status, conflict: !!data.conflict, tooLarge: !!data.too_large || res.status === 413, data});
+    }
+    return data;
+  }
+
+  async function getJSON(url){
+    const res = await send(url, {method: "GET", headers: {"Accept": "application/json"}});
+    const data = await readJSON(res);
+    if (!res.ok) throw fail(data.error || explainStatus(res.status, false), {status: res.status, data});
+    return data;
+  }
+
+  async function postForBlob(url, payload, expectType){
+    const res = await send(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF},
+                                 body: JSON.stringify(payload)});
+    const type = (res.headers.get("Content-Type") || "").toLowerCase();
+    if (!res.ok || (expectType && type.indexOf(expectType) === -1)){
+      if (type.indexOf("application/json") !== -1){
+        const data = await res.json().catch(() => ({}));
+        throw fail(data.error || explainStatus(res.status, false), {status: res.status, tooLarge: res.status === 413});
+      }
+      if (res.ok) throw fail("You've been signed out. Sign in again in a new tab, then try again.", {status: res.status});
+      throw fail(explainStatus(res.status, type.indexOf("html") !== -1), {status: res.status});
+    }
+    return res.blob();
+  }
+
+  /** A dismissible notice pinned to the bottom of the screen. */
+  function notify(message, kind){
+    let host = document.getElementById("stNotices");
+    if (!host){
+      host = document.createElement("div"); host.id = "stNotices";
+      host.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:3000;max-width:440px;display:flex;flex-direction:column;gap:8px";
+      host.setAttribute("aria-live", "assertive");
+      document.body.appendChild(host);
+    }
+    const el = document.createElement("div");
+    el.className = `alert alert-${kind || "danger"} shadow d-flex gap-2 align-items-start mb-0`;
+    el.setAttribute("role", "alert");
+    const text = document.createElement("div"); text.className = "flex-grow-1 small"; text.textContent = message;
+    const close = document.createElement("button"); close.type = "button"; close.className = "btn-close"; close.setAttribute("aria-label", "Dismiss");
+    close.onclick = () => el.remove();
+    el.append(text, close); host.appendChild(el);
+    if (kind === "success" || kind === "info") setTimeout(() => el.remove(), 5000);
+    return el;
+  }
+
+  window.StudioNet = {postJSON, getJSON, postForBlob, notify, CSRF};
+})();
+</script>

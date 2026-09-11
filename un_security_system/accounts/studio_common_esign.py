@@ -94,11 +94,63 @@ def studio_gate(request):
     return agency, None
 
 
-def json_body(request):
+#: Largest JSON body each save accepts. Django's DATA_UPLOAD_MAX_MEMORY_SIZE
+#: (2.5 MB by default) is a site-wide guard for form posts; these saves carry
+#: page images and pictures legitimately, so each sets its own ceiling.
+BODY_LIMITS = {
+    "flow": 2 * 1024 * 1024,         # a flow graph is a few KB
+    "organize": 1 * 1024 * 1024,     # a page plan
+    "form": 12 * 1024 * 1024,        # schema with logos and images (≤ ~400 KB each)
+    "edit": 40 * 1024 * 1024,        # annotations, pictures, flattened page images
+}
+
+
+def _mb(n):
+    return f"{n / (1024 * 1024):.1f}".rstrip("0").rstrip(".")
+
+
+def json_body(request, kind="flow"):
+    """
+    -> (payload, None) on success, or (None, JsonResponse) to return as-is.
+
+    Reads the request stream directly with a per-save limit rather than through
+    `request.body`, which raises RequestDataTooBig above DATA_UPLOAD_MAX_MEMORY_SIZE
+    and makes Django answer with an HTML 400 page the browser can't read.
+    Failures are always JSON with a sentence the person can act on.
+    """
+    from django.http import JsonResponse
+
+    limit = int(getattr(settings, f"ESIGN_STUDIO_MAX_{kind.upper()}_BYTES", BODY_LIMITS.get(kind, BODY_LIMITS["flow"])))
+    too_big = JsonResponse({
+        "ok": False, "too_large": True,
+        "error": (f"This is too large to save in one go (the limit is {_mb(limit)} MB). "
+                  + ("Save fewer pages at a time, or untick “Make cover-ups permanent” for pages without cover-ups."
+                     if kind == "edit" else "Use smaller images, or fewer of them." if kind == "form"
+                     else "Please reload the page and try again.")),
+    }, status=413)
     try:
-        return json.loads(request.body.decode("utf-8") or "{}")
+        declared = int(request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        declared = 0
+    if declared > limit:
+        return None, too_big
+    try:
+        if hasattr(request, "_body"):          # already read by middleware
+            raw = request._body
+        else:
+            raw = request.read(limit + 1)
+    except Exception:  # noqa: BLE001 - client disconnected mid-upload
+        return None, JsonResponse({"ok": False, "error": "The request was interrupted. Please try again."}, status=400)
+    if len(raw) > limit:
+        return None, too_big
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
     except (ValueError, UnicodeDecodeError):
-        return None
+        payload = None
+    if not isinstance(payload, dict):
+        return None, JsonResponse({"ok": False, "error": "The request couldn't be read. Please reload the page and try again."},
+                                  status=400)
+    return payload, None
 
 
 def client_ip(request):

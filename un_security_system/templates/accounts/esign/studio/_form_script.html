@@ -1,11 +1,35 @@
 {# accounts/templates/accounts/esign/studio/_form_script.html — table rows and live totals on fill pages #}
+{% load esign_studio_tags %}
 <script>
 (function(){
+  // Django refuses a submission with more fields than DATA_UPLOAD_MAX_NUMBER_FIELDS
+  // and the person would lose everything they typed. Keep "Add row" under it.
+  const MAX_FIELDS = {% esign_max_post_fields %};
+  const MARGIN = 25;
+  function fieldCount(form){ return form ? [...form.elements].filter(el => el.name && !el.disabled).length : 0; }
+  function roomFor(table){
+    if (!MAX_FIELDS) return true;
+    const cols = table.querySelectorAll("thead th").length - 1;
+    return fieldCount(table.closest("form")) + cols <= MAX_FIELDS - MARGIN;
+  }
+  function syncAdd(table){
+    const wrap = table.parentElement, add = wrap.querySelector(".fs-row-add");
+    if (!add) return;
+    const room = roomFor(table);
+    add.disabled = !room;
+    let note = wrap.querySelector(".fs-row-limit");
+    if (!room && !note){
+      note = document.createElement("div"); note.className = "form-text text-warning fs-row-limit";
+      note.textContent = "This form can't take more rows — the server accepts a limited number of answers per submission. Submit what you have and add the rest in a second form, or ask ICT to raise the limit.";
+      add.after(note);
+    } else if (room && note) note.remove();
+  }
   function renumber(table){
     const name = table.dataset.table, rows = [...table.tBodies[0].rows];
     rows.forEach((tr, i) => tr.querySelectorAll("input[data-col]").forEach(inp => inp.name = `${name}__${i}__${inp.dataset.col}`));
     const count = table.parentElement.querySelector(`input[name="${name}__rows"]`); if (count) count.value = rows.length;
     totals(table);
+    document.querySelectorAll("table[data-table]").forEach(syncAdd);
   }
   function totals(table){
     table.querySelectorAll("[data-total]").forEach(cell => {
@@ -24,11 +48,13 @@
     });
     const add = wrap.querySelector(".fs-row-add");
     if (add) add.addEventListener("click", () => {
+      if (!roomFor(table)){ syncAdd(table); return; }
       const body = table.tBodies[0], last = body.rows[body.rows.length - 1], tr = last.cloneNode(true);
       tr.querySelectorAll("input").forEach(i => i.value = ""); body.appendChild(tr); renumber(table);
       tr.querySelector("input").focus();
     });
     totals(table);
+    syncAdd(table);
   });
 })();
 </script>
