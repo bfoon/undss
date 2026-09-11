@@ -146,3 +146,18 @@ def element_state(
         "message": "",
         "completed_mode": "show_values",
     }
+
+
+def annotate_states(schema, values, *, scope="submitter"):
+    """
+    Return a deep-copied schema with `runtime_state` on each input element.
+    Templates can then render inactive/completed/disabled sections in grey
+    without changing the saved schema.
+    """
+    import copy
+
+    out = copy.deepcopy(schema or {})
+    for el in out.get("elements") or []:
+        if el.get("key"):
+            el["runtime_state"] = element_state(el, values or {}, scope=scope)
+    return out

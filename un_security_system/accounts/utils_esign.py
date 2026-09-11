@@ -406,6 +406,28 @@ def _draw_envelope_token(c, width, height, envelope):
     c.restoreState()
 
 
+
+def _is_workflow_child_envelope(envelope) -> bool:
+    """Workflow child envelope IDs belong in audit records, not stacked on the PDF."""
+    return str(getattr(envelope, "reference", "") or "").upper().startswith("WF-")
+
+
+def _clip_rect(c, x, y, w, h):
+    path = c.beginPath()
+    path.rect(x, y, max(w, 0), max(h, 0))
+    c.clipPath(path, stroke=0, fill=0)
+
+
+def _ellipsize(c, text, font, size, width):
+    text = str(text or "")
+    if c.stringWidth(text, font, size) <= width:
+        return text
+    suffix = "…"
+    while text and c.stringWidth(text + suffix, font, size) > width:
+        text = text[:-1]
+    return text + suffix if text else ""
+
+
 def _fit_font_size(c, text, max_w, max_h, font="Helvetica", start=11.0):
     size = min(start, max_h * 0.72)
     while size > 5.0 and c.stringWidth(text, font, size) > max_w:
@@ -418,84 +440,113 @@ def _draw_field(c, field, width, height, envelope):
     w = field.w * width
     h = field.h * height
     y = height - (field.y * height) - h
-
     kind = field.kind
 
-    if kind in (SignatureField.KIND_SIGNATURE, SignatureField.KIND_INITIALS):
-        if not field.image:
-            return
-        try:
-            from reportlab.lib.utils import ImageReader
-
-            field.image.open("rb")
-            data = field.image.read()
-            field.image.close()
-            reader = ImageReader(io.BytesIO(data))
-            iw, ih = reader.getSize()
-
-            caption_h = 9 if kind == SignatureField.KIND_SIGNATURE else 0
-            avail_h = max(h - caption_h, 6)
-            ratio = min(w / iw, avail_h / ih)
-            dw, dh = iw * ratio, ih * ratio
-            c.drawImage(
-                reader,
-                x,
-                y + caption_h + (avail_h - dh) / 2.0,
-                dw,
-                dh,
-                mask="auto",
-                preserveAspectRatio=True,
-                anchor="sw",
-            )
-
-            if caption_h:
-                rec = field.recipient
-                stamp_time = (field.filled_at or timezone.now())
-                stamp_time = timezone.localtime(stamp_time)
-                c.saveState()
-                c.setFont("Helvetica", 5.6)
-                c.setFillColor(LIGHT)
-                c.drawString(
-                    x,
-                    y + 2.5,
-                    f"Signed by {rec.name} · {rec.email} · "
-                    f"{stamp_time:%d %b %Y %H:%M %Z} · Token {rec.short_token}",
-                )
-                c.restoreState()
-        except Exception:
-            pass
-        return
-
-    if kind == SignatureField.KIND_CHECKBOX:
-        c.saveState()
-        c.setStrokeColor(GREY)
-        c.setLineWidth(0.8)
-        box = min(w, h, 12)
-        c.rect(x, y + (h - box) / 2, box, box, stroke=1, fill=0)
-        if field.value == "1":
-            c.setStrokeColor(UN_DARK)
-            c.setLineWidth(1.4)
-            c.line(x + box * 0.2, y + (h - box) / 2 + box * 0.5,
-                   x + box * 0.45, y + (h - box) / 2 + box * 0.22)
-            c.line(x + box * 0.45, y + (h - box) / 2 + box * 0.22,
-                   x + box * 0.82, y + (h - box) / 2 + box * 0.78)
-        c.restoreState()
-        return
-
-    text = (field.value or "").strip()
-    if not text:
-        return
-
+    # Every drawing operation is clipped to the field rectangle. This makes
+    # it impossible for a signature, date or long answer to escape its box.
     c.saveState()
-    c.setFillColor(colors.black)
-    lines = text.splitlines() or [text]
-    size = _fit_font_size(c, max(lines, key=len), w, h / max(len(lines), 1))
-    c.setFont("Helvetica", size)
-    line_h = size * 1.18
-    top = y + h - line_h + (line_h - size) / 2
-    for i, ln in enumerate(lines[:6]):
-        c.drawString(x, top - (i * line_h), ln)
-    c.restoreState()
+    _clip_rect(c, x, y, w, h)
+    try:
+        if kind in (SignatureField.KIND_SIGNATURE, SignatureField.KIND_INITIALS):
+            if not field.image:
+                return
+            try:
+                from reportlab.lib.utils import ImageReader
+
+                field.image.open("rb")
+                data = field.image.read()
+                field.image.close()
+                reader = ImageReader(io.BytesIO(data))
+                iw, ih = reader.getSize()
+
+                pad_x = min(max(w * 0.035, 2.0), 6.0)
+                pad_y = min(max(h * 0.04, 1.5), 4.0)
+                caption_h = min(9.0, max(0.0, h * 0.20)) if kind == SignatureField.KIND_SIGNATURE else 0
+                avail_w = max(w - pad_x * 2, 4)
+                avail_h = max(h - caption_h - pad_y * 2, 4)
+                ratio = min(avail_w / max(iw, 1), avail_h / max(ih, 1))
+                dw, dh = iw * ratio, ih * ratio
+                c.drawImage(
+                    reader,
+                    x + pad_x + (avail_w - dw) / 2.0,
+                    y + caption_h + pad_y + (avail_h - dh) / 2.0,
+                    dw,
+                    dh,
+                    mask="auto",
+                    preserveAspectRatio=True,
+                    anchor="sw",
+                )
+
+                if caption_h >= 5:
+                    rec = field.recipient
+                    stamp_time = timezone.localtime(field.filled_at or timezone.now())
+                    caption = (
+                        f"Signed by {rec.name} · {rec.email} · "
+                        f"{stamp_time:%d %b %Y %H:%M %Z} · Token {rec.short_token}"
+                    )
+                    cap_size = _fit_font_size(
+                        c, caption, max(w - pad_x * 2, 4), caption_h, start=5.6
+                    )
+                    caption = _ellipsize(
+                        c, caption, "Helvetica", cap_size, max(w - pad_x * 2, 4)
+                    )
+                    c.setFont("Helvetica", cap_size)
+                    c.setFillColor(LIGHT)
+                    c.drawString(
+                        x + pad_x,
+                        y + max(1.5, (caption_h - cap_size) / 2.0),
+                        caption,
+                    )
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "eSign: could not draw signature field %s",
+                    getattr(field, "pk", "?"),
+                    exc_info=True,
+                )
+            return
+
+        if kind == SignatureField.KIND_CHECKBOX:
+            c.setStrokeColor(GREY)
+            c.setLineWidth(0.8)
+            box = min(w, h, 12)
+            c.rect(x, y + (h - box) / 2, box, box, stroke=1, fill=0)
+            if field.value == "1":
+                c.setStrokeColor(UN_DARK)
+                c.setLineWidth(1.4)
+                c.line(
+                    x + box * 0.2, y + (h - box) / 2 + box * 0.5,
+                    x + box * 0.45, y + (h - box) / 2 + box * 0.22,
+                )
+                c.line(
+                    x + box * 0.45, y + (h - box) / 2 + box * 0.22,
+                    x + box * 0.82, y + (h - box) / 2 + box * 0.78,
+                )
+            return
+
+        text = (field.value or "").strip()
+        if not text:
+            return
+
+        pad = min(max(w * 0.02, 2.0), 5.0)
+        inner_w = max(w - pad * 2, 4)
+        inner_h = max(h - pad * 2, 4)
+        lines = text.splitlines() or [text]
+        size = _fit_font_size(
+            c, max(lines, key=len), inner_w, inner_h / max(len(lines), 1)
+        )
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", size)
+        line_h = size * 1.15
+        max_lines = max(1, int(inner_h // max(line_h, 1)))
+        top = y + h - pad - size
+        for i, line in enumerate(lines[:max_lines]):
+            c.drawString(
+                x + pad,
+                top - i * line_h,
+                _ellipsize(c, line, "Helvetica", size, inner_w),
+            )
+    finally:
+        c.restoreState()
 
 
 def build_final_pdf(envelope: Envelope) -> bytes:
@@ -534,7 +585,10 @@ def build_final_pdf(envelope: Envelope) -> bytes:
                 ),
             )
             c.translate(float(box.left), float(box.bottom))
-            _draw_envelope_token(c, width, height, envelope)
+            # Workflow child envelopes carry the same working PDF through
+            # several signature rounds. Do not stack a new child ID each time.
+            if not _is_workflow_child_envelope(envelope):
+                _draw_envelope_token(c, width, height, envelope)
 
             for f in fields:
                 if f.document_id == doc.id and f.page == page_index and f.is_filled:

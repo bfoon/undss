@@ -333,8 +333,10 @@ urlpatterns = [
     # eSign Studio — workflows
     path("esign/workflows/", views_esign_workflow.esign_workflows, name="esign_workflows"),
     path("esign/workflows/new/", views_esign_workflow.esign_workflow_new, name="esign_workflow_new"),
+    path("esign/workflows/import/", views_esign_workflow.esign_workflow_import, name="esign_workflow_import"),
     path("esign/workflows/<int:pk>/design/", views_esign_workflow.esign_workflow_designer, name="esign_workflow_designer"),
     path("esign/workflows/<int:pk>/save/", views_esign_workflow.esign_workflow_save, name="esign_workflow_save"),
+    path("esign/workflows/<int:pk>/export/", views_esign_workflow.esign_workflow_export, name="esign_workflow_export"),
     path("esign/workflows/<int:pk>/duplicate/", views_esign_workflow.esign_workflow_duplicate, name="esign_workflow_duplicate"),
     path("esign/workflows/<int:pk>/delete/", views_esign_workflow.esign_workflow_delete, name="esign_workflow_delete"),
     path("esign/workflows/<int:pk>/start/", views_esign_workflow.esign_workflow_launch, name="esign_workflow_launch"),
@@ -351,6 +353,7 @@ urlpatterns = [
     # eSign Studio — forms
     path("esign/forms/", views_esign_forms.esign_forms, name="esign_forms"),
     path("esign/forms/new/", views_esign_forms.esign_form_new, name="esign_form_new"),
+    path("esign/forms/import-word/", views_esign_forms.esign_form_import_word, name="esign_form_import_word"),
     path("esign/forms/<int:pk>/design/", views_esign_forms.esign_form_designer, name="esign_form_designer"),
     path("esign/forms/<int:pk>/save/", views_esign_forms.esign_form_save, name="esign_form_save"),
     path("esign/forms/<int:pk>/preview.pdf", views_esign_forms.esign_form_preview_pdf, name="esign_form_preview_pdf"),

@@ -66,6 +66,8 @@
       <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-grid-1x2 me-1"></i>Templates</button>
       <ul class="dropdown-menu dropdown-menu-end shadow-sm" id="tplMenu"></ul>
     </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_workflow_import' %}" title="Import somebody else's flow"><i class="bi bi-box-arrow-in-down me-1"></i>Import</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_workflow_export' workflow.pk %}" title="Export this flow"><i class="bi bi-box-arrow-up me-1"></i>Export</a>
     <button class="btn btn-sm btn-outline-secondary" id="tidy" title="Arrange the steps neatly"><i class="bi bi-magic me-1"></i>Tidy up</button>
     <button class="btn btn-sm btn-outline-secondary" id="undo" title="Undo (Ctrl+Z)" disabled><i class="bi bi-arrow-90deg-left"></i></button>
     <button class="btn btn-sm btn-outline-secondary" id="redo" title="Redo (Ctrl+Y)" disabled><i class="bi bi-arrow-90deg-right"></i></button>
@@ -494,23 +496,39 @@
       h += `<div class="st-group-label mb-1 mt-2">Signing</div>
         <select class="form-select form-select-sm mb-2" data-f="order"><option value="sequential" ${c.order === "sequential" ? "selected" : ""}>One after another</option><option value="parallel" ${c.order === "parallel" ? "selected" : ""}>All at the same time</option></select>
         <select class="form-select form-select-sm mb-1" data-f="placement"><option value="auto" ${c.placement === "auto" ? "selected" : ""}>Place signature fields automatically</option><option value="manual" ${c.placement === "manual" ? "selected" : ""}>The initiator places them</option></select>
-        <div class="form-text mb-2">${c.placement === "auto" ? "Uses the form's signature boxes for this step; anyone without one gets a signature page added at the end." : "The initiator gets a task to place fields, then the envelope is sent."}</div>
+        <div class="form-text mb-2">${c.placement === "auto" ? "Uses the form's signature boxes for this step. Form workflows never add a signature page; add enough signature boxes for every signer." : "The initiator gets a task to place fields, then the envelope is sent."}</div>
         <label class="form-label small fw-semibold mb-1">Message to signers</label><textarea class="form-control form-control-sm mb-2" rows="2" data-f="message" maxlength="1000">${esc(c.message)}</textarea>`;
     }
     if (n.type === "condition"){
-      const fl = fields(), f = fl.find(x => x.key === c.field);
-      h += `<div class="st-group-label mb-1 mt-2">Rule</div>`;
+      const fl = fields();
+      c.condition ||= {type:"group", logic:"and", negate:false, rules:
+        c.field ? [{type:"rule",field:c.field,op:c.op||"eq",compare:"value",field2:"",value:c.value||"",value2:""}] : []};
+      h += `<div class="st-group-label mb-1 mt-2">Advanced rule</div>`;
       if (!fl.length) h += `<div class="alert alert-warning small py-2">Conditions read form answers. Link a form in Flow settings first.</div>`;
       else {
-        h += `<select class="form-select form-select-sm mb-2" data-f="field"><option value="">If this field…</option>${fl.map(x => `<option value="${esc(x.key)}" ${c.field === x.key ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>
-          <select class="form-select form-select-sm mb-2" data-f="op">${Object.entries(OPS).map(([k, v]) => `<option value="${k}" ${c.op === k ? "selected" : ""}>${v}</option>`).join("")}</select>`;
-        if (!["empty", "not_empty"].includes(c.op)){
-          h += f && f.options && f.options.length
-            ? `<select class="form-select form-select-sm mb-2" data-f="value"><option value="">Value…</option>${f.options.map(o => `<option ${c.value === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`
-            : f && f.type === "yesno" ? `<select class="form-select form-select-sm mb-2" data-f="value"><option ${c.value === "Yes" ? "selected" : ""}>Yes</option><option ${c.value === "No" ? "selected" : ""}>No</option></select>`
-            : `<input class="form-control form-control-sm mb-2" data-f="value" value="${esc(c.value)}" placeholder="Value" ${f && f.type === "number" ? 'inputmode="decimal"' : ""}>`;
-        }
-        h += `<div class="small text-muted">Then follow <strong>Yes</strong>, otherwise <strong>No</strong>.</div>`;
+        h += `<div class="d-flex gap-2 mb-2">
+          <select class="form-select form-select-sm" data-cond-logic>
+            <option value="and" ${c.condition.logic!=="or"?"selected":""}>ALL rules (AND)</option>
+            <option value="or" ${c.condition.logic==="or"?"selected":""}>ANY rule (OR)</option>
+          </select>
+          <label class="form-check small d-flex align-items-center mb-0"><input class="form-check-input me-1" type="checkbox" data-cond-negate ${c.condition.negate?"checked":""}>NOT</label>
+        </div>`;
+        c.condition.rules.forEach((r,i) => {
+          h += `<div class="border rounded p-2 mb-2">
+            <select class="form-select form-select-sm mb-1" data-cond="${i}:field"><option value="">Field…</option>${fl.map(x=>`<option value="${esc(x.key)}" ${r.field===x.key?"selected":""}>${esc(x.label)}</option>`).join("")}</select>
+            <select class="form-select form-select-sm mb-1" data-cond="${i}:op">${Object.entries(OPS).map(([k,v])=>`<option value="${k}" ${r.op===k?"selected":""}>${esc(v)}</option>`).join("")}</select>
+            <div class="d-flex gap-1">
+              <select class="form-select form-select-sm" style="max-width:120px" data-cond="${i}:compare"><option value="value" ${r.compare!=="field"?"selected":""}>Value</option><option value="field" ${r.compare==="field"?"selected":""}>Other field</option></select>
+              ${r.compare==="field"
+                ? `<select class="form-select form-select-sm" data-cond="${i}:field2"><option value="">Other field…</option>${fl.map(x=>`<option value="${esc(x.key)}" ${r.field2===x.key?"selected":""}>${esc(x.label)}</option>`).join("")}</select>`
+                : `<input class="form-control form-control-sm" data-cond="${i}:value" value="${esc(r.value||"")}" placeholder="Value">`}
+              <button type="button" class="btn btn-sm btn-outline-danger" data-cond-remove="${i}"><i class="bi bi-x"></i></button>
+            </div>
+            ${r.op==="between"?`<input class="form-control form-control-sm mt-1" data-cond="${i}:value2" value="${esc(r.value2||"")}" placeholder="Second value">`:""}
+          </div>`;
+        });
+        h += `<button type="button" class="btn btn-sm btn-outline-primary w-100" id="condAdd"><i class="bi bi-plus me-1"></i>Add condition</button>
+          <div class="small text-muted mt-2">The Yes path runs when the complete expression is true.</div>`;
       }
     }
     if (n.type === "notify"){
@@ -534,6 +552,20 @@
     side.querySelectorAll("[data-a]").forEach(el => el.addEventListener("change", () => change(() => { n.config.assign[el.dataset.a] = el.value.trim(); })));
     side.querySelectorAll('input[name="rule"]').forEach(el => el.addEventListener("change", () => change(() => n.config.rule = el.value)));
     side.querySelectorAll('input[name="outcome"]').forEach(el => el.addEventListener("change", () => change(() => { n.config.outcome = el.value; if (["End", "Completed", "Rejected"].includes(n.label)) n.label = el.value === "rejected" ? "Rejected" : "Completed"; })));
+    if (n.type === "condition" && n.config.condition){
+      const tree = n.config.condition;
+      const logic = side.querySelector("[data-cond-logic]");
+      if (logic) logic.onchange = () => change(() => tree.logic = logic.value === "or" ? "or" : "and");
+      const neg = side.querySelector("[data-cond-negate]");
+      if (neg) neg.onchange = () => change(() => tree.negate = neg.checked);
+      side.querySelectorAll("[data-cond]").forEach(el => el.onchange = () => {
+        const [idx,key] = el.dataset.cond.split(":");
+        change(() => tree.rules[+idx][key] = el.value);
+      });
+      side.querySelectorAll("[data-cond-remove]").forEach(btn => btn.onclick = () => change(() => tree.rules.splice(+btn.dataset.condRemove, 1)));
+      const add = side.querySelector("#condAdd");
+      if (add) add.onclick = () => change(() => tree.rules.push({type:"rule",field:"",op:"eq",compare:"value",field2:"",value:"",value2:""}));
+    }
     const pp = side.querySelector("#peoplePick");
     if (pp){
       const a = n.config.assign;

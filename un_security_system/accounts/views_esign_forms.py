@@ -47,6 +47,8 @@ from .studio_common_esign import (
 )
 from .studio_library_esign import FORM_TEMPLATES, form_template
 from .utils_esign import esign_brand
+from .docx_form_import_esign import WordFormImportError, import_docx_form
+from .form_logic_esign import annotate_states
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +125,46 @@ def esign_form_delete(request, pk):
         form.delete()
         messages.success(request, "Form deleted.")
     return redirect("accounts:esign_forms")
+
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def esign_form_import_word(request):
+    agency, bounce = studio_gate(request)
+    if bounce:
+        return bounce
+    if request.method == "GET":
+        return render(
+            request,
+            "accounts/esign/studio/import_word_form.html",
+            studio_context(request, "forms"),
+        )
+
+    upload = request.FILES.get("document")
+    if not upload:
+        messages.error(request, "Choose a .docx Word form.")
+        return redirect("accounts:esign_form_import_word")
+    try:
+        imported = import_docx_form(upload.read(), upload.name)
+    except WordFormImportError as exc:
+        messages.error(request, str(exc))
+        return redirect("accounts:esign_form_import_word")
+
+    form = FormTemplate.objects.create(
+        agency=agency,
+        created_by=request.user,
+        office_id=getattr(request.user, "country_office_id", None),
+        name=imported["name"],
+        description="Imported from Word. Review all detected fields before publishing.",
+        category="Imported",
+        schema=imported["schema"],
+        reference_prefix="FRM",
+        share_scope="private",
+        is_published=False,
+    )
+    messages.warning(request, imported["warning"])
+    return redirect("accounts:esign_form_designer", pk=form.pk)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -280,12 +322,14 @@ def _fill(request, form, *, public):
     slots = E.chosen_slots(graph) if graph else []
     test_mode = bool(user and form.created_by_id == user.id and not form.is_published)
 
+    initial = F.initial_values(schema, user)
     ctx = {
         **asset_urls(),
         "base_template": "base.html" if user else "accounts/esign/studio/public_base.html",
-        "form": form, "schema": schema, "public": public, "workflow": workflow, "slots": slots,
+        "form": form, "schema": annotate_states(schema, initial, scope="submitter"),
+        "public": public, "workflow": workflow, "slots": slots,
         "directory_json": json.dumps(directory(user)) if (user and not public) else "[]",
-        "values": F.initial_values(schema, user), "errors": {}, "test_mode": test_mode,
+        "values": initial, "errors": {}, "test_mode": test_mode,
         "studio_section": "forms",
     }
 
@@ -320,8 +364,13 @@ def _fill(request, form, *, public):
         chosen[s["key"]] = people
 
     if errors:
-        ctx.update(values=values, errors=errors, posted_slots={k: request.POST.get(f"slot_{k}") or "[]"
-                                                               for k in [s["key"] for s in slots]})
+        ctx.update(
+            schema=annotate_states(schema, values, scope="submitter"),
+            values=values,
+            errors=errors,
+            posted_slots={k: request.POST.get(f"slot_{k}") or "[]"
+                          for k in [s["key"] for s in slots]},
+        )
         messages.error(request, "Please check the highlighted answers.")
         return render(request, "accounts/esign/studio/form_fill.html", ctx)
 

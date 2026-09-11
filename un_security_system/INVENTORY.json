@@ -1,0 +1,29 @@
+{
+  "package": "UNPASS_eSign_DEV_FULL_SYNC_2026-09-11",
+  "core_production_patch_operations": 46,
+  "core_existing_files_patched": [
+    "un_security_system/accounts/form_pdf_esign.py",
+    "un_security_system/accounts/urls.py",
+    "un_security_system/accounts/utils_esign.py",
+    "un_security_system/accounts/views_esign_forms.py",
+    "un_security_system/accounts/views_esign_workflow.py",
+    "un_security_system/accounts/workflow_engine_esign.py",
+    "un_security_system/templates/accounts/esign/studio/_form_sheet.html",
+    "un_security_system/templates/accounts/esign/studio/designer.html",
+    "un_security_system/templates/accounts/esign/studio/form_designer.html"
+  ],
+  "core_payload_files": [
+    "un_security_system/accounts/docx_form_import_esign.py",
+    "un_security_system/accounts/esign_condition_engine.py",
+    "un_security_system/accounts/form_logic_esign.py",
+    "un_security_system/accounts/workflow_portability_esign.py",
+    "un_security_system/templates/accounts/esign/studio/import_flow.html",
+    "un_security_system/templates/accounts/esign/studio/import_word_form.html"
+  ],
+  "followup_files": [
+    "un_security_system/accounts/workflow_engine_esign.py",
+    "un_security_system/accounts/form_logic_esign.py",
+    "un_security_system/templates/accounts/esign/sign.html",
+    "un_security_system/templates/accounts/esign/studio/_form_sheet.html"
+  ]
+}

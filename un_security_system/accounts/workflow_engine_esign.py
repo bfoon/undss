@@ -42,6 +42,8 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
+from . import esign_condition_engine as C
+
 logger = logging.getLogger(__name__)
 
 HUMAN_TYPES = ("approval", "review", "fill", "signature")
@@ -77,11 +79,7 @@ PORT_LABELS = {
     "declined": "Declined", "yes": "Yes", "no": "No",
 }
 
-CONDITION_OPS = {
-    "eq": "is", "neq": "is not", "contains": "contains", "gt": "is greater than",
-    "gte": "is at least", "lt": "is less than", "lte": "is at most",
-    "empty": "is empty", "not_empty": "is filled in",
-}
+CONDITION_OPS = C.CONDITION_OPS
 
 ASSIGN_MODES = {
     "people": "Specific people",
@@ -158,9 +156,12 @@ def clean_graph(graph):
             cfg["placement"] = "manual" if cfg_in.get("placement") == "manual" else "auto"
             cfg["message"] = _s(cfg_in.get("message"), 1000)
         if t == "condition":
+            # Keep the legacy three fields so existing flows continue to work.
             cfg["field"] = _s(cfg_in.get("field"), 40)
             cfg["op"] = cfg_in.get("op") if cfg_in.get("op") in CONDITION_OPS else "eq"
             cfg["value"] = _s(cfg_in.get("value"), 200)
+            if cfg_in.get("condition"):
+                cfg["condition"] = C.clean_tree(cfg_in.get("condition"))
         if t == "notify":
             cfg["message"] = _s(cfg_in.get("message"), 1000)
             cfg["attach_pdf"] = bool(cfg_in.get("attach_pdf", True))
@@ -258,12 +259,16 @@ def validate_graph(graph, form_schema=None):
                 warnings.append({"node": nid, "text": f"“{name}” has no next step; the branch ends there."})
 
         if t == "condition":
-            if not cfg.get("field"):
-                errors.append({"node": nid, "text": f"Choose the form field “{name}” checks."})
-            elif form_schema is not None and cfg["field"] not in form_keys:
-                errors.append({"node": nid, "text": f"“{name}” checks a form field that doesn't exist: {cfg['field']}."})
+            tree = cfg.get("condition")
+            refs = C.referenced_fields(tree) if tree else ([cfg.get("field")] if cfg.get("field") else [])
+            if not refs:
+                errors.append({"node": nid, "text": f"Choose at least one form field for “{name}”."})
+            elif form_schema is not None:
+                missing = [key for key in refs if key not in form_keys]
+                if missing:
+                    errors.append({"node": nid, "text": f"“{name}” checks fields that don't exist: {', '.join(missing)}."})
             elif form_schema is None:
-                warnings.append({"node": nid, "text": f"“{name}” checks a form field; without a form it always takes the No path."})
+                warnings.append({"node": nid, "text": f"“{name}” checks form fields; without a form it always takes the No path."})
             ports = {e["port"] for e in outs}
             for p in ("yes", "no"):
                 if p not in ports:
@@ -474,24 +479,148 @@ def _read(handle):
         handle.close()
 
 
-def run_pdf_bytes(run, status_label=""):
-    """
-    The document as it stands now.
+def _workflow_primary_envelope_id(run):
+    context = run.context if isinstance(run.context, dict) else {}
+    saved = str(context.get("primary_envelope_id") or "").strip()
+    if saved:
+        return saved
 
-    Form runs render from the current values until a signature freezes them;
-    after that the signed PDF is the document.
-    """
+    try:
+        task = (
+            run.tasks.filter(envelope__isnull=False)
+            .select_related("envelope")
+            .order_by("created_at", "id")
+            .first()
+        )
+        if task and task.envelope:
+            return task.envelope.envelope_id
+    except Exception:
+        logger.exception(
+            "eSign Studio: could not resolve primary envelope for run %s",
+            run.pk,
+        )
+    return ""
+
+
+def _stamp_workflow_form_pdf(raw, run, *, envelope_id="", status_label=""):
+    if not raw or not run.submission_id:
+        return raw
+
+    try:
+        from pypdf import PdfReader, PdfWriter
+        from reportlab.lib import colors
+        from reportlab.pdfgen import canvas as rl_canvas
+
+        reader = PdfReader(io.BytesIO(raw))
+        writer = PdfWriter()
+
+        submission = run.submission
+        schema = submission.schema or {}
+        header = schema.get("header") or {}
+
+        submitted_at = getattr(submission, "created_at", None)
+        submitted_stamp = ""
+        if submitted_at:
+            submitted_stamp = timezone.localtime(submitted_at).strftime(
+                "%d %b %Y %H:%M"
+            )
+
+        for index, page in enumerate(reader.pages):
+            width = float(page.mediabox.width)
+            height = float(page.mediabox.height)
+
+            overlay_buf = io.BytesIO()
+            c = rl_canvas.Canvas(overlay_buf, pagesize=(width, height))
+
+            if envelope_id:
+                c.setFillColor(colors.white)
+                c.rect(
+                    max(20, width - 270),
+                    height - 25,
+                    min(235, width - 40),
+                    16,
+                    stroke=0,
+                    fill=1,
+                )
+                c.setFillColor(colors.HexColor("#64748B"))
+                c.setFont("Courier", 6.5)
+                c.drawRightString(
+                    width - 36,
+                    height - 16,
+                    f"Envelope ID: {envelope_id}",
+                )
+
+            if index == 0 and status_label:
+                band_h = 58.0 + (14.0 if header.get("subtitle") else 0.0)
+                meta_y = height - 36.0 + 14.0 - band_h - 13.0
+
+                c.setFillColor(colors.white)
+                c.rect(
+                    max(250, width - 300),
+                    meta_y - 6,
+                    min(265, width - 285),
+                    16,
+                    stroke=0,
+                    fill=1,
+                )
+
+                right = status_label
+                if submitted_stamp:
+                    right = f"{right}   |   {submitted_stamp}"
+
+                c.setFillColor(colors.HexColor("#64748B"))
+                c.setFont("Helvetica-Bold", 7.8)
+                c.drawRightString(width - 42, meta_y, right)
+
+            c.save()
+            overlay_buf.seek(0)
+
+            overlay_reader = PdfReader(overlay_buf)
+            if overlay_reader.pages:
+                page.merge_page(overlay_reader.pages[0])
+
+            writer.add_page(page)
+
+        out = io.BytesIO()
+        writer.write(out)
+        return out.getvalue()
+
+    except Exception:
+        logger.exception(
+            "eSign Studio: could not stamp workflow PDF metadata for run %s",
+            run.pk,
+        )
+        return raw
+
+
+def run_pdf_bytes(run, status_label=""):
     if run.submission_id and not run.context.get("frozen"):
         from .form_pdf_esign import render_form_pdf
 
         sub = run.submission
         pdf, boxes = render_form_pdf(
-            sub.schema, sub.values, reference=sub.reference, submitted_at=sub.created_at,
-            submitter=sub.submitter_name, status_label=status_label or run.get_status_display(),
+            sub.schema,
+            sub.values,
+            reference=sub.reference,
+            submitted_at=sub.created_at,
+            submitter=sub.submitter_name,
+            status_label=status_label or run.get_status_display(),
         )
         run._form_boxes = boxes
         return pdf
-    return _read(run.document)
+
+    raw = _read(run.document)
+
+    if run.submission_id and raw:
+        raw = _stamp_workflow_form_pdf(
+            raw,
+            run,
+            envelope_id=_workflow_primary_envelope_id(run),
+            status_label=status_label or run.get_status_display(),
+        )
+
+    return raw
+
 
 
 def set_run_document(run, raw, name=None, save=True):
@@ -688,6 +817,14 @@ def _next_round(run, node_id):
 def evaluate_condition(run, node):
     cfg = node.get("config") or {}
     values = run.submission.values if run.submission_id else {}
+    if cfg.get("condition"):
+        result = C.evaluate_tree(values, cfg["condition"])
+        log_run(
+            run, "condition", node_id=node["id"],
+            note=f"{node['label']}: {C.describe_tree(cfg['condition'])} → {'Yes' if result else 'No'}",
+        )
+        return result
+
     raw = values.get(cfg.get("field") or "")
     op, target = cfg.get("op", "eq"), (cfg.get("value") or "").strip()
 
@@ -1013,6 +1150,16 @@ def _start_signature(run, node, request=None):
         else:
             extra.append(person)
 
+    # A form-backed workflow must remain the form the owner designed.
+    # Never manufacture a new signature page when a signature box is missing.
+    if extra and run.submission_id:
+        names = ", ".join(p.get("name") or p.get("email") or "Signer" for p in extra)
+        raise WorkflowError(
+            f"“{node['label']}” has no matching signature box for: {names}. "
+            "Open the form designer, add or assign the required signature box(es) "
+            "to this signature step, save the form, then retry."
+        )
+
     pages_before = page_count(raw)
     if extra:
         size = (page_sizes(raw) or [None])[-1]
@@ -1036,6 +1183,27 @@ def _start_signature(run, node, request=None):
             reminders_enabled=True,
             reference=run.reference,
         )
+
+        if run.submission_id:
+            if not isinstance(run.context, dict):
+                run.context = {}
+
+            primary_id = (
+                run.context.get("primary_envelope_id")
+                or envelope.envelope_id
+            )
+
+            if not run.context.get("primary_envelope_id"):
+                run.context["primary_envelope_id"] = primary_id
+                run.save(update_fields=["context"])
+
+            raw = _stamp_workflow_form_pdf(
+                raw,
+                run,
+                envelope_id=primary_id,
+                status_label=run.get_status_display(),
+            )
+
         doc = EnvelopeDocument.objects.create(
             envelope=envelope, name=(run.document_name or f"{run.subject}.pdf")[:200], order=0,
             file=ContentFile(raw, name=f"{run.reference}-{node['id']}.pdf"),

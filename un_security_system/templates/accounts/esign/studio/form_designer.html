@@ -39,6 +39,11 @@
   .fb-name{ font-size:1.15rem; font-weight:700; color:#005A8B; border:1px solid transparent; border-radius:.35rem; padding:.15rem .4rem; min-width:220px; background:transparent; }
   .fb-name:hover{ border-color:var(--st-line); } .fb-name:focus{ outline:0; border-color:#86b7fe; background:#fff; }
   .fb-color{ width:34px; height:30px; padding:2px; }
+  .fb-grid-free{ position:relative; min-height:1050px; display:block; }
+  .fb-free-wrap{ position:absolute; padding:0!important; }
+  .fb-el.free{ width:100%; height:100%; overflow:visible; }
+  .fb-el.free .form-control,.fb-el.free .form-select,.fb-el.free textarea{ min-height:var(--v2-height,38px);font-size:var(--v2-value,10px);background:var(--v2-bg,#fff);color:var(--v2-text,#111827);border-color:var(--v2-border,#CBD5E1);border-width:var(--v2-bw,1px);border-radius:var(--v2-radius,4px);padding:var(--v2-pad,6px); }
+  .fb-el.free .fs-label{ font-size:var(--v2-label,9px);color:var(--v2-label-color,#334155); }
 </style>
 {% endblock %}
 
@@ -50,6 +55,7 @@
   <div class="form-check form-switch ms-2 mb-0"><input class="form-check-input" type="checkbox" id="published"><label class="form-check-label small" for="published">Published</label></div>
   <span class="fb-save-state ms-2" id="saveState">Saved</span>
   <div class="ms-auto d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_form_import_word' %}"><i class="bi bi-file-earmark-word me-1"></i>Import Word</a>
     <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#tplModal"><i class="bi bi-grid-1x2 me-1"></i>Templates</button>
     <button class="btn btn-sm btn-outline-secondary" id="undo" disabled title="Undo (Ctrl+Z)"><i class="bi bi-arrow-90deg-left"></i></button>
     <button class="btn btn-sm btn-outline-secondary" id="redo" disabled title="Redo (Ctrl+Y)"><i class="bi bi-arrow-90deg-right"></i></button>
@@ -127,6 +133,17 @@
   const slug = t => (String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)) || "field";
   const byId = id => schema.elements.find(e => e.id === id);
   const flow = () => CFG.flows.find(f => f.id === +meta.workflow_id) || null;
+  const FORM_GRID = 20;
+  const fsnap = v => Math.round(v / FORM_GRID) * FORM_GRID;
+  const STATE_OPS = {eq:"is",neq:"is not",contains:"contains",gt:"greater than",gte:"at least",lt:"less than",lte:"at most",empty:"is empty",not_empty:"is filled in"};
+  function ensureV2(el){
+    el.presentation ||= {label_font_size:9,value_font_size:10,height:38,padding:6,background:"#FFFFFF",border_color:"#CBD5E1",text_color:"#111827",label_color:"#334155",border_width:1,radius:4};
+    el.canvas ||= {enabled:false,page:1,x:40,y:120,w:260,h:60,snap:FORM_GRID,z:0};
+    el.state_rules ||= [];
+    return el;
+  }
+  function v2Style(el){ const p=ensureV2(el).presentation; return `--v2-label:${p.label_font_size}px;--v2-value:${p.value_font_size}px;--v2-height:${p.height}px;--v2-pad:${p.padding}px;--v2-bg:${p.background};--v2-border:${p.border_color};--v2-text:${p.text_color};--v2-label-color:${p.label_color};--v2-bw:${p.border_width}px;--v2-radius:${p.radius}px;`; }
+  function canvasStyle(el){ const c=ensureV2(el).canvas; return `left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;z-index:${c.z};`; }
 
   // ─── history ──────────────────────────────────────────────
   const snap = () => JSON.stringify({schema, meta});
@@ -144,6 +161,7 @@
   }
   function make(type){
     const el = {id: uid(), type, width: 12};
+    ensureV2(el);
     if (INPUT_TYPES.includes(type)){
       Object.assign(el, {label: LABELS[type], required: false, help: "", placeholder: "", fill_by: "submitter", prefill: ""});
       el.key = uniqueKey(el.label); fresh.add(el.id);
@@ -219,11 +237,13 @@
         ${hd.logo ? `<img src="${hd.logo}" class="fs-logo ${hd.align === "center" ? "mx-auto d-block" : ""}" alt="">` : ""}
         <div class="fs-title">${esc(hd.title)}</div>${hd.subtitle ? `<div class="fs-subtitle">${esc(hd.subtitle)}</div>` : ""}
         ${hd.show_reference ? `<div class="small mt-1" style="opacity:.7">Reference: ${esc(meta.reference_prefix)}-2026-0001</div>` : ""}
-      </div><div class="row g-3 fs-body" id="grid">`;
+      </div><div class="row g-3 fs-body ${schema.elements.some(e => ensureV2(e).canvas.enabled) ? "fb-grid-free" : ""}" id="grid">`;
     schema.elements.forEach(el => {
       const step = INPUT_TYPES.includes(el.type) && el.fill_by && el.fill_by !== "submitter" ? `<span class="fb-step"><i class="bi bi-input-cursor-text"></i> ${esc(stepName(el.fill_by))}</span>`
         : el.type === "signature" && (el.step || el.role) ? `<span class="fb-step" style="background:#009EDB"><i class="bi bi-pen"></i> ${esc(el.step ? stepName(el.step) : el.role)}</span>` : "";
-      h += `<div class="col-md-${el.width}"><div class="fb-el ${el.id === selId ? "sel" : ""}" data-id="${el.id}" tabindex="0">
+      ensureV2(el);
+      const free = !!el.canvas.enabled;
+      h += `<div class="${free ? "fb-free-wrap" : `col-md-${el.width}`}" style="${free ? canvasStyle(el) : ""}"><div class="fb-el ${free ? "free" : ""} ${el.id === selId ? "sel" : ""}" style="${free ? v2Style(el) : ""}" data-id="${el.id}" tabindex="0">
         ${step}
         <div class="fb-tools">
           <button type="button" data-cmd="narrow" title="Narrower">−</button><button type="button" class="w" data-cmd="wide" title="Width: ${el.width}/12">${el.width}/12</button><button type="button" data-cmd="widen" title="Wider">+</button>
@@ -246,10 +266,26 @@
     if (!elNode){ if (selId){ selId = null; renderPaper(); renderInspector(); } return; }
     const id = elNode.dataset.id, el = byId(id);
     if (cmd){ e.preventDefault(); e.stopPropagation(); return command(cmd.dataset.cmd, id); }
-    if (e.target.closest(".fb-resize")) return resizeWidth(e, el, elNode);
+    if (e.target.closest(".fb-resize")) return el.canvas && el.canvas.enabled ? resizeFree(e, el, elNode.parentElement) : resizeWidth(e, el, elNode);
     if (selId !== id){ selId = id; renderPaper(); renderInspector(); }
+    if (el.canvas && el.canvas.enabled) return startFreeDrag(e, el, elNode.parentElement);
     startDrag(e, {id});
   });
+
+  function startFreeDrag(e, el, wrap){
+    e.preventDefault();
+    const sx=e.clientX, sy=e.clientY, ox=el.canvas.x, oy=el.canvas.y, before=snap();
+    const moveH=ev=>{ el.canvas.x=Math.max(0,fsnap(ox+ev.clientX-sx)); el.canvas.y=Math.max(0,fsnap(oy+ev.clientY-sy)); wrap.style.left=el.canvas.x+"px"; wrap.style.top=el.canvas.y+"px"; };
+    const up=()=>{ window.removeEventListener("pointermove",moveH);window.removeEventListener("pointerup",up);undoStack.push(before);redoStack=[];markDirty();renderInspector(); };
+    window.addEventListener("pointermove",moveH);window.addEventListener("pointerup",up);
+  }
+  function resizeFree(e, el, wrap){
+    e.preventDefault();e.stopPropagation();
+    const sx=e.clientX,sy=e.clientY,ow=el.canvas.w,oh=el.canvas.h,before=snap();
+    const moveH=ev=>{ el.canvas.w=Math.max(60,fsnap(ow+ev.clientX-sx));el.canvas.h=Math.max(30,fsnap(oh+ev.clientY-sy));wrap.style.width=el.canvas.w+"px";wrap.style.height=el.canvas.h+"px"; };
+    const up=()=>{ window.removeEventListener("pointermove",moveH);window.removeEventListener("pointerup",up);undoStack.push(before);redoStack=[];markDirty();renderInspector(); };
+    window.addEventListener("pointermove",moveH);window.addEventListener("pointerup",up);
+  }
   function command(cmd, id){
     const i = schema.elements.findIndex(e => e.id === id), el = schema.elements[i];
     const wi = WIDTHS.indexOf(el.width);
@@ -403,8 +439,41 @@
       h += check("show_date", el.show_date, "Show the date signed");
       h += `<div class="small text-muted">When the form reaches a signature step, the signature is placed exactly in this box.</div>`;
     }
+    ensureV2(el);
+    const p = el.presentation, cv = el.canvas, sr = el.state_rules[0] || null;
+    const formFields = schema.elements.filter(x => INPUT_TYPES.includes(x.type) && x.id !== el.id);
+    h += `<hr><div class="st-group-label mb-2">Advanced appearance & placement</div>
+      <div class="row g-2 mb-2">
+        <div class="col-6"><label class="form-label small mb-1">Label font</label><input class="form-control form-control-sm" type="number" min="6" max="24" data-v2p="label_font_size" value="${p.label_font_size}"></div>
+        <div class="col-6"><label class="form-label small mb-1">Value font</label><input class="form-control form-control-sm" type="number" min="6" max="24" data-v2p="value_font_size" value="${p.value_font_size}"></div>
+        <div class="col-6"><label class="form-label small mb-1">Field height</label><input class="form-control form-control-sm" type="number" min="20" max="300" data-v2p="height" value="${p.height}"></div>
+        <div class="col-6"><label class="form-label small mb-1">Padding</label><input class="form-control form-control-sm" type="number" min="0" max="24" data-v2p="padding" value="${p.padding}"></div>
+        <div class="col-6"><label class="form-label small mb-1">Background</label><input class="form-control form-control-color w-100" type="color" data-v2p="background" value="${p.background}"></div>
+        <div class="col-6"><label class="form-label small mb-1">Border</label><input class="form-control form-control-color w-100" type="color" data-v2p="border_color" value="${p.border_color}"></div>
+      </div>
+      <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="freePlace" ${cv.enabled?"checked":""}> Free position with snap-to-grid</label>
+      ${cv.enabled ? `<div class="row g-2 mb-2">
+        <div class="col-6"><label class="small">X</label><input class="form-control form-control-sm" type="number" data-v2c="x" value="${cv.x}"></div>
+        <div class="col-6"><label class="small">Y</label><input class="form-control form-control-sm" type="number" data-v2c="y" value="${cv.y}"></div>
+        <div class="col-6"><label class="small">Width</label><input class="form-control form-control-sm" type="number" data-v2c="w" value="${cv.w}"></div>
+        <div class="col-6"><label class="small">Height</label><input class="form-control form-control-sm" type="number" data-v2c="h" value="${cv.h}"></div>
+      </div><div class="small text-muted mb-3">Drag this field anywhere; it snaps to ${FORM_GRID}px.</div>` : ""}
+      ${INPUT_TYPES.includes(el.type) ? `<div class="st-group-label mb-2">Conditional state</div>
+        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="stateRuleOn" ${sr?"checked":""}> Apply a condition to this field</label>
+        ${sr ? `<select class="form-select form-select-sm mb-1" id="stateKind">
+          ${[["readonly","Grey / read-only"],["completed","Already filled"],["disabled","Not applicable"],["hidden","Hidden"]].map(([k,v])=>`<option value="${k}" ${sr.state===k?"selected":""}>${v}</option>`).join("")}
+        </select>
+        <select class="form-select form-select-sm mb-1" id="stateField"><option value="">When field…</option>${formFields.map(x=>`<option value="${esc(x.key)}" ${(sr.when?.rules?.[0]?.field||"")===x.key?"selected":""}>${esc(x.label)}</option>`).join("")}</select>
+        <select class="form-select form-select-sm mb-1" id="stateOp">${Object.entries(STATE_OPS).map(([k,v])=>`<option value="${k}" ${(sr.when?.rules?.[0]?.op||"eq")===k?"selected":""}>${esc(v)}</option>`).join("")}</select>
+        <input class="form-control form-control-sm mb-1" id="stateValue" value="${esc(sr.when?.rules?.[0]?.value||"")}" placeholder="Value">
+        <input class="form-control form-control-sm mb-1" id="stateMessage" value="${esc(sr.message||"")}" placeholder="Message, e.g. Already filled">` : ""}` : ""}`;
     inspector.innerHTML = h;
     bindInspector(el);
+    inspector.querySelectorAll("[data-v2p]").forEach(x=>x.onchange=()=>change(()=>el.presentation[x.dataset.v2p]=x.type==="number"?+x.value:x.value));
+    inspector.querySelectorAll("[data-v2c]").forEach(x=>x.onchange=()=>change(()=>el.canvas[x.dataset.v2c]=+x.value));
+    const fp=inspector.querySelector("#freePlace"); if(fp) fp.onchange=()=>change(()=>el.canvas.enabled=fp.checked);
+    const on=inspector.querySelector("#stateRuleOn"); if(on) on.onchange=()=>change(()=>{ el.state_rules = on.checked ? [{state:"readonly",completed_mode:"show_values",message:"",when:{logic:"and",rules:[{type:"rule",field:"",op:"eq",compare:"value",field2:"",value:"",value2:""}]}}] : []; });
+    ["stateKind","stateField","stateOp","stateValue","stateMessage"].forEach(id=>{ const x=inspector.querySelector("#"+id); if(!x)return; x.onchange=()=>change(()=>{ const r=el.state_rules[0]; if(!r)return; if(id==="stateKind")r.state=x.value; if(id==="stateMessage")r.message=x.value; if(id==="stateField")r.when.rules[0].field=x.value; if(id==="stateOp")r.when.rules[0].op=x.value; if(id==="stateValue")r.when.rules[0].value=x.value; }); });
   }
 
   function setPath(obj, path, val){ const p = path.split("."); let o = obj; for (let i = 0; i < p.length - 1; i++) o = o[p[i]] = o[p[i]] || {}; o[p[p.length - 1]] = val; }

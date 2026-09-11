@@ -28,6 +28,8 @@ from datetime import date, datetime
 
 from django.conf import settings
 from django.utils import timezone
+
+from .form_logic_esign import clean_v2_element_metadata
 from PIL import Image
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -151,6 +153,7 @@ def _clean_element(el):
     if width not in WIDTHS:
         width = min(WIDTHS, key=lambda w: abs(w - width))
     out = {"id": eid, "type": t, "width": width}
+    out.update(clean_v2_element_metadata(el))
 
     if t in INPUT_TYPES:
         label = _s(el.get("label"), 200) or "Untitled field"
@@ -529,7 +532,8 @@ class _Painter:
         if t == "image":
             return float(el["height"]) if el.get("src") else 0.0
         if t == "signature":
-            return label_h + 50.0 + (18.0 if el.get("show_date") else 4.0)
+            custom = float((el.get("presentation") or {}).get("height") or 50.0)
+            return label_h + max(20.0, min(180.0, custom)) + (18.0 if el.get("show_date") else 4.0)
         if t == "textarea":
             text = display_value(el, self.values.get(el["key"]))
             lines = el.get("_lines") or (self._wrap(text, self.regular, 9.5, w - 12) if text and not self.blank else [])
@@ -651,7 +655,11 @@ class _Painter:
                 return put([piece], [h], h)          # nothing better is possible
 
         row, span = [], 0
-        for el in self._split_tall(self.schema.get("elements") or []):
+        normal_elements = [
+            el for el in (self.schema.get("elements") or [])
+            if not (el.get("canvas") or {}).get("enabled")
+        ]
+        for el in self._split_tall(normal_elements):
             if span + el["width"] > 12 and row:
                 place(row)
                 row, span = [], 0
@@ -659,6 +667,23 @@ class _Painter:
             span += el["width"]
         if row:
             place(row)
+
+        # Free-position fields use a fixed 794x1123 designer canvas. Convert
+        # that coordinate system to the actual A4 PDF page. Mobile filling still
+        # follows logical element order; only the PDF/designer use x/y.
+        designer_w, designer_h = 794.0, 1123.0
+        for el in self.schema.get("elements") or []:
+            cv = el.get("canvas") or {}
+            if not cv.get("enabled"):
+                continue
+            page_no = max(1, int(cv.get("page") or 1))
+            while len(pages) < page_no:
+                pages.append([])
+            x = float(cv.get("x") or 0) / designer_w * PAGE_W
+            y_top = PAGE_H - (float(cv.get("y") or 0) / designer_h * PAGE_H)
+            w = max(12.0, float(cv.get("w") or 240) / designer_w * PAGE_W)
+            h = max(12.0, float(cv.get("h") or 40) / designer_h * PAGE_H)
+            pages[page_no - 1].append((el, x, y_top, w, h))
         return pages
 
     def _header_h(self, first):
@@ -772,17 +797,21 @@ class _Painter:
 
     def _label(self, c, el, x, y_top, w):
         label = el.get("label") or ""
-        c.setFont(self.bold, 8)
-        c.setFillColor(self.label_color)
+        p = el.get("presentation") or {}
+        size = float(p.get("label_font_size") or 8)
+        c.setFont(self.bold, size)
+        c.setFillColor(_color(p.get("label_color"), self.theme.get("label_color") or "#334155"))
         text = label + (" *" if el.get("required") and self.blank else "")
-        c.drawString(x, y_top - 9, simpleSplit(text, self.bold, 8, w)[0] if text else "")
+        c.drawString(x, y_top - size - 1, simpleSplit(text, self.bold, size, w)[0] if text else "")
 
-    def _field_box(self, c, x, y, w, h):
-        c.setFillColor(colors.HexColor("#F8FAFC"))
-        c.setStrokeColor(colors.HexColor("#CBD5E1"))
-        c.setLineWidth(0.6)
-        if self.theme.get("rounded", True):
-            c.roundRect(x, y, w, h, 3, stroke=1, fill=1)
+    def _field_box(self, c, x, y, w, h, el=None):
+        p = (el or {}).get("presentation") or {}
+        c.setFillColor(_color(p.get("background"), "#F8FAFC"))
+        c.setStrokeColor(_color(p.get("border_color"), "#CBD5E1"))
+        c.setLineWidth(float(p.get("border_width") or 0.6))
+        radius = float(p.get("radius") or 3)
+        if self.theme.get("rounded", True) or radius:
+            c.roundRect(x, y, w, h, radius, stroke=1, fill=1)
         else:
             c.rect(x, y, w, h, stroke=1, fill=1)
 
@@ -846,7 +875,10 @@ class _Painter:
                 heading = el["label"] + (f" — {role}" if role and role.lower() != el["label"].lower() else "")
                 self._label(c, {"label": heading}, x, y_top, w)
                 box_top = y_top - 13
-                sig_h = 50.0
+                if (el.get("canvas") or {}).get("enabled"):
+                    sig_h = max(20.0, h - 13.0 - (18.0 if el.get("show_date") else 4.0))
+                else:
+                    sig_h = max(20.0, min(180.0, float((el.get("presentation") or {}).get("height") or 50.0)))
                 c.setFillColor(_tint(self.accent, 0.94))
                 c.setStrokeColor(_tint(self.accent, 0.45))
                 c.setDash(3, 2)
@@ -910,14 +942,24 @@ class _Painter:
                 return None
 
             box_h = h - 13 - self._help_h(el, w)
-            self._field_box(c, x, body_top - box_h, w, box_h)
+            self._field_box(c, x, body_top - box_h, w, box_h, el)
             if not self.blank:
                 text = display_value(el, value)
-                c.setFillColor(colors.HexColor("#0F172A"))
-                c.setFont(self.regular, 9.5)
-                lines = el.get("_lines") or self._wrap(text, self.regular, 9.5, w - 12)
-                for i, line in enumerate(lines):
-                    c.drawString(x + 6, body_top - 14.5 - i * 12.5, line)
+                p = el.get("presentation") or {}
+                size = float(p.get("value_font_size") or 9.5)
+                pad = float(p.get("padding") or 6)
+                c.saveState()
+                clip = c.beginPath()
+                clip.rect(x, body_top - box_h, w, box_h)
+                c.clipPath(clip, stroke=0, fill=0)
+                c.setFillColor(_color(p.get("text_color"), "#0F172A"))
+                c.setFont(self.regular, size)
+                lines = el.get("_lines") or self._wrap(text, self.regular, size, max(10, w - pad * 2))
+                line_h = size * 1.2
+                max_lines = max(1, int(max(1, box_h - pad * 2) // max(line_h, 1)))
+                for i, line in enumerate(lines[:max_lines]):
+                    c.drawString(x + pad, body_top - pad - size - i * line_h, line)
+                c.restoreState()
             elif el.get("help"):
                 c.setFont(self.regular, 7)
                 c.setFillColor(colors.HexColor("#94A3B8"))

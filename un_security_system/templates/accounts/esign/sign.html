@@ -131,8 +131,16 @@
       {% for s in saved_signatures %}
         <div class="es-card p-2 mb-2 d-flex align-items-center gap-2">
           <img src="{{ s.url }}" alt="{{ s.label }}" style="height:34px;max-width:150px;object-fit:contain">
+          {% if s.is_default %}
+            <span class="badge bg-success">Default</span>
+          {% endif %}
           <button class="btn btn-sm btn-outline-primary ms-auto es-use-saved"
-                  data-id="{{ s.id }}" data-sig="{{ s.url }}" data-init="{{ s.initials }}">Use</button>
+                  data-id="{{ s.id }}"
+                  data-sig="{{ s.url }}"
+                  data-init="{{ s.initials }}"
+                  data-default="{% if s.is_default %}1{% else %}0{% endif %}">
+            {% if s.is_default %}Default{% else %}Use{% endif %}
+          </button>
         </div>
       {% endfor %}
     </div>
@@ -613,6 +621,22 @@ document.querySelectorAll('.es-use-saved').forEach(b => b.onclick = () => {
   reapplyAll();
   nextField();
 });
+
+const esDefaultSaved = document.querySelector(
+  '.es-use-saved[data-default="1"]'
+);
+
+if (esDefaultSaved) {
+  setAdopted(
+    esDefaultSaved.dataset.sig,
+    esDefaultSaved.dataset.init || esDefaultSaved.dataset.sig,
+    { kind:'saved', save:false, isDefault:true },
+    esDefaultSaved.dataset.id
+  );
+  showAdopted();
+  const adoptLabel = document.getElementById('esAdoptLabel');
+  if (adoptLabel) adoptLabel.textContent = 'Default signature ready';
+}
 
 function openFinish() {
   const pending = pendingFields();

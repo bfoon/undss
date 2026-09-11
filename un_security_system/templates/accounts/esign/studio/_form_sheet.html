@@ -34,7 +34,7 @@
       {% if el.show_date %}<div class="small text-muted mt-1">Date: ____________</div>{% endif %}
     {% else %}
       {% with val=values|get_item:el.key err=errors|get_item:el.key fb=el.fill_by|default:"submitter" %}
-      {% if scope and fb == scope %}
+      {% if scope and fb == scope and el.runtime_state.state == 'active' %}
         <label class="fs-label" for="f_{{ el.key }}">{{ el.label }}{% if el.required %} <span class="text-danger">*</span>{% endif %}</label>
         {% if el.type == 'textarea' %}
           <textarea class="form-control {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" rows="{{ el.rows }}" placeholder="{{ el.placeholder }}" {% if el.required %}required{% endif %}>{{ val }}</textarea>
@@ -77,7 +77,11 @@
         {% endif %}
         {% if err %}<div class="invalid-feedback d-block">{{ err }}</div>{% elif el.help %}<div class="form-text">{{ el.help }}</div>{% endif %}
       {% else %}
-        <div class="fs-label">{{ el.label }}</div>
+        <div class="p-2 rounded border bg-light" style="opacity:.82">
+        <div class="fs-label">{{ el.label }}
+          {% if el.runtime_state.state == 'completed' %}<span class="badge bg-secondary ms-1">Already filled</span>{% endif %}
+          {% if el.runtime_state.state == 'disabled' %}<span class="badge bg-light text-secondary border ms-1">Not applicable</span>{% endif %}
+        </div>
         {% if el.type == 'table' %}
           {% if val %}
           <div class="table-responsive"><table class="table table-sm table-bordered fs-table mb-0">
@@ -87,8 +91,17 @@
           </table></div>
           {% else %}<div class="fs-value text-muted">—</div>{% endif %}
         {% else %}
-          <div class="fs-value">{% with shown=el|form_display:val %}{% if shown %}{{ shown|linebreaksbr }}{% elif fb != 'submitter' %}<span class="text-muted fst-italic">Completed later in the workflow</span>{% else %}<span class="text-muted">—</span>{% endif %}{% endwith %}</div>
+          <div class="fs-value">
+            {% if el.runtime_state.state == 'disabled' %}
+              <span class="text-muted fst-italic">{{ el.runtime_state.message|default:"Not applicable" }}</span>
+            {% elif el.runtime_state.state == 'completed' and el.runtime_state.completed_mode == 'message' %}
+              <span class="text-muted fst-italic">{{ el.runtime_state.message|default:"Already filled" }}</span>
+            {% else %}
+              {% with shown=el|form_display:val %}{% if shown %}{{ shown|linebreaksbr }}{% elif fb != 'submitter' %}<span class="text-muted fst-italic">{{ el.runtime_state.message|default:"Completed later in the workflow" }}</span>{% else %}<span class="text-muted">—</span>{% endif %}{% endwith %}
+            {% endif %}
+          </div>
         {% endif %}
+        </div>
       {% endif %}
       {% endwith %}
     {% endif %}

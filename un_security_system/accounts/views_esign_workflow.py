@@ -43,6 +43,9 @@ from .studio_common_esign import (
 )
 from .studio_library_esign import FLOW_TEMPLATES, flow_template
 
+from .workflow_portability_esign import FlowPackageError, dumps_workflow_package, loads_package
+from .form_logic_esign import annotate_states
+
 logger = logging.getLogger(__name__)
 
 
@@ -179,6 +182,8 @@ def esign_workflow_designer(request, pk):
                            "graph": E.clean_graph(t["graph"])} for t in FLOW_TEMPLATES],
             "save_url": reverse("accounts:esign_workflow_save", args=[wf.pk]),
             "launch_url": reverse("accounts:esign_workflow_launch", args=[wf.pk]),
+            "export_url": reverse("accounts:esign_workflow_export", args=[wf.pk]),
+            "import_url": reverse("accounts:esign_workflow_import"),
         }),
     ))
 
@@ -247,6 +252,83 @@ def esign_workflow_delete(request, pk):
         wf.delete()
         messages.success(request, "Flow deleted.")
     return redirect(reverse("accounts:esign_workflows") + "?tab=flows")
+
+
+
+@login_required
+@require_GET
+def esign_workflow_export(request, pk):
+    agency, bounce = studio_gate(request)
+    if bounce:
+        return bounce
+    wf = get_object_or_404(DocumentWorkflow.objects.select_related("form"), pk=pk)
+    if not can_use_template(request.user, wf):
+        raise Http404()
+    raw = dumps_workflow_package(
+        wf, include_form=request.GET.get("form", "1") != "0"
+    )
+    resp = HttpResponse(raw, content_type="application/json; charset=utf-8")
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in wf.name)[:70] or "flow"
+    resp["Content-Disposition"] = f'attachment; filename="{safe}.unpassflow"'
+    return resp
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def esign_workflow_import(request):
+    agency, bounce = studio_gate(request)
+    if bounce:
+        return bounce
+    if request.method == "GET":
+        return render(
+            request,
+            "accounts/esign/studio/import_flow.html",
+            studio_context(request, "flows"),
+        )
+
+    upload = request.FILES.get("package")
+    if not upload:
+        messages.error(request, "Choose a .unpassflow file.")
+        return redirect("accounts:esign_workflow_import")
+    try:
+        package = loads_package(upload.read())
+    except FlowPackageError as exc:
+        messages.error(request, str(exc))
+        return redirect("accounts:esign_workflow_import")
+
+    imported_form = None
+    if package.get("form"):
+        f = package["form"]
+        imported_form = FormTemplate.objects.create(
+            agency=agency,
+            created_by=request.user,
+            office_id=getattr(request.user, "country_office_id", None),
+            name=f["name"],
+            description=f["description"],
+            category=f["category"],
+            schema=f["schema"],
+            reference_prefix=f["reference_prefix"],
+            submit_message=f["submit_message"],
+            share_scope="private",
+            is_published=False,
+        )
+
+    wf = DocumentWorkflow.objects.create(
+        agency=agency,
+        created_by=request.user,
+        office_id=getattr(request.user, "country_office_id", None),
+        name=package["name"],
+        description=package["description"],
+        graph=package["graph"],
+        form=imported_form,
+        share_scope="private",
+        monitor_runs=package["monitor_runs"],
+    )
+    messages.success(
+        request,
+        "Flow imported. Review people, roles and conditions before using it.",
+    )
+    return redirect("accounts:esign_workflow_designer", pk=wf.pk)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -542,7 +624,9 @@ def esign_wf_task(request, token):
         **asset_urls(),
         "base_template": base_template,
         "task": task, "run": run, "node": node, "cfg": cfg,
-        "sub": sub, "schema": sub.schema if sub else None, "values": values, "errors": errors, "scope": scope,
+        "sub": sub,
+        "schema": annotate_states(sub.schema, values, scope=scope) if sub else None,
+        "values": values, "errors": errors, "scope": scope,
         "summary": summary_rows(sub.schema, sub.values) if sub else [],
         "actions": E.ACTIONS.get(task.kind, ()),
         "allow_return": cfg.get("allow_return", True),
