@@ -1,0 +1,148 @@
+"""Optional v2 form-state, presentation and absolute-layout helpers for UNPASS."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Mapping
+
+from .esign_condition_engine import clean_tree, evaluate_tree
+
+DISPLAY_STATES = ("active", "readonly", "completed", "disabled", "hidden")
+HEX_DEFAULTS = {
+    "background": "#FFFFFF",
+    "border_color": "#CBD5E1",
+    "text_color": "#111827",
+    "label_color": "#334155",
+}
+
+
+def _num(value, lo, hi, default):
+    try:
+        return max(lo, min(hi, float(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int(value, lo, hi, default):
+    try:
+        return max(lo, min(hi, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _hex(value, default):
+    value = str(value or "").strip()
+    if len(value) == 7 and value.startswith("#"):
+        try:
+            int(value[1:], 16)
+            return value.upper()
+        except ValueError:
+            pass
+    return default
+
+
+def clean_presentation(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    raw = raw if isinstance(raw, Mapping) else {}
+    return {
+        "label_font_size": _int(raw.get("label_font_size"), 6, 24, 9),
+        "value_font_size": _int(raw.get("value_font_size"), 6, 24, 10),
+        "height": _int(raw.get("height"), 20, 300, 38),
+        "padding": _int(raw.get("padding"), 0, 24, 6),
+        "background": _hex(raw.get("background"), HEX_DEFAULTS["background"]),
+        "border_color": _hex(raw.get("border_color"), HEX_DEFAULTS["border_color"]),
+        "text_color": _hex(raw.get("text_color"), HEX_DEFAULTS["text_color"]),
+        "label_color": _hex(raw.get("label_color"), HEX_DEFAULTS["label_color"]),
+        "border_width": _num(raw.get("border_width"), 0, 5, 1),
+        "radius": _int(raw.get("radius"), 0, 30, 4),
+    }
+
+
+def clean_canvas(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    raw = raw if isinstance(raw, Mapping) else {}
+    return {
+        "enabled": bool(raw.get("enabled")),
+        "page": _int(raw.get("page"), 1, 50, 1),
+        "x": _num(raw.get("x"), 0, 10000, 0),
+        "y": _num(raw.get("y"), 0, 10000, 0),
+        "w": _num(raw.get("w"), 20, 10000, 240),
+        "h": _num(raw.get("h"), 16, 10000, 40),
+        "snap": _int(raw.get("snap"), 2, 100, 20),
+        "z": _int(raw.get("z"), 0, 999, 0),
+    }
+
+
+def clean_state_rule(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    raw = raw if isinstance(raw, Mapping) else {}
+    state = raw.get("state") if raw.get("state") in DISPLAY_STATES else "active"
+    completed_mode = raw.get("completed_mode")
+    if completed_mode not in ("show_values", "message", "collapse"):
+        completed_mode = "show_values"
+    return {
+        "state": state,
+        "when": clean_tree(raw.get("when") or {"logic": "and", "rules": []}),
+        "message": str(raw.get("message") or "")[:160],
+        "completed_mode": completed_mode,
+    }
+
+
+def clean_v2_element_metadata(element: Mapping[str, Any]) -> Dict[str, Any]:
+    return {
+        "presentation": clean_presentation(element.get("presentation")),
+        "canvas": clean_canvas(element.get("canvas")),
+        "state_rules": [
+            clean_state_rule(x) for x in (element.get("state_rules") or [])[:10]
+            if isinstance(x, Mapping)
+        ],
+    }
+
+
+def is_filled(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, set, dict)):
+        return bool(value)
+    return True
+
+
+def element_state(
+    element: Mapping[str, Any],
+    values: Mapping[str, Any],
+    *,
+    scope: str = "submitter",
+) -> Dict[str, Any]:
+    """
+    Decide the state shown to the current filler.
+
+    Rule order matters: first matching state rule wins.
+    If no rule matches, a value filled by a previous workflow step is shown as
+    completed/read-only to later steps.
+    """
+    for raw_rule in element.get("state_rules") or []:
+        rule = clean_state_rule(raw_rule)
+        if evaluate_tree(values, rule["when"]):
+            return rule
+
+    fill_by = str(element.get("fill_by") or "submitter")
+    key = element.get("key")
+    value = values.get(key) if key else None
+    if key and is_filled(value) and fill_by != scope:
+        return {
+            "state": "completed",
+            "when": {"logic": "and", "rules": []},
+            "message": "Already filled",
+            "completed_mode": "show_values",
+        }
+    if fill_by != scope and key:
+        return {
+            "state": "readonly",
+            "when": {"logic": "and", "rules": []},
+            "message": "Completed later in the workflow",
+            "completed_mode": "show_values",
+        }
+    return {
+        "state": "active",
+        "when": {"logic": "and", "rules": []},
+        "message": "",
+        "completed_mode": "show_values",
+    }
