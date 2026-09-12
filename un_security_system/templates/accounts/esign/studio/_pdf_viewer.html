@@ -41,7 +41,7 @@
     constructor(kind, detail, cause){ super(detail || kind); this.kind = kind; this.cause = cause; }
   }
   const REASONS = {
-    library:  "The PDF viewer library (pdf.js) didn't load — a network filter or security policy may be blocking it.",
+    library:  "The PDF viewer library (pdf.js) didn't load. It is usually missing static files: run collectstatic and restart. A network filter or security policy can also block it.",
     worker:   "The PDF viewer couldn't start.",
     fetch:    "The request for the document was blocked or interrupted.",
     status:   "The server couldn't provide the document",
@@ -95,7 +95,15 @@
   }
 
   async function open(src){
-    if (!window.pdfjsLib) throw new ViewerError("library", "pdfjsLib is not defined ({{ pdfjs_url|escapejs }})");
+    if (!window.pdfjsLib){
+      // Say whether the file is missing (404 — usually collectstatic) or merely blocked.
+      let detail = "pdfjsLib is not defined ({{ pdfjs_url|escapejs }})";
+      try {
+        const probe = await fetch("{{ pdfjs_url|escapejs }}", {method: "GET", cache: "no-store"});
+        detail += probe.ok ? " — the file loaded but did not run" : ` — the server returned ${probe.status} for it`;
+      } catch (e){ detail += " — the request for it failed"; }
+      throw new ViewerError("library", detail);
+    }
     const bytes = await getBytes(src);
     try {
       // pdf.js may transfer the buffer to its worker, so give it a copy.
