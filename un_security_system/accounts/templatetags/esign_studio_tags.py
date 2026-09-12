@@ -88,6 +88,16 @@ def blank_rows(rows, minimum):
 
 
 @register.simple_tag
+def form_logic_payload(schema, values=None, scope="submitter", extras=None, hide_keys=None):
+    """What the browser needs to keep conditional states up to date as people type."""
+    from ..form_logic_esign import logic_payload
+
+    if not isinstance(schema, dict):
+        return {"elements": [], "values": {}, "scope": scope, "extras": {}}
+    return logic_payload(schema, values or {}, scope=scope, extras=extras or {}, hide_keys=hide_keys or ())
+
+
+@register.simple_tag
 def esign_max_post_fields():
     """Django's DATA_UPLOAD_MAX_NUMBER_FIELDS, or 0 when unlimited — fill pages stay under it."""
     from django.conf import settings

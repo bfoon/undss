@@ -1,0 +1,415 @@
+{% comment %}
+  accounts/templates/accounts/esign/studio/_rules.html — StudioRules
+
+  The browser half of accounts/esign_condition_engine.py, using the same tree
+  shape ({type, logic, negate, rules} / {type:"rule", field, op, compare,
+  field2, value, value2}). The evaluator between the CORE markers must agree
+  with the Python one; both are checked against the same test vectors.
+
+    StudioRules.evaluate(values, tree)              -> bool
+    StudioRules.derive(values, elements, extras)    adds @sum:, @days:, … keys
+    StudioRules.catalog(elements, opts)             -> [{field, label, type, group, options}]
+    StudioRules.describe(tree, catalog)             -> "Amount is greater than 5000 and …"
+    StudioRules.states(elements, values, scope)     -> {id: {state, message, completed_mode}}
+    new StudioRules.Builder(host, {catalog, value, onChange, depth})
+{% endcomment %}
+<script>
+(function(){
+  if (window.StudioRules) return;
+
+  /* RULES-CORE-START */
+  const OPS = {
+    eq: "is", neq: "is not", contains: "contains", not_contains: "does not contain",
+    starts_with: "starts with", ends_with: "ends with", gt: "is greater than", gte: "is at least",
+    lt: "is less than", lte: "is at most", between: "is between", empty: "is empty",
+    not_empty: "is filled in", before: "is before", after: "is after", on_or_before: "is on or before",
+    on_or_after: "is on or after", truthy: "is true / yes", falsy: "is false / no",
+    in: "is one of", not_in: "is not one of", not_between: "is not between",
+    includes_any: "includes any of", includes_all: "includes all of",
+    in_past: "is in the past", in_future: "is in the future",
+    within_days: "is within the next … days", beyond_days: "is more than … days away",
+  };
+  const UNARY = new Set(["empty", "not_empty", "truthy", "falsy", "in_past", "in_future"]);
+  const LIST_OPS = new Set(["in", "not_in", "includes_any", "includes_all"]);
+  const RANGE_OPS = new Set(["between", "not_between"]);
+  const DAY_OPS = new Set(["within_days", "beyond_days"]);
+  const FIELD_COMPARABLE = new Set(["eq", "neq", "gt", "gte", "lt", "lte", "before", "after", "on_or_before", "on_or_after"]);
+  const TRUTHY = new Set(["1", "true", "yes", "y", "on", "approved"]);
+
+  function num(v){
+    if (v === null || v === undefined || v === "") return null;
+    if (typeof v === "number") return isFinite(v) ? v : null;
+    if (typeof v === "boolean") return v ? 1 : 0;
+    const s = String(v).replace(/,/g, "").trim();
+    if (s === "" || !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+    const n = Number(s); return isFinite(n) ? n : null;
+  }
+  /** A date as a whole-day number, or null. Accepts YYYY-MM-DD, as the server does. */
+  function day(v){
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim().slice(0, 10);
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s); if (!m) return null;
+    const y = +m[1], mo = +m[2], d = +m[3], t = Date.UTC(y, mo - 1, d), dt = new Date(t);
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+    return Math.round(t / 86400000);
+  }
+  function text(v){
+    if (Array.isArray(v)) return v.map(x => String(x)).join(", ");
+    return v === null || v === undefined ? "" : String(v);
+  }
+  function asList(v){
+    const items = Array.isArray(v) ? v : (v === null || v === undefined || v === "" ? [] : [v]);
+    return items.map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  }
+  const splitList = v => String(v === null || v === undefined ? "" : v).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  function asBool(v){
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return v !== 0;
+    if (Array.isArray(v)) return v.length > 0;
+    if (v && typeof v === "object") return Object.keys(v).length > 0;
+    return TRUTHY.has(String(v === null || v === undefined ? "" : v).trim().toLowerCase());
+  }
+  function today(values){
+    const pinned = day((values || {})["@today"]);
+    return pinned !== null ? pinned : day(new Date().toISOString().slice(0, 10));
+  }
+
+  function evalRule(values, rule){
+    const op = rule.op;
+    const left = values[rule.field];
+    const right = rule.compare === "field" ? values[rule.field2] : rule.value;
+    const leftText = text(left).trim(), rightText = text(right).trim();
+    const empty = (Array.isArray(left) || (left && typeof left === "object")) ? !asBool(left) : leftText === "";
+
+    if (op === "empty") return empty;
+    if (op === "not_empty") return !empty;
+    if (op === "truthy") return asBool(left);
+    if (op === "falsy") return !asBool(left);
+
+    if (LIST_OPS.has(op)){
+      const wanted = splitList(right);
+      if (!wanted.length) return false;
+      if (op === "in" || op === "not_in"){
+        const hit = wanted.includes(leftText.trim().toLowerCase());
+        return op === "in" ? hit : !hit;
+      }
+      const chosen = new Set(asList(left));
+      return op === "includes_any" ? wanted.some(w => chosen.has(w)) : wanted.every(w => chosen.has(w));
+    }
+
+    if (op === "in_past" || op === "in_future" || DAY_OPS.has(op)){
+      const a = day(left); if (a === null) return false;
+      const t = today(values);
+      if (op === "in_past") return a < t;
+      if (op === "in_future") return a > t;
+      const span = num(right); if (span === null) return false;
+      const edge = t + Math.trunc(span);
+      return op === "within_days" ? (t <= a && a <= edge) : a > edge;
+    }
+
+    if (["gt", "gte", "lt", "lte"].includes(op) || RANGE_OPS.has(op)){
+      const a = num(left), b = num(right);
+      if (RANGE_OPS.has(op)){
+        const c = num(rule.value2);
+        if (a === null || b === null || c === null) return false;
+        const lo = Math.min(b, c), hi = Math.max(b, c), inside = lo <= a && a <= hi;
+        return op === "between" ? inside : !inside;
+      }
+      if (a === null || b === null) return false;
+      return ({gt: a > b, gte: a >= b, lt: a < b, lte: a <= b})[op];
+    }
+
+    if (["before", "after", "on_or_before", "on_or_after"].includes(op)){
+      const a = day(left), b = day(right);
+      if (a === null || b === null) return false;
+      return ({before: a < b, after: a > b, on_or_before: a <= b, on_or_after: a >= b})[op];
+    }
+
+    const a = leftText.toLowerCase(), b = rightText.toLowerCase();
+    if (op === "contains") return !!b && a.includes(b);
+    if (op === "not_contains") return !b || !a.includes(b);
+    if (op === "starts_with") return !!b && a.startsWith(b);
+    if (op === "ends_with") return !!b && a.endsWith(b);
+    if (op === "neq"){
+      const an = num(left), bn = num(right);
+      return (an !== null && bn !== null) ? an !== bn : a !== b;
+    }
+    const an = num(left), bn = num(right);
+    return (an !== null && bn !== null) ? an === bn : a === b;
+  }
+
+  function evaluate(values, tree){
+    tree = tree || {};
+    const results = (tree.rules || []).map(item =>
+      (item.type === "group" || "rules" in item) ? evaluate(values, item) : evalRule(values, item));
+    let result;
+    if (!results.length) result = false;              // an empty group is false, as on the server
+    else result = tree.logic === "or" ? results.some(Boolean) : results.every(Boolean);
+    return tree.negate ? !result : result;
+  }
+
+  /** values plus the computed @… entries, matching derive_values() on the server. */
+  function derive(values, elements, extras){
+    const out = Object.assign({}, values || {});
+    extras = extras || {};
+    if (extras.today) out["@today"] = extras.today;
+    for (const [group, prefix] of [["who", "@who:"], ["run", "@run:"]]){
+      for (const [k, v] of Object.entries(extras[group] || {})) if (v !== null && v !== "") out[prefix + k] = v;
+    }
+    for (const [nodeId, comment] of Object.entries(extras.steps || {})) out[`@step:${nodeId}:comment`] = comment;
+    const dates = [];
+    for (const el of elements || []){
+      const key = el.key; if (!key) continue;
+      const v = out[key];
+      if (el.type === "table"){
+        const rows = Array.isArray(v) ? v.filter(r => r && typeof r === "object") : [];
+        out[`@rows:${key}`] = rows.length;
+        for (const col of el.columns || []){
+          if (col.kind !== "number") continue;
+          const nums = rows.map(r => num(r[col.key])).filter(n => n !== null);
+          out[`@sum:${key}:${col.key}`] = nums.reduce((s, n) => s + n, 0);
+          if (nums.length){ out[`@min:${key}:${col.key}`] = Math.min(...nums); out[`@max:${key}:${col.key}`] = Math.max(...nums); }
+        }
+      } else if (el.type === "checkboxes"){
+        out[`@count:${key}`] = asList(v).length;
+      } else if (el.type === "date"){
+        dates.push(key);
+      }
+    }
+    for (const a of dates) for (const b of dates){
+      if (a === b) continue;
+      const s = day(out[a]), e = day(out[b]);
+      if (s !== null && e !== null) out[`@days:${a}:${b}`] = e - s;
+    }
+    return out;
+  }
+
+  const isFilled = v => Array.isArray(v) ? v.length > 0 : (v !== null && v !== undefined && String(v).trim() !== "");
+
+  /**
+   * The state of every element for this filler, matching element_state() and
+   * annotate_states() on the server, plus section inheritance: a heading's
+   * rule covers the heading and everything after it up to the next heading.
+   */
+  function states(elements, values, scope, extras){
+    const vals = derive(values, elements, extras);
+    const out = {}; let section = null;
+    for (const el of elements || []){
+      if (el.type === "heading") section = (el.state_rules || []).length ? el : null;
+      let st = null;
+      for (const rule of el.state_rules || []){
+        if (evaluate(vals, rule.when)){ st = {state: rule.state, message: rule.message || "", completed_mode: rule.completed_mode || "show_values", from: "own"}; break; }
+      }
+      if (!st && section && section !== el){
+        for (const rule of section.state_rules || []){
+          if (evaluate(vals, rule.when)){ st = {state: rule.state, message: rule.message || "", completed_mode: rule.completed_mode || "show_values", from: "section"}; break; }
+        }
+      }
+      if (!st){
+        const fillBy = String(el.fill_by || "submitter"), key = el.key;
+        if (key && isFilled(vals[key]) && fillBy !== scope) st = {state: "completed", message: "Already filled", completed_mode: "show_values", from: "auto"};
+        else if (key && fillBy !== scope) st = {state: "readonly", message: "Completed later in the workflow", completed_mode: "show_values", from: "auto"};
+        else st = {state: "active", message: "", completed_mode: "show_values", from: "auto"};
+      }
+      out[el.id] = st;
+    }
+    return out;
+  }
+  /* RULES-CORE-END */
+
+  const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  function catalog(elements, opts){
+    opts = opts || {};
+    const kinds = {number: "number", date: "date", checkboxes: "choices", yesno: "yesno"};
+    const items = [], dates = [];
+    for (const el of elements || []){
+      const key = el.key, label = el.label || el.key;
+      if (!key || ["heading", "paragraph", "divider", "spacer", "image", "signature"].includes(el.type)) continue;
+      if (el.type === "table"){
+        items.push({field: `@rows:${key}`, label: `${label} · number of rows`, type: "number", group: "Tables"});
+        for (const col of el.columns || []) if (col.kind === "number")
+          for (const [p, w] of [["@sum", "total"], ["@min", "smallest"], ["@max", "largest"]])
+            items.push({field: `${p}:${key}:${col.key}`, label: `${label} · ${w} ${col.label || col.key}`, type: "number", group: "Tables"});
+        continue;
+      }
+      const entry = {field: key, label, type: kinds[el.type] || "text", group: "Form answers"};
+      if (el.options && el.options.length) entry.options = el.options.slice();
+      if (el.type === "yesno") entry.options = ["yes", "no"];
+      items.push(entry);
+      if (el.type === "checkboxes") items.push({field: `@count:${key}`, label: `${label} · how many ticked`, type: "number", group: "Form answers"});
+      if (el.type === "date") dates.push([key, label]);
+    }
+    for (const [ak, al] of dates) for (const [bk, bl] of dates) if (ak !== bk)
+      items.push({field: `@days:${ak}:${bk}`, label: `Days from ${al} to ${bl}`, type: "number", group: "Dates"});
+    if (opts.workflow){
+      [["name", "name"], ["email", "email"], ["email_domain", "email domain"], ["job_title", "job title"], ["agency", "agency"], ["office", "country office"]]
+        .forEach(([k, l]) => items.push({field: `@who:${k}`, label: `Requester's ${l}`, type: "text", group: "Requester"}));
+      [["returns", "Times returned for changes"], ["days_open", "Days since the run started"], ["pages", "Pages in the document"]]
+        .forEach(([k, l]) => items.push({field: `@run:${k}`, label: l, type: "number", group: "This run"}));
+      (opts.nodes || []).forEach(n => items.push({field: `@step:${n.id}:comment`, label: `Comment at “${n.label}”`, type: "text", group: "Step comments"}));
+    }
+    return items;
+  }
+
+  function describe(tree, cat){
+    const name = f => ((cat || []).find(c => c.field === f) || {}).label || f;
+    function part(node){
+      if (node.type === "group" || "rules" in node){
+        const parts = (node.rules || []).map(part).filter(Boolean);
+        if (!parts.length) return "";
+        let t = parts.join(node.logic === "or" ? " or " : " and ");
+        if (parts.length > 1) t = `(${t})`;
+        return node.negate ? `not ${t}` : t;
+      }
+      const label = OPS[node.op] || node.op, left = name(node.field);
+      if (UNARY.has(node.op)) return `${left} ${label}`;
+      const right = node.compare === "field" ? name(node.field2) : node.value;
+      if (RANGE_OPS.has(node.op)) return `${left} ${label} ${right} and ${node.value2}`;
+      if (DAY_OPS.has(node.op)) return `${left} ${label.replace(" … days", "")} ${right} days`;
+      return `${left} ${label} ${right || "…"}`;
+    }
+    return part(tree || {});
+  }
+
+  // ─── visual builder ──────────────────────────────────────────────────────
+  const opsFor = type => Object.keys(OPS).filter(op => {
+    if (type === "number") return !["contains", "not_contains", "starts_with", "ends_with", "before", "after", "on_or_before", "on_or_after", "in_past", "in_future", "within_days", "beyond_days", "includes_any", "includes_all"].includes(op);
+    if (type === "date") return ["before", "after", "on_or_before", "on_or_after", "in_past", "in_future", "within_days", "beyond_days", "between", "not_between", "empty", "not_empty", "eq", "neq"].includes(op);
+    if (type === "choices") return ["includes_any", "includes_all", "contains", "not_contains", "empty", "not_empty", "eq", "neq"].includes(op);
+    if (type === "yesno") return ["truthy", "falsy", "empty", "not_empty", "eq", "neq"].includes(op);
+    return !["includes_any", "includes_all", "in_past", "in_future", "within_days", "beyond_days", "before", "after", "on_or_before", "on_or_after", "between", "not_between"].includes(op);
+  });
+  const defaultOp = type => ({number: "gt", date: "before", choices: "includes_any", yesno: "truthy"})[type] || "eq";
+  const blankRule = item => ({type: "rule", field: item ? item.field : "", op: item ? defaultOp(item.type) : "eq",
+                              compare: "value", field2: "", value: item && item.options && item.type !== "yesno" ? item.options[0] : "", value2: ""});
+
+  function Builder(host, opts){
+    this.host = host;
+    this.opts = Object.assign({depth: 3, emptyText: "No rules yet.", noCatalogText: "There is nothing to check yet."}, opts || {});
+    this.tree = JSON.parse(JSON.stringify(this.opts.value && this.opts.value.rules ? this.opts.value : {type: "group", logic: "and", negate: false, rules: []}));
+    host.classList.add("sr-builder");
+    this.render();
+  }
+  Builder.prototype.item = function(f){ return (this.opts.catalog || []).find(c => c.field === f); };
+  Builder.prototype.changed = function(rerender){ if (rerender !== false) this.render(); if (this.opts.onChange) this.opts.onChange(JSON.parse(JSON.stringify(this.tree))); };
+  Builder.prototype.at = function(path){ let n = this.tree; if (path === "") return n; for (const i of path.split(".").map(Number)) n = n.rules[i]; return n; };
+  Builder.prototype.parentOf = function(path){ const p = path.split("."), i = +p.pop(); return [this.at(p.join(".")), i]; };
+
+  Builder.prototype.sourceSelect = function(rule){
+    const groups = {};
+    (this.opts.catalog || []).forEach(c => (groups[c.group] = groups[c.group] || []).push(c));
+    let html = `<select class="form-select form-select-sm sr-src" aria-label="What to check">`;
+    if (!this.item(rule.field)) html += `<option value="${esc(rule.field)}" selected>${rule.field ? "Missing: " + esc(rule.field) : "Choose a question…"}</option>`;
+    for (const [g, list] of Object.entries(groups))
+      html += `<optgroup label="${esc(g)}">` + list.map(c => `<option value="${esc(c.field)}" ${c.field === rule.field ? "selected" : ""}>${esc(c.label)}</option>`).join("") + `</optgroup>`;
+    return html + `</select>`;
+  };
+  Builder.prototype.valueEditor = function(rule, item){
+    const op = rule.op, type = item ? item.type : "text";
+    if (UNARY.has(op)) return "";
+    if (DAY_OPS.has(op)) return `<div class="input-group input-group-sm sr-val"><input class="form-control" type="number" min="0" data-r="value" value="${esc(rule.value)}"><span class="input-group-text">days</span></div>`;
+    if (RANGE_OPS.has(op)) return `<div class="d-flex gap-1 align-items-center sr-val"><input class="form-control form-control-sm" type="${type === "date" ? "date" : "text"}" data-r="value" value="${esc(rule.value)}" placeholder="from"><span class="small text-muted">and</span><input class="form-control form-control-sm" type="${type === "date" ? "date" : "text"}" data-r="value2" value="${esc(rule.value2)}" placeholder="to"></div>`;
+    if (LIST_OPS.has(op)){
+      if (item && item.options && item.options.length){
+        const chosen = splitList(rule.value);
+        return `<div class="sr-val sr-chips">` + item.options.map(o => `<label class="sr-chip"><input type="checkbox" data-r="opt" value="${esc(o)}" ${chosen.includes(String(o).toLowerCase()) ? "checked" : ""}> ${esc(o)}</label>`).join("") + `</div>`;
+      }
+      return `<input class="form-control form-control-sm sr-val" data-r="value" value="${esc(rule.value)}" placeholder="Values, separated by commas">`;
+    }
+    const canField = FIELD_COMPARABLE.has(op) && (this.opts.catalog || []).some(c => c.field !== rule.field && c.type === type);
+    let editor;
+    if (rule.compare === "field"){
+      editor = `<select class="form-select form-select-sm" data-r="field2">` + (this.opts.catalog || []).filter(c => c.field !== rule.field && c.type === type)
+        .map(c => `<option value="${esc(c.field)}" ${c.field === rule.field2 ? "selected" : ""}>${esc(c.label)}</option>`).join("") + `</select>`;
+    } else if (item && item.options && item.options.length){
+      editor = `<select class="form-select form-select-sm" data-r="value">` + item.options.map(o => `<option ${String(rule.value).toLowerCase() === String(o).toLowerCase() ? "selected" : ""}>${esc(o)}</option>`).join("") + `</select>`;
+    } else {
+      editor = `<input class="form-control form-control-sm" type="${type === "date" ? "date" : "text"}" ${type === "number" ? 'inputmode="decimal"' : ""} data-r="value" value="${esc(rule.value)}" placeholder="${type === "number" ? "Number" : "Value"}">`;
+    }
+    const toggle = canField ? `<button type="button" class="btn btn-sm btn-outline-secondary sr-kind" title="${rule.compare === "field" ? "Compare with a typed value" : "Compare with another answer"}">${rule.compare === "field" ? "abc" : '<i class="bi bi-link-45deg"></i>'}</button>` : "";
+    return `<div class="input-group input-group-sm sr-val">${editor}${toggle}</div>`;
+  };
+  Builder.prototype.groupHtml = function(group, path, depth){
+    const root = path.length === 0;
+    let h = `<div class="sr-group ${root ? "sr-root" : "sr-sub"}" data-path="${path.join(".")}">
+      <div class="sr-head">
+        <select class="form-select form-select-sm sr-logic" aria-label="Match">
+          <option value="and" ${group.logic !== "or" ? "selected" : ""}>All of these are true</option>
+          <option value="or" ${group.logic === "or" ? "selected" : ""}>Any of these is true</option>
+        </select>
+        <label class="form-check form-check-inline small mb-0 ms-1" title="Invert this group"><input class="form-check-input sr-negate" type="checkbox" ${group.negate ? "checked" : ""}> not</label>
+        ${root ? "" : `<button type="button" class="btn btn-sm btn-link text-danger ms-auto sr-del-group" title="Remove group"><i class="bi bi-x-lg"></i></button>`}
+      </div>`;
+    if (!(group.rules || []).length) h += `<div class="sr-empty small text-muted">${esc(root ? this.opts.emptyText : "Empty group")}</div>`;
+    (group.rules || []).forEach((r, i) => {
+      const p = path.concat(i);
+      if (r.type === "group" || "rules" in r){ h += this.groupHtml(r, p, depth + 1); return; }
+      const item = this.item(r.field), type = item ? item.type : "text";
+      const list = opsFor(type); if (!list.includes(r.op)) list.unshift(r.op);
+      h += `<div class="sr-rule" data-path="${p.join(".")}">
+        ${this.sourceSelect(r)}
+        <select class="form-select form-select-sm sr-op" aria-label="Comparison">${list.map(o => `<option value="${o}" ${o === r.op ? "selected" : ""}>${esc((OPS[o] || o).replace(" … days", " days"))}</option>`).join("")}</select>
+        ${this.valueEditor(r, item)}
+        <button type="button" class="btn btn-sm btn-link text-danger sr-del" title="Remove rule"><i class="bi bi-x-lg"></i></button></div>`;
+    });
+    h += `<div class="sr-add"><button type="button" class="btn btn-sm btn-link px-0 sr-add-rule" ${(this.opts.catalog || []).length ? "" : "disabled"}><i class="bi bi-plus-lg"></i> Rule</button>`;
+    if (depth + 1 < this.opts.depth) h += ` <button type="button" class="btn btn-sm btn-link px-0 ms-2 sr-add-group"><i class="bi bi-diagram-2"></i> Group</button>`;
+    return h + `</div></div>`;
+  };
+  Builder.prototype.render = function(){
+    if (!(this.opts.catalog || []).length){ this.host.innerHTML = `<div class="small text-muted">${esc(this.opts.noCatalogText)}</div>`; return; }
+    this.host.innerHTML = this.groupHtml(this.tree, [], 0);
+    const self = this;
+    const q = (sel, fn) => self.host.querySelectorAll(sel).forEach(fn);
+    q(".sr-logic", el => el.onchange = () => { self.at(el.closest(".sr-group").dataset.path).logic = el.value; self.changed(); });
+    q(".sr-negate", el => el.onchange = () => { self.at(el.closest(".sr-group").dataset.path).negate = el.checked; self.changed(); });
+    q(".sr-add-rule", b => b.onclick = () => { self.at(b.closest(".sr-group").dataset.path).rules.push(blankRule((self.opts.catalog || [])[0])); self.changed(); });
+    q(".sr-add-group", b => b.onclick = () => { self.at(b.closest(".sr-group").dataset.path).rules.push({type: "group", logic: "or", negate: false, rules: [blankRule((self.opts.catalog || [])[0])]}); self.changed(); });
+    q(".sr-del-group", b => b.onclick = () => { const [p, i] = self.parentOf(b.closest(".sr-group").dataset.path); p.rules.splice(i, 1); self.changed(); });
+    q(".sr-rule", row => {
+      const path = row.dataset.path, rule = () => self.at(path);
+      row.querySelector(".sr-del").onclick = () => { const [p, i] = self.parentOf(path); p.rules.splice(i, 1); self.changed(); };
+      row.querySelector(".sr-src").onchange = e => {
+        const r = rule(), it = self.item(e.target.value); r.field = e.target.value;
+        if (it && !opsFor(it.type).includes(r.op)) r.op = defaultOp(it.type);
+        r.compare = "value"; r.field2 = ""; r.value = it && it.options && it.type !== "yesno" ? it.options[0] : ""; r.value2 = "";
+        self.changed();
+      };
+      row.querySelector(".sr-op").onchange = e => { const r = rule(); r.op = e.target.value; if (!FIELD_COMPARABLE.has(r.op)){ r.compare = "value"; r.field2 = ""; } self.changed(); };
+      const kind = row.querySelector(".sr-kind");
+      if (kind) kind.onclick = () => {
+        const r = rule(), it = self.item(r.field);
+        if (r.compare === "field"){ r.compare = "value"; r.field2 = ""; }
+        else { const other = (self.opts.catalog || []).find(c => c.field !== r.field && c.type === (it ? it.type : "text")); r.compare = "field"; r.field2 = other ? other.field : ""; }
+        self.changed();
+      };
+      row.querySelectorAll("[data-r]").forEach(inp => {
+        const ev = inp.tagName === "SELECT" || inp.type === "checkbox" ? "change" : "input";
+        inp.addEventListener(ev, () => {
+          const r = rule();
+          if (inp.dataset.r === "opt") r.value = [...row.querySelectorAll('[data-r="opt"]:checked')].map(x => x.value).join(", ");
+          else r[inp.dataset.r] = inp.value;
+          self.changed(inp.dataset.r === "opt");
+        });
+      });
+    });
+  };
+  Builder.prototype.set = function(tree){ this.tree = JSON.parse(JSON.stringify(tree || {type: "group", logic: "and", negate: false, rules: []})); this.render(); };
+
+  window.StudioRules = {OPS, UNARY, LIST_OPS, RANGE_OPS, DAY_OPS, FIELD_COMPARABLE,
+                        evaluate, evalRule, derive, states, catalog, describe, Builder, num, day, isFilled};
+})();
+</script>
+<style>
+  .sr-builder .sr-sub{ background:#F5F3FF; border:1px solid #E4DCFB; border-radius:.45rem; padding:.45rem .5rem .2rem; margin:.35rem 0; }
+  .sr-builder .sr-head{ display:flex; align-items:center; gap:.3rem; margin-bottom:.35rem; }
+  .sr-builder .sr-head .sr-logic{ width:auto; font-weight:600; }
+  .sr-builder .sr-rule{ display:grid; grid-template-columns:1fr auto; gap:.25rem; background:#fff; border:1px solid #E2E8F0; border-radius:.4rem; padding:.35rem; margin-bottom:.35rem; }
+  .sr-builder .sr-rule > .sr-op, .sr-builder .sr-rule > .sr-val{ grid-column:1 / span 2; }
+  .sr-builder .sr-rule > .sr-del{ grid-column:2; grid-row:1; padding:0 .3rem; }
+  .sr-builder .sr-chips{ display:flex; flex-wrap:wrap; gap:.25rem; }
+  .sr-builder .sr-chip{ font-size:.78rem; border:1px solid #CBD5E1; border-radius:999px; padding:.05rem .5rem; cursor:pointer; background:#fff; }
+  .sr-builder .sr-chip input{ margin-right:.2rem; }
+  .sr-builder .sr-empty{ padding:.2rem 0 .4rem; }
+</style>

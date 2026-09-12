@@ -143,6 +143,21 @@ def _form_fields(form):
             for el in (form.schema or {}).get("elements") or [] if el["type"] in INPUT_TYPES]
 
 
+def _rule_catalog(form, graph):
+    """
+    Everything a Condition in this flow can check: the form's answers, plus the
+    computed values — table totals, days between dates, the requester, the run
+    and the comments left at earlier steps.
+    """
+    from .esign_condition_engine import catalog
+
+    if not form:
+        return []
+    steps = {n["id"]: n["label"] for n in (graph or {}).get("nodes") or []
+             if n["type"] in ("approval", "review", "fill")}
+    return catalog(form.schema or {}, workflow=True, node_labels=steps)
+
+
 @login_required
 @require_GET
 def esign_workflow_designer(request, pk):
@@ -177,7 +192,8 @@ def esign_workflow_designer(request, pk):
             "condition_ops": E.CONDITION_OPS,
             "assign_modes": E.ASSIGN_MODES,
             "directory": directory(request.user),
-            "forms": [{"id": f.pk, "name": f.name, "fields": _form_fields(f)} for f in my_forms],
+            "forms": [{"id": f.pk, "name": f.name, "fields": _form_fields(f),
+                       "catalog": _rule_catalog(f, graph)} for f in my_forms],
             "templates": [{"key": t["key"], "name": t["name"], "icon": t["icon"], "description": t["description"],
                            "graph": E.clean_graph(t["graph"])} for t in FLOW_TEMPLATES],
             "save_url": reverse("accounts:esign_workflow_save", args=[wf.pk]),

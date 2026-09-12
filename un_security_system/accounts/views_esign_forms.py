@@ -261,7 +261,12 @@ def esign_form_save(request, pk):
     if workflow:
         report = E.validate_graph(E.clean_graph(workflow.graph), schema)
         warnings = [w["text"] for w in report["errors"] + report["warnings"]]
-    return JsonResponse({"ok": True, "version": form.version, "schema": schema, "flow_warnings": warnings,
+    from .form_logic_esign import canvas_problems
+
+    layout_warnings = canvas_problems(schema)
+    return JsonResponse({"ok": True, "version": form.version, "schema": schema,
+                         "flow_warnings": warnings + layout_warnings,
+                         "layout_warnings": layout_warnings,
                          "saved_at": timezone.localtime().strftime("%H:%M")})
 
 

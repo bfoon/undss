@@ -16,3 +16,21 @@
   .fs-sheet:not(.rounded-fields) .form-control, .fs-sheet:not(.rounded-fields) .form-select{ border-radius:0; }
   .fs-sheet .form-control:focus, .fs-sheet .form-select:focus{ border-color:var(--fs-accent); box-shadow:0 0 0 .2rem color-mix(in srgb, var(--fs-accent) 20%, transparent); }
 </style>
+<style>
+  /* Conditional states. The server sets the class; _form_script.html keeps it
+     up to date as answers change, so a section greys out as you type. */
+  .fs-item{ transition:opacity .15s ease; }
+  .fs-state-note{ display:none; font-size:.68rem; font-weight:600; vertical-align:middle; }
+  .fs-state-disabled{ opacity:.55; }
+  .fs-state-disabled .fs-state-note{ display:inline-block; }
+  .fs-state-disabled .form-control, .fs-state-disabled .form-select,
+  .fs-state-readonly .form-control, .fs-state-readonly .form-select{ background:#F1F4F7; }
+  .fs-state-completed .fs-state-note{ display:inline-block; background:#E2E8F0!important; color:#475569!important; }
+  .fs-state-completed .fs-label{ color:#475569; }
+  /* a greyed-out heading dims its whole section heading row */
+  .fs-state-disabled .fs-heading, .fs-state-disabled .fs-para{ opacity:.75; }
+  .fs-heading .fs-state-note{ font-weight:500; vertical-align:middle; }
+  /* the reason belongs on the heading; fields in that section stay quiet */
+  .fs-note-quiet{ display:none!important; }
+  .fs-state-hidden{ display:none; }
+</style>

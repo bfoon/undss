@@ -285,11 +285,15 @@ def editable_for(el, scope):
     return (el.get("fill_by") or "submitter") == scope
 
 
-def read_values(schema, post, existing=None, scope="submitter"):
+def read_values(schema, post, existing=None, scope="submitter", extras=None):
     """
     Pull values out of a POST for the elements this scope may edit, validate
     them, and merge over `existing`. Returns (values, errors) where errors maps
     a field key to a readable message.
+
+    Conditional states are applied afterwards: an answer the rules grey out or
+    hide for this person is cleared and never validated, so a section that
+    doesn't apply can't block the form with "this is required".
     """
     values = dict(existing or {})
     errors = {}
@@ -359,6 +363,22 @@ def read_values(schema, post, existing=None, scope="submitter"):
         if el.get("required") and not val and key not in errors:
             errors[key] = f"{label} is required."
 
+    return _apply_states(schema, values, errors, scope, extras)
+
+
+def _apply_states(schema, values, errors, scope, extras=None):
+    """Clear and stop validating anything the rules switch off for this person."""
+    from .form_logic_esign import annotate_states
+
+    extras = extras or {}
+    annotated = annotate_states(schema, values, scope=scope, extras=extras)
+    for el in annotated.get("elements") or []:
+        state = (el.get("runtime_state") or {}).get("state")
+        key = el.get("key")
+        if not key or state not in ("disabled", "hidden") or not editable_for(el, scope):
+            continue
+        values[key] = [] if el.get("type") in ("checkboxes", "table") else ""
+        errors.pop(key, None)
     return values, errors
 
 

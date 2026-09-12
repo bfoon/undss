@@ -10,7 +10,9 @@ through a port:
     review       creates a task per person; leaves by `next` once acknowledged
     fill         someone completes their part of the form; leaves by `next`
     signature    creates an eSign envelope; leaves by `signed` or `declined`
-    condition    compares a form field; leaves by `yes` or `no`
+    condition    checks a set of rules; leaves by `yes` or `no`
+    route        checks each path's rules in order; leaves by the first match
+                 (or by every match), otherwise by `otherwise`
     notify       emails people; leaves by `next`
     parallel     leaves by every `next` edge at once
     join         waits until every incoming branch has arrived
@@ -62,6 +64,8 @@ NODE_TYPES = {
              "ports": ["next"], "hint": "Someone completes the part of the form assigned to this step."},
     "signature": {"label": "Signature", "icon": "bi-pen", "color": "#009EDB",
                   "ports": ["signed", "declined"], "hint": "Sends an eSign envelope and waits for it."},
+    "route": {"label": "Route", "icon": "bi-signpost-2", "color": "#C026D3",
+              "ports": [], "hint": "Several paths, each with its own rules, plus an Otherwise path."},
     "condition": {"label": "Condition", "icon": "bi-signpost-split", "color": "#7C3AED",
                   "ports": ["yes", "no"], "hint": "Take one path or the other based on a form answer."},
     "notify": {"label": "Notify", "icon": "bi-bell", "color": "#0891B2",
@@ -74,9 +78,27 @@ NODE_TYPES = {
             "ports": [], "hint": "Finish. Mark the outcome as completed or rejected."},
 }
 
+MAX_BRANCHES = 8
+
+
+def ports_for(node):
+    """A node's exits. A Route has one per path it defines, plus Otherwise."""
+    if (node or {}).get("type") == "route":
+        return [b["id"] for b in ((node.get("config") or {}).get("branches") or [])] + ["otherwise"]
+    return NODE_TYPES.get((node or {}).get("type"), {}).get("ports", [])
+
+
+def port_label(node, port):
+    if (node or {}).get("type") == "route":
+        for b in (node.get("config") or {}).get("branches") or []:
+            if b["id"] == port:
+                return b["label"]
+    return PORT_LABELS.get(port, port)
+
+
 PORT_LABELS = {
     "next": "Next", "approved": "Approved", "rejected": "Rejected", "signed": "Signed",
-    "declined": "Declined", "yes": "Yes", "no": "No",
+    "declined": "Declined", "yes": "Yes", "no": "No", "otherwise": "Otherwise",
 }
 
 CONDITION_OPS = C.CONDITION_OPS
@@ -155,6 +177,21 @@ def clean_graph(graph):
             cfg["order"] = "parallel" if cfg_in.get("order") == "parallel" else "sequential"
             cfg["placement"] = "manual" if cfg_in.get("placement") == "manual" else "auto"
             cfg["message"] = _s(cfg_in.get("message"), 1000)
+        if t == "route":
+            branches, seen_ids = [], set()
+            for i, b in enumerate((cfg_in.get("branches") or [])[:MAX_BRANCHES]):
+                if not isinstance(b, dict):
+                    continue
+                bid = _s(b.get("id"), 20)
+                if not re.match(r"^b[A-Za-z0-9_]{1,19}$", bid) or bid in seen_ids:
+                    bid = f"b{i + 1}"
+                    while bid in seen_ids:
+                        bid += "x"
+                seen_ids.add(bid)
+                branches.append({"id": bid, "label": _s(b.get("label"), 40) or f"Path {i + 1}",
+                                 "condition": C.clean_tree(b.get("condition"))})
+            cfg["branches"] = branches
+            cfg["mode"] = "all" if cfg_in.get("mode") == "all" else "first"
         if t == "condition":
             # Keep the legacy three fields so existing flows continue to work.
             cfg["field"] = _s(cfg_in.get("field"), 40)
@@ -175,6 +212,7 @@ def clean_graph(graph):
         })
 
     types = {n["id"]: n["type"] for n in nodes}
+    cleaned_by_id = {n["id"]: n for n in nodes}
     edges, seen, eids = [], set(), set()
     for e in (graph.get("edges") or [])[:MAX_NODES * 4]:
         if not isinstance(e, dict):
@@ -182,7 +220,7 @@ def clean_graph(graph):
         a, b, port = _s(e.get("from"), 40), _s(e.get("to"), 40), _s(e.get("port"), 20)
         if a not in types or b not in types or a == b:
             continue
-        if port not in NODE_TYPES[types[a]]["ports"] or types[b] == "start":
+        if port not in ports_for(cleaned_by_id.get(a)) or types[b] == "start":
             continue
         key = (a, port, b)
         if key in seen:
@@ -252,11 +290,35 @@ def validate_graph(graph, form_schema=None):
                 elif form_schema is None:
                     warnings.append({"node": nid, "text": f"“{name}” is assigned from a form field; it only works when the flow runs from a form."})
 
-        if t in ("approval", "review", "fill", "signature", "condition", "notify", "parallel", "join") and not outs:
+        if t in ("approval", "review", "fill", "signature", "condition", "route", "notify", "parallel", "join") and not outs:
             if t in ("approval", "signature"):
                 warnings.append({"node": nid, "text": f"“{name}” has no next step; when it finishes the run ends there."})
             elif t != "end":
                 warnings.append({"node": nid, "text": f"“{name}” has no next step; the branch ends there."})
+
+        if t == "route":
+            branches = cfg.get("branches") or []
+            if not branches:
+                errors.append({"node": nid, "text": f"Add at least one path to “{name}”."})
+            known = {item["field"] for item in C.catalog(form_schema, workflow=True,
+                                                         node_labels={m["id"]: m["label"] for m in nodes})} if form_schema is not None else set()
+            ports = {e["port"] for e in outs}
+            for b in branches:
+                refs = C.referenced_fields(b["condition"])
+                if not refs:
+                    errors.append({"node": nid, "text": f"“{name}”: the path “{b['label']}” has no rules."})
+                elif form_schema is not None:
+                    missing = [k for k in refs if k not in form_keys and k not in known]
+                    if missing:
+                        errors.append({"node": nid, "text": f"“{name}” (path “{b['label']}”) checks fields that don't exist: {', '.join(missing)}."})
+                if b["id"] not in ports:
+                    warnings.append({"node": nid, "text": f"“{name}”: the path “{b['label']}” isn't connected, so a run that matches it stops there."})
+            if "otherwise" not in ports:
+                warnings.append({"node": nid, "text": f"“{name}” has no Otherwise path; a run matching nothing stops there."})
+            if cfg.get("mode") == "all" and len(branches) > 1:
+                warnings.append({"node": nid, "text": f"“{name}” can take several paths at once — bring them back together with a Join if later steps should wait for all of them."})
+            if form_schema is None:
+                warnings.append({"node": nid, "text": f"“{name}” reads form answers; without a form every run takes Otherwise."})
 
         if t == "condition":
             tree = cfg.get("condition")
@@ -264,7 +326,11 @@ def validate_graph(graph, form_schema=None):
             if not refs:
                 errors.append({"node": nid, "text": f"Choose at least one form field for “{name}”."})
             elif form_schema is not None:
-                missing = [key for key in refs if key not in form_keys]
+                # Computed values (@sum:, @days:, @who:, @run:, @step:) are worked
+                # out at run time, so check the questions they are built from.
+                known = {item["field"] for item in C.catalog(form_schema, workflow=True,
+                                                             node_labels={n["id"]: n["label"] for n in nodes})}
+                missing = [key for key in refs if key not in form_keys and key not in known]
                 if missing:
                     errors.append({"node": nid, "text": f"“{name}” checks fields that don't exist: {', '.join(missing)}."})
             elif form_schema is None:
@@ -758,6 +824,9 @@ def _enter(run, node, request=None):
     if t == "condition":
         return _leave(run, node, "yes" if evaluate_condition(run, node) else "no", request)
 
+    if t == "route":
+        return _enter_route(run, node, request)
+
     if t == "notify":
         people = resolve_people(run, node)
         from . import workflow_notify_esign as notify
@@ -799,7 +868,7 @@ def _leave(run, node, port, request=None):
     if not edges:
         if port in ("rejected", "declined"):
             return finish_run(run, WorkflowRun.STATUS_REJECTED,
-                              note=f"{node['label']}: {PORT_LABELS.get(port, port).lower()}")
+                              note=f"{node['label']}: {port_label(node, port).lower()}")
         return
     targets = {n["id"]: n for n in run.graph.get("nodes") or []}
     for e in edges:
@@ -814,14 +883,89 @@ def _next_round(run, node_id):
     return rounds[node_id]
 
 
+def rule_values(run):
+    """
+    What a rule can read inside a run: the form's answers, plus the computed
+    values — table totals, days between dates, the requester, this run's
+    history and the comments left at earlier steps.
+    """
+    sub = run.submission if run.submission_id else None
+    u = run.initiator
+    email = (getattr(u, "email", "") or "").strip()
+    office = getattr(u, "country_office", None)
+    agency = getattr(u, "agency", None) or getattr(office, "agency", None)
+    unit = getattr(u, "unit", None)
+    who = {
+        "name": (u.get_full_name() or u.username) if u else "",
+        "email": email,
+        "email_domain": email.split("@")[-1].lower() if "@" in email else "",
+        "job_title": getattr(u, "role", "") or "",          # this deployment stores the role, not a job title
+        "role": getattr(u, "role", "") or "",
+        "unit": getattr(unit, "name", "") or "",
+        "agency": getattr(agency, "name", "") or "",
+        "office": getattr(office, "name", "") or "",
+    }
+    started = getattr(run, "started_at", None) or getattr(run, "created_at", None)
+    run_info = {
+        "returns": run.tasks.filter(status="returned").count(),
+        "days_open": max(0, (timezone.now() - started).days) if started else 0,
+        "pages": 0,
+    }
+    comments = {}
+    for t in run.tasks.exclude(comment="").order_by("decided_at", "created_at"):
+        comments[t.node_id] = t.comment
+    return C.derive_values(sub.values if sub else {}, sub.schema if sub else None,
+                           who=who, run=run_info, steps=comments, today=timezone.localdate())
+
+
+def _enter_route(run, node, request=None):
+    """Take the first path whose rules match — or every matching path — else Otherwise."""
+    from .models_esign_studio import WorkflowRun
+
+    cfg = node.get("config") or {}
+    branches = cfg.get("branches") or []
+    values = rule_values(run)
+    matched = [b for b in branches if (b["condition"].get("rules") or []) and C.evaluate_tree(values, b["condition"])]
+    if cfg.get("mode") != "all":
+        matched = matched[:1]
+    if not matched:
+        log_run(run, "condition", node_id=node["id"], note=f"{node['label']}: nothing matched — took Otherwise.")
+        return _leave(run, node, "otherwise", request)
+
+    log_run(run, "condition", node_id=node["id"],
+            note=f"{node['label']}: took " + ", ".join(f"“{b['label']}”" for b in matched) + ".")
+    # Several paths can lead to the same step; enter each step only once.
+    targets = {n["id"]: n for n in run.graph.get("nodes") or []}
+    order = []
+    for b in matched:
+        for e in _out(run, node["id"], b["id"]):
+            if e["to"] not in order and e["to"] in targets:
+                order.append(e["to"])
+    for target_id in order:
+        if run.status != WorkflowRun.STATUS_RUNNING:
+            break
+        _enter(run, targets[target_id], request)
+    return None
+
+
 def evaluate_condition(run, node):
     cfg = node.get("config") or {}
     values = run.submission.values if run.submission_id else {}
     if cfg.get("condition"):
-        result = C.evaluate_tree(values, cfg["condition"])
+        resolved = rule_values(run)
+        if "@run:pages" in C.referenced_fields(cfg["condition"]):
+            try:
+                from .pdf_tools_esign import page_count
+
+                resolved["@run:pages"] = page_count(run_pdf_bytes(run) or b"")
+            except Exception:  # noqa: BLE001 - an unreadable document counts as no pages
+                logger.exception("eSign Studio: could not count pages for run %s", run.pk)
+        result = C.evaluate_tree(resolved, cfg["condition"])
+        schema = run.submission.schema if run.submission_id else None
+        labels = {n["id"]: n["label"] for n in (run.graph or {}).get("nodes") or []}
         log_run(
             run, "condition", node_id=node["id"],
-            note=f"{node['label']}: {C.describe_tree(cfg['condition'])} → {'Yes' if result else 'No'}",
+            note=f"{node['label']}: {C.describe_tree_labelled(cfg['condition'], schema, labels)} → {'Yes' if result else 'No'}",
         )
         return result
 

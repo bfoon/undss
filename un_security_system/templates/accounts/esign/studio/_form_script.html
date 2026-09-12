@@ -56,5 +56,65 @@
     totals(table);
     syncAdd(table);
   });
+
+  // ── conditional states, kept up to date as people type ─────────────────
+  const payload = document.getElementById("formLogic");
+  if (!payload || !window.StudioRules) return;
+  const P = JSON.parse(payload.textContent);
+  const hasRules = P.elements.some(el => (el.state_rules || []).length);
+  const byKey = {}; P.elements.forEach(el => { if (el.key) byKey[el.key] = el; });
+
+  function readItem(item){
+    const key = item.dataset.key, type = item.dataset.type, name = "f_" + key;
+    if (type === "checkboxes") return [...item.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value);
+    if (type === "radio" || type === "yesno"){ const c = item.querySelector(`input[name="${name}"]:checked`); return c ? c.value : ""; }
+    if (type === "table"){
+      return [...item.querySelectorAll("tbody tr")].map(tr => {
+        const row = {}; tr.querySelectorAll("input[data-col]").forEach(i => row[i.dataset.col] = i.value.trim()); return row;
+      }).filter(r => Object.values(r).some(Boolean));
+    }
+    const input = item.querySelector(`[name="${name}"]`);
+    return input ? input.value : "";
+  }
+  function answers(){
+    const vals = Object.assign({}, P.values);
+    document.querySelectorAll('.fs-item[data-mine="1"][data-key]').forEach(item => { vals[item.dataset.key] = readItem(item); });
+    return vals;
+  }
+  const STATES = ["active", "readonly", "completed", "disabled", "hidden"];
+  function apply(){
+    const states = StudioRules.states(P.elements, answers(), P.scope, P.extras);
+    for (const [id, st] of Object.entries(states)){
+      const item = document.querySelector(`.fs-item[data-el="${id}"]`);
+      if (!item) continue;
+      STATES.forEach(s => item.classList.toggle("fs-state-" + s, s === st.state));
+      item.classList.toggle("d-none", st.state === "hidden");
+      const note = item.querySelector(".fs-state-note");
+      if (note){
+        if (st.message) note.textContent = st.message;
+        note.classList.toggle("fs-note-quiet", st.from === "section" && item.dataset.type !== "heading");
+      }
+      if (item.dataset.mine !== "1") continue;
+      const live = st.state === "active";
+      item.querySelectorAll("input, select, textarea, .fs-row-add, .fs-row-del").forEach(ctrl => {
+        if (ctrl.type === "hidden") return;
+        ctrl.disabled = !live;
+      });
+      const el = byKey[item.dataset.key];
+      const star = item.querySelector(".fs-req");
+      if (star) star.classList.toggle("d-none", !(live && el && el.required));
+      if (el && el.required && !["checkboxes", "table"].includes(el.type)){
+        item.querySelectorAll(`[name="f_${el.key}"]`).forEach(ctrl => { ctrl.required = live; });
+      }
+    }
+    document.querySelectorAll("table[data-table]").forEach(syncAdd);
+  }
+  if (hasRules){
+    const form = payload.closest("form") || document;
+    form.addEventListener("input", apply);
+    form.addEventListener("change", apply);
+    document.addEventListener("click", e => { if (e.target.closest(".fs-row-add, .fs-row-del")) setTimeout(apply, 0); });
+    apply();
+  }
 })();
 </script>

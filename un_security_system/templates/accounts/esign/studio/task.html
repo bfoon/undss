@@ -45,6 +45,7 @@
 
     {% if sub and task.is_open and scope %}
       {% include "accounts/esign/studio/_form_sheet.html" with schema=schema values=values errors=errors scope=scope %}
+    {% form_logic_payload schema values scope as logic_payload %}{{ logic_payload|json_script:"formLogic" }}
     {% else %}
       <div class="card">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -119,6 +120,7 @@
 {% block extra_js %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}
 {{ pdf_inline|json_script:"pdfInline" }}
+{% include "accounts/esign/studio/_rules.html" %}
 {% include "accounts/esign/studio/_form_script.html" %}
 <script>
 (function(){

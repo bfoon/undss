@@ -104,6 +104,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "accounts/esign/studio/_rules.html" %}
 {% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}
 <script>
@@ -135,7 +136,14 @@
   const flow = () => CFG.flows.find(f => f.id === +meta.workflow_id) || null;
   const FORM_GRID = 20;
   const fsnap = v => Math.round(v / FORM_GRID) * FORM_GRID;
-  const STATE_OPS = {eq:"is",neq:"is not",contains:"contains",gt:"greater than",gte:"at least",lt:"less than",lte:"at most",empty:"is empty",not_empty:"is filled in"};
+  const STATE_LABELS = {readonly: "Grey out, showing the answer", completed: "Show “Already filled” instead of the answer",
+                        disabled: "Grey out as not applicable", hidden: "Hide completely"};
+  const STATE_HINTS = {
+    readonly: "People can read the answer but not change it.",
+    completed: "The answer is replaced with your message — useful when it shouldn't be seen again.",
+    disabled: "Greyed out and skipped: it won't be asked for, and it can't block the form.",
+    hidden: "Removed from the form entirely, and its answer is cleared.",
+  };
   function ensureV2(el){
     el.presentation ||= {label_font_size:9,value_font_size:10,height:38,padding:6,background:"#FFFFFF",border_color:"#CBD5E1",text_color:"#111827",label_color:"#334155",border_width:1,radius:4};
     el.canvas ||= {enabled:false,page:1,x:40,y:120,w:260,h:60,snap:FORM_GRID,z:0};
@@ -441,7 +449,8 @@
     }
     ensureV2(el);
     const p = el.presentation, cv = el.canvas, sr = el.state_rules[0] || null;
-    const formFields = schema.elements.filter(x => INPUT_TYPES.includes(x.type) && x.id !== el.id);
+    const isSection = el.type === "heading";
+    const canHaveRules = INPUT_TYPES.includes(el.type) || isSection;
     h += `<hr><div class="st-group-label mb-2">Advanced appearance & placement</div>
       <div class="row g-2 mb-2">
         <div class="col-6"><label class="form-label small mb-1">Label font</label><input class="form-control form-control-sm" type="number" min="6" max="24" data-v2p="label_font_size" value="${p.label_font_size}"></div>
@@ -458,22 +467,46 @@
         <div class="col-6"><label class="small">Width</label><input class="form-control form-control-sm" type="number" data-v2c="w" value="${cv.w}"></div>
         <div class="col-6"><label class="small">Height</label><input class="form-control form-control-sm" type="number" data-v2c="h" value="${cv.h}"></div>
       </div><div class="small text-muted mb-3">Drag this field anywhere; it snaps to ${FORM_GRID}px.</div>` : ""}
-      ${INPUT_TYPES.includes(el.type) ? `<div class="st-group-label mb-2">Conditional state</div>
-        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="stateRuleOn" ${sr?"checked":""}> Apply a condition to this field</label>
+      ${canHaveRules ? `<div class="st-group-label mb-1"><i class="bi bi-lightning-charge me-1"></i>${isSection ? "Rule for this whole section" : "Conditional state"}</div>
+        ${isSection ? `<div class="form-text mb-2">Applies to this heading and every field under it, up to the next heading. A field's own rule wins over this one.</div>` : ""}
+        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" id="stateRuleOn" ${sr?"checked":""}> ${isSection ? "Grey out or hide this section when…" : "Change this field when…"}</label>
         ${sr ? `<select class="form-select form-select-sm mb-1" id="stateKind">
-          ${[["readonly","Grey / read-only"],["completed","Already filled"],["disabled","Not applicable"],["hidden","Hidden"]].map(([k,v])=>`<option value="${k}" ${sr.state===k?"selected":""}>${v}</option>`).join("")}
+          ${Object.entries(STATE_LABELS).map(([k,v])=>`<option value="${k}" ${sr.state===k?"selected":""}>${esc(v)}</option>`).join("")}
         </select>
-        <select class="form-select form-select-sm mb-1" id="stateField"><option value="">When field…</option>${formFields.map(x=>`<option value="${esc(x.key)}" ${(sr.when?.rules?.[0]?.field||"")===x.key?"selected":""}>${esc(x.label)}</option>`).join("")}</select>
-        <select class="form-select form-select-sm mb-1" id="stateOp">${Object.entries(STATE_OPS).map(([k,v])=>`<option value="${k}" ${(sr.when?.rules?.[0]?.op||"eq")===k?"selected":""}>${esc(v)}</option>`).join("")}</select>
-        <input class="form-control form-control-sm mb-1" id="stateValue" value="${esc(sr.when?.rules?.[0]?.value||"")}" placeholder="Value">
-        <input class="form-control form-control-sm mb-1" id="stateMessage" value="${esc(sr.message||"")}" placeholder="Message, e.g. Already filled">` : ""}` : ""}`;
+        <div class="form-text mb-2">${esc(STATE_HINTS[sr.state] || "")}</div>
+        <div id="stateRules" class="mb-2"></div>
+        <input class="form-control form-control-sm mb-1" id="stateMessage" value="${esc(sr.message||"")}" placeholder="${isSection ? "Reason, e.g. Not needed — no vehicle requested" : "Message, e.g. Already filled"}">
+        <div class="form-text">Shown in place of the answer, so people know why.</div>` : ""}` : ""}`;
     inspector.innerHTML = h;
     bindInspector(el);
     inspector.querySelectorAll("[data-v2p]").forEach(x=>x.onchange=()=>change(()=>el.presentation[x.dataset.v2p]=x.type==="number"?+x.value:x.value));
     inspector.querySelectorAll("[data-v2c]").forEach(x=>x.onchange=()=>change(()=>el.canvas[x.dataset.v2c]=+x.value));
     const fp=inspector.querySelector("#freePlace"); if(fp) fp.onchange=()=>change(()=>el.canvas.enabled=fp.checked);
-    const on=inspector.querySelector("#stateRuleOn"); if(on) on.onchange=()=>change(()=>{ el.state_rules = on.checked ? [{state:"readonly",completed_mode:"show_values",message:"",when:{logic:"and",rules:[{type:"rule",field:"",op:"eq",compare:"value",field2:"",value:"",value2:""}]}}] : []; });
-    ["stateKind","stateField","stateOp","stateValue","stateMessage"].forEach(id=>{ const x=inspector.querySelector("#"+id); if(!x)return; x.onchange=()=>change(()=>{ const r=el.state_rules[0]; if(!r)return; if(id==="stateKind")r.state=x.value; if(id==="stateMessage")r.message=x.value; if(id==="stateField")r.when.rules[0].field=x.value; if(id==="stateOp")r.when.rules[0].op=x.value; if(id==="stateValue")r.when.rules[0].value=x.value; }); });
+    const on=inspector.querySelector("#stateRuleOn");
+    if(on) on.onchange=()=>change(()=>{
+      el.state_rules = on.checked
+        ? [{state: el.type === "heading" ? "disabled" : "readonly", completed_mode:"show_values", message:"",
+            when:{type:"group", logic:"and", negate:false, rules:[]}}]
+        : [];
+    });
+    ["stateKind","stateMessage"].forEach(id=>{ const x=inspector.querySelector("#"+id); if(!x)return;
+      x.onchange=()=>change(()=>{ const r=el.state_rules[0]; if(!r)return;
+        if(id==="stateKind"){ r.state=x.value; r.completed_mode = x.value === "completed" ? "message" : "show_values"; }
+        if(id==="stateMessage") r.message=x.value; }); });
+    const rulesHost = inspector.querySelector("#stateRules");
+    if (rulesHost){
+      let snapped = false;
+      new StudioRules.Builder(rulesHost, {
+        catalog: StudioRules.catalog(schema.elements.filter(x => x.id !== el.id)),
+        value: el.state_rules[0].when, depth: 3,
+        emptyText: "Add a rule to say when this applies.",
+        noCatalogText: "Add some questions first — rules read their answers.",
+        onChange: tree => {
+          if (!snapped){ undoStack.push(snap()); redoStack = []; snapped = true; }
+          el.state_rules[0].when = tree; markDirty(); renderPaper();
+        },
+      });
+    }
   }
 
   function setPath(obj, path, val){ const p = path.split("."); let o = obj; for (let i = 0; i < p.length - 1; i++) o = o[p[i]] = o[p[i]] || {}; o[p[p.length - 1]] = val; }

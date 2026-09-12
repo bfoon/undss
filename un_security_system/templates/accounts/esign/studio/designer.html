@@ -107,6 +107,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "accounts/esign/studio/_rules.html" %}
 {% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_people_picker.html" %}
 <script>
@@ -115,8 +116,19 @@
   const INIT = {{ payload|safe }};
   const CSRF = "{{ csrf_token }}";
   const T = CFG.node_types, PL = CFG.port_labels, OPS = CFG.condition_ops, MODES = CFG.assign_modes;
+  /** A step's exits. A Route defines its own — one per path, plus Otherwise. */
+  const portsOf = n => n && n.type === "route"
+    ? [...((n.config || {}).branches || []).map(b => b.id), "otherwise"]
+    : T[n.type].ports;
+  const portName = (n, port) => {
+    if (n && n.type === "route"){
+      const b = ((n.config || {}).branches || []).find(x => x.id === port);
+      return b ? b.label : (PL[port] || port);
+    }
+    return PL[port] || port;
+  };
   const W = 200, H = 76, GRID = 20;
-  const PAL_ORDER = ["start", "approval", "review", "fill", "signature", "condition", "notify", "parallel", "join", "end"];
+  const PAL_ORDER = ["start", "approval", "review", "fill", "signature", "condition", "route", "notify", "parallel", "join", "end"];
 
   const stage = document.getElementById("stage"), world = document.getElementById("world");
   const nodeLayer = document.getElementById("nodeLayer"), edgeLayer = document.getElementById("edgeLayer"), ghost = document.getElementById("ghost");
@@ -135,6 +147,7 @@
   const snap = v => Math.round(v / GRID) * GRID;
   const form = () => CFG.forms.find(f => f.id === +flow.form_id) || null;
   const fields = () => (form() || {fields: []}).fields.filter(f => f.type !== "table");
+  const ruleCatalog = () => (form() || {}).catalog || [];
 
   // ─── history ──────────────────────────────────────────────
   function state(){ return JSON.stringify({graph, flow}); }
@@ -174,7 +187,7 @@
   }, {passive: false});
 
   // ─── rendering ───────────────────────────────────────────
-  function portY(n, port){ const ports = T[n.type].ports; return H * (ports.indexOf(port) + 1) / (ports.length + 1); }
+  function portY(n, port){ const ports = portsOf(n); return H * (ports.indexOf(port) + 1) / (ports.length + 1); }
 
   function summary(n){
     const c = n.config || {}, a = c.assign || {};
@@ -192,7 +205,17 @@
       case "fill": return who();
       case "signature": return who() + (c.placement === "manual" ? " · place fields" : "");
       case "notify": return "Email " + who().toLowerCase();
-      case "condition": { const f = fields().find(x => x.key === c.field); return f ? `${f.label} ${OPS[c.op] || ""} ${["empty","not_empty"].includes(c.op) ? "" : (c.value || "…")}` : "Choose a form field"; }
+      case "route": {
+        const bs = c.branches || [];
+        if (!bs.length) return "No paths yet";
+        return `${bs.length} path${bs.length > 1 ? "s" : ""} · ${c.mode === "all" ? "every match" : "first match"}`;
+      }
+      case "condition": {
+        const tree = c.condition;
+        if (tree && (tree.rules || []).length) return StudioRules.describe(tree, ruleCatalog()) || "Rules set";
+        const f = fields().find(x => x.key === c.field);
+        return f ? `${f.label} ${OPS[c.op] || ""} ${["empty","not_empty"].includes(c.op) ? "" : (c.value || "…")}` : "No rules yet";
+      }
       case "parallel": return "Branches run together";
       case "join": return "Waits for all branches";
       case "end": return c.outcome === "rejected" ? "Outcome: rejected" : "Outcome: completed";
@@ -208,7 +231,9 @@
     graph.nodes.forEach(n => {
       const t = T[n.type], iss = issuesFor(n.id);
       const el = document.createElement("div");
-      el.className = `fd-node ${n.type}` + (t.ports.length > 1 ? " multi" : "") + (sel && sel.kind === "node" && sel.id === n.id ? " sel" : "") + (iss.err.length ? " has-error" : "");
+      const myPorts = portsOf(n);
+      el.className = `fd-node ${n.type}` + (myPorts.length > 1 ? " multi" : "") + (sel && sel.kind === "node" && sel.id === n.id ? " sel" : "") + (iss.err.length ? " has-error" : "");
+      if (myPorts.length > 2) el.style.minHeight = (26 * myPorts.length + 26) + "px";
       el.style.left = n.x + "px"; el.style.top = n.y + "px"; el.dataset.id = n.id; el.tabIndex = 0;
       el.setAttribute("aria-label", `${t.label}: ${n.label}`);
       let h = `<div class="strip" style="background:${t.color}"></div><div class="type" style="color:${t.color}"><i class="bi ${t.icon} me-1"></i>${t.label}</div>`
@@ -216,10 +241,10 @@
       if (iss.err.length) h += `<span class="flag text-danger" title="${esc(iss.err.map(i => i.text).join("\n"))}"><i class="bi bi-exclamation-circle-fill"></i></span>`;
       else if (iss.warn.length) h += `<span class="flag text-warning" title="${esc(iss.warn.map(i => i.text).join("\n"))}"><i class="bi bi-exclamation-triangle-fill"></i></span>`;
       if (n.type !== "start") h += `<span class="fd-port in" data-in="${n.id}"></span>`;
-      t.ports.forEach(p => {
-        const y = portY(n, p);
-        h += `<span class="fd-port out" data-port="${p}" style="top:${y - 7}px" title="Drag to connect: ${esc(PL[p])}"></span>`;
-        if (t.ports.length > 1 || p !== "next") h += `<span class="fd-port-label" style="top:${y}px;color:${["rejected","declined"].includes(p) ? "#B91C1C" : "#475569"}">${esc(PL[p])}</span>`;
+      myPorts.forEach(p => {
+        const y = portY(n, p), label = portName(n, p);
+        h += `<span class="fd-port out" data-port="${p}" style="top:${y - 7}px" title="Drag to connect: ${esc(label)}"></span>`;
+        if (myPorts.length > 1 || p !== "next") h += `<span class="fd-port-label" style="top:${y}px;color:${["rejected","declined","otherwise"].includes(p) ? "#B91C1C" : "#475569"}">${esc(label)}</span>`;
       });
       el.innerHTML = h;
       nodeLayer.appendChild(el);
@@ -388,7 +413,7 @@
       const max = Math.max(0, ...Object.values(level));
       graph.nodes.forEach(n => { if (level[n.id] === undefined) level[n.id] = max + 1; });
       const cols = {};
-      const portRank = e => { const a = byId(e.from); return a ? T[a.type].ports.indexOf(e.port) : 0; };
+      const portRank = e => { const a = byId(e.from); return a ? portsOf(a).indexOf(e.port) : 0; };
       const order = n => { const inc = graph.edges.filter(e => e.to === n.id); return inc.length ? Math.min(...inc.map(e => (byId(e.from)?.y || 0) + portRank(e) * 10)) : 0; };
       Object.keys(level).sort((a, b) => level[a] - level[b]).forEach(id => { (cols[level[id]] = cols[level[id]] || []).push(byId(id)); });
       Object.entries(cols).forEach(([l, list]) => {
@@ -499,37 +524,37 @@
         <div class="form-text mb-2">${c.placement === "auto" ? "Uses the form's signature boxes for this step. Form workflows never add a signature page; add enough signature boxes for every signer." : "The initiator gets a task to place fields, then the envelope is sent."}</div>
         <label class="form-label small fw-semibold mb-1">Message to signers</label><textarea class="form-control form-control-sm mb-2" rows="2" data-f="message" maxlength="1000">${esc(c.message)}</textarea>`;
     }
-    if (n.type === "condition"){
-      const fl = fields();
-      c.condition ||= {type:"group", logic:"and", negate:false, rules:
-        c.field ? [{type:"rule",field:c.field,op:c.op||"eq",compare:"value",field2:"",value:c.value||"",value2:""}] : []};
-      h += `<div class="st-group-label mb-1 mt-2">Advanced rule</div>`;
-      if (!fl.length) h += `<div class="alert alert-warning small py-2">Conditions read form answers. Link a form in Flow settings first.</div>`;
+    if (n.type === "route"){
+      const cat = ruleCatalog();
+      c.branches ||= []; c.mode ||= "first";
+      h += `<div class="st-group-label mb-1 mt-2"><i class="bi bi-signpost-2 me-1"></i>Paths</div>`;
+      if (!cat.length) h += `<div class="alert alert-warning small py-2">A Route reads form answers. Link a form in Flow settings first.</div>`;
       else {
-        h += `<div class="d-flex gap-2 mb-2">
-          <select class="form-select form-select-sm" data-cond-logic>
-            <option value="and" ${c.condition.logic!=="or"?"selected":""}>ALL rules (AND)</option>
-            <option value="or" ${c.condition.logic==="or"?"selected":""}>ANY rule (OR)</option>
-          </select>
-          <label class="form-check small d-flex align-items-center mb-0"><input class="form-check-input me-1" type="checkbox" data-cond-negate ${c.condition.negate?"checked":""}>NOT</label>
-        </div>`;
-        c.condition.rules.forEach((r,i) => {
+        h += `<select class="form-select form-select-sm mb-2" data-route-mode>
+            <option value="first" ${c.mode !== "all" ? "selected" : ""}>Take the first path that matches</option>
+            <option value="all" ${c.mode === "all" ? "selected" : ""}>Take every path that matches</option>
+          </select>`;
+        c.branches.forEach((b, i) => {
           h += `<div class="border rounded p-2 mb-2">
-            <select class="form-select form-select-sm mb-1" data-cond="${i}:field"><option value="">Field…</option>${fl.map(x=>`<option value="${esc(x.key)}" ${r.field===x.key?"selected":""}>${esc(x.label)}</option>`).join("")}</select>
-            <select class="form-select form-select-sm mb-1" data-cond="${i}:op">${Object.entries(OPS).map(([k,v])=>`<option value="${k}" ${r.op===k?"selected":""}>${esc(v)}</option>`).join("")}</select>
-            <div class="d-flex gap-1">
-              <select class="form-select form-select-sm" style="max-width:120px" data-cond="${i}:compare"><option value="value" ${r.compare!=="field"?"selected":""}>Value</option><option value="field" ${r.compare==="field"?"selected":""}>Other field</option></select>
-              ${r.compare==="field"
-                ? `<select class="form-select form-select-sm" data-cond="${i}:field2"><option value="">Other field…</option>${fl.map(x=>`<option value="${esc(x.key)}" ${r.field2===x.key?"selected":""}>${esc(x.label)}</option>`).join("")}</select>`
-                : `<input class="form-control form-control-sm" data-cond="${i}:value" value="${esc(r.value||"")}" placeholder="Value">`}
-              <button type="button" class="btn btn-sm btn-outline-danger" data-cond-remove="${i}"><i class="bi bi-x"></i></button>
+            <div class="d-flex gap-1 mb-2">
+              <input class="form-control form-control-sm" data-branch-label="${i}" value="${esc(b.label)}" maxlength="40" placeholder="Path name">
+              <button type="button" class="btn btn-sm btn-outline-danger" data-branch-remove="${i}" title="Remove this path"><i class="bi bi-x"></i></button>
             </div>
-            ${r.op==="between"?`<input class="form-control form-control-sm mt-1" data-cond="${i}:value2" value="${esc(r.value2||"")}" placeholder="Second value">`:""}
-          </div>`;
+            <div data-branch-rules="${i}"></div></div>`;
         });
-        h += `<button type="button" class="btn btn-sm btn-outline-primary w-100" id="condAdd"><i class="bi bi-plus me-1"></i>Add condition</button>
-          <div class="small text-muted mt-2">The Yes path runs when the complete expression is true.</div>`;
+        h += `<button type="button" class="btn btn-sm btn-outline-primary w-100" id="branchAdd" ${c.branches.length >= 8 ? "disabled" : ""}><i class="bi bi-plus me-1"></i>Add a path</button>
+          <div class="small text-muted mt-2">Paths are checked from the top down. Anything matching none of them leaves by <strong>Otherwise</strong>.</div>`;
       }
+    }
+    if (n.type === "condition"){
+      const cat = ruleCatalog();
+      c.condition ||= {type: "group", logic: "and", negate: false, rules:
+        c.field ? [{type: "rule", field: c.field, op: c.op || "eq", compare: "value", field2: "", value: c.value || "", value2: ""}] : []};
+      h += `<div class="st-group-label mb-1 mt-2"><i class="bi bi-lightning-charge me-1"></i>Rules for the Yes path</div>`;
+      if (!cat.length) h += `<div class="alert alert-warning small py-2">Conditions read form answers. Link a form in Flow settings first.</div>`;
+      else h += `<div id="condRules" class="mb-2"></div>
+        <div class="small text-muted">The <strong>Yes</strong> path runs when this is true; otherwise the run takes <strong>No</strong>.
+        As well as the answers, rules can use table totals, days between two dates, who made the request and what earlier steps said.</div>`;
     }
     if (n.type === "notify"){
       h += `<label class="form-label small fw-semibold mb-1 mt-2">Message</label><textarea class="form-control form-control-sm mb-2" rows="3" data-f="message" maxlength="1000">${esc(c.message)}</textarea>
@@ -552,19 +577,48 @@
     side.querySelectorAll("[data-a]").forEach(el => el.addEventListener("change", () => change(() => { n.config.assign[el.dataset.a] = el.value.trim(); })));
     side.querySelectorAll('input[name="rule"]').forEach(el => el.addEventListener("change", () => change(() => n.config.rule = el.value)));
     side.querySelectorAll('input[name="outcome"]').forEach(el => el.addEventListener("change", () => change(() => { n.config.outcome = el.value; if (["End", "Completed", "Rejected"].includes(n.label)) n.label = el.value === "rejected" ? "Rejected" : "Completed"; })));
-    if (n.type === "condition" && n.config.condition){
-      const tree = n.config.condition;
-      const logic = side.querySelector("[data-cond-logic]");
-      if (logic) logic.onchange = () => change(() => tree.logic = logic.value === "or" ? "or" : "and");
-      const neg = side.querySelector("[data-cond-negate]");
-      if (neg) neg.onchange = () => change(() => tree.negate = neg.checked);
-      side.querySelectorAll("[data-cond]").forEach(el => el.onchange = () => {
-        const [idx,key] = el.dataset.cond.split(":");
-        change(() => tree.rules[+idx][key] = el.value);
+    const modeSel = side.querySelector("[data-route-mode]");
+    if (modeSel) modeSel.onchange = () => change(() => n.config.mode = modeSel.value);
+    side.querySelectorAll("[data-branch-label]").forEach(inp => inp.oninput = () => {
+      n.config.branches[+inp.dataset.branchLabel].label = inp.value; markDirty(); render();
+    });
+    side.querySelectorAll("[data-branch-remove]").forEach(btn => btn.onclick = () => change(() => {
+      const gone = n.config.branches.splice(+btn.dataset.branchRemove, 1)[0];
+      graph.edges = graph.edges.filter(e => !(e.from === n.id && e.port === gone.id));   // its connection goes too
+    }));
+    const branchAdd = side.querySelector("#branchAdd");
+    if (branchAdd) branchAdd.onclick = () => change(() => {
+      const used = new Set(n.config.branches.map(b => b.id));
+      let i = 1; while (used.has("b" + i)) i++;
+      n.config.branches.push({id: "b" + i, label: `Path ${n.config.branches.length + 1}`,
+                              condition: {type: "group", logic: "and", negate: false, rules: []}});
+    });
+    side.querySelectorAll("[data-branch-rules]").forEach(host => {
+      const idx = +host.dataset.branchRules;
+      let snapped = false;
+      new StudioRules.Builder(host, {
+        catalog: ruleCatalog(), value: n.config.branches[idx].condition, depth: 3,
+        emptyText: "Add a rule to say when this path is taken.",
+        onChange: tree => {
+          if (!snapped){ undoStack.push(state()); redoStack = []; snapped = true; }
+          n.config.branches[idx].condition = tree; markDirty(); render();
+        },
       });
-      side.querySelectorAll("[data-cond-remove]").forEach(btn => btn.onclick = () => change(() => tree.rules.splice(+btn.dataset.condRemove, 1)));
-      const add = side.querySelector("#condAdd");
-      if (add) add.onclick = () => change(() => tree.rules.push({type:"rule",field:"",op:"eq",compare:"value",field2:"",value:"",value2:""}));
+    });
+
+    const condHost = side.querySelector("#condRules");
+    if (condHost){
+      let snapped = false;
+      new StudioRules.Builder(condHost, {
+        catalog: ruleCatalog(), value: n.config.condition, depth: 3,
+        emptyText: "Add a rule to decide when the Yes path is taken.",
+        onChange: tree => {
+          if (!snapped){ undoStack.push(state()); redoStack = []; snapped = true; }
+          n.config.condition = tree;
+          delete n.config.field; delete n.config.op; delete n.config.value;   // the old single-rule shape
+          markDirty(); render();
+        },
+      });
     }
     const pp = side.querySelector("#peoplePick");
     if (pp){

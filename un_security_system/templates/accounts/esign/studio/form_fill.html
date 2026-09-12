@@ -29,6 +29,7 @@
     {% endif %}
 
     {% include "accounts/esign/studio/_form_sheet.html" with schema=schema values=values errors=errors scope="submitter" %}
+    {% form_logic_payload schema values "submitter" as logic_payload %}{{ logic_payload|json_script:"formLogic" }}
 
     {% if slots %}
     <div class="card mt-3"><div class="card-body">
@@ -55,6 +56,7 @@
 
 {% block extra_js %}
 {% include "accounts/esign/studio/_people_picker.html" %}
+{% include "accounts/esign/studio/_rules.html" %}
 {% include "accounts/esign/studio/_form_script.html" %}
 <script>
 (function(){

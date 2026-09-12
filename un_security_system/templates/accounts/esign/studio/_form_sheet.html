@@ -6,6 +6,10 @@
   include with: schema, values, errors, scope
     scope = "submitter" | a workflow node id  → those fields are editable
     scope = None                               → everything read-only
+
+  Every element is wrapped with its id, key and current state, and the fields
+  this person owns always render their input — so _form_script.html can grey
+  them out or bring them back as the answers change, without a page reload.
 {% endcomment %}
 {% with th=schema.theme hd=schema.header %}
 <div class="fs-sheet {% if th.density == 'compact' %}compact{% endif %} {% if th.rounded %}rounded-fields{% endif %}"
@@ -17,9 +21,12 @@
   </div>
   <div class="row g-3 fs-body">
   {% for el in schema.elements %}
-    <div class="col-md-{{ el.width }}">
+    {% with rs=el.runtime_state %}
+    <div class="col-md-{{ el.width }} fs-item fs-state-{{ rs.state|default:'active' }}{% if rs.state == 'hidden' %} d-none{% endif %}"
+         data-el="{{ el.id }}" data-type="{{ el.type }}"{% if el.key %} data-key="{{ el.key }}"{% endif %}
+         data-mine="{% if scope and el.fill_by|default:'submitter' == scope %}1{% else %}0{% endif %}">
     {% if el.type == 'heading' %}
-      <div class="fs-heading fs-h-{{ el.style.size }}" style="color:{{ el.style.color }};text-align:{{ el.style.align }};{% if el.style.bg %}background:{{ el.style.bg }};padding:.35rem .6rem;border-radius:.3rem;{% else %}border-bottom:2px solid var(--fs-accent);{% endif %}">{{ el.text }}</div>
+      <div class="fs-heading fs-h-{{ el.style.size }}" style="color:{{ el.style.color }};text-align:{{ el.style.align }};{% if el.style.bg %}background:{{ el.style.bg }};padding:.35rem .6rem;border-radius:.3rem;{% else %}border-bottom:2px solid var(--fs-accent);{% endif %}">{{ el.text }}<span class="fs-state-note badge bg-light text-secondary border ms-2">{{ rs.message|default:"Not needed" }}</span></div>
     {% elif el.type == 'paragraph' %}
       <div class="fs-para {% if el.style.size == 'sm' %}small{% endif %}" style="color:{{ el.style.color }};text-align:{{ el.style.align }};{% if el.style.bg %}background:{{ el.style.bg }};padding:.5rem .7rem;border-radius:.3rem;{% endif %}">{{ el.text|linebreaksbr }}</div>
     {% elif el.type == 'divider' %}
@@ -34,27 +41,31 @@
       {% if el.show_date %}<div class="small text-muted mt-1">Date: ____________</div>{% endif %}
     {% else %}
       {% with val=values|get_item:el.key err=errors|get_item:el.key fb=el.fill_by|default:"submitter" %}
-      {% if scope and fb == scope and el.runtime_state.state == 'active' %}
-        <label class="fs-label" for="f_{{ el.key }}">{{ el.label }}{% if el.required %} <span class="text-danger">*</span>{% endif %}</label>
+      {% if scope and fb == scope %}
+        {% with off=rs.state|default:'active'|cut:'active' %}
+        <label class="fs-label" for="f_{{ el.key }}">{{ el.label }}
+          <span class="fs-req text-danger{% if rs.state != 'active' %} d-none{% endif %}">{% if el.required %} *{% endif %}</span>
+          <span class="fs-state-note badge bg-light text-secondary border ms-1{% if rs.from == 'section' %} fs-note-quiet{% endif %}">{{ rs.message|default:"Not applicable" }}</span>
+        </label>
         {% if el.type == 'textarea' %}
-          <textarea class="form-control {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" rows="{{ el.rows }}" placeholder="{{ el.placeholder }}" {% if el.required %}required{% endif %}>{{ val }}</textarea>
+          <textarea class="form-control {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" rows="{{ el.rows }}" placeholder="{{ el.placeholder }}" {% if el.required and rs.state == 'active' %}required{% endif %} {% if rs.state != 'active' %}disabled{% endif %}>{{ val }}</textarea>
         {% elif el.type == 'select' %}
-          <select class="form-select {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" {% if el.required %}required{% endif %}>
+          <select class="form-select {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" {% if el.required and rs.state == 'active' %}required{% endif %} {% if rs.state != 'active' %}disabled{% endif %}>
             <option value="">{{ el.placeholder|default:"Choose…" }}</option>
             {% for o in el.options %}<option {% if o == val %}selected{% endif %}>{{ o }}</option>{% endfor %}
           </select>
         {% elif el.type == 'radio' %}
           <div class="{% if err %}is-invalid{% endif %}">{% for o in el.options %}
-            <label class="form-check form-check-inline"><input class="form-check-input" type="radio" name="f_{{ el.key }}" value="{{ o }}" {% if o == val %}checked{% endif %} {% if el.required %}required{% endif %}> {{ o }}</label>
+            <label class="form-check form-check-inline"><input class="form-check-input" type="radio" name="f_{{ el.key }}" value="{{ o }}" {% if o == val %}checked{% endif %} {% if el.required and rs.state == 'active' %}required{% endif %} {% if rs.state != 'active' %}disabled{% endif %}> {{ o }}</label>
           {% endfor %}</div>
         {% elif el.type == 'checkboxes' %}
           <div>{% for o in el.options %}
-            <label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="f_{{ el.key }}" value="{{ o }}" {% if o|in_list:val %}checked{% endif %}> {{ o }}</label>
+            <label class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="f_{{ el.key }}" value="{{ o }}" {% if o|in_list:val %}checked{% endif %} {% if rs.state != 'active' %}disabled{% endif %}> {{ o }}</label>
           {% endfor %}</div>
         {% elif el.type == 'yesno' %}
           <div class="btn-group" role="group">
-            <input type="radio" class="btn-check" name="f_{{ el.key }}" id="f_{{ el.key }}_y" value="yes" {% if val == 'yes' %}checked{% endif %} {% if el.required %}required{% endif %}><label class="btn btn-outline-primary btn-sm px-3" for="f_{{ el.key }}_y">Yes</label>
-            <input type="radio" class="btn-check" name="f_{{ el.key }}" id="f_{{ el.key }}_n" value="no" {% if val == 'no' %}checked{% endif %}><label class="btn btn-outline-primary btn-sm px-3" for="f_{{ el.key }}_n">No</label>
+            <input type="radio" class="btn-check" name="f_{{ el.key }}" id="f_{{ el.key }}_y" value="yes" {% if val == 'yes' %}checked{% endif %} {% if el.required and rs.state == 'active' %}required{% endif %} {% if rs.state != 'active' %}disabled{% endif %}><label class="btn btn-outline-primary btn-sm px-3" for="f_{{ el.key }}_y">Yes</label>
+            <input type="radio" class="btn-check" name="f_{{ el.key }}" id="f_{{ el.key }}_n" value="no" {% if val == 'no' %}checked{% endif %} {% if rs.state != 'active' %}disabled{% endif %}><label class="btn btn-outline-primary btn-sm px-3" for="f_{{ el.key }}_n">No</label>
           </div>
         {% elif el.type == 'table' %}
           <div class="table-responsive">
@@ -62,20 +73,21 @@
               <thead><tr>{% for c in el.columns %}<th>{{ c.label }}</th>{% endfor %}<th style="width:34px"></th></tr></thead>
               <tbody>
                 {% for row in val|blank_rows:el.rows %}
-                <tr>{% for c in el.columns %}<td><input class="form-control form-control-sm" data-col="{{ c.key }}" data-kind="{{ c.kind }}" type="{% if c.kind == 'date' %}date{% else %}text{% endif %}" {% if c.kind == 'number' %}inputmode="decimal"{% endif %} name="f_{{ el.key }}__{{ forloop.parentloop.counter0 }}__{{ c.key }}" value="{{ row|get_item:c.key }}"></td>{% endfor %}
+                <tr>{% for c in el.columns %}<td><input class="form-control form-control-sm" data-col="{{ c.key }}" data-kind="{{ c.kind }}" type="{% if c.kind == 'date' %}date{% else %}text{% endif %}" {% if c.kind == 'number' %}inputmode="decimal"{% endif %} name="f_{{ el.key }}__{{ forloop.parentloop.counter0 }}__{{ c.key }}" value="{{ row|get_item:c.key }}" {% if rs.state != 'active' %}disabled{% endif %}></td>{% endfor %}
                   <td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0 fs-row-del" title="Remove row"><i class="bi bi-x-lg"></i></button></td></tr>
                 {% endfor %}
               </tbody>
               {% if el.show_total %}<tfoot><tr>{% for c in el.columns %}<th class="small">{% if c.kind == 'number' %}<span data-total="{{ c.key }}">0</span>{% elif forloop.first %}Total{% endif %}</th>{% endfor %}<th></th></tr></tfoot>{% endif %}
             </table>
             <input type="hidden" name="f_{{ el.key }}__rows" value="{{ val|blank_rows:el.rows|length }}">
-            {% if el.allow_add %}<button type="button" class="btn btn-sm btn-outline-primary fs-row-add"><i class="bi bi-plus-lg me-1"></i>Add row</button>{% endif %}
+            {% if el.allow_add %}<button type="button" class="btn btn-sm btn-outline-primary fs-row-add" {% if rs.state != 'active' %}disabled{% endif %}><i class="bi bi-plus-lg me-1"></i>Add row</button>{% endif %}
           </div>
         {% else %}
           <input class="form-control {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" value="{{ val }}" placeholder="{{ el.placeholder }}"
-                 type="{% if el.type == 'email' %}email{% elif el.type == 'date' %}date{% else %}text{% endif %}" {% if el.type == 'number' %}inputmode="decimal"{% endif %} {% if el.required %}required{% endif %}>
+                 type="{% if el.type == 'email' %}email{% elif el.type == 'date' %}date{% else %}text{% endif %}" {% if el.type == 'number' %}inputmode="decimal"{% endif %} {% if el.required and rs.state == 'active' %}required{% endif %} {% if rs.state != 'active' %}disabled{% endif %}>
         {% endif %}
         {% if err %}<div class="invalid-feedback d-block">{{ err }}</div>{% elif el.help %}<div class="form-text">{{ el.help }}</div>{% endif %}
+        {% endwith %}
       {% else %}
         <div class="p-2 rounded border bg-light" style="opacity:.82">
         <div class="fs-label">{{ el.label }}
@@ -106,6 +118,7 @@
       {% endwith %}
     {% endif %}
     </div>
+    {% endwith %}
   {% endfor %}
   </div>
 </div>
