@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- The same palette as the website's stylesheet. -->
-    <color name="un_blue">#009EDB</color>
-    <color name="un_dark_blue">#005A8B</color>
-    <color name="un_navy">#0B2A45</color>
-</resources>
