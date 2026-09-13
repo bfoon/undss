@@ -1,0 +1,59 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "gm.unpass.mobile"
+    compileSdk = 34
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        // mobile_scanner's ML Kit dependency needs the newer library desugaring.
+        coreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+
+    defaultConfig {
+        applicationId = "gm.unpass.mobile"
+        minSdk = 24            // ML Kit's floor; covers Android 7 and later
+        targetSdk = 34
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        release {
+            // Set these in android/key.properties — see BUILD.md. Falls back to
+            // the debug key so a first build works without any setup.
+            def props = new Properties()
+            def file = rootProject.file("key.properties")
+            if (file.exists()) {
+                file.withInputStream { props.load(it) }
+                keyAlias = props["keyAlias"]
+                keyPassword = props["keyPassword"]
+                storeFile = props["storeFile"] ? rootProject.file(props["storeFile"]) : null
+                storePassword = props["storePassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            def hasKey = rootProject.file("key.properties").exists()
+            signingConfig = hasKey ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+flutter { source = "../.." }
+
+dependencies {
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+}
