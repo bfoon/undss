@@ -3,7 +3,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../core/api.dart';
 import '../core/theme.dart';
-import '../widgets/common.dart';
 import 'asset_result.dart';
 
 /// The camera view for reading an asset label.
@@ -98,32 +97,53 @@ class _ScannerScreenState extends State<ScannerScreen> with WidgetsBindingObserv
             children: [
               const Icon(Icons.help_outline, size: 40, color: UnColors.amber),
               const SizedBox(height: 12),
-              const Text('Not recognised',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: UnColors.navy)),
+              const Text(
+                'Not recognised',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  color: UnColors.navy,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text(message, textAlign: TextAlign.center, style: const TextStyle(color: UnColors.muted)),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: UnColors.muted),
+              ),
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                    color: UnColors.canvas, borderRadius: BorderRadius.circular(10)),
-                child: Text(raw.length > 160 ? '${raw.substring(0, 160)}…' : raw,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: UnColors.ink)),
+                  color: UnColors.canvas,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  raw.length > 160 ? '${raw.substring(0, 160)}…' : raw,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: UnColors.ink,
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: () {
                   Navigator.pop(sheetContext);
                   Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AssetSearchScreen()));
+                    MaterialPageRoute(builder: (_) => const AssetSearchScreen()),
+                  );
                 },
                 icon: const Icon(Icons.search),
                 label: const Text('Search by tag or name'),
               ),
               const SizedBox(height: 8),
               FilledButton(
-                  onPressed: () => Navigator.pop(sheetContext), child: const Text('Scan another')),
+                onPressed: () => Navigator.pop(sheetContext),
+                child: const Text('Scan another'),
+              ),
             ],
           ),
         ),
@@ -167,10 +187,20 @@ class _ScannerScreenState extends State<ScannerScreen> with WidgetsBindingObserv
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 44),
+                    const Icon(
+                      Icons.no_photography_outlined,
+                      color: Colors.white70,
+                      size: 44,
+                    ),
                     const SizedBox(height: 14),
-                    const Text('The camera is not available.',
-                        style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600)),
+                    const Text(
+                      'The camera is not available.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     const Text(
                       'Allow camera access for UN PASS in your phone settings, then come back.',
@@ -180,9 +210,12 @@ class _ScannerScreenState extends State<ScannerScreen> with WidgetsBindingObserv
                     const SizedBox(height: 18),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white, side: const BorderSide(color: Colors.white38)),
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white38),
+                      ),
                       onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AssetSearchScreen())),
+                        MaterialPageRoute(builder: (_) => const AssetSearchScreen()),
+                      ),
                       icon: const Icon(Icons.search),
                       label: const Text('Search instead'),
                     ),
@@ -201,15 +234,25 @@ class _ScannerScreenState extends State<ScannerScreen> with WidgetsBindingObserv
                   children: [
                     CircularProgressIndicator(color: Colors.white),
                     SizedBox(height: 14),
-                    Text('Looking it up…', style: TextStyle(color: Colors.white, fontSize: 16)),
+                    Text(
+                      'Looking it up…',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
                   ],
                 ),
               ),
             ),
           Positioned(
-            left: 0, right: 0, bottom: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: Container(
-              padding: EdgeInsets.fromLTRB(24, 18, 24, 24 + MediaQuery.of(context).padding.bottom),
+              padding: EdgeInsets.fromLTRB(
+                24,
+                18,
+                24,
+                24 + MediaQuery.of(context).padding.bottom,
+              ),
               color: Colors.black.withOpacity(0.55),
               child: const Text(
                 'Hold the label inside the frame. It scans on its own — no button to press.',
@@ -250,10 +293,18 @@ class _ScanFrame extends StatelessWidget {
                   width: 44,
                   decoration: BoxDecoration(
                     border: Border(
-                      top: corner.y < 0 ? const BorderSide(color: UnColors.blue, width: 4) : BorderSide.none,
-                      bottom: corner.y > 0 ? const BorderSide(color: UnColors.blue, width: 4) : BorderSide.none,
-                      left: corner.x < 0 ? const BorderSide(color: UnColors.blue, width: 4) : BorderSide.none,
-                      right: corner.x > 0 ? const BorderSide(color: UnColors.blue, width: 4) : BorderSide.none,
+                      top: corner.y < 0
+                          ? const BorderSide(color: UnColors.blue, width: 4)
+                          : BorderSide.none,
+                      bottom: corner.y > 0
+                          ? const BorderSide(color: UnColors.blue, width: 4)
+                          : BorderSide.none,
+                      left: corner.x < 0
+                          ? const BorderSide(color: UnColors.blue, width: 4)
+                          : BorderSide.none,
+                      right: corner.x > 0
+                          ? const BorderSide(color: UnColors.blue, width: 4)
+                          : BorderSide.none,
                     ),
                   ),
                 ),
