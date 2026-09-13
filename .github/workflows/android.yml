@@ -1,0 +1,170 @@
+name: Android app
+
+# Builds the UN PASS phone app whenever its code changes, so every push is
+# checked by a compiler and leaves a downloadable APK behind.
+#
+#   push to master   → analyse, test, build, attach the APKs to the run
+#   pull request     → the same, so a branch is checked before it is merged
+#   tag v1.2.3       → the same, plus a GitHub Release with the APKs on it
+#   "Run workflow"   → build on demand from the Actions tab
+on:
+  push:
+    branches: [master, main]
+    tags: ["v*"]
+    # No `paths` filter here on purpose: a tag usually points at a commit that
+    # is already pushed, so its event carries no changed files and a path
+    # filter would quietly skip the release build.
+  pull_request:
+    paths:
+      - "unpass_mobile/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Which build to make"
+        type: choice
+        default: release
+        options: [release, debug]
+
+# Pushing twice in quick succession cancels the older build rather than
+# queueing both. Releases are never cancelled.
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  FLUTTER_VERSION: "3.24.5"
+  APP_DIR: unpass_mobile
+
+jobs:
+  build:
+    name: Build the APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Android's Gradle plugin needs a JDK; 17 matches build.gradle.
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Flutter ${{ env.FLUTTER_VERSION }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Fetch packages
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter pub get
+
+      # Fails the run on real errors. Warnings and hints are reported but don't
+      # block a build — they are for tidying up, not for stopping a release.
+      - name: Analyse
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Tests
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          if [ -d test ] && [ -n "$(ls -A test 2>/dev/null)" ]; then
+            flutter test
+          else
+            echo "No tests in this app yet — skipping."
+          fi
+
+      # The release keystore is held in repository secrets. Without them the
+      # build still succeeds, signed with the debug key, and says so — so a
+      # fresh clone of the project builds something installable straight away.
+      - name: Unpack the signing key
+        id: signing
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "signed=debug" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — this APK is signed with the debug key and is for testing only."
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/unpass-release.jks
+          cat > android/key.properties <<PROPS
+          storeFile=unpass-release.jks
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          PROPS
+          echo "signed=release" >> "$GITHUB_OUTPUT"
+
+      # The build number rises with every run, so two builds of the same
+      # version are still tellable apart on a handset.
+      - name: Build
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          MODE="${{ github.event.inputs.build_type || 'release' }}"
+          flutter build apk --"$MODE" --build-number=${{ github.run_number }}
+          if [ "$MODE" = "release" ]; then
+            flutter build apk --release --split-per-abi --build-number=${{ github.run_number }}
+          fi
+
+      - name: Name the file
+        id: name
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | cut -d+ -f1)
+          SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "label=unpass-$VERSION-build${{ github.run_number }}-$SHORT" >> "$GITHUB_OUTPUT"
+          ls -la build/app/outputs/flutter-apk/
+
+      - name: Attach the APKs to this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.label }}-${{ steps.signing.outputs.signed }}
+          path: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          {
+            echo "### UN PASS app — build ${{ github.run_number }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | ${{ steps.name.outputs.version }} |"
+            echo "| Signed with | ${{ steps.signing.outputs.signed }} key |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo ""
+            if [ "${{ steps.signing.outputs.signed }}" = "debug" ]; then
+              echo "> Signed with the debug key — fine for testing, not for handing out."
+              echo "> Add the four \`ANDROID_*\` secrets to sign it properly."
+            fi
+            echo ""
+            echo "Download it from **Artifacts** at the bottom of this page."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Tagging a version publishes the APKs so people can install them without
+      # a GitHub account of their own.
+      - name: Publish a release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/*.apk
+          generate_release_notes: true
+          body: |
+            UN PASS for Android — ${{ steps.name.outputs.version }} (build ${{ github.run_number }})
+
+            `app-release.apk` installs on any supported phone.
+            The `app-arm64-v8a-release.apk` and similar files are smaller
+            downloads for one type of phone each; use the plain one if unsure.
+
+            Needs Android 7.0 or later.
