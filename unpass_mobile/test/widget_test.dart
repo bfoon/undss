@@ -13,12 +13,16 @@ void main() {
   testWidgets('the sign-in screen asks for the right things', (tester) async {
     await tester.pumpWidget(wrap(SignInScreen(onSignedIn: (_) {})));
 
-    expect(find.text('Sign in'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Username'), findsOneWidget);
+    expect(find.text('Sign in to UN PASS'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Username or email'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Password'), findsOneWidget);
-    expect(find.text('Continue'), findsOneWidget);
+    expect(find.text('Sign in securely'), findsOneWidget);
+
     // The site address is tucked away — most people never touch it.
-    expect(find.text('Site address'), findsOneWidget);
+    expect(find.text('Connection settings'), findsOneWidget);
+    await tester.tap(find.text('Connection settings'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, 'UN PASS address'), findsOneWidget);
   });
 
   testWidgets('the password can be shown and hidden', (tester) async {
@@ -31,25 +35,40 @@ void main() {
   });
 
   testWidgets('the code screen wants six digits and offers another code', (tester) async {
-    await tester.pumpWidget(wrap(
-      const OtpScreen(username: 'awa', password: 'x', sentTo: 'aw•••@undp.org'),
-    ));
+    await tester.pumpWidget(
+      wrap(
+        const OtpScreen(
+          identifier: 'awa',
+          password: 'x',
+          sentTo: 'aw•••@undp.org',
+        ),
+      ),
+    );
 
-    expect(find.text('Check your email'), findsOneWidget);
+    expect(find.text('Verify your sign-in'), findsOneWidget);
     expect(find.textContaining('aw•••@undp.org'), findsOneWidget);
-    expect(find.text('Send another code'), findsOneWidget);
+    expect(find.text('Resend code'), findsOneWidget);
 
     // Too few digits: it says so rather than calling the server.
     await tester.enterText(find.byType(TextField), '123');
     await tester.tap(find.text('Verify and sign in'));
     await tester.pump();
-    expect(find.textContaining('six digits'), findsOneWidget);
+    expect(find.textContaining('six-digit'), findsOneWidget);
   });
 
   testWidgets('a status pill takes its colour from the status', (tester) async {
-    await tester.pumpWidget(wrap(
-      const Scaffold(body: Column(children: [StatusPill('Completed'), StatusPill('Rejected')])),
-    ));
+    await tester.pumpWidget(
+      wrap(
+        const Scaffold(
+          body: Column(
+            children: [
+              StatusPill('Completed'),
+              StatusPill('Rejected'),
+            ],
+          ),
+        ),
+      ),
+    );
 
     expect(find.text('Completed'), findsOneWidget);
     expect(find.text('Rejected'), findsOneWidget);
