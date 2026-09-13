@@ -1,4 +1,6 @@
 from django.urls import path
+
+from . import api_mobile
 from django.contrib.auth import views as auth_views
 from . import views, views_ict, view_asset_management, views_batch, view_asset_reports
 from .hr import views_hr
@@ -358,6 +360,20 @@ urlpatterns = [
     path("esign/forms/<int:pk>/save/", views_esign_forms.esign_form_save, name="esign_form_save"),
     path("esign/forms/<int:pk>/preview.pdf", views_esign_forms.esign_form_preview_pdf, name="esign_form_preview_pdf"),
     path("esign/forms/<int:pk>/section-step/", views_esign_forms.esign_form_section_step, name="esign_form_section_step"),
+
+    # ── the phone app ───────────────────────────────────────────────────────
+    path("api/m/ping/", api_mobile.ping, name="api_m_ping"),
+    path("api/m/auth/login/", api_mobile.auth_login, name="api_m_login"),
+    path("api/m/auth/verify/", api_mobile.auth_verify, name="api_m_verify"),
+    path("api/m/auth/resend/", api_mobile.auth_resend, name="api_m_resend"),
+    path("api/m/auth/logout/", api_mobile.auth_logout, name="api_m_logout"),
+    path("api/m/me/", api_mobile.me, name="api_m_me"),
+    path("api/m/inbox/", api_mobile.inbox, name="api_m_inbox"),
+    path("api/m/tasks/<str:token>/", api_mobile.task_detail, name="api_m_task"),
+    path("api/m/tasks/<str:token>/decide/", api_mobile.task_decide, name="api_m_task_decide"),
+    path("api/m/assets/lookup/", api_mobile.asset_lookup, name="api_m_asset_lookup"),
+    path("api/m/assets/search/", api_mobile.asset_search, name="api_m_asset_search"),
+    path("api/m/assets/mine/", api_mobile.my_assets, name="api_m_my_assets"),
     path("esign/forms/<int:pk>/duplicate/", views_esign_forms.esign_form_duplicate, name="esign_form_duplicate"),
     path("esign/forms/<int:pk>/delete/", views_esign_forms.esign_form_delete, name="esign_form_delete"),
     path("esign/forms/<int:pk>/fill/", views_esign_forms.esign_form_fill, name="esign_form_fill"),
