@@ -290,5 +290,62 @@ class Api {
   Future<List<dynamic>> myAssets() async =>
       (await _send('GET', '/assets/mine/'))['assets'] as List<dynamic>;
 
+  // ── envelopes and signing ────────────────────────────────────────────────
+
+  Future<List<dynamic>> envelopes({String status = '', String q = ''}) async {
+    final query = <String, String>{};
+    if (status.isNotEmpty) query['status'] = status;
+    if (q.isNotEmpty) query['q'] = q;
+    return (await _send('GET', '/envelopes/', query: query.isEmpty ? null : query))['envelopes'] as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> envelope(int id) async =>
+      (await _send('GET', '/envelopes/$id/'))['envelope'] as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> signSheet(String token) => _send('GET', '/sign/$token/');
+
+  Future<String> sign(String token,
+      {required String signature, String initials = '', bool saveSignature = false,
+      Map<String, dynamic> fields = const {}}) async {
+    final data = await _send('POST', '/sign/$token/submit/', body: {
+      'signature': signature,
+      'initials': initials,
+      'consent': true,
+      'save_signature': saveSignature,
+      'fields': fields,
+    });
+    return (data['message'] as String?) ?? 'Signed.';
+  }
+
+  Future<void> decline(String token, String reason) =>
+      _send('POST', '/sign/$token/decline/', body: {'reason': reason});
+
+  // ── forms ────────────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> forms() => _send('GET', '/forms/');
+
+  Future<Map<String, dynamic>> form(int id) async =>
+      (await _send('GET', '/forms/$id/'))['form'] as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> submitForm(int id,
+          {required Map<String, dynamic> values, Map<String, String> slots = const {}}) =>
+      _send('POST', '/forms/$id/submit/', body: {'values': values, 'slots': slots});
+
+  Future<Map<String, dynamic>> submission(int id) async =>
+      (await _send('GET', '/submissions/$id/'))['submission'] as Map<String, dynamic>;
+
+  // ── flows and runs ───────────────────────────────────────────────────────
+
+  Future<List<dynamic>> flows() async => (await _send('GET', '/flows/'))['flows'] as List<dynamic>;
+
+  Future<List<dynamic>> runs({String status = 'open'}) async =>
+      (await _send('GET', '/runs/', query: {'status': status}))['runs'] as List<dynamic>;
+
+  Future<Map<String, dynamic>> run(int id) async =>
+      (await _send('GET', '/runs/$id/'))['run'] as Map<String, dynamic>;
+
+  Future<void> cancelRun(int id, String reason) =>
+      _send('POST', '/runs/$id/cancel/', body: {'reason': reason});
+
   String webUrl(String path) => '$_baseUrl$path';
 }

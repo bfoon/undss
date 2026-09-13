@@ -10,7 +10,7 @@ import json
 from functools import wraps
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
-from django.http import JsonResponse
+from django.http import JsonResponse, QueryDict
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -770,3 +770,481 @@ def my_assets(request):
             "assets": [_asset_json(asset) for asset in rows],
         }
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reusing the website's own views
+#
+# Signing and form submission are long, careful pieces of work: consent, field
+# placement, the audit trail, notifications, starting the workflow. Rather than
+# write a second version for the phone that could drift out of step, the API
+# hands the same request objects to the very same view functions and turns
+# their answer into JSON.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _as_form_post(request, values):
+    """Point this request at a form-style POST, so a website view can handle it."""
+    post = QueryDict(mutable=True)
+    for key, value in values.items():
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                post.appendlist(key, str(item))
+        elif value is not None:
+            post[key] = str(value)
+    request.POST = post
+    request.method = "POST"
+    return request
+
+
+def _messages_from(request):
+    """Collect anything the view put in the message framework, for the app to show."""
+    try:
+        from django.contrib.messages import get_messages
+
+        return [{"level": m.level_tag, "text": str(m)} for m in get_messages(request)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Envelopes
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _envelope_json(env, recipient=None):
+    return {
+        "id": env.pk,
+        "envelope_id": env.envelope_id,
+        "subject": env.subject,
+        "message": env.message or "",
+        "status": env.status,
+        "status_label": env.get_status_display(),
+        "created_by": env.created_by.get_full_name() if env.created_by else "",
+        "created": env.created_at.isoformat() if env.created_at else None,
+        "expires": env.expires_at.date().isoformat() if getattr(env, "expires_at", None) else None,
+        "documents": [{"id": d.pk, "name": d.name, "pages": getattr(d, "page_count", 0) or 0}
+                      for d in env.documents.all()],
+        "recipients": [{"name": r.name, "email": r.email, "role": r.role,
+                        "status": r.status, "order": r.order,
+                        "is_me": recipient is not None and r.pk == recipient.pk}
+                       for r in env.recipients.all()],
+        "my_token": str(recipient.token) if recipient else None,
+    }
+
+
+@api
+@require_GET
+@signed_in
+def envelopes(request):
+    """Every envelope this person can see, newest first."""
+    from .views_esign import _esign_visible_envelopes
+
+    status = (request.GET.get("status") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+    rows = _esign_visible_envelopes(request.user).select_related("created_by").prefetch_related("recipients")
+    if status:
+        rows = rows.filter(status=status)
+    if q:
+        from django.db.models import Q
+
+        rows = rows.filter(Q(subject__icontains=q) | Q(envelope_id__icontains=q))
+    rows = rows.order_by("-created_at")[:100]
+    from .models_esign import EnvelopeRecipient
+
+    mine = {r.envelope_id: r for r in
+            EnvelopeRecipient.objects.filter(user=request.user, envelope__in=[e.pk for e in rows])}
+    return JsonResponse({"ok": True, "count": len(rows),
+                         "envelopes": [_envelope_json(e, mine.get(e.pk)) for e in rows]})
+
+
+@api
+@require_GET
+@signed_in
+def envelope_detail(request, pk):
+    from .models_esign import Envelope, EnvelopeRecipient
+    from .views_esign import _esign_visible_envelopes
+
+    env = _esign_visible_envelopes(request.user).filter(pk=pk).first()
+    if env is None:
+        return _fail("That envelope no longer exists, or you can't see it.", 404)
+    me = EnvelopeRecipient.objects.filter(envelope=env, user=request.user).first()
+    data = _envelope_json(env, me)
+    data["events"] = [{"event": e.event, "note": e.note,
+                       "at": e.at.isoformat() if e.at else None}
+                      for e in env.events.order_by("-at")[:40]]
+    data["can_sign"] = bool(me and me.is_signing_role and me.can_sign_now()
+                            and me.status not in ("signed", "declined"))
+    data["final_url"] = f"/accounts/esign/envelope/{env.pk}/download/"
+    return JsonResponse({"ok": True, "envelope": data})
+
+
+@api
+@require_GET
+def sign_sheet(request, token):
+    """
+    What the app needs to sign: the documents, and the fields placed for this
+    person. Reachable by the emailed link, so no sign-in is required.
+    """
+    from .models_esign import EnvelopeRecipient
+
+    recipient = EnvelopeRecipient.objects.filter(token=token).select_related("envelope").first()
+    if recipient is None:
+        return _fail("That signing link is not valid.", 404)
+    env = recipient.envelope
+    if recipient.access_code:
+        return _fail("This envelope needs an access code. Open it in the browser.", 409,
+                     needs_browser=True, url=f"/accounts/esign/sign/{token}/")
+    if recipient.status in ("signed", "declined") or env.status == "completed":
+        return JsonResponse({"ok": True, "already_done": True, "status": recipient.status,
+                             "envelope": _envelope_json(env, recipient)})
+    if not recipient.can_sign_now():
+        return _fail("It is not your turn yet — you will be emailed when it is.", 409)
+
+    fields = list(env.fields.filter(recipient=recipient).values(
+        "id", "document_id", "kind", "page", "x", "y", "w", "h", "required", "label"))
+    return JsonResponse({"ok": True, "already_done": False,
+                         "envelope": _envelope_json(env, recipient),
+                         "consent_needed": True,
+                         "fields": fields,
+                         "documents": [{"id": d.pk, "name": d.name,
+                                        "url": f"/accounts/esign/t/{token}/doc/{d.pk}/"}
+                                       for d in env.documents.all()]})
+
+
+@api
+@require_POST
+def envelope_sign(request, token):
+    """
+    Sign from the phone. The drawn signature arrives as a data URL and is handed
+    to the website's own handler, so the audit trail, the stamping and the
+    notifications are identical to signing in a browser.
+    """
+    from .models_esign import EnvelopeRecipient
+    from .views_esign import _handle_sign_submit
+
+    data = _body(request) or {}
+    recipient = EnvelopeRecipient.objects.filter(token=token).select_related("envelope").first()
+    if recipient is None:
+        return _fail("That signing link is not valid.", 404)
+    if recipient.status in ("signed", "declined"):
+        return _fail("You have already responded to this envelope.", 409, stale=True)
+    signature = str(data.get("signature") or "")
+    if not signature.startswith("data:image/"):
+        return _fail("Draw your signature before signing.")
+    if not data.get("consent"):
+        return _fail("You need to accept the electronic record consent to sign.")
+
+    # The website's handler only fills fields that appear in the payload, so
+    # build an entry for every one of this person's fields: the drawn signature
+    # where a signature is wanted, and the obvious details filled in for them.
+    supplied = data.get("fields") if isinstance(data.get("fields"), dict) else {}
+    from .models_esign import SignatureField
+
+    user = recipient.user
+    auto = {
+        SignatureField.KIND_DATE: timezone.localdate().strftime("%d %b %Y"),
+        SignatureField.KIND_NAME: recipient.name or (user.get_full_name() if user else ""),
+        SignatureField.KIND_EMAIL: recipient.email or (getattr(user, "email", "") if user else ""),
+        SignatureField.KIND_TITLE: getattr(user, "role", "") if user else "",
+    }
+    payload = {}
+    for field in recipient.envelope.fields.filter(recipient=recipient):
+        fid = str(field.id)
+        if fid in supplied:
+            payload[fid] = supplied[fid]
+        elif field.kind in (SignatureField.KIND_SIGNATURE, SignatureField.KIND_INITIALS):
+            payload[fid] = ""                      # falls through to the drawing below
+        else:
+            payload[fid] = auto.get(field.kind, "")
+
+    values = {
+        "consent": "1",
+        "signature_data": signature,
+        "initials_data": str(data.get("initials") or signature),
+        "fields_payload": json.dumps(payload),
+    }
+    if data.get("save_signature"):
+        values["save_signature"] = "1"
+    _as_form_post(request, values)
+    _handle_sign_submit(request, recipient)
+    recipient.refresh_from_db()
+    if recipient.status != "signed":
+        notes = _messages_from(request)
+        return _fail(notes[0]["text"] if notes else "The signature could not be recorded.", 400)
+    return JsonResponse({"ok": True, "status": recipient.status,
+                         "message": "Signed. Everyone will be notified."})
+
+
+@api
+@require_POST
+def envelope_decline(request, token):
+    from .models_esign import EnvelopeRecipient
+    from .views_esign import esign_decline
+
+    data = _body(request) or {}
+    reason = str(data.get("reason") or "").strip()
+    if not reason:
+        return _fail("Please say why you are declining.")
+    recipient = EnvelopeRecipient.objects.filter(token=token).first()
+    if recipient is None:
+        return _fail("That link is not valid.", 404)
+    _as_form_post(request, {"reason": reason})
+    esign_decline(request, token)
+    recipient.refresh_from_db()
+    return JsonResponse({"ok": recipient.status == "declined", "status": recipient.status,
+                         "message": "Declined. The sender has been told."})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Forms
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api
+@require_GET
+@signed_in
+def forms(request):
+    """Forms this person can fill in, and their own forms."""
+    from .models_esign_studio import FormSubmission, FormTemplate
+    from .studio_common_esign import shared_template_q
+
+    mine = FormTemplate.objects.filter(created_by=request.user).order_by("name")[:100]
+    fillable = (FormTemplate.objects.filter(shared_template_q(request.user), is_published=True)
+                .order_by("name")[:100])
+
+    def row(f):
+        return {"id": f.pk, "name": f.name, "description": f.description or "",
+                "category": f.category or "", "published": f.is_published,
+                "reference_prefix": f.reference_prefix,
+                "workflow": f.workflow.name if f.workflow_id else ""}
+
+    subs = (FormSubmission.objects.filter(submitted_by=request.user)
+            .select_related("form").order_by("-created_at")[:50])
+    return JsonResponse({"ok": True,
+                         "fillable": [row(f) for f in fillable],
+                         "mine": [row(f) for f in mine],
+                         "submissions": [{"id": s.pk, "reference": s.reference,
+                                          "form": s.form_name, "status": s.status,
+                                          "status_label": s.get_status_display(),
+                                          "created": s.created_at.isoformat() if s.created_at else None}
+                                         for s in subs]})
+
+
+@api
+@require_GET
+@signed_in
+def form_schema(request, pk):
+    """
+    The form itself, ready for the app to draw: the questions, the section
+    rules, and who fills each part in.
+    """
+    from .form_pdf_esign import resolved_schema
+    from .models_esign_studio import FormTemplate
+    from .studio_common_esign import shared_template_q
+
+    form = (FormTemplate.objects.filter(shared_template_q(request.user), pk=pk).first()
+            or FormTemplate.objects.filter(created_by=request.user, pk=pk).first())
+    if form is None:
+        return _fail("That form no longer exists, or it isn't shared with you.", 404)
+    schema = resolved_schema(form.schema or {})
+    prefill = {}
+    for el in schema.get("elements") or []:
+        key, source = el.get("key"), el.get("prefill")
+        if not key or not source:
+            continue
+        office = getattr(request.user, "country_office", None)
+        agency = getattr(request.user, "agency", None) or getattr(office, "agency", None)
+        prefill[key] = {
+            "user.full_name": request.user.get_full_name() or request.user.username,
+            "user.email": request.user.email,
+            "user.job_title": getattr(request.user, "role", "") or "",
+            "user.agency": getattr(agency, "name", "") or "",
+            "user.office": getattr(office, "name", "") or "",
+            "today": timezone.localdate().isoformat(),
+        }.get(source, "")
+    return JsonResponse({"ok": True, "form": {
+        "id": form.pk, "name": form.name, "description": form.description or "",
+        "schema": schema, "prefill": prefill,
+        "workflow": form.workflow.name if form.workflow_id else "",
+        "slots": _slots_for(form),
+    }})
+
+
+def _slots_for_graph(graph):
+    """Roles whoever starts a run must pick people for."""
+    from . import workflow_engine_esign as E
+
+    try:
+        return list(E.chosen_slots(E.clean_graph(graph or {})))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _slots_for(form):
+    """The same, for the flow a form starts."""
+    return _slots_for_graph(form.workflow.graph) if form.workflow_id else []
+
+
+@api
+@require_POST
+@signed_in
+def form_submit(request, pk):
+    """
+    Submit a form. Handed straight to the website's fill view, so validation,
+    the reference number, the PDF and the workflow all behave identically.
+    """
+    from .models_esign_studio import FormSubmission, FormTemplate
+    from .studio_common_esign import shared_template_q
+    from .views_esign_forms import _fill
+
+    form = FormTemplate.objects.filter(shared_template_q(request.user), pk=pk, is_published=True).first()
+    if form is None:
+        return _fail("That form no longer exists, or it isn't shared with you.", 404)
+    data = _body(request) or {}
+    values = data.get("values") if isinstance(data.get("values"), dict) else {}
+    columns = {el["key"]: [c["key"] for c in el.get("columns") or []]
+               for el in (form.schema or {}).get("elements") or []
+               if el.get("type") == "table" and el.get("key")}
+    post = {}
+    for key, value in values.items():
+        if key in columns and isinstance(value, list):
+            # a table: one entry per cell, plus the row count, as the page posts it
+            post[f"f_{key}__rows"] = len(value)
+            for row_no, row in enumerate(value):
+                if not isinstance(row, dict):
+                    continue
+                for column in columns[key]:
+                    post[f"f_{key}__{row_no}__{column}"] = row.get(column, "")
+        else:
+            post[f"f_{key}"] = value          # a list here is a tick-list, sent as repeats
+    for key, value in (data.get("slots") or {}).items():
+        post[f"slot_{key}"] = value
+    before = FormSubmission.objects.filter(form=form).count()
+
+    _as_form_post(request, post)
+    _fill(request, form, public=False)
+    made = (FormSubmission.objects.filter(form=form, submitted_by=request.user)
+            .order_by("-created_at").first())
+    if FormSubmission.objects.filter(form=form).count() == before or made is None:
+        notes = [m["text"] for m in _messages_from(request)]
+        return _fail(notes[0] if notes else "Some answers need fixing. Check the form and try again.", 400,
+                     notes=notes)
+    return JsonResponse({"ok": True, "reference": made.reference, "submission": made.pk,
+                         "message": f"Sent. Your reference is {made.reference}."})
+
+
+@api
+@require_GET
+@signed_in
+def submission_detail(request, pk):
+    from .form_pdf_esign import summary_rows
+    from .models_esign_studio import FormSubmission
+
+    sub = FormSubmission.objects.filter(pk=pk).select_related("form").first()
+    if sub is None or (sub.submitted_by_id != request.user.pk and sub.form.created_by_id != request.user.pk):
+        return _fail("That submission no longer exists, or you can't see it.", 404)
+    runs = [{"reference": r.reference, "status": r.status, "subject": r.subject}
+            for r in sub.runs.all()]
+    return JsonResponse({"ok": True, "submission": {
+        "id": sub.pk, "reference": sub.reference, "form": sub.form_name,
+        "status": sub.status, "status_label": sub.get_status_display(),
+        "created": sub.created_at.isoformat() if sub.created_at else None,
+        "answers": [{"label": label, "value": value} for label, value in summary_rows(sub.schema, sub.values)],
+        "runs": runs,
+        "pdf_url": f"/accounts/esign/submissions/{sub.pk}/pdf/",
+    }})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Flows and runs
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api
+@require_GET
+@signed_in
+def flows(request):
+    from .models_esign_studio import DocumentWorkflow
+    from .studio_common_esign import shared_template_q
+
+    rows = (DocumentWorkflow.objects.filter(shared_template_q(request.user), is_active=True)
+            .select_related("form").order_by("name")[:100])
+    return JsonResponse({"ok": True, "flows": [{
+        "id": f.pk, "name": f.name, "description": f.description or "",
+        "steps": len([n for n in (f.graph or {}).get("nodes") or []
+                      if n.get("type") not in ("start", "end")]),
+        "form": f.form.name if f.form_id else "",
+        "form_id": f.form_id,
+        "mine": f.created_by_id == request.user.pk,
+        "slots": _slots_for_graph(f.graph),
+    } for f in rows]})
+
+
+@api
+@require_GET
+@signed_in
+def runs(request):
+    from .models_esign_studio import WorkflowRun
+    from .studio_common_esign import visible_runs
+
+    status = (request.GET.get("status") or "").strip()
+    rows = visible_runs(request.user).select_related("initiator", "workflow")
+    if status == "open":
+        rows = rows.filter(status__in=WorkflowRun.OPEN_STATUSES)
+    elif status:
+        rows = rows.filter(status=status)
+    rows = rows.order_by("-started_at")[:100]
+    return JsonResponse({"ok": True, "runs": [{
+        "id": r.pk, "reference": r.reference, "subject": r.subject,
+        "status": r.status, "status_label": r.get_status_display(),
+        "flow": r.workflow_name, "started_by": r.initiator.get_full_name() if r.initiator else "",
+        "started": r.started_at.isoformat() if r.started_at else None,
+    } for r in rows]})
+
+
+@api
+@require_GET
+@signed_in
+def run_detail(request, pk):
+    from .models_esign_studio import WorkflowRun
+    from .studio_common_esign import visible_runs
+
+    run = visible_runs(request.user).filter(pk=pk).select_related("initiator").first()
+    if run is None:
+        return _fail("That run no longer exists, or you can't see it.", 404)
+    steps = [{"step": t.node_label or t.get_kind_display(), "kind": t.kind,
+              "who": t.name or (t.user.get_full_name() if t.user else ""),
+              "status": t.status, "comment": t.comment or "",
+              "decided": t.decided_at.isoformat() if t.decided_at else None}
+             for t in run.tasks.select_related("user").order_by("created_at")]
+    return JsonResponse({"ok": True, "run": {
+        "id": run.pk, "reference": run.reference, "subject": run.subject,
+        "status": run.status, "status_label": run.get_status_display(),
+        "flow": run.workflow_name,
+        "started_by": run.initiator.get_full_name() if run.initiator else "",
+        "started": run.started_at.isoformat() if run.started_at else None,
+        "steps": steps,
+        "events": [{"event": e.event, "note": e.note,
+                    "at": e.at.isoformat() if e.at else None}
+                   for e in run.events.order_by("-at")[:40]],
+        "document_url": f"/accounts/esign/runs/{run.pk}/pdf/final/",
+        "can_cancel": run.initiator_id == request.user.pk and run.status in WorkflowRun.OPEN_STATUSES,
+    }})
+
+
+@api
+@require_POST
+@signed_in
+def run_cancel(request, pk):
+    from . import workflow_engine_esign as E
+    from .models_esign_studio import WorkflowRun
+    from .studio_common_esign import visible_runs
+
+    run = visible_runs(request.user).filter(pk=pk).first()
+    if run is None:
+        return _fail("That run no longer exists.", 404)
+    if run.initiator_id != request.user.pk:
+        return _fail("Only the person who started a run can cancel it.", 403)
+    if run.status not in WorkflowRun.OPEN_STATUSES:
+        return _fail("This run has already finished.", 409)
+    reason = str((_body(request) or {}).get("reason") or "").strip()
+    E.cancel_run(run, request.user, reason=reason)
+    run.refresh_from_db()
+    return JsonResponse({"ok": True, "status": run.status, "message": "The run has been cancelled."})

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import 'asset_result.dart';
 import 'scanner.dart';
+import 'sign.dart';
 import 'task_detail.dart';
+import 'work.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.user, required this.onSignedOut});
@@ -25,8 +26,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final pages = [
       InboxTab(key: _inboxKey, user: widget.user),
+      const EnvelopesTab(),
+      const FormsTab(),
+      const FlowsTab(),
       const _ScanTab(),
-      const MyAssetsTab(),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -67,11 +70,15 @@ class _HomeScreenState extends State<HomeScreen> {
         indicatorColor: UnColors.lightBlue,
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.inbox_outlined), selectedIcon: Icon(Icons.inbox), label: 'Waiting on me'),
+              icon: Icon(Icons.inbox_outlined), selectedIcon: Icon(Icons.inbox), label: 'Waiting'),
+          NavigationDestination(
+              icon: Icon(Icons.mail_outline), selectedIcon: Icon(Icons.mail), label: 'Envelopes'),
+          NavigationDestination(
+              icon: Icon(Icons.edit_note_outlined), selectedIcon: Icon(Icons.edit_note), label: 'Forms'),
+          NavigationDestination(
+              icon: Icon(Icons.account_tree_outlined), selectedIcon: Icon(Icons.account_tree), label: 'Flows'),
           NavigationDestination(
               icon: Icon(Icons.qr_code_scanner), selectedIcon: Icon(Icons.qr_code_scanner), label: 'Scan'),
-          NavigationDestination(
-              icon: Icon(Icons.devices_other_outlined), selectedIcon: Icon(Icons.devices_other), label: 'My assets'),
         ],
       ),
     );
@@ -218,11 +225,10 @@ class _InboxCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(UnStyle.radius),
       onTap: () async {
         if (isEnvelope) {
-          // Signing needs the full page — hand it to the browser, still signed in.
-          final url = Uri.parse(Api.instance.webUrl(item['url'] as String));
-          if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-            if (context.mounted) showNote(context, "Couldn't open the signing page.", error: true);
-          }
+          final done = await Navigator.of(context).push<bool>(MaterialPageRoute(
+            builder: (_) => SignScreen(token: item['id'] as String, subject: '${item['title']}'),
+          ));
+          if (done == true) onDone();
           return;
         }
         final changed = await Navigator.of(context).push<bool>(
@@ -324,6 +330,15 @@ class _ScanTab extends StatelessWidget {
             ),
             icon: const Icon(Icons.search),
             label: const Text('Search instead'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => Scaffold(
+                appBar: AppBar(title: const Text('My assets')), body: const MyAssetsTab())),
+            ),
+            icon: const Icon(Icons.devices_other_outlined),
+            label: const Text('Equipment assigned to me'),
           ),
           const SizedBox(height: 14),
           const Text('Use search when a label is torn, faded or missing.',
