@@ -1,7 +1,7 @@
 import uuid
 import secrets
 import random
-import threading  # 👈 add this
+import threading
 from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
@@ -17,17 +17,15 @@ def create_otp_for_user(user, device_id, ip_address=None, user_agent=""):
     Create a 6-digit OTP for this user+device, valid for 10 minutes.
     Also marks previous unused OTPs for that device as used/invalid.
     """
-    # Invalidate older unused OTPs for safety
     OneTimeCode.objects.filter(
         user=user,
         device_id=device_id,
         is_used=False,
     ).update(is_used=True)
 
-    # 6-digit numeric OTP
     code = f"{secrets.randbelow(10**6):06d}"
-
     expires_at = timezone.now() + timedelta(minutes=10)
+
     otp = OneTimeCode.objects.create(
         user=user,
         device_id=device_id,
@@ -40,12 +38,9 @@ def create_otp_for_user(user, device_id, ip_address=None, user_agent=""):
 
 
 def _send_otp_email_sync(user, code):
-    """
-    INTERNAL: synchronous email sending.
-    """
+    """Send an OTP email and raise if delivery fails."""
     if not user.email:
-        # You might want to log this or show a message instead
-        return
+        raise ValueError("This UNPASS account does not have an email address.")
 
     subject = "Your UN Security login verification code"
     greeting = user.get_full_name() or user.username
@@ -60,30 +55,44 @@ def _send_otp_email_sync(user, code):
 
     from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
 
-    # If something is misconfigured, we WANT to see the error => fail_silently=False
-    send_mail(
+    sent = send_mail(
         subject,
         message,
         from_email,
         [user.email],
         fail_silently=False,
     )
+    if sent < 1:
+        raise RuntimeError("The email backend did not accept the OTP message.")
+    return sent
+
+
+def send_otp_email(user, code):
+    """
+    Synchronous OTP sender.
+
+    The mobile login API uses this so it only tells the phone that a code was
+    sent after Django's configured email backend has accepted the message.
+    """
+    return _send_otp_email_sync(user, code)
 
 
 def send_otp_email_async(user, code):
     """
-    Public helper: send OTP email in a background thread so
-    the login request is not blocked by SMTP.
+    Background helper retained for web flows that do not need to wait for SMTP.
+    Failures are logged instead of being silently ignored.
     """
 
     def _target():
         try:
-            _send_otp_email_sync(user, code)
+            send_otp_email(user, code)
         except Exception:
-            # Optional: log the exception instead of crashing the thread
-            # import logging
-            # logging.getLogger(__name__).exception("Failed to send OTP email")
-            pass
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Failed to send UNPASS OTP email to user_id=%s",
+                getattr(user, "pk", None),
+            )
 
     thread = threading.Thread(target=_target, daemon=True)
     thread.start()
@@ -106,7 +115,6 @@ def remember_device(user, device_id, user_agent="", ip_address=""):
 
 
 def is_ict_focal_point(user):
-    # Adjust to your real logic
     return user.is_authenticated and getattr(user, "role", "") == "ict_focal"
 
 
