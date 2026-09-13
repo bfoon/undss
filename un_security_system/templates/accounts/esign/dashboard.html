@@ -42,6 +42,24 @@ document.querySelectorAll('.es-del').forEach(btn => {
   .es-avatars .es-av{ width:26px;height:26px;border-radius:50%;background:#E2E8F0;color:#475569;
     font-size:.65rem;display:inline-flex;align-items:center;justify-content:center;
     margin-left:-6px;border:2px solid #fff;font-weight:700; }
+
+  /* ── Long lists ──────────────────────────────────────────────────────────
+     Lists scroll inside their card once they outgrow it, so the page keeps its
+     shape and the filters above stay put. Short lists are unaffected: the box
+     shrinks to fit. Table headings stick to the top while you scroll, and the
+     soft shading at the edges shows there is more to see. */
+  .es-scroll{ max-height:min(62vh, 700px); overflow-y:auto; overscroll-behavior:contain;
+              background:
+                linear-gradient(#fff 30%, rgba(255,255,255,0)) top/100% 20px local no-repeat,
+                linear-gradient(rgba(255,255,255,0), #fff 70%) bottom/100% 20px local no-repeat,
+                radial-gradient(farthest-side at 50% 0, rgba(15,23,42,.10), transparent) top/100% 7px scroll no-repeat,
+                radial-gradient(farthest-side at 50% 100%, rgba(15,23,42,.10), transparent) bottom/100% 7px scroll no-repeat; }
+  .es-scroll:focus-visible{ outline:2px solid rgba(0,158,219,.6); outline-offset:-2px; }
+  .es-scroll thead th{ position:sticky; top:0; z-index:2; background:#fff;
+                       box-shadow:inset 0 -1px 0 rgba(15,23,42,.12); }
+  .es-scroll > .card-body, .es-scroll.card-body{ background:transparent; }
+  .es-capped{ font-size:.78rem; color:#64748B; padding:.5rem .9rem; border-top:1px solid rgba(15,23,42,.08); background:#F8FAFC; }
+  @media (max-width: 767.98px){ .es-scroll{ max-height:none; } }   /* let the page scroll on a phone */
 </style>
 {% endblock %}
 
@@ -216,7 +234,7 @@ document.querySelectorAll('.es-del').forEach(btn => {
         </form>
       </div>
 
-      <div class="table-responsive">
+      <div class="table-responsive es-scroll" tabindex="0" role="region" aria-label="Envelopes">
         <table class="table align-middle mb-0">
           <thead class="table-light">
             <tr>
@@ -290,6 +308,9 @@ document.querySelectorAll('.es-del').forEach(btn => {
           </tbody>
         </table>
       </div>
+      {% if envelopes|length >= 200 %}
+        <div class="es-capped"><i class="bi bi-info-circle me-1"></i>Showing the 200 most recent. Use the search and status filter above to narrow it down.</div>
+      {% endif %}
     </div>
   </div>
 </div>

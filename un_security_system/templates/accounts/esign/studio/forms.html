@@ -33,7 +33,7 @@
       </div>
 
       {% if tab == 'forms' %}
-      <div class="card-body"><div class="row g-3">
+      <div class="card-body es-scroll" tabindex="0" role="region" aria-label="My forms"><div class="row g-3">
         {% for f in my_forms %}
         <div class="col-md-6 col-xl-4">
           <div class="fm-card">
@@ -65,7 +65,7 @@
       </div></div>
 
       {% elif tab == 'fill' %}
-      <div class="list-group list-group-flush">
+      <div class="list-group list-group-flush es-scroll" tabindex="0" role="region" aria-label="Forms you can fill in">
         {% for f in fillable %}
         <div class="list-group-item es-row d-flex flex-wrap align-items-center gap-3">
           <span class="d-inline-flex align-items-center justify-content-center rounded" style="width:40px;height:40px;background:{{ f.schema.theme.accent|default:'#009EDB' }}1a;color:{{ f.schema.theme.accent|default:'#009EDB' }}"><i class="bi bi-file-earmark-text fs-5"></i></span>
@@ -79,7 +79,7 @@
       </div>
 
       {% else %}
-      <div class="table-responsive"><table class="table align-middle mb-0">
+      <div class="table-responsive es-scroll" tabindex="0" role="region" aria-label="Submissions"><table class="table align-middle mb-0">
         <thead class="small text-muted"><tr><th>Reference</th><th>Form</th><th>Submitted by</th><th>Status</th><th class="text-end">Date</th></tr></thead>
         <tbody>
         {% for s in submissions %}
@@ -93,6 +93,9 @@
         {% endfor %}
         </tbody>
       </table></div>
+      {% if submissions|length >= 200 %}
+        <div class="es-capped"><i class="bi bi-info-circle me-1"></i>Showing the 200 most recent. Open a form's own submissions list to see all of them.</div>
+      {% endif %}
       {% endif %}
     </div>
   </div>

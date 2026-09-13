@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Import flow | UN PASS{% endblock %}
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<div class="card shadow-sm mx-auto" style="max-width:720px">
+  <div class="card-body p-4">
+    <h4 class="text-un-primary mb-2"><i class="bi bi-box-arrow-in-down me-2"></i>Import eSign flow</h4>
+    <p class="text-muted">Import a portable <code>.unpassflow</code> package. People are deliberately not imported; review the roles after import.</p>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input class="form-control mb-3" type="file" name="package" accept=".unpassflow,.json,application/json" required>
+      <button class="btn btn-un-primary"><i class="bi bi-upload me-1"></i>Import flow</button>
+      <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_workflows' %}?tab=flows">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

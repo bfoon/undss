@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Import Word form | UN PASS{% endblock %}
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<div class="card shadow-sm mx-auto" style="max-width:720px">
+  <div class="card-body p-4">
+    <h4 class="text-un-primary mb-2"><i class="bi bi-file-earmark-word me-2"></i>Import Word form</h4>
+    <p class="text-muted">Upload a DOCX. UNPASS will detect headings, fields, checkboxes, signature lines and tables, then open the result in the normal form designer.</p>
+    <div class="alert alert-info small">Word import is heuristic. Review the detected fields and signature roles before publishing the form.</div>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input class="form-control mb-3" type="file" name="document" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required>
+      <button class="btn btn-un-primary"><i class="bi bi-upload me-1"></i>Import Word form</button>
+      <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_forms' %}">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

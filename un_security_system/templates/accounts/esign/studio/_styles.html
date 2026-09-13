@@ -68,4 +68,22 @@
   .st-map svg{ max-width:none!important; }
   .wf-mini svg, .wf-tpl .st-map svg{ height:100%!important; }
   iframe.st-native-pdf{ height:78vh!important; max-height:none!important; width:100%!important; }
+
+  /* ── Long lists ──────────────────────────────────────────────────────────
+     Lists scroll inside their card once they outgrow it, so the page keeps its
+     shape and the filters above stay put. Short lists are unaffected: the box
+     shrinks to fit. Table headings stick to the top while you scroll, and the
+     soft shading at the edges shows there is more to see. */
+  .es-scroll{ max-height:min(62vh, 700px); overflow-y:auto; overscroll-behavior:contain;
+              background:
+                linear-gradient(#fff 30%, rgba(255,255,255,0)) top/100% 20px local no-repeat,
+                linear-gradient(rgba(255,255,255,0), #fff 70%) bottom/100% 20px local no-repeat,
+                radial-gradient(farthest-side at 50% 0, rgba(15,23,42,.10), transparent) top/100% 7px scroll no-repeat,
+                radial-gradient(farthest-side at 50% 100%, rgba(15,23,42,.10), transparent) bottom/100% 7px scroll no-repeat; }
+  .es-scroll:focus-visible{ outline:2px solid rgba(0,158,219,.6); outline-offset:-2px; }
+  .es-scroll thead th{ position:sticky; top:0; z-index:2; background:#fff;
+                       box-shadow:inset 0 -1px 0 rgba(15,23,42,.12); }
+  .es-scroll > .card-body, .es-scroll.card-body{ background:transparent; }
+  .es-capped{ font-size:.78rem; color:#64748B; padding:.5rem .9rem; border-top:1px solid rgba(15,23,42,.08); background:#F8FAFC; }
+  @media (max-width: 767.98px){ .es-scroll{ max-height:none; } }   /* let the page scroll on a phone */
 </style>
