@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'core/api.dart';
 import 'core/theme.dart';
@@ -156,6 +157,10 @@ class _SignInScreenState extends State<SignInScreen> {
           widget.onSignedIn(user);
         }
       } else {
+        if (data['must_change_password'] == true && mounted) {
+          await _showMustChangePassword();
+          return;
+        }
         widget.onSignedIn(data['user'] as Map<String, dynamic>);
       }
     } on ApiException catch (e) {
@@ -164,6 +169,34 @@ class _SignInScreenState extends State<SignInScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// The account is flagged to change its password. Nothing else will work
+  /// until that is done, and it has to be done in a browser.
+  Future<void> _showMustChangePassword() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.lock_reset, size: 34, color: UnColors.amber),
+        title: const Text('Change your password first'),
+        content: const Text(
+          'Your account is set to change its password at next sign-in. '
+          'Set a new one in a browser, then come back and sign in here.',
+          style: TextStyle(height: 1.4),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close')),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final url = Uri.parse('${Api.instance.baseUrl}/accounts/password/change/');
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            },
+            child: const Text('Open in browser'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -301,7 +334,17 @@ class _SignInScreenState extends State<SignInScreen> {
                                 color: UnColors.muted,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: () async {
+                                if (_site.text.trim() != Api.instance.baseUrl) {
+                                  await Api.instance.setBaseUrl(_site.text);
+                                }
+                                if (context.mounted) await showConnectionCheck(context);
+                              },
+                              icon: const Icon(Icons.network_check, size: 18),
+                              label: const Text('Check the connection'),
+                            ),
+                            const SizedBox(height: 4),
                           ],
                         ),
                       ],

@@ -8,11 +8,16 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.status = 0, this.signedOut = false, this.stale = false});
+  ApiException(this.message,
+      {this.status = 0, this.signedOut = false, this.stale = false, this.mustChangePassword = false});
   final String message;
   final int status;
   final bool signedOut;
   final bool stale;
+
+  /// The account is flagged to change its password. Everything except signing
+  /// in is refused until that is done, in a browser.
+  final bool mustChangePassword;
 
   @override
   String toString() => message;
@@ -163,12 +168,44 @@ class Api {
 
     final type = res.headers['content-type'] ?? '';
     if (!type.contains('json')) {
-      throw ApiException(
-        res.statusCode >= 500
-            ? 'The server hit a problem. Try again shortly.'
-            : "That address doesn't look like a UN PASS site. Check it in Settings.",
-        status: res.statusCode,
-      );
+      // A page came back where JSON was expected. The status says why, and
+      // these are very different problems — so name the right one rather than
+      // blaming the address for all of them.
+      lastDiagnosis = 'HTTP ${res.statusCode} · ${type.isEmpty ? 'no content type' : type} · $path';
+      String reason;
+      switch (res.statusCode) {
+        case 404:
+          reason = "This server doesn't have the phone app's API yet. "
+              "Ask ICT to deploy the latest code and restart the site.";
+          break;
+        case 400:
+          reason = "The server rejected the address the app used. "
+              "ICT should check ALLOWED_HOSTS covers ${Uri.parse(_baseUrl ?? '').host}.";
+          break;
+        case 401:
+        case 403:
+          reason = 'You have been signed out. Sign in again.';
+          await clearSession();
+          break;
+        case 405:
+          reason = 'The server refused that request. This usually means an out-of-date '
+              'version of the app or the site — ICT can check both are up to date.';
+          break;
+        case 502:
+        case 503:
+        case 504:
+          reason = 'The site is not responding. Try again shortly.';
+          break;
+        default:
+          reason = res.statusCode >= 500
+              ? 'The server hit a problem (HTTP ${res.statusCode}). Try again shortly.'
+              : res.statusCode >= 300
+                  ? 'You have been signed out. Sign in again.'
+                  : "That address doesn't look like a UN PASS site. Check it in Settings.";
+          if (res.statusCode >= 300 && res.statusCode < 400) await clearSession();
+      }
+      throw ApiException(reason,
+          status: res.statusCode, signedOut: res.statusCode == 401 || res.statusCode == 403);
     }
 
     final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -177,6 +214,7 @@ class Api {
       throw ApiException(
         (data['error'] as String?) ?? 'Something went wrong. Please try again.',
         status: res.statusCode,
+        mustChangePassword: data['must_change_password'] == true,
         signedOut: data['signed_out'] == true,
         stale: data['stale'] == true,
       );
@@ -192,7 +230,50 @@ class Api {
 
   // ── signing in ────────────────────────────────────────────────────────────
 
+  /// The technical detail behind the last failure — status, content type and
+  /// path. Shown on the connection check so ICT has something to act on.
+  String lastDiagnosis = '';
+
   Future<Map<String, dynamic>> ping() => _send('GET', '/ping/');
+
+  /// Ask the server what it is, and report plainly what came back. Used by the
+  /// "Check the connection" button so a problem can be identified without
+  /// anyone reading a log.
+  Future<Map<String, String>> checkConnection() async {
+    final target = '${_baseUrl ?? ''}/accounts/api/m/ping/';
+    if ((_baseUrl ?? '').isEmpty) {
+      return {'result': 'No address', 'detail': 'Enter your site address first.', 'ok': 'no'};
+    }
+    try {
+      final res = await http
+          .get(Uri.parse(target), headers: {'Accept': 'application/json', if ((_cookie ?? '').isNotEmpty) 'Cookie': _cookie!})
+          .timeout(const Duration(seconds: 20));
+      final type = res.headers['content-type'] ?? 'unknown';
+      if (res.statusCode == 200 && type.contains('json')) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return {
+          'result': 'Connected',
+          'detail': 'UN PASS API ${data['api']} · ${data['signed_in'] == true ? 'signed in' : 'not signed in'}',
+          'ok': 'yes',
+        };
+      }
+      if (res.statusCode == 404) {
+        return {
+          'result': 'API not installed',
+          'detail': 'The site answered, but has no phone API at $target. '
+              'ICT should deploy the latest code and restart.',
+          'ok': 'no',
+        };
+      }
+      return {
+        'result': 'Unexpected answer',
+        'detail': 'HTTP ${res.statusCode}, $type from $target',
+        'ok': 'no',
+      };
+    } catch (e) {
+      return {'result': 'Cannot reach the site', 'detail': '$target\n$e', 'ok': 'no'};
+    }
+  }
 
   /// [identifier] can be either the UNPASS username or registered email.
   /// The server only returns otp_required=true after email delivery has been
