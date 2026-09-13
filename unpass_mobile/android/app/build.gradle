@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "gm.unpass.mobile"
     compileSdk = 34
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "25.1.8937393"
 
     compileOptions {
         // mobile_scanner's ML Kit dependency needs the newer library desugaring.
@@ -27,7 +27,7 @@ android {
 
     signingConfigs {
         release {
-            // Set these in android/key.properties — see BUILD.md. Falls back to
+            // Set these in android/key.properties â€” see BUILD.md. Falls back to
             // the debug key so a first build works without any setup.
             def props = new Properties()
             def file = rootProject.file("key.properties")
