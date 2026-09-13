@@ -22,6 +22,9 @@
   <div class="row g-3 fs-body">
   {% for el in schema.elements %}
     {% with rs=el.runtime_state %}
+    {% if el.type == 'heading' and scope and el.fill_by == scope %}
+      <div class="col-12 fs-mine-tag"><i class="bi bi-pencil-square me-1"></i>Your part — fill these in and submit them together</div>
+    {% endif %}
     <div class="col-md-{{ el.width }} fs-item fs-state-{{ rs.state|default:'active' }}{% if rs.state == 'hidden' %} d-none{% endif %}"
          data-el="{{ el.id }}" data-type="{{ el.type }}"{% if el.key %} data-key="{{ el.key }}"{% endif %}
          data-mine="{% if scope and el.fill_by|default:'submitter' == scope %}1{% else %}0{% endif %}">

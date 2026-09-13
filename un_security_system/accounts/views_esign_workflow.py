@@ -143,6 +143,24 @@ def _form_fields(form):
             for el in (form.schema or {}).get("elements") or [] if el["type"] in INPUT_TYPES]
 
 
+def _form_sections(form):
+    """
+    The form's sections, so a Fill-in step can claim a whole one at a time:
+    [{id, title, fill_by, fields:[label], overrides}].
+    """
+    from .form_pdf_esign import sections_of
+
+    if not form:
+        return []
+    out = []
+    for sec in sections_of(form.schema or {}):
+        head = sec["heading"]
+        out.append({"id": head["id"] if head else "", "title": head["text"] if head else "Before the first heading",
+                    "fill_by": sec["fill_by"], "overrides": sec["overrides"],
+                    "fields": [el.get("label") or el["key"] for el in sec["fields"]]})
+    return out
+
+
 def _rule_catalog(form, graph):
     """
     Everything a Condition in this flow can check: the form's answers, plus the
@@ -193,10 +211,11 @@ def esign_workflow_designer(request, pk):
             "assign_modes": E.ASSIGN_MODES,
             "directory": directory(request.user),
             "forms": [{"id": f.pk, "name": f.name, "fields": _form_fields(f),
-                       "catalog": _rule_catalog(f, graph)} for f in my_forms],
+                       "catalog": _rule_catalog(f, graph), "sections": _form_sections(f)} for f in my_forms],
             "templates": [{"key": t["key"], "name": t["name"], "icon": t["icon"], "description": t["description"],
                            "graph": E.clean_graph(t["graph"])} for t in FLOW_TEMPLATES],
             "save_url": reverse("accounts:esign_workflow_save", args=[wf.pk]),
+            "section_step_url": reverse("accounts:esign_form_section_step", args=[wf.form_id]) if wf.form_id else "",
             "launch_url": reverse("accounts:esign_workflow_launch", args=[wf.pk]),
             "export_url": reverse("accounts:esign_workflow_export", args=[wf.pk]),
             "import_url": reverse("accounts:esign_workflow_import"),

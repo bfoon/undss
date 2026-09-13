@@ -193,9 +193,12 @@
    */
   function states(elements, values, scope, extras){
     const vals = derive(values, elements, extras);
-    const out = {}; let section = null;
+    const out = {}; let section = null, sectionFill = "submitter";
     for (const el of elements || []){
-      if (el.type === "heading") section = (el.state_rules || []).length ? el : null;
+      if (el.type === "heading"){
+        section = (el.state_rules || []).length ? el : null;
+        sectionFill = el.fill_by || "submitter";        // the heading owns its section
+      }
       let st = null;
       for (const rule of el.state_rules || []){
         if (evaluate(vals, rule.when)){ st = {state: rule.state, message: rule.message || "", completed_mode: rule.completed_mode || "show_values", from: "own"}; break; }
@@ -206,7 +209,9 @@
         }
       }
       if (!st){
-        const fillBy = String(el.fill_by || "submitter"), key = el.key;
+        const own = String(el.fill_by || "inherit");
+        const fillBy = el.type === "heading" ? sectionFill : (own === "inherit" ? sectionFill : own);
+        const key = el.key;
         if (key && isFilled(vals[key]) && fillBy !== scope) st = {state: "completed", message: "Already filled", completed_mode: "show_values", from: "auto"};
         else if (key && fillBy !== scope) st = {state: "readonly", message: "Completed later in the workflow", completed_mode: "show_values", from: "auto"};
         else st = {state: "active", message: "", completed_mode: "show_values", from: "auto"};

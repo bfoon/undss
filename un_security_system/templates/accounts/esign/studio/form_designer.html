@@ -29,6 +29,7 @@
   .fb-resize:after{ content:""; position:absolute; top:35%; bottom:35%; left:3px; width:3px; border-radius:2px; background:#009EDB; }
   .fb-el.sel .fb-resize{ display:block; }
   .fb-el .fb-step{ position:absolute; left:0; top:-15px; font-size:.65rem; background:#2563EB; color:#fff; border-radius:3px; padding:0 5px; display:none; }
+  .fb-el .fb-noprint{ position:absolute; right:0; top:-15px; font-size:.65rem; background:#64748B; color:#fff; border-radius:3px; padding:0 5px; }
   .fb-el:hover .fb-step, .fb-el.sel .fb-step{ display:block; }
   .fb-drop{ position:absolute; background:#009EDB; border-radius:2px; z-index:10; pointer-events:none; box-shadow:0 0 0 2px rgba(0,158,219,.25); }
   .fb-el input, .fb-el select, .fb-el textarea{ pointer-events:none; }
@@ -236,8 +237,43 @@
     return `<label class="fs-label">${esc(el.label)}${el.required ? ' <span class="text-danger">*</span>' : ""}</label>${fieldPreview(el)}${el.help ? `<div class="form-text">${esc(el.help)}</div>` : ""}`;
   }
   function stepName(id){ const f = flow(); const s = f && f.steps.find(x => x.id === id); return s ? s.label : id; }
+  const fillLabel = id => id === "submitter" ? "When the form is submitted" : stepName(id);
+  /** Does the section containing this element print on the PDF? */
+  function sectionPrintFor(id){
+    let prints = true;
+    for (const el of schema.elements){
+      if (el.type === "heading") prints = el.print_pdf !== false;
+      if (el.id === id) return prints;
+    }
+    return prints;
+  }
+  const printsOnPdf = el => el.print_pdf === false ? false
+    : el.print_pdf === true ? true
+    : el.type === "heading" ? true : sectionPrintFor(el.id);
+  /** Who fills each element in, once sections are taken into account. Mirrors effective_fill(). */
+  function effectiveFill(){
+    const out = {}; let section = "submitter";
+    for (const el of schema.elements){
+      if (el.type === "heading"){ section = el.fill_by || "submitter"; out[el.id] = section; continue; }
+      const own = el.fill_by || "inherit";
+      out[el.id] = own === "inherit" ? section : own;
+    }
+    return out;
+  }
+  /** [{heading, fill_by, fields, overrides}] — the sections of this form. */
+  function sectionsOf(){
+    const out = [{heading: null, fill_by: "submitter", fields: [], overrides: 0}];
+    for (const el of schema.elements){
+      if (el.type === "heading"){ out.push({heading: el, fill_by: el.fill_by || "submitter", fields: [], overrides: 0}); continue; }
+      if (!INPUT_TYPES.includes(el.type)) continue;
+      out[out.length - 1].fields.push(el);
+      if ((el.fill_by || "inherit") !== "inherit") out[out.length - 1].overrides++;
+    }
+    return out.filter(x => x.heading || x.fields.length);
+  }
 
   function renderPaper(){
+    const FILL = effectiveFill();
     const th = schema.theme, hd = schema.header;
     const font = th.font === "times" ? "'Times New Roman',Times,serif" : th.font === "courier" ? "'Courier New',monospace" : "'Segoe UI',Helvetica,Arial,sans-serif";
     let h = `<div class="fs-sheet ${th.density === "compact" ? "compact" : ""} ${th.rounded ? "rounded-fields" : ""}" style="--fs-accent:${th.accent};--fs-hbg:${th.header_bg};--fs-htext:${th.header_text};--fs-label:${th.label_color};font-family:${font}">
@@ -247,12 +283,18 @@
         ${hd.show_reference ? `<div class="small mt-1" style="opacity:.7">Reference: ${esc(meta.reference_prefix)}-2026-0001</div>` : ""}
       </div><div class="row g-3 fs-body ${schema.elements.some(e => ensureV2(e).canvas.enabled) ? "fb-grid-free" : ""}" id="grid">`;
     schema.elements.forEach(el => {
-      const step = INPUT_TYPES.includes(el.type) && el.fill_by && el.fill_by !== "submitter" ? `<span class="fb-step"><i class="bi bi-input-cursor-text"></i> ${esc(stepName(el.fill_by))}</span>`
+      const eff = FILL[el.id];
+      const step = el.type === "heading" && eff && eff !== "submitter"
+          ? `<span class="fb-step" style="background:#2563EB"><i class="bi bi-collection"></i> Section filled at: ${esc(stepName(eff))}</span>`
+        : INPUT_TYPES.includes(el.type) && eff && eff !== "submitter"
+          ? `<span class="fb-step"${(el.fill_by || "inherit") === "inherit" ? ' style="opacity:.72"' : ""}><i class="bi bi-input-cursor-text"></i> ${esc(stepName(eff))}</span>`
         : el.type === "signature" && (el.step || el.role) ? `<span class="fb-step" style="background:#009EDB"><i class="bi bi-pen"></i> ${esc(el.step ? stepName(el.step) : el.role)}</span>` : "";
+      const noPrint = !printsOnPdf(el)
+        ? `<span class="fb-noprint" title="Collected, but not printed on the PDF"><i class="bi bi-file-earmark-x"></i> not printed</span>` : "";
       ensureV2(el);
       const free = !!el.canvas.enabled;
       h += `<div class="${free ? "fb-free-wrap" : `col-md-${el.width}`}" style="${free ? canvasStyle(el) : ""}"><div class="fb-el ${free ? "free" : ""} ${el.id === selId ? "sel" : ""}" style="${free ? v2Style(el) : ""}" data-id="${el.id}" tabindex="0">
-        ${step}
+        ${step}${noPrint}
         <div class="fb-tools">
           <button type="button" data-cmd="narrow" title="Narrower">−</button><button type="button" class="w" data-cmd="wide" title="Width: ${el.width}/12">${el.width}/12</button><button type="button" data-cmd="widen" title="Wider">+</button>
           <button type="button" data-cmd="up" title="Move up"><i class="bi bi-arrow-up"></i></button><button type="button" data-cmd="down" title="Move down"><i class="bi bi-arrow-down"></i></button>
@@ -421,9 +463,30 @@
       h += `<hr class="my-2">`;
       h += field("Filled in automatically with", select("prefill", el.prefill, Object.entries(CFG.prefill)), "Only for people signed in to UN PASS; they can still change it.");
       const steps = flow() ? flow().steps.filter(x => x.type === "fill") : [];
-      h += field("Filled in at", select("fill_by", el.fill_by, [["submitter", "When the form is submitted"], ...steps.map(x => [x.id, `Workflow step: ${x.label}`])]),
+      h += field("Filled in at", select("fill_by", el.fill_by || "inherit",
+            [["inherit", `Same as its section (${fillLabel(effectiveFill()[el.id] || "submitter")})`],
+             ["submitter", "When the form is submitted"], ...steps.map(x => [x.id, `Workflow step: ${x.label}`])]),
         flow() ? (steps.length ? "A later step can complete this field — e.g. ICT adds the username." : "Add a “Fill in” step to the linked workflow to use this.") : "Link a workflow in Settings to have a later step complete this.");
+      h += field("Print on the PDF", select("print_pdf", el.print_pdf === undefined || el.print_pdf === null ? "inherit" : (el.print_pdf ? "yes" : "no"),
+            [["inherit", `Same as its section (${sectionPrintFor(el.id) ? "printed" : "not printed"})`], ["yes", "Yes — always print it"], ["no", "No — screen only"]]),
+        "What reaches the printed PDF. It is still asked for, saved and shown on screen.");
       h += `<details class="small mt-2"><summary class="text-muted">Advanced</summary>${field("Field key", input("key", el.key, 'maxlength="40"'), "Used in workflow conditions and CSV exports. Changing it breaks conditions that use it.")}</details>`;
+    }
+    if (el.type === "heading"){
+      const fsteps = flow() ? flow().steps.filter(x => x.type === "fill") : [];
+      const mine = sectionsOf().find(x => x.heading && x.heading.id === el.id) || {fields: [], overrides: 0};
+      h += `<div class="st-group-label mb-1"><i class="bi bi-collection me-1"></i>This section</div>`;
+      h += field("Who fills it in", select("fill_by", el.fill_by || "submitter",
+            [["submitter", "Whoever submits the form"], ...fsteps.map(x => [x.id, `Workflow step: ${x.label}`])]),
+        `Applies to all ${mine.fields.length} question${mine.fields.length === 1 ? "" : "s"} under this heading, down to the next one.` +
+        (flow() ? (fsteps.length ? "" : " Add a “Fill in” step to the workflow to send it to someone else.") : " Link a workflow in Settings to send it to a later step."));
+      h += field("Print on the PDF", select("print_pdf", el.print_pdf === false ? "no" : "yes",
+            [["yes", "Yes — print this section"], ["no", "No — screen only"]]),
+        "Questions under this heading follow it unless they say otherwise.");
+      if (mine.overrides) h += `<div class="alert alert-warning small py-2">
+          <div class="mb-2">${mine.overrides} question${mine.overrides === 1 ? " is" : "s are"} set individually and won't follow this.</div>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="clearOverrides">Make them follow the section</button></div>`;
+      h += `<hr class="my-3">`;
     }
     if (el.type === "heading" || el.type === "paragraph"){
       h += field("Text", el.type === "heading" ? input("text", el.text, 'maxlength="200"') : `<textarea class="form-control form-control-sm" rows="5" data-k="text" maxlength="4000">${esc(el.text)}</textarea>`);
@@ -482,6 +545,14 @@
     inspector.querySelectorAll("[data-v2p]").forEach(x=>x.onchange=()=>change(()=>el.presentation[x.dataset.v2p]=x.type==="number"?+x.value:x.value));
     inspector.querySelectorAll("[data-v2c]").forEach(x=>x.onchange=()=>change(()=>el.canvas[x.dataset.v2c]=+x.value));
     const fp=inspector.querySelector("#freePlace"); if(fp) fp.onchange=()=>change(()=>el.canvas.enabled=fp.checked);
+    const clearBtn = inspector.querySelector("#clearOverrides");
+    if (clearBtn) clearBtn.onclick = () => change(() => {
+      let inside = false;
+      for (const other of schema.elements){
+        if (other.type === "heading"){ inside = other.id === el.id; continue; }
+        if (inside && INPUT_TYPES.includes(other.type)) other.fill_by = "inherit";
+      }
+    });
     const on=inspector.querySelector("#stateRuleOn");
     if(on) on.onchange=()=>change(()=>{
       el.state_rules = on.checked
@@ -523,6 +594,10 @@
         }
         change(() => {
           if (k === "key") v = uniqueKey(v, el.id);
+          if (k === "print_pdf"){                 // yes / no / follow the section
+            if (v === "inherit") delete el.print_pdf; else el.print_pdf = v === "yes";
+            return;
+          }
           setPath(el, k, v);
           if (k === "label" && fresh.has(el.id)) el.key = uniqueKey(v, el.id);
           if (k === "key") fresh.delete(el.id);

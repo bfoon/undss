@@ -153,6 +153,11 @@ def _clean_element(el):
     if width not in WIDTHS:
         width = min(WIDTHS, key=lambda w: abs(w - width))
     out = {"id": eid, "type": t, "width": width}
+    # Whether it appears on the printed PDF. A heading answers for its whole
+    # section unless a question overrides it. Missing means yes, so forms made
+    # before this setting print exactly as they always did.
+    if el.get("print_pdf") is not None:
+        out["print_pdf"] = bool(el.get("print_pdf"))
     out.update(clean_v2_element_metadata(el))
 
     if t in INPUT_TYPES:
@@ -163,7 +168,7 @@ def _clean_element(el):
             "required": bool(el.get("required")),
             "help": _s(el.get("help"), 300),
             "placeholder": _s(el.get("placeholder"), 120),
-            "fill_by": _s(el.get("fill_by"), 40) or "submitter",
+            "fill_by": _s(el.get("fill_by"), 40) or "inherit",
             "prefill": el.get("prefill") if el.get("prefill") in PREFILL_KEYS else "",
         })
         if t in ("select", "radio", "checkboxes"):
@@ -208,6 +213,9 @@ def _clean_element(el):
         style = el.get("style") or {}
         out.update({
             "text": _s(el.get("text"), 200) or "Section",
+            # A heading owns the section beneath it: whoever fills it in, and the
+            # rules that apply, cover every field down to the next heading.
+            "fill_by": _s(el.get("fill_by"), 40) or "submitter",
             "style": {
                 "size": style.get("size") if style.get("size") in ("sm", "md", "lg") else "md",
                 "color": _hex(style.get("color"), "#005A8B"),
@@ -280,6 +288,60 @@ def initial_values(schema, user):
     return values
 
 
+def effective_fill(schema):
+    """
+    {element id: who fills it in}. A field set to "inherit" takes its section's
+    assignment — the heading above it — so a whole section can be handed to a
+    workflow step in one move. Anything before the first heading, or in a
+    section that doesn't say, belongs to the person who starts the form.
+    """
+    out, section = {}, "submitter"
+    for el in (schema or {}).get("elements") or []:
+        if el.get("type") == "heading":
+            section = str(el.get("fill_by") or "submitter")
+            out[el["id"]] = section
+            continue
+        own = str(el.get("fill_by") or "inherit")
+        out[el["id"]] = section if own == "inherit" else own
+    return out
+
+
+def resolved_schema(schema):
+    """A copy of the schema with every `fill_by` replaced by its effective value."""
+    import copy
+
+    resolved = copy.deepcopy(schema or {})
+    scopes = effective_fill(resolved)
+    for el in resolved.get("elements") or []:
+        el["fill_by"] = scopes.get(el["id"], "submitter")
+    return resolved
+
+
+def fields_for_step(schema, node_id):
+    """The input fields a workflow step collects, section assignments included."""
+    scopes = effective_fill(schema)
+    return [el for el in (schema or {}).get("elements") or []
+            if el["type"] in INPUT_TYPES and scopes.get(el["id"]) == node_id]
+
+
+def sections_of(schema):
+    """
+    [{heading, fill_by, fields, overrides}] — one entry per section, plus an
+    opening entry with no heading for anything above the first one.
+    """
+    out = [{"heading": None, "fill_by": "submitter", "fields": [], "overrides": 0}]
+    for el in (schema or {}).get("elements") or []:
+        if el["type"] == "heading":
+            out.append({"heading": el, "fill_by": str(el.get("fill_by") or "submitter"),
+                        "fields": [], "overrides": 0})
+            continue
+        if el["type"] in INPUT_TYPES:
+            out[-1]["fields"].append(el)
+            if str(el.get("fill_by") or "inherit") != "inherit":
+                out[-1]["overrides"] += 1
+    return [s for s in out if s["heading"] is not None or s["fields"]]
+
+
 def editable_for(el, scope):
     """scope is "submitter" or a workflow node id."""
     return (el.get("fill_by") or "submitter") == scope
@@ -297,6 +359,7 @@ def read_values(schema, post, existing=None, scope="submitter", extras=None):
     """
     values = dict(existing or {})
     errors = {}
+    schema = resolved_schema(schema)
 
     for el in schema.get("elements") or []:
         if el["type"] not in INPUT_TYPES or not editable_for(el, scope):
@@ -426,12 +489,34 @@ def table_total(el, rows, col_key):
     return total
 
 
-def summary_rows(schema, values):
-    """[(label, display)] for every input — detail pages and email summaries."""
+def summary_rows(schema, values, *, for_pdf=False):
+    """
+    [(label, display)] for every input — detail pages, emails, and the workflow
+    record page.
+
+    With for_pdf, the same rules the printed form follows apply here too: a
+    question switched off with "Print on the PDF", or hidden by a rule, is left
+    out, and one kept back reads "Already filled" rather than showing the
+    answer. Otherwise nothing is filtered — the answers page on screen shows
+    everything the viewer is entitled to see.
+    """
+    from .form_logic_esign import print_plan
+
+    plan = print_plan(schema, values) if for_pdf else {}
     out = []
     for el in schema.get("elements") or []:
-        if el["type"] in INPUT_TYPES:
-            out.append((el.get("label") or el["key"], display_value(el, values.get(el["key"]))))
+        if el["type"] not in INPUT_TYPES:
+            continue
+        how = plan.get(el["id"], "print")
+        if how == "skip":
+            continue
+        label = el.get("label") or el["key"]
+        if how == "not_applicable":
+            out.append((label, NOT_APPLICABLE))
+        elif how == "already_filled":
+            out.append((label, ALREADY_FILLED))
+        else:
+            out.append((label, display_value(el, values.get(el["key"]))))
     return out
 
 
@@ -499,6 +584,10 @@ def _image_reader(data_url):
         return None, (0, 0)
 
 
+NOT_APPLICABLE = "Not applicable"
+ALREADY_FILLED = "Already filled"
+
+
 class _Painter:
     """Two passes: lay out once to count pages, then draw with page totals known."""
 
@@ -512,6 +601,12 @@ class _Painter:
         self.submitted_at = submitted_at
         self.submitter = submitter
         self.blank = blank
+        # Rules decide what reaches paper: hidden questions are left out,
+        # greyed-out ones print "Not applicable", and ones the owner chose to
+        # keep back print "Already filled" instead of the answer.
+        from .form_logic_esign import print_plan
+
+        self.plan = {} if blank else print_plan(schema, self.values)
         self.status_label = status_label
         self.regular, self.bold = _font_names(self.theme.get("font", "helvetica"))
         self.compact = self.theme.get("density") == "compact"
@@ -564,7 +659,7 @@ class _Painter:
         if t == "table":
             rows = self._table_rows(el)
             return label_h + 18.0 * (1 + len(rows) + (1 if el.get("show_total") else 0)) + 4 + self._help_h(el, w)
-        text = display_value(el, self.values.get(el["key"]))
+        text = el.get("_fixed") or display_value(el, self.values.get(el["key"]))
         lines = self._wrap(text, self.regular, 9.5, w - 12) if text and not self.blank else [""]
         return label_h + max(22.0, len(lines) * 12.5 + 9) + self._help_h(el, w)
 
@@ -676,8 +771,8 @@ class _Painter:
 
         row, span = [], 0
         normal_elements = [
-            el for el in (self.schema.get("elements") or [])
-            if not (el.get("canvas") or {}).get("enabled")
+            self._for_print(el) for el in (self.schema.get("elements") or [])
+            if not (el.get("canvas") or {}).get("enabled") and self.plan.get(el["id"], "print") != "skip"
         ]
         for el in self._split_tall(normal_elements):
             if span + el["width"] > 12 and row:
@@ -694,8 +789,9 @@ class _Painter:
         designer_w, designer_h = 794.0, 1123.0
         for el in self.schema.get("elements") or []:
             cv = el.get("canvas") or {}
-            if not cv.get("enabled"):
+            if not cv.get("enabled") or self.plan.get(el["id"], "print") == "skip":
                 continue
+            el = self._for_print(el)
             page_no = max(1, int(cv.get("page") or 1))
             while len(pages) < page_no:
                 pages.append([])
@@ -715,6 +811,15 @@ class _Painter:
         return h + 22.0
 
     # -- drawing ----------------------------------------------------------
+    def _for_print(self, el):
+        """Swap an input for a plain line of text when the rules say so."""
+        how = self.plan.get(el["id"], "print")
+        if how == "not_applicable":
+            return dict(el, type="text", _fixed=NOT_APPLICABLE, _muted=True, required=False)
+        if how == "already_filled":
+            return dict(el, type="text", _fixed=ALREADY_FILLED, _muted=True, required=False)
+        return el
+
     def render(self):
         pages = self.layout()
         total = len(pages)
@@ -964,7 +1069,7 @@ class _Painter:
             box_h = h - 13 - self._help_h(el, w)
             self._field_box(c, x, body_top - box_h, w, box_h, el)
             if not self.blank:
-                text = display_value(el, value)
+                text = el.get("_fixed") or display_value(el, value)
                 p = el.get("presentation") or {}
                 size = float(p.get("value_font_size") or 9.5)
                 pad = float(p.get("padding") or 6)
@@ -972,7 +1077,7 @@ class _Painter:
                 clip = c.beginPath()
                 clip.rect(x, body_top - box_h, w, box_h)
                 c.clipPath(clip, stroke=0, fill=0)
-                c.setFillColor(_color(p.get("text_color"), "#0F172A"))
+                c.setFillColor(_color(p.get("text_color"), "#94A3B8" if el.get("_muted") else "#0F172A"))
                 c.setFont(self.regular, size)
                 lines = el.get("_lines") or self._wrap(text, self.regular, size, max(10, w - pad * 2))
                 line_h = size * 1.2

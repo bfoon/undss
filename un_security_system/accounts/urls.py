@@ -357,6 +357,7 @@ urlpatterns = [
     path("esign/forms/<int:pk>/design/", views_esign_forms.esign_form_designer, name="esign_form_designer"),
     path("esign/forms/<int:pk>/save/", views_esign_forms.esign_form_save, name="esign_form_save"),
     path("esign/forms/<int:pk>/preview.pdf", views_esign_forms.esign_form_preview_pdf, name="esign_form_preview_pdf"),
+    path("esign/forms/<int:pk>/section-step/", views_esign_forms.esign_form_section_step, name="esign_form_section_step"),
     path("esign/forms/<int:pk>/duplicate/", views_esign_forms.esign_form_duplicate, name="esign_form_duplicate"),
     path("esign/forms/<int:pk>/delete/", views_esign_forms.esign_form_delete, name="esign_form_delete"),
     path("esign/forms/<int:pk>/fill/", views_esign_forms.esign_form_fill, name="esign_form_fill"),

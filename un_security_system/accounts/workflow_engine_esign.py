@@ -341,8 +341,11 @@ def validate_graph(graph, form_schema=None):
                     warnings.append({"node": nid, "text": f"“{name}” has no {p.title()} path; that answer ends the branch."})
 
         if t == "fill" and form_schema is not None:
-            if not any((el.get("fill_by") == nid) for el in form_schema.get("elements") or []):
-                warnings.append({"node": nid, "text": f"No form fields are assigned to “{name}” yet — set “Filled in at” on the fields in the form designer."})
+            from .form_pdf_esign import fields_for_step
+
+            collected = fields_for_step(form_schema, nid)
+            if not collected:
+                warnings.append({"node": nid, "text": f"No questions are assigned to “{name}” yet — give it a section, or set “Filled in at” on individual questions."})
         if t == "fill" and form_schema is None:
             warnings.append({"node": nid, "text": f"“{name}” needs a form; on a plain document it works like a review."})
 
@@ -1727,7 +1730,7 @@ def build_run_record_pdf(run) -> bytes:
     if run.submission_id:
         from .form_pdf_esign import summary_rows
 
-        values = summary_rows(run.submission.schema, run.submission.values)
+        values = summary_rows(run.submission.schema, run.submission.values, for_pdf=True)
         if values:
             story.append(Paragraph("Final form answers", h2))
             vt = Table([["Field", "Answer"]] + [[Paragraph(esc(k), small), Paragraph(esc(v or "—"), small)]

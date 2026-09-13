@@ -171,8 +171,12 @@ def annotate_states(schema, values, *, scope="submitter", extras=None):
     import copy
 
     from .esign_condition_engine import derive_values
+    from .form_pdf_esign import effective_fill
 
     out = copy.deepcopy(schema or {})
+    scopes = effective_fill(out)          # a field may take its section's assignment
+    for el in out.get("elements") or []:
+        el["fill_by"] = scopes.get(el["id"], "submitter")
     extras = extras or {}
     resolved = derive_values(values or {}, out, who=extras.get("who"), run=extras.get("run"),
                              steps=extras.get("steps"), today=extras.get("today"))
@@ -193,8 +197,9 @@ def logic_payload(schema, values, *, scope="submitter", extras=None, hide_keys=(
     unless a rule actually reads them.
     """
     from .esign_condition_engine import referenced_fields
+    from .form_pdf_esign import resolved_schema
 
-    schema = schema or {}
+    schema = resolved_schema(schema or {})
     needed = set()
     for el in schema.get("elements") or []:
         for rule in el.get("state_rules") or []:
@@ -246,3 +251,60 @@ def canvas_problems(schema):
             if overlap_w > 1 and overlap_h > 1:
                 problems.append(f"“{name(a)}” and “{name(b)}” overlap — one will print on top of the other.")
     return problems
+
+
+def print_plan(schema, values):
+    """
+    What the PDF should do with each element: {element id: "print" | "skip" |
+    "not_applicable" | "already_filled"}.
+
+    Only rules decide this. Who fills a field in is irrelevant on paper — the
+    printed form is the finished record, not somebody's turn — so the
+    completed/read-only states that element_state() infers from `fill_by` are
+    ignored here. A question switched off with "Print on the PDF" never prints.
+    """
+    from .esign_condition_engine import derive_values, evaluate_tree
+
+    schema = schema or {}
+    resolved = derive_values(values or {}, schema)
+    plan, section, section_prints = {}, None, True
+    for el in schema.get("elements") or []:
+        if el.get("type") == "heading":
+            section = el if (el.get("state_rules") or []) else None
+            section_prints = print_on_pdf(el)
+
+        own = el.get("print_pdf")
+        prints = section_prints if own is None and el.get("type") != "heading" else bool(own) if own is not None else True
+        if not prints:
+            plan[el["id"]] = "skip"
+            continue
+
+        state = None
+        for owner in (el, section):
+            if owner is None or (owner is section and owner is el):
+                continue
+            for raw in owner.get("state_rules") or []:
+                rule = clean_state_rule(raw)
+                if evaluate_tree(resolved, rule["when"]):
+                    state = rule
+                    break
+            if state:
+                break
+
+        if state is None:
+            plan[el["id"]] = "print"
+        elif state["state"] == "hidden":
+            plan[el["id"]] = "skip"
+        elif state["state"] == "disabled":
+            plan[el["id"]] = "not_applicable"
+        elif state["state"] == "completed" and state.get("completed_mode") == "message":
+            plan[el["id"]] = "already_filled"
+        else:
+            plan[el["id"]] = "print"
+    return plan
+
+
+def print_on_pdf(element):
+    """Whether this element is printed at all. Missing means yes — the default."""
+    value = (element or {}).get("print_pdf")
+    return True if value is None else bool(value)

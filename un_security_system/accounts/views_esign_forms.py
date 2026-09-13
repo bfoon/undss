@@ -97,6 +97,46 @@ def esign_form_new(request):
 
 @login_required
 @require_POST
+def esign_form_section_step(request, pk):
+    """
+    Hand one section of a form to a workflow step — used by the Fill-in step in
+    the flow designer, so a whole section can be claimed without opening the
+    form. Questions set individually keep their own assignment.
+    """
+    agency, bounce = studio_gate(request)
+    if bounce:
+        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+    form = get_object_or_404(FormTemplate, pk=pk, created_by=request.user)
+    body, problem = json_body(request, "form")
+    if problem:
+        return problem
+    section_id = str(body.get("section") or "")
+    fill_by = str(body.get("fill_by") or "submitter")
+
+    schema = dict(form.schema or {})
+    elements = [dict(el) for el in schema.get("elements") or []]
+    target = next((el for el in elements if el["id"] == section_id and el["type"] == "heading"), None)
+    if target is None:
+        return JsonResponse({"ok": False, "error": "That section no longer exists. Reload the page."}, status=404)
+    target["fill_by"] = fill_by
+    schema["elements"] = elements
+    form.schema = F.clean_schema(schema)
+    form.version += 1
+    form.save(update_fields=["schema", "version", "updated_at"])
+    from .form_pdf_esign import sections_of
+
+    moved = next((s for s in sections_of(form.schema) if s["heading"] and s["heading"]["id"] == section_id), None)
+    return JsonResponse({"ok": True, "version": form.version,
+                         "moved": len(moved["fields"]) if moved else 0,
+                         "sections": [{"id": s["heading"]["id"] if s["heading"] else "",
+                                       "title": s["heading"]["text"] if s["heading"] else "Before the first heading",
+                                       "fill_by": s["fill_by"], "overrides": s["overrides"],
+                                       "fields": [el.get("label") or el["key"] for el in s["fields"]]}
+                                      for s in sections_of(form.schema)]})
+
+
+@login_required
+@require_POST
 def esign_form_duplicate(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
