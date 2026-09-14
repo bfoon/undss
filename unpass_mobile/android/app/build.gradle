@@ -6,7 +6,10 @@ plugins {
 
 android {
     namespace = "gm.unpass.mobile"
-    compileSdk = 34
+    // 35 because flutter_pdfview (and androidx.core 1.16) are built against it.
+    // Compiling against a newer SDK is backward compatible and does not change
+    // how the app behaves on a phone — that is targetSdk, left at 34 below.
+    compileSdk = 35
     ndkVersion = "25.1.8937393"
 
     compileOptions {
@@ -20,7 +23,7 @@ android {
     defaultConfig {
         applicationId = "gm.unpass.mobile"
         minSdk = 24            // ML Kit's floor; covers Android 7 and later
-        targetSdk = 34
+        targetSdk = 34         // the behaviour the app opts in to; raise deliberately, not by accident
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

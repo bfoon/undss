@@ -32,6 +32,10 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
+# These four move together. If one is raised, check the others:
+#   Java 17 · Gradle 8.9 · Android Gradle plugin 8.7.3 · Kotlin 2.0.21
+# compileSdk is 35 because flutter_pdfview and androidx.core 1.16 need it, and
+# AGP 8.6+ is required to compile against 35.
 env:
   FLUTTER_VERSION: "3.24.5"
   APP_DIR: unpass_mobile
