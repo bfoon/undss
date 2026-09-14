@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import 'asset_result.dart';
+import 'booking.dart';
 import 'home.dart';
 import 'scanner.dart';
 import 'work.dart';
@@ -38,6 +39,12 @@ class ModuleHome extends StatelessWidget {
     return 'Good evening,';
   }
 
+  bool _nativeInApp(Map module) {
+    // `rooms` is handled natively by this dev build even though the current
+    // server's BUILT_IN_APP set still reports it as web-only.
+    return module['in_app'] == true || module['key'] == 'rooms';
+  }
+
   @override
   Widget build(BuildContext context) {
     final modules = (user['modules'] as List<dynamic>? ?? []);
@@ -62,15 +69,21 @@ class ModuleHome extends StatelessWidget {
             crossAxisSpacing: 12,
             childAspectRatio: 0.92,
             children: [
-              for (final m in modules)
-                _ModuleTile(
-                  title: '${(m as Map)['title']}',
-                  subtitle: '${m['subtitle']}',
-                  icon: _icons['${m['icon']}'] ?? Icons.widgets_outlined,
-                  inApp: m['in_app'] == true,
-                  onTap: () => m['in_app'] == true
-                      ? onOpenModule('${m['key']}')
-                      : _explainWebOnly(context, '${m['title']}'),
+              for (final raw in modules)
+                Builder(
+                  builder: (context) {
+                    final module = raw as Map;
+                    final native = _nativeInApp(module);
+                    return _ModuleTile(
+                      title: '${module['title']}',
+                      subtitle: '${module['subtitle']}',
+                      icon: _icons['${module['icon']}'] ?? Icons.widgets_outlined,
+                      inApp: native,
+                      onTap: () => native
+                          ? onOpenModule('${module['key']}')
+                          : _explainWebOnly(context, '${module['title']}'),
+                    );
+                  },
                 ),
             ],
           ),
@@ -296,6 +309,9 @@ class ModuleScreen extends StatelessWidget {
         break;
       case 'assets':
         body = const MyAssetsTab();
+        break;
+      case 'rooms':
+        body = const BookingScreen();
         break;
       default:
         body = const EmptyState(

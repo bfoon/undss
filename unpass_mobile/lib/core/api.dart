@@ -380,8 +380,17 @@ class Api {
     return (await _send('GET', '/envelopes/', query: query.isEmpty ? null : query))['envelopes'] as List<dynamic>;
   }
 
-  Future<Map<String, dynamic>> envelope(int id) async =>
-      (await _send('GET', '/envelopes/$id/'))['envelope'] as Map<String, dynamic>;
+  Future<Map<String, dynamic>> envelope(int id) async {
+    final data =
+        (await _send('GET', '/envelopes/$id/'))['envelope']
+            as Map<String, dynamic>;
+
+    // The current server response uses an old/non-existent URL shape for the
+    // final signed PDF. Keep the correction client-side too, so the dev app
+    // remains able to open signed PDFs even before api_mobile.py is changed.
+    data['final_url'] = '/accounts/esign/$id/download/final/';
+    return data;
+  }
 
   Future<Map<String, dynamic>> signSheet(String token) => _send('GET', '/sign/$token/');
 
@@ -402,6 +411,55 @@ class Api {
 
   Future<void> decline(String token, String reason) =>
       _send('POST', '/sign/$token/decline/', body: {'reason': reason});
+
+  // ── room booking ──────────────────────────────────────────────────────────
+
+  Future<List<dynamic>> rooms({String q = ''}) async {
+    final query = <String, String>{};
+    if (q.trim().isNotEmpty) query['q'] = q.trim();
+    return (await _send(
+      'GET',
+      '/rooms/',
+      query: query.isEmpty ? null : query,
+    ))['rooms'] as List<dynamic>;
+  }
+
+  Future<List<dynamic>> roomBookings() async =>
+      (await _send('GET', '/rooms/bookings/'))['bookings'] as List<dynamic>;
+
+  Future<Map<String, dynamic>> bookRoom(
+    int roomId, {
+    required String title,
+    required String date,
+    required String startTime,
+    required String endTime,
+    String description = '',
+    String ictSupport = 'none',
+    String attendeeEmails = '',
+    String virtualMeetingLink = '',
+    List<int> amenityIds = const [],
+    bool enableAttendance = false,
+    bool enableInviteLink = false,
+    bool autoAcceptRegistration = false,
+  }) =>
+      _send('POST', '/rooms/$roomId/book/', body: {
+        'title': title,
+        'description': description,
+        'date': date,
+        'start_time': startTime,
+        'end_time': endTime,
+        'ict_support': ictSupport,
+        'attendee_emails': attendeeEmails,
+        'virtual_meeting_link': virtualMeetingLink,
+        'amenity_ids': amenityIds,
+        'enable_attendance': enableAttendance,
+        'enable_invite_link': enableInviteLink,
+        'auto_accept_registration': autoAcceptRegistration,
+      });
+
+  Future<void> cancelRoomBooking(int id) async {
+    await _send('POST', '/rooms/bookings/$id/cancel/');
+  }
 
   // ── forms ────────────────────────────────────────────────────────────────
 
@@ -458,11 +516,26 @@ class Api {
     if (res.statusCode >= 400) {
       throw ApiException('The document could not be fetched (HTTP ${res.statusCode}).');
     }
-    final looksLikePdf = res.bodyBytes.length > 4 &&
-        res.bodyBytes[0] == 0x25 && res.bodyBytes[1] == 0x50;   // "%P"
-    if (!type.contains('pdf') && !looksLikePdf) {
-      throw ApiException('That download was not a PDF. It may need to be opened on the website.');
+
+    final looksLikePdf = res.bodyBytes.length >= 5 &&
+        res.bodyBytes[0] == 0x25 &&
+        res.bodyBytes[1] == 0x50 &&
+        res.bodyBytes[2] == 0x44 &&
+        res.bodyBytes[3] == 0x46 &&
+        res.bodyBytes[4] == 0x2D; // "%PDF-"
+
+    if (!looksLikePdf) {
+      if (!type.contains('pdf')) {
+        throw ApiException(
+          'That download was not a PDF. It may be a sign-in/error page.',
+        );
+      }
+      throw ApiException(
+        'UN PASS returned a response labelled as PDF, but the file itself is invalid. '
+        'The signed PDF should be regenerated on the server.',
+      );
     }
+
     return res.bodyBytes;
   }
 

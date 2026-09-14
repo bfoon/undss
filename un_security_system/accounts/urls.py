@@ -1,6 +1,8 @@
 from django.urls import path
 
 from . import api_mobile
+from . import api_mobile_booking
+from . import pdf_delivery
 from django.contrib.auth import views as auth_views
 from . import views, views_ict, view_asset_management, views_batch, view_asset_reports
 from .hr import views_hr
@@ -290,12 +292,15 @@ urlpatterns = [
     path("esign/<int:pk>/comment/", views_esign.esign_comment_internal, name="esign_comment_internal"),
     path("esign/<int:pk>/delete/", views_esign.esign_envelope_delete, name="esign_envelope_delete"),
     path("esign/<int:pk>/resend/<int:recipient_id>/", views_esign.esign_resend, name="esign_resend"),
-    path("esign/<int:pk>/preview/", views_esign.esign_preview, name="esign_preview"),
+
+    # PDF routes are handled by pdf_delivery so completed PDFs can be validated
+    # and automatically rebuilt when the stored media object is missing/corrupt.
+    path("esign/<int:pk>/preview/", pdf_delivery.esign_preview, name="esign_preview"),
     path("esign/<int:pk>/document/<int:doc_id>/", views_esign.esign_document_file, name="esign_document_file"),
     path("esign/<int:pk>/document/<int:doc_id>/pages/", views_esign.esign_document_pages, name="esign_document_pages"),
     path("esign/<int:pk>/document/<int:doc_id>/remove/", views_esign.esign_document_remove, name="esign_document_remove"),
     path("esign/<int:pk>/documents/add/", views_esign.esign_document_add, name="esign_document_add"),
-    path("esign/<int:pk>/download/<str:kind>/", views_esign.esign_download, name="esign_download"),
+    path("esign/<int:pk>/download/<str:kind>/", pdf_delivery.esign_download, name="esign_download"),
 
     # Markup & comments — sender / ICT / Ops side (login required)
     path("esign/<int:pk>/markup/", views_esign_markup.esign_markup_list_internal, name="esign_markup_list_internal"),
@@ -387,6 +392,13 @@ urlpatterns = [
     path("api/m/runs/", api_mobile.runs, name="api_m_runs"),
     path("api/m/runs/<int:pk>/", api_mobile.run_detail, name="api_m_run"),
     path("api/m/runs/<int:pk>/cancel/", api_mobile.run_cancel, name="api_m_run_cancel"),
+
+    # Native room booking API used by the phone app.
+    path("api/m/rooms/", api_mobile_booking.room_list, name="api_m_rooms"),
+    path("api/m/rooms/bookings/", api_mobile_booking.my_bookings, name="api_m_room_bookings"),
+    path("api/m/rooms/<int:room_id>/book/", api_mobile_booking.create_booking, name="api_m_room_book"),
+    path("api/m/rooms/bookings/<int:pk>/cancel/", api_mobile_booking.cancel_booking, name="api_m_room_booking_cancel"),
+
     path("esign/forms/<int:pk>/duplicate/", views_esign_forms.esign_form_duplicate, name="esign_form_duplicate"),
     path("esign/forms/<int:pk>/delete/", views_esign_forms.esign_form_delete, name="esign_form_delete"),
     path("esign/forms/<int:pk>/fill/", views_esign_forms.esign_form_fill, name="esign_form_fill"),
@@ -403,8 +415,8 @@ urlpatterns = [
     path("esign/s/<str:token>/return/", views_esign.esign_return, name="esign_return"),
     path("esign/s/<str:token>/comment/", views_esign.esign_comment, name="esign_comment"),
     path("esign/s/<str:token>/review/", views_esign.esign_review, name="esign_review"),
-    path("esign/s/<str:token>/document/<int:doc_id>/", views_esign.esign_token_document, name="esign_token_document"),
-    path("esign/s/<str:token>/download/<str:kind>/", views_esign.esign_token_download, name="esign_token_download"),
+    path("esign/s/<str:token>/document/<int:doc_id>/", pdf_delivery.esign_token_document, name="esign_token_document"),
+    path("esign/s/<str:token>/download/<str:kind>/", pdf_delivery.esign_token_download, name="esign_token_download"),
 
     # Markup & comments — recipient side (tokenized, no login)
     path("esign/s/<str:token>/markup/", views_esign_markup.esign_markup_list, name="esign_markup_list"),
