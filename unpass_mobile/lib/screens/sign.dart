@@ -161,6 +161,12 @@ class _SignScreenState extends State<SignScreen> {
   bool _save = true;
   bool _busy = false;
 
+  /// The signature already saved on the website, if there is one. Chosen by
+  /// default, because re-drawing a signature on a phone is both fiddly and
+  /// gives a different mark each time.
+  Map<String, dynamic>? _chosen;
+  bool _drawInstead = false;
+
   @override
   void dispose() {
     _pad.dispose();
@@ -172,14 +178,22 @@ class _SignScreenState extends State<SignScreen> {
       showNote(context, 'Accept the electronic record consent first.', error: true);
       return;
     }
-    final png = await _pad.toDataUrl();
-    if (png == null) {
-      showNote(context, 'Draw your signature in the box first.', error: true);
-      return;
+    String? signature;
+    var saveIt = false;
+    if (!_drawInstead && _chosen != null) {
+      signature = '${_chosen!['ref']}';        // the one saved on the website
+    } else {
+      signature = await _pad.toDataUrl();
+      saveIt = _save;
+      if (signature == null) {
+        showNote(context, 'Draw your signature in the box first.', error: true);
+        return;
+      }
     }
     setState(() => _busy = true);
     try {
-      final message = await Api.instance.sign(widget.token, signature: png, saveSignature: _save);
+      final message =
+          await Api.instance.sign(widget.token, signature: signature, saveSignature: saveIt);
       if (!mounted) return;
       showNote(context, message);
       Navigator.of(context).pop(true);
@@ -298,39 +312,125 @@ class _SignScreenState extends State<SignScreen> {
                   ],
                 ),
               ),
-              SectionCard(
-                title: 'YOUR SIGNATURE',
-                icon: Icons.draw_outlined,
-                trailing: TextButton.icon(
-                  onPressed: () => setState(() => _pad.clear()),
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Clear'),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SignaturePad(controller: _pad),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
+              Builder(builder: (context) {
+                final saved = (data['saved_signatures'] as List<dynamic>? ?? []);
+                if (saved.isNotEmpty && _chosen == null && !_drawInstead) {
+                  _chosen = saved.first as Map<String, dynamic>;   // the default comes first
+                }
+                final useSaved = saved.isNotEmpty && !_drawInstead;
+
+                return SectionCard(
+                  title: 'YOUR SIGNATURE',
+                  icon: Icons.draw_outlined,
+                  trailing: useSaved
+                      ? null
+                      : TextButton.icon(
+                          onPressed: () => setState(() => _pad.clear()),
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Clear'),
+                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (useSaved) ...[
+                        for (final raw in saved)
+                          Builder(builder: (context) {
+                            final sig = raw as Map<String, dynamic>;
+                            final picked = _chosen != null && _chosen!['id'] == sig['id'];
+                            return InkWell(
+                              onTap: () => setState(() => _chosen = sig),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: picked ? UnColors.lightBlue : Colors.white,
+                                  border: Border.all(
+                                      color: picked ? UnColors.blue : UnColors.line,
+                                      width: picked ? 2 : 1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(picked ? Icons.radio_button_checked : Icons.radio_button_off,
+                                        size: 20, color: picked ? UnColors.blue : UnColors.muted),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          if ('${sig['image_url'] ?? ''}'.isNotEmpty)
+                                            SizedBox(
+                                              height: 46,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Image.network(
+                                                  Api.instance.webUrl('${sig['image_url']}'),
+                                                  height: 46,
+                                                  fit: BoxFit.contain,
+                                                  errorBuilder: (_, __, ___) => Text('${sig['label']}',
+                                                      style: const TextStyle(
+                                                          fontSize: 16, fontWeight: FontWeight.w600)),
+                                                ),
+                                              ),
+                                            ),
+                                          const SizedBox(height: 2),
+                                          Row(children: [
+                                            Text('${sig['label']}',
+                                                style: const TextStyle(fontSize: 12.5, color: UnColors.muted)),
+                                            if (sig['is_default'] == true) ...[
+                                              const SizedBox(width: 8),
+                                              const StatusPill('Default', color: UnColors.blue),
+                                            ],
+                                          ]),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        const SizedBox(height: 4),
+                        const Text('From your Signature Studio on the website.',
+                            style: TextStyle(fontSize: 12, color: UnColors.muted)),
                         TextButton.icon(
-                          onPressed: () => setState(() => _pad.undo()),
-                          icon: const Icon(Icons.undo, size: 18),
-                          label: const Text('Undo stroke'),
+                          onPressed: () => setState(() => _drawInstead = true),
+                          icon: const Icon(Icons.gesture, size: 18),
+                          label: const Text('Draw a different one this time'),
+                        ),
+                      ] else ...[
+                        SignaturePad(controller: _pad),
+                        const SizedBox(height: 8),
+                        Row(children: [
+                          TextButton.icon(
+                            onPressed: () => setState(() => _pad.undo()),
+                            icon: const Icon(Icons.undo, size: 18),
+                            label: const Text('Undo stroke'),
+                          ),
+                          if (saved.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () => setState(() {
+                                _drawInstead = false;
+                                _pad.clear();
+                              }),
+                              icon: const Icon(Icons.bookmark_outline, size: 18),
+                              label: const Text('Use my saved one'),
+                            ),
+                        ]),
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: _save,
+                          onChanged: (v) => setState(() => _save = v ?? false),
+                          title: const Text('Save this signature for next time'),
                         ),
                       ],
-                    ),
-                    CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      value: _save,
-                      onChanged: (v) => setState(() => _save = v ?? false),
-                      title: const Text('Save this signature for next time'),
-                    ),
-                  ],
-                ),
-              ),
+                    ],
+                  ),
+                );
+              }),
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: UnStyle.card(color: const Color(0xFFFFF9E8), border: const Color(0x33D97706)),

@@ -10,6 +10,7 @@ import json
 from functools import wraps
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.urls import reverse
 from django.http import JsonResponse, QueryDict
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -947,8 +948,32 @@ def sign_sheet(request, token):
                          "consent_needed": True,
                          "fields": fields,
                          "documents": [{"id": d.pk, "name": d.name,
-                                        "url": f"/accounts/esign/t/{token}/doc/{d.pk}/"}
-                                       for d in env.documents.all()]})
+                                        "url": reverse("accounts:esign_token_document",
+                                                       args=[token, d.pk])}
+                                       for d in env.documents.all()],
+                         "saved_signatures": _saved_signatures(recipient)})
+
+
+def _saved_signatures(recipient):
+    """
+    The signatures this person has already set up in Signature Studio, newest
+    default first, so the app can offer the one they normally use instead of
+    making them draw it again on a small screen.
+    """
+    if not recipient.user_id:
+        return []
+    from .models_esign import SignatureProfile
+
+    rows = SignatureProfile.objects.filter(user_id=recipient.user_id).order_by("-is_default", "-id")
+    return [{
+        "id": s.id,
+        "ref": f"saved:{s.id}",                      # what the server expects back
+        "label": s.label or s.get_kind_display(),
+        "kind": s.kind,
+        "is_default": s.is_default,
+        "image_url": s.image.url if s.image else "",
+        "initials_url": s.initials_image.url if s.initials_image else "",
+    } for s in rows]
 
 
 @api
@@ -969,8 +994,19 @@ def envelope_sign(request, token):
     if recipient.status in ("signed", "declined"):
         return _fail("You have already responded to this envelope.", 409, stale=True)
     signature = str(data.get("signature") or "")
-    if not signature.startswith("data:image/"):
-        return _fail("Draw your signature before signing.")
+    # Either a drawing from the phone, or "saved:<id>" for one already set up in
+    # Signature Studio. The website's handler understands both.
+    if not (signature.startswith("data:image/") or signature.startswith("saved:")):
+        return _fail("Choose a saved signature, or draw one, before signing.")
+    if signature.startswith("saved:"):
+        from .models_esign import SignatureProfile
+
+        try:
+            profile_id = int(signature.split(":", 1)[1])
+        except (IndexError, ValueError):
+            return _fail("That saved signature is not valid.")
+        if not SignatureProfile.objects.filter(id=profile_id, user_id=recipient.user_id).exists():
+            return _fail("That saved signature no longer exists.", 404)
     if not data.get("consent"):
         return _fail("You need to accept the electronic record consent to sign.")
 
@@ -993,7 +1029,9 @@ def envelope_sign(request, token):
         if fid in supplied:
             payload[fid] = supplied[fid]
         elif field.kind in (SignatureField.KIND_SIGNATURE, SignatureField.KIND_INITIALS):
-            payload[fid] = ""                      # falls through to the drawing below
+            # A saved signature is applied by reference; a drawing falls through
+            # to signature_data below.
+            payload[fid] = signature if signature.startswith("saved:") else ""
         else:
             payload[fid] = auto.get(field.kind, "")
 

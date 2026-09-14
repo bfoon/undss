@@ -385,6 +385,8 @@ class Api {
 
   Future<Map<String, dynamic>> signSheet(String token) => _send('GET', '/sign/$token/');
 
+  /// [signature] is either a drawing as a data URL, or `saved:<id>` for one
+  /// already set up in Signature Studio on the website.
   Future<String> sign(String token,
       {required String signature, String initials = '', bool saveSignature = false,
       Map<String, dynamic> fields = const {}}) async {
