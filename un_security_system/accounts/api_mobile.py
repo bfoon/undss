@@ -91,7 +91,48 @@ def _user_json(user):
             part[0]
             for part in (user.get_full_name() or user.username).split()[:2]
         ).upper(),
+        "modules": _modules_for(user),
     }
+
+
+#: What the phone app can do, and the feature each part needs. The home screen
+#: shows only the tiles a person's office has switched on, so nobody is offered
+#: a module they cannot open.
+APP_MODULES = (
+    {"key": "esign", "title": "eSign", "subtitle": "Review and approve documents",
+     "icon": "draw", "feature": "esign"},
+    {"key": "forms", "title": "Forms", "subtitle": "Fill in and send a request",
+     "icon": "edit_note", "feature": "esign"},
+    {"key": "flows", "title": "Workflows", "subtitle": "Follow a request's progress",
+     "icon": "account_tree", "feature": "esign"},
+    {"key": "assets", "title": "Assets", "subtitle": "Verify and manage office assets",
+     "icon": "inventory", "feature": "asset_mgmt"},
+    {"key": "visitors", "title": "Visitor Pass", "subtitle": "Request and manage visitor passes",
+     "icon": "badge", "feature": "visitor_access"},
+    {"key": "rooms", "title": "Room Booking", "subtitle": "Find and book meeting spaces",
+     "icon": "event", "feature": "room_booking"},
+    {"key": "attendance", "title": "Attendance", "subtitle": "Check in and view your attendance",
+     "icon": "people", "feature": "room_attendance"},
+    {"key": "packages", "title": "Packages", "subtitle": "Track your incoming packages",
+     "icon": "package", "feature": "mailroom"},
+    {"key": "incidents", "title": "Incidents", "subtitle": "Report a security incident",
+     "icon": "warning", "feature": "incident_reporting"},
+)
+
+#: Modules the app has its own screens for. The rest are shown as "on the web",
+#: so people can see the module exists without being sent to a dead end.
+BUILT_IN_APP = {"esign", "forms", "flows", "assets"}
+
+
+def _modules_for(user):
+    """The tiles this person should see, in the order above."""
+    try:
+        from tenancy.services import enabled_features
+
+        enabled = set(enabled_features(user))
+    except Exception:  # noqa: BLE001 - the home screen must never fail over this
+        enabled = set()
+    return [{**m, "in_app": m["key"] in BUILT_IN_APP} for m in APP_MODULES if m["feature"] in enabled]
 
 
 def _device_trusted(user, device_id):

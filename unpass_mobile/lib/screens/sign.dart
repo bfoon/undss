@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
+import 'pdf_view.dart';
 
 /// Draw a signature with a finger. Strokes are kept as points so the drawing
 /// can be undone stroke by stroke and redrawn cleanly at export size.
@@ -286,14 +286,10 @@ class _SignScreenState extends State<SignScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: OutlinedButton.icon(
-                          onPressed: () async {
-                            final url = Uri.parse(Api.instance.webUrl('${(d as Map)['url']}'));
-                            if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-                              if (context.mounted) showNote(context, "Couldn't open it.", error: true);
-                            }
-                          },
-                          icon: const Icon(Icons.open_in_new),
-                          label: Text('${(d as Map)['name']}', overflow: TextOverflow.ellipsis),
+                          onPressed: () => openPdf(context, '\${d['url']}',
+                              title: '\${d['name']}', subtitle: '\${env['envelope_id']}'),
+                          icon: const Icon(Icons.menu_book_outlined),
+                          label: Text('\${d['name']}', overflow: TextOverflow.ellipsis),
                         ),
                       ),
                     Text('${fields.length} field${fields.length == 1 ? '' : 's'} are waiting for you. '

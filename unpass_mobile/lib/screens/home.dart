@@ -4,10 +4,10 @@ import '../core/api.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import 'asset_result.dart';
-import 'scanner.dart';
+import 'module_home.dart';
+import '../widgets/connection_check.dart';
 import 'sign.dart';
 import 'task_detail.dart';
-import 'work.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.user, required this.onSignedOut});
@@ -24,12 +24,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final modules = (widget.user['modules'] as List<dynamic>? ?? []);
     final pages = [
+      ModuleHome(
+        user: widget.user,
+        onOpenModule: (key) {
+          final module = modules.firstWhere((m) => (m as Map)['key'] == key, orElse: () => null);
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => ModuleScreen(
+              moduleKey: key,
+              title: module == null ? 'UN PASS' : '${(module as Map)['title']}',
+            ),
+          ));
+        },
+      ),
       InboxTab(key: _inboxKey, user: widget.user),
-      const EnvelopesTab(),
-      const FormsTab(),
-      const FlowsTab(),
-      const _ScanTab(),
+      const _NotificationsTab(),
+      _ProfileTab(user: widget.user, onSignedOut: widget.onSignedOut),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -64,21 +75,19 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIndex: _tab,
         onDestinationSelected: (i) {
           setState(() => _tab = i);
-          if (i == 0) _inboxKey.currentState?.refresh();
+          if (i == 1) _inboxKey.currentState?.refresh();
         },
         backgroundColor: Colors.white,
         indicatorColor: UnColors.lightBlue,
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.inbox_outlined), selectedIcon: Icon(Icons.inbox), label: 'Waiting'),
+              icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
           NavigationDestination(
-              icon: Icon(Icons.mail_outline), selectedIcon: Icon(Icons.mail), label: 'Envelopes'),
+              icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: 'Requests'),
           NavigationDestination(
-              icon: Icon(Icons.edit_note_outlined), selectedIcon: Icon(Icons.edit_note), label: 'Forms'),
+              icon: Icon(Icons.notifications_outlined), selectedIcon: Icon(Icons.notifications), label: 'Notifications'),
           NavigationDestination(
-              icon: Icon(Icons.account_tree_outlined), selectedIcon: Icon(Icons.account_tree), label: 'Flows'),
-          NavigationDestination(
-              icon: Icon(Icons.qr_code_scanner), selectedIcon: Icon(Icons.qr_code_scanner), label: 'Scan'),
+              icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
@@ -115,6 +124,13 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.public, color: UnColors.muted),
               title: const Text('Site'),
               subtitle: Text(Api.instance.baseUrl),
+              trailing: TextButton(
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  showConnectionCheck(context);
+                },
+                child: const Text('Check'),
+              ),
             ),
             const Divider(),
             ListTile(
@@ -290,65 +306,6 @@ class _InboxCard extends StatelessWidget {
 // Scan
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ScanTab extends StatelessWidget {
-  const _ScanTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            height: 96, width: 96,
-            decoration: BoxDecoration(color: UnColors.lightBlue, borderRadius: BorderRadius.circular(28)),
-            child: const Icon(Icons.qr_code_scanner, size: 48, color: UnColors.darkBlue),
-          ),
-          const SizedBox(height: 22),
-          const Text('Verify an asset',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: UnColors.navy)),
-          const SizedBox(height: 8),
-          const Text(
-            'Point the camera at the QR label on the equipment. You will see what it is, '
-            'who holds it and whether it is still in service.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: UnColors.muted, height: 1.4),
-          ),
-          const SizedBox(height: 26),
-          FilledButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ScannerScreen()),
-            ),
-            icon: const Icon(Icons.camera_alt_outlined),
-            label: const Text('Open the scanner'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AssetSearchScreen()),
-            ),
-            icon: const Icon(Icons.search),
-            label: const Text('Search instead'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => Scaffold(
-                appBar: AppBar(title: const Text('My assets')), body: const MyAssetsTab())),
-            ),
-            icon: const Icon(Icons.devices_other_outlined),
-            label: const Text('Equipment assigned to me'),
-          ),
-          const SizedBox(height: 14),
-          const Text('Use search when a label is torn, faded or missing.',
-              style: TextStyle(fontSize: 12, color: UnColors.muted)),
-        ],
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // My assets
 // ─────────────────────────────────────────────────────────────────────────────
@@ -453,6 +410,166 @@ class AssetTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// Notifications. The server has no feed yet, so this shows what is waiting on
+/// the person rather than inventing an empty page.
+class _NotificationsTab extends StatelessWidget {
+  const _NotificationsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<dynamic>>(
+      future: Api.instance.inbox(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) return const Loading();
+        if (snap.hasError) {
+          return FailureState(message: '${snap.error}', onRetry: () {});
+        }
+        final items = snap.data ?? [];
+        if (items.isEmpty) {
+          return const EmptyState(
+            icon: Icons.notifications_none,
+            title: 'Nothing new',
+            detail: 'When something needs you — an approval, a signature — it will show here.',
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(UnStyle.gap),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, i) {
+            final item = items[i] as Map<String, dynamic>;
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: UnStyle.card(),
+              child: Row(
+                children: [
+                  Container(
+                    height: 38, width: 38,
+                    decoration: BoxDecoration(
+                        color: UnColors.lightBlue, borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.notifications_active_outlined,
+                        size: 20, color: UnColors.darkBlue),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${item['title']}',
+                            style: const TextStyle(fontWeight: FontWeight.w700, color: UnColors.navy)),
+                        Text('${item['subtitle']}',
+                            style: const TextStyle(fontSize: 12.5, color: UnColors.muted)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Profile: who you are, which phone this is, and how to sign out.
+class _ProfileTab extends StatelessWidget {
+  const _ProfileTab({required this.user, required this.onSignedOut});
+  final Map<String, dynamic> user;
+  final VoidCallback onSignedOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final modules = (user['modules'] as List<dynamic>? ?? []);
+    return ListView(
+      padding: const EdgeInsets.all(UnStyle.gap),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: UnStyle.card(),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: UnColors.darkBlue,
+                child: Text('${user['initials'] ?? '?'}',
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${user['name']}',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700, color: UnColors.navy)),
+                    const SizedBox(height: 2),
+                    Text('${user['email']}',
+                        style: const TextStyle(fontSize: 13, color: UnColors.muted)),
+                    if ('${user['office'] ?? ''}'.isNotEmpty)
+                      Text('${user['office']}',
+                          style: const TextStyle(fontSize: 12.5, color: UnColors.muted)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: UnStyle.gap),
+        SectionCard(
+          title: 'YOUR MODULES',
+          icon: Icons.apps_outlined,
+          child: modules.isEmpty
+              ? const Text('None switched on yet.', style: TextStyle(color: UnColors.muted))
+              : Column(
+                  children: [
+                    for (final m in modules)
+                      DetailRow('${(m as Map)['title']}',
+                          m['in_app'] == true ? 'In the app' : 'On the website'),
+                  ],
+                ),
+        ),
+        SectionCard(
+          title: 'THIS PHONE',
+          icon: Icons.smartphone,
+          child: Column(
+            children: [
+              DetailRow('Device', Api.instance.deviceName),
+              DetailRow('Site', Api.instance.baseUrl),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: () => showConnectionCheck(context),
+                icon: const Icon(Icons.network_check),
+                label: const Text('Check the connection'),
+              ),
+            ],
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: () async {
+            await Api.instance.logout();
+            onSignedOut();
+          },
+          icon: const Icon(Icons.logout),
+          label: const Text('Sign out'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(foregroundColor: UnColors.red),
+          onPressed: () async {
+            await Api.instance.logout(forgetDevice: true);
+            onSignedOut();
+          },
+          icon: const Icon(Icons.person_off_outlined),
+          label: const Text('Sign out and forget this phone'),
+        ),
+      ],
     );
   }
 }

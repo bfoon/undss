@@ -428,5 +428,41 @@ class Api {
   Future<void> cancelRun(int id, String reason) =>
       _send('POST', '/runs/$id/cancel/', body: {'reason': reason});
 
+  /// Fetch a PDF using the app's own session.
+  ///
+  /// This is why documents are read in the app rather than handed to the
+  /// browser: the browser carries no session cookie, so it would meet a
+  /// sign-in page instead of the document.
+  Future<List<int>> fetchPdf(String path) async {
+    if ((_baseUrl ?? '').isEmpty) throw ApiException('No site address is set.');
+    final uri = Uri.parse(path.startsWith('http') ? path : '$_baseUrl$path');
+    late http.Response res;
+    try {
+      res = await http.get(uri, headers: {
+        'Accept': 'application/pdf',
+        if ((_cookie ?? '').isNotEmpty) 'Cookie': _cookie!,
+      }).timeout(const Duration(seconds: 60));
+    } on SocketException {
+      throw ApiException("Can't reach UN PASS. Check your connection.");
+    } catch (_) {
+      throw ApiException('The document took too long to arrive. Try again.');
+    }
+    _keepCookie(res);
+    final type = (res.headers['content-type'] ?? '').toLowerCase();
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      await clearSession();
+      throw ApiException('You have been signed out. Sign in again.', signedOut: true);
+    }
+    if (res.statusCode >= 400) {
+      throw ApiException('The document could not be fetched (HTTP ${res.statusCode}).');
+    }
+    final looksLikePdf = res.bodyBytes.length > 4 &&
+        res.bodyBytes[0] == 0x25 && res.bodyBytes[1] == 0x50;   // "%P"
+    if (!type.contains('pdf') && !looksLikePdf) {
+      throw ApiException('That download was not a PDF. It may need to be opened on the website.');
+    }
+    return res.bodyBytes;
+  }
+
   String webUrl(String path) => '$_baseUrl$path';
 }

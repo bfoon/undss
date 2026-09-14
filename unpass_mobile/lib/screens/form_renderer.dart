@@ -205,7 +205,7 @@ class FormRules {
       }
       Map<String, dynamic>? found;
       for (final owner in [el, if (section != null && section != el) section]) {
-        for (final r in (owner!['state_rules'] as List<dynamic>? ?? [])) {
+        for (final r in (owner['state_rules'] as List<dynamic>? ?? [])) {
           final rule = r as Map<String, dynamic>;
           if (evaluate(vals, rule['when'] as Map<String, dynamic>?)) {
             found = {

@@ -6,6 +6,7 @@ import 'core/api.dart';
 import 'core/theme.dart';
 import 'screens/home.dart';
 import 'widgets/common.dart';
+import 'widgets/connection_check.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

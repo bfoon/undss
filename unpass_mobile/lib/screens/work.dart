@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
 import 'form_renderer.dart';
+import 'pdf_view.dart';
 import 'sign.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -371,12 +371,10 @@ class SubmissionScreen extends StatelessWidget {
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: () async {
-                  final url = Uri.parse(Api.instance.webUrl('${s['pdf_url']}'));
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                },
-                icon: const Icon(Icons.picture_as_pdf_outlined),
-                label: const Text('Open the PDF'),
+                onPressed: () => openPdf(context, '${s['pdf_url']}',
+                    title: '${s['form']}', subtitle: '${s['reference']}'),
+                icon: const Icon(Icons.menu_book_outlined),
+                label: const Text('Read the PDF'),
               ),
             ],
           );
@@ -630,12 +628,10 @@ class _EnvelopeScreenState extends State<EnvelopeScreen> {
                   ),
                 ),
               OutlinedButton.icon(
-                onPressed: () async {
-                  final url = Uri.parse(Api.instance.webUrl('${e['final_url']}'));
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                },
-                icon: const Icon(Icons.download),
-                label: const Text('Download the signed PDF'),
+                onPressed: () => openPdf(context, '${e['final_url']}',
+                    title: '${e['subject']}', subtitle: '${e['envelope_id']}'),
+                icon: const Icon(Icons.menu_book_outlined),
+                label: const Text('Read the signed PDF'),
               ),
             ],
           );
@@ -869,12 +865,10 @@ class _RunScreenState extends State<RunScreen> {
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: () async {
-                  final url = Uri.parse(Api.instance.webUrl('${r['document_url']}'));
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                },
-                icon: const Icon(Icons.picture_as_pdf_outlined),
-                label: const Text('Open the document'),
+                onPressed: () => openPdf(context, '${r['document_url']}',
+                    title: '${r['subject']}', subtitle: '${r['reference']}'),
+                icon: const Icon(Icons.menu_book_outlined),
+                label: const Text('Read the document'),
               ),
               if (r['can_cancel'] == true) ...[
                 const SizedBox(height: 8),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api.dart';
 import '../core/theme.dart';
 import '../widgets/common.dart';
+import 'pdf_view.dart';
 
 /// One step of a workflow: what is being asked, the answers so far, and the
 /// decision buttons. Deciding here is exactly what the website does.
@@ -284,26 +284,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                           OutlinedButton.icon(
-                            onPressed: () async {
-                              final url = Uri.parse(
-                                Api.instance.webUrl('${t['document_url']}'),
-                              );
-
-                              if (!await launchUrl(
-                                url,
-                                mode: LaunchMode.externalApplication,
-                              )) {
-                                if (context.mounted) {
-                                  showNote(
-                                    context,
-                                    "Couldn't open the document.",
-                                    error: true,
-                                  );
-                                }
-                              }
-                            },
-                            icon: const Icon(Icons.open_in_new),
-                            label: const Text('Open the PDF'),
+                            onPressed: () => openPdf(context, '\${t['document_url']}',
+                                title: 'Document', subtitle: '\${t['reference']}'),
+                            icon: const Icon(Icons.menu_book_outlined),
+                            label: const Text('Read the document'),
                           ),
                         ],
                       ),
