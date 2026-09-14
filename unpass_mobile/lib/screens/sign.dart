@@ -286,10 +286,10 @@ class _SignScreenState extends State<SignScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: OutlinedButton.icon(
-                          onPressed: () => openPdf(context, '\${d['url']}',
-                              title: '\${d['name']}', subtitle: '\${env['envelope_id']}'),
+                          onPressed: () => openPdf(context, '${d['url']}',
+                              title: '${d['name']}', subtitle: '${env['envelope_id']}'),
                           icon: const Icon(Icons.menu_book_outlined),
-                          label: Text('\${d['name']}', overflow: TextOverflow.ellipsis),
+                          label: Text('${d['name']}', overflow: TextOverflow.ellipsis),
                         ),
                       ),
                     Text('${fields.length} field${fields.length == 1 ? '' : 's'} are waiting for you. '

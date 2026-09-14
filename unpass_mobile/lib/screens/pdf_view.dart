@@ -6,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api.dart';
-import '../core/theme.dart';
 import '../widgets/common.dart';
 
 /// Read a document without leaving the app.

@@ -284,8 +284,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                           OutlinedButton.icon(
-                            onPressed: () => openPdf(context, '\${t['document_url']}',
-                                title: 'Document', subtitle: '\${t['reference']}'),
+                            onPressed: () => openPdf(context, '${t['document_url']}',
+                                title: 'Document', subtitle: '${t['reference']}'),
                             icon: const Icon(Icons.menu_book_outlined),
                             label: const Text('Read the document'),
                           ),
