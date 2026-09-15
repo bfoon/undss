@@ -9,14 +9,15 @@ Mount in the project urls.py:
 
 from django.urls import path
 
-from . import sso, views
+from . import global_views, sso, views
 
 app_name = "tenancy"
 
 urlpatterns = [
     # Superuser console
     path("", views.platform_overview, name="overview"),
-    path("features/<str:scope_key>/", views.feature_console, name="feature_console"),
+    path("global-modules/", global_views.global_modules, name="global_modules"),
+    path("features/<str:scope_key>/", global_views.feature_console, name="feature_console"),
     path("features/<str:scope_key>/explain/<str:code>/", views.feature_explain, name="feature_explain"),
 
     # Country offices

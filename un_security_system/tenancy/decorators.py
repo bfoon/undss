@@ -3,13 +3,6 @@ tenancy/decorators.py
 =====================
 
 Function-view guards.
-
-    from tenancy.decorators import feature_required, office_admin_required
-
-    @login_required
-    @feature_required("esign")
-    def esign_dashboard(request):
-        ...
 """
 
 from functools import wraps
@@ -19,16 +12,22 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect, render
 
 from .catalog import FEATURES_BY_CODE
+from .global_control import is_globally_enabled
 from .services import has_all, has_any, is_main_admin, is_office_admin
 
 
 def _deny(request, codes, mode="all"):
     """Render the friendly 'module not enabled' page instead of a bare 403."""
     names = [FEATURES_BY_CODE[c].name for c in codes if c in FEATURES_BY_CODE]
+    globally_disabled = any(
+        c in FEATURES_BY_CODE and not is_globally_enabled(c)
+        for c in codes
+    )
     context = {
         "feature_names": names,
         "requires_all": mode == "all",
         "office": getattr(request.user, "country_office", None),
+        "globally_disabled": globally_disabled,
     }
     return render(request, "tenancy/feature_disabled.html", context, status=403)
 
@@ -38,7 +37,9 @@ def feature_required(*codes, mode="all"):
     Block the view unless the caller's office has the feature(s) switched on.
 
     mode="all"  (default) every code must be enabled
-    mode="any"  at least one must be enabled
+    mode="any"   at least one must be enabled
+
+    tenancy.services applies the platform-wide global master switch first.
     """
     check = has_all if mode == "all" else has_any
 
@@ -50,8 +51,10 @@ def feature_required(*codes, mode="all"):
             if not check(request.user, codes):
                 return _deny(request, codes, mode)
             return view_func(request, *args, **kwargs)
+
         _wrapped.required_features = codes
         return _wrapped
+
     return decorator
 
 
@@ -65,6 +68,7 @@ def office_admin_required(view_func):
             messages.error(request, "You need office admin rights to open that page.")
             raise PermissionDenied
         return view_func(request, *args, **kwargs)
+
     return _wrapped
 
 
@@ -78,6 +82,7 @@ def main_admin_required(view_func):
             messages.error(request, "Only a main admin can do that.")
             raise PermissionDenied
         return view_func(request, *args, **kwargs)
+
     return _wrapped
 
 
@@ -89,4 +94,5 @@ def superuser_required(view_func):
         if not request.user.is_superuser:
             raise PermissionDenied
         return view_func(request, *args, **kwargs)
+
     return _wrapped

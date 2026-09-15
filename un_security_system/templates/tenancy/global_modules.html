@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Global Module Control{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <h1 class="h3 mb-0">Global Module Control</h1>
+        <span class="badge bg-danger">SUPERUSER</span>
+      </div>
+      <p class="text-muted mb-0">
+        Platform-wide master switches. A global disable overrides every agency,
+        country office and superuser module grant without deleting existing data or settings.
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'tenancy:overview' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Platform modules
+      </a>
+      <a href="{% url 'tenancy:audit_log' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-clock-history me-1"></i> Change log
+      </a>
+    </div>
+  </div>
+
+  <div class="alert alert-warning d-flex gap-3 align-items-start shadow-sm" role="alert">
+    <i class="bi bi-shield-lock-fill fs-4"></i>
+    <div>
+      <div class="fw-semibold">Global OFF is the highest-precedence control.</div>
+      <div class="small">
+        Users will immediately lose access from menus, direct web URLs and mapped mobile APIs.
+        Existing records and office/agency settings are preserved. Reactivating a module restores
+        normal tenancy rules.
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase fw-semibold">Effective globally</div>
+          <div class="display-6 fw-bold">{{ effective_count }}</div>
+          <div class="text-muted">of {{ total_count }} catalogue features available</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="fw-semibold mb-2">How this interacts with office settings</div>
+          <div class="small text-muted">
+            <strong>Global Active</strong> means the normal agency/country-office switch is evaluated.
+            <strong>Global Disabled</strong> means the feature is stopped everywhere.
+            Child capabilities are also blocked when a required parent module is globally unavailable.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% for group in groups %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 mb-0">{{ group.label }}</h2>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Module</th>
+              <th style="width:170px;">Master switch</th>
+              <th style="width:190px;">Effective state</th>
+              <th>Last global change</th>
+              <th class="text-end" style="width:160px;">Control</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in group.items %}
+              <tr class="{% if not item.enabled %}table-light{% endif %}">
+                <td>
+                  <div class="fw-semibold">{{ item.feature.name }}</div>
+                  <div class="small text-muted">{{ item.feature.description }}</div>
+                  {% if item.feature.requires %}
+                    <div class="small mt-1">
+                      <span class="text-muted">Requires:</span>
+                      {% for parent in item.feature.requires %}
+                        <span class="badge bg-light text-dark border">{{ parent }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if item.enabled %}
+                    <span class="badge bg-success">
+                      <i class="bi bi-toggle-on me-1"></i> Global Active
+                    </span>
+                  {% else %}
+                    <span class="badge bg-danger">
+                      <i class="bi bi-toggle-off me-1"></i> Global Disabled
+                    </span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if item.effective %}
+                    <span class="text-success fw-semibold">
+                      <i class="bi bi-check-circle-fill me-1"></i> Available
+                    </span>
+                  {% elif not item.enabled %}
+                    <span class="text-danger fw-semibold">
+                      <i class="bi bi-slash-circle-fill me-1"></i> Stopped globally
+                    </span>
+                  {% else %}
+                    <span class="text-warning-emphasis fw-semibold">
+                      <i class="bi bi-link-45deg me-1"></i> Blocked by dependency
+                    </span>
+                    {% if item.blocked_parent_names %}
+                      <div class="small text-muted mt-1">
+                        {% for name in item.blocked_parent_names %}
+                          {{ name }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                      </div>
+                    {% endif %}
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if item.grant %}
+                    <div class="small">
+                      <div>
+                        {{ item.updated_by|default:"system" }}
+                        · {{ item.updated_at|date:"d M Y H:i" }}
+                      </div>
+                      {% if item.reason %}
+                        <div class="text-muted mt-1" title="{{ item.reason }}">
+                          {{ item.reason|truncatechars:100 }}
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% else %}
+                    <span class="text-muted small">Default: globally active</span>
+                  {% endif %}
+                </td>
+
+                <td class="text-end">
+                  {% if item.enabled %}
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger js-global-control"
+                      data-bs-toggle="modal"
+                      data-bs-target="#globalControlModal"
+                      data-code="{{ item.feature.code }}"
+                      data-name="{{ item.feature.name }}"
+                      data-action="disable">
+                      <i class="bi bi-power me-1"></i> Disable
+                    </button>
+                  {% else %}
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-success js-global-control"
+                      data-bs-toggle="modal"
+                      data-bs-target="#globalControlModal"
+                      data-code="{{ item.feature.code }}"
+                      data-name="{{ item.feature.name }}"
+                      data-action="enable">
+                      <i class="bi bi-power me-1"></i> Activate
+                    </button>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+
+</div>
+
+<div class="modal fade" id="globalControlModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="feature_code" id="globalFeatureCode">
+        <input type="hidden" name="action" id="globalFeatureAction">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="globalControlTitle">Change global module state</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <div id="globalDisableWarning" class="alert alert-danger d-none">
+            <div class="fw-semibold mb-1">
+              <i class="bi bi-exclamation-octagon-fill me-1"></i>
+              This will stop the module for everyone.
+            </div>
+            <div class="small">
+              Web navigation, direct gated URLs and mapped mobile APIs will be blocked immediately,
+              including for superusers. Existing data will not be deleted.
+            </div>
+          </div>
+
+          <div id="globalEnableInfo" class="alert alert-success d-none">
+            <div class="fw-semibold mb-1">
+              <i class="bi bi-check-circle-fill me-1"></i>
+              Normal tenancy rules will resume.
+            </div>
+            <div class="small">
+              Existing agency and country-office settings will be used again.
+            </div>
+          </div>
+
+          <p class="mb-3">
+            Module: <strong id="globalFeatureName"></strong>
+          </p>
+
+          <label for="globalReason" class="form-label">
+            Reason <span class="text-muted">(recommended)</span>
+          </label>
+          <textarea
+            class="form-control"
+            id="globalReason"
+            name="reason"
+            rows="3"
+            maxlength="1000"
+            placeholder="Example: Temporarily disabled for maintenance or security review."></textarea>
+          <div class="form-text">The reason is stored in the platform change log.</div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn" id="globalConfirmButton">Confirm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const buttons = document.querySelectorAll(".js-global-control");
+  const codeInput = document.getElementById("globalFeatureCode");
+  const actionInput = document.getElementById("globalFeatureAction");
+  const nameEl = document.getElementById("globalFeatureName");
+  const titleEl = document.getElementById("globalControlTitle");
+  const confirmButton = document.getElementById("globalConfirmButton");
+  const disableWarning = document.getElementById("globalDisableWarning");
+  const enableInfo = document.getElementById("globalEnableInfo");
+  const reason = document.getElementById("globalReason");
+
+  buttons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      const code = button.dataset.code;
+      const name = button.dataset.name;
+      const action = button.dataset.action;
+
+      codeInput.value = code;
+      actionInput.value = action;
+      nameEl.textContent = name;
+      reason.value = "";
+
+      if (action === "disable") {
+        titleEl.textContent = "Disable " + name + " globally?";
+        confirmButton.textContent = "Disable Globally";
+        confirmButton.className = "btn btn-danger";
+        disableWarning.classList.remove("d-none");
+        enableInfo.classList.add("d-none");
+      } else {
+        titleEl.textContent = "Activate " + name + " globally?";
+        confirmButton.textContent = "Activate Globally";
+        confirmButton.className = "btn btn-success";
+        disableWarning.classList.add("d-none");
+        enableInfo.classList.remove("d-none");
+      }
+    });
+  });
+});
+</script>
+{% endblock %}
