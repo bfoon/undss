@@ -227,9 +227,6 @@ FEATURES: Tuple[FeatureDef, ...] = (
         category="facilities",
         description="Prepare package-step documents in the shared eSign engine, including "
                     "recipients, field placement, signing, audit trail and certificate.",
-        # Package signing is a Mailroom capability, but the signing machinery is eSign.
-        # tenancy.services._apply_dependencies() therefore switches this OFF whenever
-        # either parent is unavailable.
         requires=("mailroom", "esign"),
         delegable=True,
         url_rules=("vehicles:document_*", "vehicles:signature_*"),
@@ -285,6 +282,7 @@ FEATURES: Tuple[FeatureDef, ...] = (
         name="eSign",
         category="ict",
         description="Electronic signature envelopes, recipients and audit trail.",
+        default_enabled=True,
         shareable=True,
         url_rules=("accounts:esign_*",),
     ),
@@ -294,6 +292,7 @@ FEATURES: Tuple[FeatureDef, ...] = (
         category="ict",
         description="Highlight, freehand and area-select comments on envelopes.",
         requires=("esign",),
+        default_enabled=True,
         delegable=True,
         url_rules=("accounts:esign_markup_*",),
     ),
@@ -313,7 +312,6 @@ FEATURES: Tuple[FeatureDef, ...] = (
         name="Analytics & reports",
         category="platform",
         description="Cross-module dashboards, exports and periodic reports.",
-        default_enabled=True,
         url_rules=(
             "accounts:analytics*", "dashboard:analytics", "dashboard:reports",
             "dashboard:daily_report", "dashboard:weekly_report",
@@ -325,7 +323,6 @@ FEATURES: Tuple[FeatureDef, ...] = (
         name="Activity log",
         category="platform",
         description="Per-user audit trail of actions across the platform.",
-        default_enabled=True,
         url_rules=("accounts:activity_*",),
     ),
     FeatureDef(
