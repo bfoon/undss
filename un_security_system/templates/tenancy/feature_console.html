@@ -38,6 +38,22 @@
     </div>
   </div>
 
+  {% if scope_status and not scope_status.active %}
+    <div class="alert alert-danger d-flex align-items-start gap-2">
+      <i class="bi bi-building-x mt-1"></i>
+      <div>
+        <div class="fw-semibold">
+          This {% if office %}Country Office{% else %}Agency{% endif %} is currently suspended.
+        </div>
+        <div class="small">
+          Module settings shown below are preserved configuration only. Ordinary users
+          cannot access UNPASS until the scope is reactivated from
+          <a href="{% url 'tenancy:overview' %}" class="alert-link">Platform control</a>.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
   {% if is_super %}
     <div class="alert alert-light border d-flex align-items-start gap-2">
       <i class="bi bi-shield-lock text-danger mt-1"></i>

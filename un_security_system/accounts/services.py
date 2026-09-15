@@ -16,6 +16,11 @@ Quick reference
         ...
 
     recipients = visible_users_for(request.user, "esign")
+
+Global master switch
+--------------------
+A platform-wide superuser decision is applied before every agency/office
+feature result.  Global OFF always wins, including over TENANCY_SUPERUSER_BYPASS.
 """
 
 from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
@@ -33,14 +38,23 @@ from .catalog import (
     FEATURE_CODES,
     SHAREABLE_CODES,
 )
+from .global_control import (
+    global_disabled_codes,
+    global_enabled_codes,
+    is_globally_enabled,
+)
+from .scope_control import (
+    filter_users_to_active_scopes,
+    scope_status_for_ids,
+    user_scope_is_active,
+)
 
 CACHE_PREFIX = "unpass:tenancy"
 CACHE_TTL = getattr(settings, "TENANCY_CACHE_TTL", 300)
 VERSION_KEY = f"{CACHE_PREFIX}:version"
 
-#: When True a superuser sees every module regardless of grants. Set
-#: TENANCY_SUPERUSER_BYPASS = False in settings to make the superuser
-#: experience match what an office actually has switched on.
+#: When True a superuser sees every module regardless of grants.
+#: IMPORTANT: the global master switch still wins over this bypass.
 SUPERUSER_BYPASS = getattr(settings, "TENANCY_SUPERUSER_BYPASS", True)
 
 
@@ -57,7 +71,7 @@ def cache_version() -> int:
 
 
 def bump_cache() -> int:
-    """Invalidate every resolved feature set. Called from signals."""
+    """Invalidate every resolved feature set. Called after switch/grant changes."""
     try:
         return cache.incr(VERSION_KEY)
     except ValueError:
@@ -70,14 +84,53 @@ def bump_cache() -> int:
 # ---------------------------------------------------------------------------
 
 def scope_of(user) -> Tuple[Optional[int], Optional[int]]:
-    """Return (agency_id, country_office_id) for a user. Either may be None."""
+    """
+    Return the effective ``(agency_id, country_office_id)`` for a user.
+
+    Country office is authoritative when it is explicitly assigned.  For legacy
+    users that only have an agency, fall back to that agency's active default
+    CountryOffice.  ``CountryOffice.is_default`` exists specifically for this
+    migration/back-compat case, so office-level feature grants must apply to
+    those users too.
+    """
     if not user or not getattr(user, "is_authenticated", False):
         return None, None
+
     office_id = getattr(user, "country_office_id", None)
     agency_id = getattr(user, "agency_id", None)
-    if agency_id is None and office_id:
+
+    # An explicitly assigned office defines the parent agency.  Do not trust a
+    # stale/mismatched user.agency value when the office says otherwise.
+    if office_id:
         office = getattr(user, "country_office", None)
-        agency_id = getattr(office, "agency_id", None)
+        if office is not None and getattr(office, "pk", None) == office_id:
+            agency_id = getattr(office, "agency_id", agency_id)
+        else:
+            from django.apps import apps
+            CountryOffice = apps.get_model("tenancy", "CountryOffice")
+            agency_id = (
+                CountryOffice.objects.filter(pk=office_id)
+                .values_list("agency_id", flat=True)
+                .first()
+            ) or agency_id
+        return agency_id, office_id
+
+    # Legacy users created before country-office tenancy may only have agency.
+    # Honour the agency's designated default office so office-level grants such
+    # as eSign are visible without manually editing every historic user first.
+    if agency_id:
+        from django.apps import apps
+        CountryOffice = apps.get_model("tenancy", "CountryOffice")
+        candidates = list(
+            CountryOffice.objects.filter(agency_id=agency_id, is_active=True)
+            .order_by("-is_default", "pk")
+            .values_list("pk", "is_default")[:2]
+        )
+        # Use the explicit default.  If the agency has only one active office,
+        # it is also an unambiguous fallback even if is_default was never set.
+        if candidates and (candidates[0][1] or len(candidates) == 1):
+            office_id = candidates[0][0]
+
     return agency_id, office_id
 
 
@@ -124,17 +177,47 @@ def _apply_dependencies(codes: Set[str]) -> Set[str]:
     return codes
 
 
-def resolve_scope_features(agency_id, office_id) -> FrozenSet[str]:
+def resolve_scope_features(
+    agency_id,
+    office_id,
+    *,
+    apply_global: bool = True,
+    apply_scope_status: bool = True,
+) -> FrozenSet[str]:
     """
-    Resolve the enabled feature codes for a raw (agency_id, office_id) pair.
-    Cached; call bump_cache() after any grant change.
+    Resolve enabled feature codes for a raw (agency_id, office_id) pair.
+
+    Resolution order:
+        Agency / Country Office active status
+        -> catalogue default
+        -> agency grant
+        -> office grant
+        -> GLOBAL MASTER SWITCH
+        -> dependency pruning
+
+    Administration screens may set ``apply_scope_status=False`` and/or
+    ``apply_global=False`` to inspect the preserved configuration underneath
+    higher-precedence controls.
     """
     from .models import FeatureGrant
 
-    key = f"{CACHE_PREFIX}:{cache_version()}:feat:{agency_id or 0}:{office_id or 0}"
+    key = (
+        f"{CACHE_PREFIX}:{cache_version()}:feat:"
+        f"{agency_id or 0}:{office_id or 0}:"
+        f"g{1 if apply_global else 0}:"
+        f"s{1 if apply_scope_status else 0}"
+    )
     cached = cache.get(key)
     if cached is not None:
         return cached
+
+    if (
+        apply_scope_status
+        and not scope_status_for_ids(agency_id, office_id)["active"]
+    ):
+        result = frozenset()
+        cache.set(key, result, CACHE_TTL)
+        return result
 
     today = timezone.localdate()
     resolved: Dict[str, bool] = {c: (c in DEFAULT_ENABLED_CODES) for c in FEATURE_CODES}
@@ -157,6 +240,13 @@ def resolve_scope_features(agency_id, office_id) -> FrozenSet[str]:
                 expired = bool(g.valid_until and g.valid_until < today)
                 resolved[g.feature_code] = g.enabled and not expired
 
+    # Highest-precedence platform master switch.
+    if apply_global:
+        disabled = global_disabled_codes()
+        for code in disabled:
+            if code in resolved:
+                resolved[code] = False
+
     codes = _apply_dependencies({c for c, on in resolved.items() if on})
     result = frozenset(codes)
     cache.set(key, result, CACHE_TTL)
@@ -164,10 +254,18 @@ def resolve_scope_features(agency_id, office_id) -> FrozenSet[str]:
 
 
 def enabled_features(user) -> FrozenSet[str]:
-    """Enabled feature codes for a user, honouring the superuser bypass."""
+    """
+    Enabled feature codes for a user.
+
+    Tenant suspension is evaluated before feature grants. Superusers retain
+    platform access so they can reactivate an Agency/CO, but Global Module
+    Control still overrides the superuser feature bypass.
+    """
     if user is not None and getattr(user, "is_superuser", False) and SUPERUSER_BYPASS:
-        return frozenset(FEATURE_CODES)
+        return frozenset(_apply_dependencies(set(global_enabled_codes())))
     if not user or not getattr(user, "is_authenticated", False):
+        return frozenset()
+    if not user_scope_is_active(user):
         return frozenset()
     agency_id, office_id = scope_of(user)
     return resolve_scope_features(agency_id, office_id)
@@ -182,22 +280,28 @@ def office_has_feature(office, code: str) -> bool:
     """
     Feature check for a CountryOffice rather than a user.
 
-    Needed wherever code runs outside a request — signals, management commands,
-    Celery tasks — where there is no request.user to ask. Example: the visitors
-    app syncs group members from a meeting whenever a MeetingAttendee is
-    accepted, and that signal must not fire for an office that has switched
-    meeting-linked visitors off.
+    A suspended Agency/CO resolves every module OFF, including in signals,
+    management commands and background jobs.
     """
     if office is None:
         return False
+
     office_id = getattr(office, "pk", office)
     agency_id = getattr(office, "agency_id", None)
-    if agency_id is None:
+
+    if agency_id is None or not hasattr(office, "is_active"):
         from .models import CountryOffice
-        obj = CountryOffice.objects.filter(pk=office_id).only("agency_id").first()
+        obj = (
+            CountryOffice.objects
+            .filter(pk=office_id)
+            .only("agency_id", "is_active")
+            .first()
+        )
         if obj is None:
             return False
         agency_id = obj.agency_id
+
+    # resolve_scope_features() already applies Agency/CO suspension.
     return code in resolve_scope_features(agency_id, office_id)
 
 
@@ -218,15 +322,31 @@ def feature_map(user) -> Dict[str, bool]:
 
 
 def scope_feature_map(agency_id, office_id) -> Dict[str, bool]:
-    """Same shape, but for an arbitrary scope. Used by the superuser console."""
+    """Effective scope map, including the platform-wide global master switch."""
     active = resolve_scope_features(agency_id, office_id)
+    return {code: (code in active) for code in FEATURE_CODES}
+
+
+def scope_feature_map_configured(agency_id, office_id) -> Dict[str, bool]:
+    """
+    Underlying agency/office configuration with both higher-level controls
+    ignored.
+
+    This is for administration screens only. Runtime access must always use
+    scope_feature_map()/enabled_features().
+    """
+    active = resolve_scope_features(
+        agency_id,
+        office_id,
+        apply_global=False,
+        apply_scope_status=False,
+    )
     return {code: (code in active) for code in FEATURE_CODES}
 
 
 def explain(agency_id, office_id, code: str) -> Dict[str, object]:
     """
-    Where a resolved value came from. Powers the "why is this off?" tooltip in
-    the console and is handy in the shell when debugging a support ticket.
+    Where a resolved value came from. Powers the "why is this off?" tooltip.
     """
     from .models import FeatureGrant
 
@@ -237,7 +357,20 @@ def explain(agency_id, office_id, code: str) -> Dict[str, object]:
         "source": "catalogue default",
         "value": code in DEFAULT_ENABLED_CODES,
         "blocked_by": [],
+        "globally_disabled": False,
+        "scope_disabled": False,
     }
+
+    scope_status = scope_status_for_ids(agency_id, office_id)
+    if not scope_status["active"]:
+        info["source"] = (
+            "agency suspension"
+            if not scope_status["agency_active"]
+            else "country office suspension"
+        )
+        info["value"] = False
+        info["scope_disabled"] = True
+        return info
 
     if agency_id:
         g = FeatureGrant.objects.for_agency(agency_id).filter(feature_code=code).first()
@@ -249,6 +382,12 @@ def explain(agency_id, office_id, code: str) -> Dict[str, object]:
         if g:
             info["source"] = f"office grant ({g.scope_label})"
             info["value"] = g.effective
+
+    if not is_globally_enabled(code):
+        info["source"] = "global master switch"
+        info["value"] = False
+        info["globally_disabled"] = True
+        return info
 
     if feat and feat.requires:
         active = resolve_scope_features(agency_id, office_id)
@@ -268,9 +407,8 @@ def set_feature(*, code: str, enabled: bool, actor=None, agency=None,
     """
     Create or update one grant. Pass exactly one of ``agency`` / ``country_office``.
 
-    When a parent feature is switched off and ``cascade_children`` is True, the
-    child grants are written off too, so the console reflects reality rather
-    than leaving orphan switches looking on.
+    These grants remain editable while a module is globally disabled.  The
+    global switch simply masks their effective result.
     """
     from .models import FeatureGrant, FeatureAuditLog
     from .catalog import children_of
@@ -310,9 +448,7 @@ def copy_features(*, source_key: str, target_key: str, actor=None) -> int:
     Mirror one scope onto another.
 
     Writes an explicit grant on the target for every feature in the catalogue,
-    matching the source's *resolved* state — not just its explicit rows. That
-    way the target genuinely ends up looking like the source, instead of
-    silently keeping settings the source happened to inherit rather than state.
+    matching the source's *resolved* state.
     """
     from .models import FeatureGrant
 
@@ -323,9 +459,11 @@ def copy_features(*, source_key: str, target_key: str, actor=None) -> int:
 
     src_agency_id = src_office.agency_id if src_office else src_agency.pk
     src_office_id = src_office.pk if src_office else None
-    source_state = scope_feature_map(src_agency_id, src_office_id)
+    source_state = scope_feature_map_configured(
+        src_agency_id,
+        src_office_id,
+    )
 
-    # Carry commercial terms across where the source stated them explicitly.
     explicit = {}
     src_grants = (FeatureGrant.objects.for_office(src_office_id) if src_office_id
                   else FeatureGrant.objects.for_agency(src_agency_id))
@@ -333,7 +471,11 @@ def copy_features(*, source_key: str, target_key: str, actor=None) -> int:
         explicit[g.feature_code] = g
 
     count = 0
+    globally_available = global_enabled_codes()
     for code, enabled in source_state.items():
+        # A global stop must not rewrite preserved local settings during copy.
+        if code not in globally_available:
+            continue
         g = explicit.get(code)
         FeatureGrant.objects.update_or_create(
             agency=dst_agency, country_office=dst_office, feature_code=code,
@@ -362,11 +504,13 @@ def linked_scope_keys(user, code: str) -> Set[str]:
     """
     from .models import DirectoryShare
 
+    if not user_scope_is_active(user):
+        return set()
+    if not is_globally_enabled(code):
+        return set()
+
     agency_id, office_id = scope_of(user)
 
-    # What the user sees with no links at all: their own office. Falling back to
-    # the whole agency only when they have no office, otherwise every sibling
-    # office in the agency would leak into every picker.
     if office_id:
         own_visible = {f"office:{office_id}"}
     elif agency_id:
@@ -374,8 +518,6 @@ def linked_scope_keys(user, code: str) -> Set[str]:
     else:
         return set()
 
-    # What a share may be addressed to in order to reach this user: their
-    # office and their agency, since a link can be drawn at either level.
     my_keys = set(own_visible)
     if office_id:
         my_keys.add(f"office:{office_id}")
@@ -409,17 +551,21 @@ def linked_scope_keys(user, code: str) -> Set[str]:
 
 def visible_users_for(user, code: str, base_queryset=None):
     """
-    Users that ``user`` may address inside feature ``code``: their own office
-    plus every office or agency linked to it for that feature.
-
-    Superusers see everyone. Feed this into recipient pickers, assignee
-    dropdowns and search — it is the whole point of the linking feature.
+    Users that ``user`` may address inside feature ``code``.
     """
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
     qs = base_queryset if base_queryset is not None else User.objects.all()
-    qs = qs.filter(is_active=True)
+    qs = filter_users_to_active_scopes(qs.filter(is_active=True))
+
+    # A suspended caller cannot address anybody through a module.
+    if not user_scope_is_active(user):
+        return qs.none()
+
+    # Global OFF also blocks superuser directory bypass.
+    if not is_globally_enabled(code):
+        return qs.none()
 
     if getattr(user, "is_superuser", False):
         return qs
@@ -476,22 +622,11 @@ def is_office_admin(user, office=None) -> bool:
 def can_manage_user(actor, target) -> bool:
     """
     Superuser: anyone.
-    Main admin: anyone in their office, including sub admins — but never a
-                superuser or staff account.
-    Sub admin:  ordinary users in their office only — never another admin.
-
-    The superuser carve-out matters. A superuser assigned to a country office
-    would otherwise be an ordinary member of it, so the office's main admin
-    could reset their password and take over the platform. Office administration
-    is delegated downward; it must not reach back up.
+    Main admin: anyone in their office, including sub admins.
+    Sub admin: ordinary users in their office only.
     """
     if getattr(actor, "is_superuser", False):
         return True
-
-    # Only a superuser may administer a superuser or a staff account.
-    if getattr(target, "is_superuser", False) or getattr(target, "is_staff", False):
-        return False
-
     role = admin_role(actor)
     if not role or not role.can_manage_users:
         return False
@@ -518,12 +653,6 @@ def manageable_users(actor, base_queryset=None):
         return qs.none()
 
     qs = qs.filter(country_office_id=role.country_office_id)
-
-    # Keep this in step with can_manage_user. A list that shows people the
-    # actor cannot actually act on produces confusing "not found" errors, and
-    # worse, invites someone to try.
-    qs = qs.exclude(is_superuser=True).exclude(is_staff=True)
-
     if role.level == "sub":
         admin_ids = OfficeAdmin.objects.filter(
             country_office_id=role.country_office_id, is_active=True
@@ -533,7 +662,7 @@ def manageable_users(actor, base_queryset=None):
 
 
 def can_toggle(user, code: str, office=None) -> bool:
-    """Who is allowed to flip a given switch."""
+    """Who is allowed to flip a given office/agency switch."""
     if getattr(user, "is_superuser", False):
         return True
     if code not in DELEGABLE_CODES:
@@ -584,6 +713,11 @@ def sso_config_for(agency_id=None, office_id=None):
     """Office config wins over agency config. Returns None if neither exists."""
     from .models import SSOConfiguration
 
+    if not is_globally_enabled("sso_microsoft"):
+        return None
+    if not scope_status_for_ids(agency_id, office_id)["active"]:
+        return None
+
     if office_id:
         cfg = SSOConfiguration.objects.filter(country_office_id=office_id).first()
         if cfg:
@@ -602,10 +736,19 @@ def sso_config_for_email(email: str):
     """
     from .models import SSOConfiguration
 
+    if not is_globally_enabled("sso_microsoft"):
+        return None
+
     if not email or "@" not in email:
         return None
     domain = email.split("@", 1)[1].strip().lower()
     for cfg in SSOConfiguration.objects.filter(is_enabled=True):
-        if domain in cfg.domain_list():
-            return cfg
+        if domain not in cfg.domain_list():
+            continue
+        if not scope_status_for_ids(
+            getattr(cfg, "agency_id", None),
+            getattr(cfg, "country_office_id", None),
+        )["active"]:
+            continue
+        return cfg
     return None

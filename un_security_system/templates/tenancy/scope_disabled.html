@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}UNPASS access suspended{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4 p-md-5 text-center">
+          <div class="mb-3">
+            <i class="bi bi-building-x text-danger" style="font-size:3rem;"></i>
+          </div>
+
+          <h1 class="h4 mb-3">UNPASS access is currently suspended</h1>
+
+          {% if scope_status.reason == "agency_disabled" %}
+            <p class="lead mb-2">
+              {{ agency.name|default:agency.code }} is currently disabled in UNPASS.
+            </p>
+            <p class="text-muted">
+              This suspension applies to all country offices and ordinary users
+              under the agency.
+            </p>
+          {% elif scope_status.reason == "office_disabled" %}
+            <p class="lead mb-2">
+              {{ office.name }} is currently disabled in UNPASS.
+            </p>
+            <p class="text-muted">
+              This suspension applies only to users assigned to this country office.
+            </p>
+          {% else %}
+            <p class="text-muted">
+              Your organization is currently disabled in UNPASS.
+            </p>
+          {% endif %}
+
+          <div class="alert alert-light border text-start mt-4">
+            <div class="fw-semibold mb-1">Your account and data have not been deleted.</div>
+            <div class="small text-muted">
+              Existing users, module settings, records and trusted-device information
+              are preserved. Access resumes when the UNPASS platform superuser
+              reactivates the Agency or Country Office.
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
+            {% if user.is_authenticated %}
+              <a href="{% url 'accounts:logout' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-box-arrow-right me-1"></i> Sign out
+              </a>
+            {% else %}
+              <a href="{% url 'accounts:login' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Back to sign in
+              </a>
+            {% endif %}
+
+            {% if user.is_superuser %}
+              <a href="{% url 'tenancy:overview' %}" class="btn btn-primary">
+                <i class="bi bi-sliders me-1"></i> Platform control
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

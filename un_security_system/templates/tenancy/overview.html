@@ -4,13 +4,14 @@
 {% block content %}
 <div class="container-fluid py-4">
 
-  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-      <h1 class="h3 mb-1">Platform modules</h1>
+      <h1 class="h3 mb-1">Platform control</h1>
       <p class="text-muted mb-0">
-        Switch modules on or off per agency and per country office.
+        Control Agency/CO access and configure modules across UNPASS.
       </p>
     </div>
+
     <div class="d-flex gap-2 flex-wrap">
       <a href="{% url 'tenancy:global_modules' %}" class="btn btn-danger">
         <i class="bi bi-shield-lock me-1"></i> Global Module Control
@@ -33,84 +34,207 @@
   <div class="alert alert-light border shadow-sm d-flex align-items-start gap-2">
     <i class="bi bi-info-circle text-primary mt-1"></i>
     <div class="small">
-      Agency and country-office switches apply normally unless a module is stopped by the
-      <a href="{% url 'tenancy:global_modules' %}" class="fw-semibold">Global Module Control</a>.
-      Global OFF overrides every local setting without deleting it.
+      <strong>Agency/CO status is above module permissions.</strong>
+      Suspending an Agency blocks all ordinary users in all its country offices.
+      Suspending one CO blocks only that office. No users, records, trusted devices
+      or module settings are deleted. Global Module Control remains a separate
+      platform-wide switch for individual modules.
     </div>
   </div>
 
   {% for row in rows %}
-    <div class="card border-0 shadow-sm mb-4">
-      <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-          <h2 class="h5 mb-0">{{ row.agency.name }}</h2>
-          <small class="text-muted">
-            {{ row.agency.code }} · {{ row.office_count }} office{{ row.office_count|pluralize }}
-          </small>
-        </div>
-        <div class="d-flex align-items-center gap-3">
-          <span class="text-muted small">
-            Agency defaults: {{ row.on_count }} of {{ total_features }} on
-          </span>
-          <a href="{% url 'tenancy:feature_console' row.scope_key %}" class="btn btn-sm btn-outline-primary">
-            Edit agency defaults
-          </a>
+    <div class="card border-0 shadow-sm mb-4 {% if not row.agency_active %}border border-danger-subtle{% endif %}">
+      <div class="card-header bg-white py-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+          <div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <h2 class="h5 mb-0">{{ row.agency.name }}</h2>
+              <span class="badge bg-light text-dark border">{{ row.agency.code }}</span>
+
+              {% if row.agency_active %}
+                <span class="badge bg-success">
+                  <i class="bi bi-check-circle-fill me-1"></i> Agency active
+                </span>
+              {% else %}
+                <span class="badge bg-danger">
+                  <i class="bi bi-slash-circle-fill me-1"></i> Agency suspended
+                </span>
+              {% endif %}
+            </div>
+
+            <small class="text-muted">
+              {{ row.office_count }} office{{ row.office_count|pluralize }}
+              · {{ row.active_office_count }} effectively active
+              · {{ row.on_count }} of {{ total_features }} agency module defaults configured on
+            </small>
+          </div>
+
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <a href="{% url 'tenancy:feature_console' row.scope_key %}"
+               class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-toggles me-1"></i> Agency modules
+            </a>
+
+            {% if row.agency_active %}
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-danger js-scope-control"
+                data-bs-toggle="modal"
+                data-bs-target="#scopeControlModal"
+                data-scope-type="agency"
+                data-scope-id="{{ row.agency.pk }}"
+                data-scope-name="{{ row.agency.name }}"
+                data-action="disable">
+                <i class="bi bi-pause-circle me-1"></i> Suspend agency
+              </button>
+            {% else %}
+              <button
+                type="button"
+                class="btn btn-sm btn-success js-scope-control"
+                data-bs-toggle="modal"
+                data-bs-target="#scopeControlModal"
+                data-scope-type="agency"
+                data-scope-id="{{ row.agency.pk }}"
+                data-scope-name="{{ row.agency.name }}"
+                data-action="enable">
+                <i class="bi bi-play-circle me-1"></i> Activate agency
+              </button>
+            {% endif %}
+          </div>
         </div>
       </div>
+
+      {% if not row.agency_active %}
+        <div class="alert alert-danger rounded-0 border-start-0 border-end-0 mb-0 py-2">
+          <div class="small">
+            <i class="bi bi-exclamation-octagon-fill me-1"></i>
+            <strong>Agency suspension is active.</strong>
+            All ordinary users below are blocked even if an individual CO still shows
+            its own switch as active.
+          </div>
+        </div>
+      {% endif %}
 
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
           <thead class="table-light">
             <tr>
               <th>Country office</th>
-              <th class="text-center" style="width:110px;">Users</th>
-              <th class="text-center" style="width:110px;">Admins</th>
+              <th class="text-center" style="width:115px;">Users</th>
+              <th class="text-center" style="width:115px;">Admins</th>
+              <th style="width:180px;">Office switch</th>
+              <th style="width:180px;">Effective access</th>
               <th class="text-center" style="width:130px;">Modules on</th>
-              <th>Active modules</th>
-              <th class="text-end" style="width:200px;">Manage</th>
+              <th>Configured modules</th>
+              <th class="text-end" style="width:280px;">Manage</th>
             </tr>
           </thead>
+
           <tbody>
             {% for item in row.offices %}
-              <tr>
+              <tr class="{% if not item.effective_active %}table-light{% endif %}">
                 <td>
                   <div class="fw-semibold">{{ item.office.name }}</div>
                   <small class="text-muted">
-                    {{ item.office.code }}{% if item.office.country %} · {{ item.office.country }}{% endif %}
-                    {% if not item.office.is_active %}
-                      <span class="badge bg-secondary ms-1">inactive</span>
-                    {% endif %}
+                    {{ item.office.code }}
+                    {% if item.office.country %} · {{ item.office.country }}{% endif %}
                   </small>
                 </td>
+
                 <td class="text-center">{{ item.user_count }}</td>
                 <td class="text-center">{{ item.admin_count }}</td>
+
+                <td>
+                  {% if item.own_active %}
+                    <span class="badge bg-success">
+                      <i class="bi bi-toggle-on me-1"></i> Active
+                    </span>
+                  {% else %}
+                    <span class="badge bg-danger">
+                      <i class="bi bi-toggle-off me-1"></i> Suspended
+                    </span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if item.effective_active %}
+                    <span class="text-success fw-semibold">
+                      <i class="bi bi-check-circle-fill me-1"></i> Available
+                    </span>
+                  {% elif item.suspended_by_agency %}
+                    <span class="text-danger fw-semibold">
+                      <i class="bi bi-building-slash me-1"></i> Agency suspended
+                    </span>
+                  {% else %}
+                    <span class="text-danger fw-semibold">
+                      <i class="bi bi-slash-circle-fill me-1"></i> Office suspended
+                    </span>
+                  {% endif %}
+                </td>
+
                 <td class="text-center">
-                  <span class="badge {% if item.on_count %}bg-success{% else %}bg-secondary{% endif %}">
+                  <span class="badge {% if item.on_count %}bg-primary{% else %}bg-secondary{% endif %}">
                     {{ item.on_count }} / {{ total_features }}
                   </span>
                 </td>
+
                 <td>
-                  {% for code in item.on_codes|slice:":6" %}
+                  {% for code in item.on_codes|slice:":5" %}
                     <span class="badge bg-light text-dark border">{{ code }}</span>
                   {% empty %}
                     <span class="text-muted small">Nothing switched on</span>
                   {% endfor %}
-                  {% if item.on_codes|length > 6 %}
-                    <span class="text-muted small">+{{ item.on_codes|length|add:"-6" }} more</span>
+
+                  {% if item.on_codes|length > 5 %}
+                    <span class="text-muted small">
+                      +{{ item.on_codes|length|add:"-5" }} more
+                    </span>
                   {% endif %}
                 </td>
+
                 <td class="text-end">
-                  <a href="{% url 'tenancy:feature_console' item.scope_key %}" class="btn btn-sm btn-primary">
-                    Modules
-                  </a>
-                  <a href="{% url 'tenancy:office_admins' item.office.pk %}" class="btn btn-sm btn-outline-secondary">
-                    Admins
-                  </a>
+                  <div class="d-flex gap-1 justify-content-end flex-wrap">
+                    <a href="{% url 'tenancy:feature_console' item.scope_key %}"
+                       class="btn btn-sm btn-primary">
+                      Modules
+                    </a>
+
+                    <a href="{% url 'tenancy:office_admins' item.office.pk %}"
+                       class="btn btn-sm btn-outline-secondary">
+                      Admins
+                    </a>
+
+                    {% if item.own_active %}
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-danger js-scope-control"
+                        data-bs-toggle="modal"
+                        data-bs-target="#scopeControlModal"
+                        data-scope-type="office"
+                        data-scope-id="{{ item.office.pk }}"
+                        data-scope-name="{{ item.office.name }}"
+                        data-action="disable">
+                        Suspend
+                      </button>
+                    {% else %}
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-success js-scope-control"
+                        data-bs-toggle="modal"
+                        data-bs-target="#scopeControlModal"
+                        data-scope-type="office"
+                        data-scope-id="{{ item.office.pk }}"
+                        data-scope-name="{{ item.office.name }}"
+                        data-action="enable">
+                        Activate
+                      </button>
+                    {% endif %}
+                  </div>
                 </td>
               </tr>
             {% empty %}
               <tr>
-                <td colspan="6" class="text-center text-muted py-4">
+                <td colspan="8" class="text-center text-muted py-4">
                   No country offices yet.
                   <a href="{% url 'tenancy:office_list' %}">Add the first one</a>.
                 </td>
@@ -121,23 +245,29 @@
       </div>
     </div>
   {% empty %}
-    <div class="alert alert-info">No agencies exist yet. Create one in the Django admin first.</div>
+    <div class="alert alert-info">
+      No agencies exist yet. Create one in the Django admin first.
+    </div>
   {% endfor %}
 
   {% if recent_changes %}
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-white">
-        <h2 class="h6 mb-0">Recent changes</h2>
+        <h2 class="h6 mb-0">Recent platform changes</h2>
       </div>
+
       <ul class="list-group list-group-flush">
         {% for entry in recent_changes %}
-          <li class="list-group-item d-flex justify-content-between align-items-center">
+          <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span>
               <span class="fw-semibold">{{ entry.get_action_display }}</span>
               {% if entry.feature_code %} · {{ entry.feature_code }}{% endif %}
               · {{ entry.scope_label }}
-              {% if entry.detail %}<span class="text-muted">— {{ entry.detail }}</span>{% endif %}
+              {% if entry.detail %}
+                <span class="text-muted">— {{ entry.detail }}</span>
+              {% endif %}
             </span>
+
             <small class="text-muted">
               {{ entry.actor|default:"system" }} · {{ entry.created_at|date:"d M Y H:i" }}
             </small>
@@ -148,4 +278,133 @@
   {% endif %}
 
 </div>
+
+
+<div class="modal fade" id="scopeControlModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post" action="{% url 'tenancy:organization_status' %}">
+        {% csrf_token %}
+
+        <input type="hidden" name="scope_type" id="scopeType">
+        <input type="hidden" name="scope_id" id="scopeId">
+        <input type="hidden" name="action" id="scopeAction">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="scopeControlTitle">Change organization status</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <div id="scopeDisableWarning" class="alert alert-danger d-none">
+            <div class="fw-semibold mb-1">
+              <i class="bi bi-exclamation-octagon-fill me-1"></i>
+              Access will stop immediately.
+            </div>
+            <div class="small" id="scopeDisableText"></div>
+          </div>
+
+          <div id="scopeEnableInfo" class="alert alert-success d-none">
+            <div class="fw-semibold mb-1">
+              <i class="bi bi-check-circle-fill me-1"></i>
+              Existing access configuration will be restored.
+            </div>
+            <div class="small">
+              Users, module grants, records and trusted-device information were
+              preserved while the scope was suspended.
+            </div>
+          </div>
+
+          <p class="mb-3">
+            <span id="scopeKindLabel">Organization</span>:
+            <strong id="scopeName"></strong>
+          </p>
+
+          <label for="scopeReason" class="form-label">
+            Reason <span class="text-muted">(recommended)</span>
+          </label>
+          <textarea
+            id="scopeReason"
+            name="reason"
+            class="form-control"
+            rows="3"
+            maxlength="1000"
+            placeholder="Example: Office temporarily closed, service suspended, or administrative hold."></textarea>
+          <div class="form-text">
+            The reason is recorded in the platform change log.
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+            Cancel
+          </button>
+          <button type="submit" class="btn" id="scopeConfirmButton">Confirm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const buttons = document.querySelectorAll(".js-scope-control");
+
+  const typeInput = document.getElementById("scopeType");
+  const idInput = document.getElementById("scopeId");
+  const actionInput = document.getElementById("scopeAction");
+
+  const nameEl = document.getElementById("scopeName");
+  const kindEl = document.getElementById("scopeKindLabel");
+  const titleEl = document.getElementById("scopeControlTitle");
+  const confirmButton = document.getElementById("scopeConfirmButton");
+
+  const disableWarning = document.getElementById("scopeDisableWarning");
+  const disableText = document.getElementById("scopeDisableText");
+  const enableInfo = document.getElementById("scopeEnableInfo");
+  const reason = document.getElementById("scopeReason");
+
+  buttons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      const scopeType = button.dataset.scopeType;
+      const scopeId = button.dataset.scopeId;
+      const scopeName = button.dataset.scopeName;
+      const action = button.dataset.action;
+
+      typeInput.value = scopeType;
+      idInput.value = scopeId;
+      actionInput.value = action;
+      nameEl.textContent = scopeName;
+      kindEl.textContent = scopeType === "agency" ? "Agency" : "Country Office";
+      reason.value = "";
+
+      if (action === "disable") {
+        titleEl.textContent =
+          "Suspend " + (scopeType === "agency" ? "Agency" : "Country Office") + "?";
+
+        confirmButton.textContent = "Suspend Access";
+        confirmButton.className = "btn btn-danger";
+
+        disableWarning.classList.remove("d-none");
+        enableInfo.classList.add("d-none");
+
+        disableText.textContent =
+          scopeType === "agency"
+            ? "All ordinary UNPASS users in this Agency and all its country offices will be blocked."
+            : "Ordinary UNPASS users assigned to this Country Office will be blocked. Other offices are unaffected.";
+      } else {
+        titleEl.textContent =
+          "Activate " + (scopeType === "agency" ? "Agency" : "Country Office") + "?";
+
+        confirmButton.textContent = "Activate Access";
+        confirmButton.className = "btn btn-success";
+
+        disableWarning.classList.add("d-none");
+        enableInfo.classList.remove("d-none");
+      }
+    });
+  });
+});
+</script>
 {% endblock %}
