@@ -195,8 +195,9 @@
                 <td class="text-end">
                   <div class="d-flex gap-1 justify-content-end flex-wrap">
                     <a href="{% url 'tenancy:feature_console' item.scope_key %}"
-                       class="btn btn-sm btn-primary">
-                      Modules
+                       class="btn btn-sm btn-primary text-white"
+                       style="color: #ffffff !important;">
+                      <i class="bi bi-grid me-1"></i> Modules
                     </a>
 
                     <a href="{% url 'tenancy:office_admins' item.office.pk %}"
