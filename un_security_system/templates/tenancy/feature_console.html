@@ -23,14 +23,48 @@
       </p>
     </div>
     <div class="text-end">
-      <div class="h4 mb-0">{{ enabled_count }} <span class="text-muted h6">of {{ total_count }} on</span></div>
+      <div class="h4 mb-0">
+        {{ enabled_count }}
+        <span class="text-muted h6">of {{ total_count }} effective</span>
+      </div>
+      {% if configured_count != enabled_count %}
+        <div class="small text-muted">
+          {{ configured_count }} configured on before global controls
+        </div>
+      {% endif %}
       {% if office %}
         <a href="{% url 'tenancy:office_admins' office.pk %}" class="small">Manage office admins</a>
       {% endif %}
     </div>
   </div>
 
-  {% if not is_super %}
+  {% if scope_status and not scope_status.active %}
+    <div class="alert alert-danger d-flex align-items-start gap-2">
+      <i class="bi bi-building-x mt-1"></i>
+      <div>
+        <div class="fw-semibold">
+          This {% if office %}Country Office{% else %}Agency{% endif %} is currently suspended.
+        </div>
+        <div class="small">
+          Module settings shown below are preserved configuration only. Ordinary users
+          cannot access UNPASS until the scope is reactivated from
+          <a href="{% url 'tenancy:overview' %}" class="alert-link">Platform control</a>.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if is_super %}
+    <div class="alert alert-light border d-flex align-items-start gap-2">
+      <i class="bi bi-shield-lock text-danger mt-1"></i>
+      <div class="small">
+        A module stopped in
+        <a href="{% url 'tenancy:global_modules' %}" class="fw-semibold">Global Module Control</a>
+        is locked on this page. Its underlying agency/office setting is preserved and will
+        return automatically when the global module is reactivated.
+      </div>
+    </div>
+  {% else %}
     <div class="alert alert-info d-flex align-items-start gap-2">
       <i class="bi bi-info-circle mt-1"></i>
       <div>
@@ -48,28 +82,46 @@
         <div class="card-header bg-white">
           <h2 class="h6 mb-0">{{ group.label }}</h2>
         </div>
+
         <div class="list-group list-group-flush">
           {% for item in group.items %}
-            <div class="list-group-item py-3">
+            <div class="list-group-item py-3 {% if not item.global_available %}bg-light{% endif %}">
               <div class="d-flex align-items-start gap-3">
+
                 <div class="form-check form-switch mt-1">
-                  <input class="form-check-input" type="checkbox"
-                         role="switch"
-                         name="features"
-                         id="f_{{ item.feature.code }}"
-                         value="{{ item.feature.code }}"
-                         {% if item.enabled %}checked{% endif %}
-                         {% if not item.editable %}disabled{% endif %}>
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    name="features"
+                    id="f_{{ item.feature.code }}"
+                    value="{{ item.feature.code }}"
+                    {% if item.enabled %}checked{% endif %}
+                    {% if not item.editable %}disabled{% endif %}>
                 </div>
 
                 <div class="flex-grow-1">
                   <label class="fw-semibold mb-1 d-block" for="f_{{ item.feature.code }}">
                     {{ item.feature.name }}
+
+                    {% if not item.global_enabled %}
+                      <span class="badge bg-danger fw-normal ms-1">
+                        <i class="bi bi-shield-lock-fill me-1"></i>
+                        globally disabled
+                      </span>
+                    {% elif not item.global_available %}
+                      <span class="badge bg-warning text-dark fw-normal ms-1">
+                        <i class="bi bi-link-45deg me-1"></i>
+                        blocked globally by dependency
+                      </span>
+                    {% endif %}
+
                     {% if item.feature.requires %}
                       <span class="badge bg-light text-dark border fw-normal">
                         needs {{ item.parent_names|join:", " }}
                       </span>
                     {% endif %}
+
                     {% if item.feature.shareable %}
                       <span class="badge bg-light text-dark border fw-normal">
                         <i class="bi bi-link-45deg"></i> linkable
@@ -79,34 +131,67 @@
 
                   <div class="text-muted small">{{ item.feature.description }}</div>
 
-                  <div class="small mt-1">
-                    {% if not item.parents_ok %}
-                      <span class="text-warning">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        Stays off until {{ item.parent_names|join:" and " }} {{ item.parent_names|length|pluralize:"is,are" }} on.
-                      </span>
-                    {% elif item.is_explicit %}
-                      <span class="text-muted">
-                        Set here on {{ item.grant.updated_at|date:"d M Y" }}{% if item.grant.updated_by %} by {{ item.grant.updated_by }}{% endif %}.
-                      </span>
-                    {% elif office %}
-                      <span class="text-muted">
-                        Inherited from {{ office.agency.code }} defaults
-                        ({% if item.inherited_value %}on{% else %}off{% endif %}).
-                      </span>
-                    {% else %}
-                      <span class="text-muted">Using the catalogue default.</span>
+                  {% if not item.global_available %}
+                    <div class="small mt-2 text-danger">
+                      <i class="bi bi-lock-fill me-1"></i>
+                      {% if not item.global_enabled %}
+                        Global Module Control currently stops this module for every office.
+                      {% else %}
+                        This module is unavailable because
+                        {{ item.global_blocked_by|join:" and " }}
+                        {% if item.global_blocked_by|length == 1 %}is{% else %}are{% endif %}
+                        globally unavailable.
+                      {% endif %}
+                      The switch above shows the preserved local configuration and cannot be changed here.
+                    </div>
+                    {% if item.global_reason %}
+                      <div class="small text-muted mt-1">
+                        Global reason: {{ item.global_reason }}
+                      </div>
                     {% endif %}
+                  {% else %}
+                    <div class="small mt-1">
+                      {% if not item.parents_ok %}
+                        <span class="text-warning">
+                          <i class="bi bi-exclamation-triangle"></i>
+                          Stays off until {{ item.parent_names|join:" and " }}
+                          {{ item.parent_names|length|pluralize:"is,are" }} on.
+                        </span>
+                      {% elif item.is_explicit %}
+                        <span class="text-muted">
+                          Set here on {{ item.grant.updated_at|date:"d M Y" }}
+                          {% if item.grant.updated_by %}by {{ item.grant.updated_by }}{% endif %}.
+                        </span>
+                      {% elif office %}
+                        <span class="text-muted">
+                          Inherited from {{ office.agency.code }} defaults
+                          ({% if item.inherited_value %}on{% else %}off{% endif %}).
+                        </span>
+                      {% else %}
+                        <span class="text-muted">Using the catalogue default.</span>
+                      {% endif %}
 
-                    {% if not is_super and item.editable %}
-                      <span class="text-success ms-1">· you can change this</span>
-                    {% endif %}
-                  </div>
+                      {% if not is_super and item.editable %}
+                        <span class="text-success ms-1">· you can change this</span>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+
+                  {% if item.enabled and not item.effective_enabled %}
+                    <div class="small mt-1">
+                      <span class="badge bg-secondary">
+                        configured ON · currently not effective
+                      </span>
+                    </div>
+                  {% endif %}
 
                   {% if item.grant and item.grant.valid_until %}
                     <div class="small text-muted mt-1">
-                      <i class="bi bi-calendar-event"></i> Expires {{ item.grant.valid_until|date:"d M Y" }}
-                      {% if item.grant.is_expired %}<span class="text-danger">(expired)</span>{% endif %}
+                      <i class="bi bi-calendar-event"></i>
+                      Expires {{ item.grant.valid_until|date:"d M Y" }}
+                      {% if item.grant.is_expired %}
+                        <span class="text-danger">(expired)</span>
+                      {% endif %}
                     </div>
                   {% endif %}
                 </div>
@@ -126,6 +211,11 @@
         <i class="bi bi-check2 me-1"></i> Save modules
       </button>
       <a href="{% url 'tenancy:overview' %}" class="btn btn-outline-secondary">Cancel</a>
+      {% if is_super %}
+        <a href="{% url 'tenancy:global_modules' %}" class="btn btn-outline-danger ms-auto">
+          <i class="bi bi-shield-lock me-1"></i> Global Module Control
+        </a>
+      {% endif %}
     </div>
   </form>
 
@@ -136,12 +226,15 @@
       </div>
       <div class="card-body">
         <p class="text-muted small">
-          Overwrites this scope's switches with the chosen scope's. Useful when opening a
-          second office that should mirror the first.
+          Overwrites this scope's switches with the chosen scope's current settings.
+          Modules stopped by Global Module Control are deliberately skipped so their
+          preserved local settings are not changed.
         </p>
+
         <form method="post" class="row g-2 align-items-end">
           {% csrf_token %}
           <input type="hidden" name="action" value="copy">
+
           <div class="col-md-8">
             <label class="form-label small">Copy from</label>
             <select name="source_scope" class="form-select" required>
@@ -151,6 +244,7 @@
               {% endfor %}
             </select>
           </div>
+
           <div class="col-md-4">
             <button type="submit" class="btn btn-outline-primary w-100">
               <i class="bi bi-files me-1"></i> Copy settings across

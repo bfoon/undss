@@ -8,11 +8,21 @@
       <div class="card border-0 shadow-sm">
         <div class="card-body p-4 p-md-5 text-center">
           <div class="mb-3">
-            <i class="bi bi-toggle-off text-secondary" style="font-size:3rem;"></i>
+            {% if globally_disabled %}
+              <i class="bi bi-shield-lock-fill text-danger" style="font-size:3rem;"></i>
+            {% else %}
+              <i class="bi bi-toggle-off text-secondary" style="font-size:3rem;"></i>
+            {% endif %}
           </div>
 
           <h1 class="h4 mb-3">
-            {% if feature_names|length == 1 %}
+            {% if globally_disabled %}
+              {% if feature_names|length == 1 %}
+                {{ feature_names.0 }} is disabled across UNPASS
+              {% else %}
+                A required module is globally disabled
+              {% endif %}
+            {% elif feature_names|length == 1 %}
               {{ feature_names.0 }} is not switched on here
             {% else %}
               Some modules are not switched on here
@@ -31,7 +41,11 @@
           {% endif %}
 
           <p class="text-muted mb-4">
-            {% if office %}
+            {% if globally_disabled %}
+              The platform superuser has stopped this module using the Global Module Control.
+              Existing module data and office settings are preserved, but access is blocked
+              until the module is globally reactivated.
+            {% elif office %}
               {{ office }} does not currently have this module. Your ICT focal point
               can request it, or the platform superuser can switch it on.
             {% else %}
@@ -44,10 +58,17 @@
             <a href="{% url 'dashboard:dashboard' %}" class="btn btn-primary">
               <i class="bi bi-house-door me-1"></i> Back to dashboard
             </a>
-            {% if user.is_superuser and office %}
-              <a href="{% url 'tenancy:feature_console' office.scope_key %}" class="btn btn-outline-secondary">
-                <i class="bi bi-sliders me-1"></i> Manage modules for this office
-              </a>
+
+            {% if user.is_superuser %}
+              {% if globally_disabled %}
+                <a href="{% url 'tenancy:global_modules' %}" class="btn btn-danger">
+                  <i class="bi bi-shield-lock me-1"></i> Global Module Control
+                </a>
+              {% elif office %}
+                <a href="{% url 'tenancy:feature_console' office.scope_key %}" class="btn btn-outline-secondary">
+                  <i class="bi bi-sliders me-1"></i> Manage modules for this office
+                </a>
+              {% endif %}
             {% endif %}
           </div>
         </div>

@@ -8,3 +8,6 @@ class TenancyConfig(AppConfig):
 
     def ready(self):
         from . import signals  # noqa: F401
+        from .scope_control import install_audit_action_labels
+
+        install_audit_action_labels()
