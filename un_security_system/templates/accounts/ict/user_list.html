@@ -1,77 +1,100 @@
 {% extends "base.html" %}
+{% load tenancy_status %}
 {% block title %}Users{% endblock %}
 
 {% block content %}
 <div class="container py-4">
-  <!-- Header Section -->
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <div>
-    <h2 class="mb-1">
-      <i class="bi bi-people me-2"></i> Users
-    </h2>
-    <p class="text-muted mb-0">
-      <i class="bi bi-building me-1"></i>
-      <span class="fw-semibold">{{ my_agency|default:"No Agency Assigned" }}</span>
-      {% if my_office %}
-        <span class="mx-1">·</span>
-        <i class="bi bi-geo-alt me-1"></i>{{ my_office.name }}
-      {% endif %}
-      {% if total_scoped_users %}
-        <span class="badge bg-secondary ms-2">{{ total_scoped_users }} user{{ total_scoped_users|pluralize }}</span>
-        <span class="badge bg-success ms-1">{{ total_active_users }} active</span>
-      {% endif %}
-      {% if unassigned_count %}
-        <a href="?office=none" class="badge bg-warning text-dark ms-1 text-decoration-none"
-           title="Users with no country office — their module access falls back to agency defaults">
-          {{ unassigned_count }} without an office
-        </a>
-      {% endif %}
-    </p>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
+    <div>
+      <h2 class="mb-1">
+        <i class="bi bi-people me-2"></i>Users
+      </h2>
+
+      <p class="text-muted mb-0">
+        <i class="bi bi-building me-1"></i>
+        <span class="fw-semibold">{{ my_agency|default:"No Agency Assigned" }}</span>
+
+        {% if my_office %}
+          <span class="mx-1">·</span>
+          <i class="bi bi-geo-alt me-1"></i>{{ my_office.name }}
+        {% endif %}
+
+        {% if total_scoped_users %}
+          <span class="badge bg-secondary ms-2">
+            {{ total_scoped_users }} user{{ total_scoped_users|pluralize }}
+          </span>
+          <span class="badge bg-success ms-1">
+            {{ total_active_users }} account active
+          </span>
+        {% endif %}
+
+        {% if unassigned_count %}
+          <a href="?office=none"
+             class="badge bg-warning text-dark ms-1 text-decoration-none"
+             title="Users with no country office">
+            {{ unassigned_count }} without an office
+          </a>
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-primary" href="{% url 'accounts:ict_user_create' %}">
+        <i class="bi bi-person-plus me-1"></i>Add New User
+      </a>
+
+      <a class="btn btn-warning" href="{% url 'accounts:registration_links_list' %}">
+        <i class="bi bi-link-45deg me-1"></i>Registration Links
+      </a>
+    </div>
   </div>
 
-  <div class="d-flex gap-2">
-    <!-- Existing Add User Button -->
-    <a class="btn btn-primary" href="{% url 'accounts:ict_user_create' %}">
-      <i class="bi bi-person-plus me-1"></i> Add New User
-    </a>
 
-    <!-- NEW Registration Links Button -->
-    <a class="btn btn-warning" href="{% url 'accounts:registration_links_list' %}">
-      <i class="bi bi-link-45deg me-1"></i> Registration Links
-    </a>
+  <div class="alert alert-light border shadow-sm small">
+    <i class="bi bi-info-circle text-primary me-1"></i>
+    <strong>UNPASS Status</strong> shows effective access.
+    A user account can remain technically active while access is
+    <strong>suspended</strong> because its Country Office or Agency is disabled.
   </div>
-</div>
 
 
-
-  <!-- Search and Filters -->
   <form method="get" class="card shadow-sm mb-4">
     <div class="card-header bg-light">
-      <h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Search & Filters</h6>
+      <h6 class="mb-0">
+        <i class="bi bi-funnel me-2"></i>Search & Filters
+      </h6>
     </div>
+
     <div class="card-body">
       <div class="row g-3">
         <div class="col-lg-4 col-md-6">
           <label for="search" class="form-label fw-semibold">
             <i class="bi bi-search me-1"></i>Search
           </label>
-          <input type="text" id="search" name="q" value="{{ q }}" class="form-control"
-                 placeholder="Username, name, email or employee ID" autofocus>
+          <input type="text"
+                 id="search"
+                 name="q"
+                 value="{{ q }}"
+                 class="form-control"
+                 placeholder="Username, name, email or employee ID">
         </div>
 
         {% if show_office_column %}
           <div class="col-lg-3 col-md-6">
             <label for="office" class="form-label fw-semibold">
-              <i class="bi bi-geo-alt me-1"></i>Country office
+              <i class="bi bi-geo-alt me-1"></i>Country Office
             </label>
             <select id="office" name="office" class="form-select">
               <option value="">All offices</option>
               {% for o in offices %}
-                <option value="{{ o.pk }}" {% if selected_office == o.pk|stringformat:"s" %}selected{% endif %}>
+                <option value="{{ o.pk }}"
+                        {% if selected_office == o.pk|stringformat:"s" %}selected{% endif %}>
                   {{ o }}
                 </option>
               {% endfor %}
-              <option value="none" {% if selected_office == 'none' %}selected{% endif %}>
+              <option value="none"
+                      {% if selected_office == "none" %}selected{% endif %}>
                 — no office assigned —
               </option>
             </select>
@@ -83,26 +106,39 @@
           <select id="role" name="role" class="form-select">
             <option value="">All roles</option>
             {% for value, label in role_choices %}
-              <option value="{{ value }}" {% if selected_role == value %}selected{% endif %}>{{ label }}</option>
+              <option value="{{ value }}"
+                      {% if selected_role == value %}selected{% endif %}>
+                {{ label }}
+              </option>
             {% endfor %}
           </select>
         </div>
 
         <div class="col-lg-2 col-md-4">
-          <label for="status" class="form-label fw-semibold">Status</label>
+          <label for="status" class="form-label fw-semibold">Account State</label>
           <select id="status" name="status" class="form-select">
             <option value="">All</option>
-            <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
-            <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
+            <option value="active"
+                    {% if selected_status == "active" %}selected{% endif %}>
+              Account active
+            </option>
+            <option value="inactive"
+                    {% if selected_status == "inactive" %}selected{% endif %}>
+              Account inactive
+            </option>
           </select>
         </div>
 
         <div class="{% if show_office_column %}col-lg-1{% else %}col-lg-4{% endif %} col-md-4 d-flex align-items-end gap-2">
-          <button type="submit" class="btn btn-primary flex-grow-1" title="Apply filters">
+          <button type="submit"
+                  class="btn btn-primary flex-grow-1"
+                  title="Apply filters">
             <i class="bi bi-search"></i>
           </button>
+
           {% if q or selected_office or selected_role or selected_status %}
-            <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-outline-secondary"
+            <a href="{% url 'accounts:ict_user_list' %}"
+               class="btn btn-outline-secondary"
                title="Clear all filters">
               <i class="bi bi-x-circle"></i>
             </a>
@@ -112,20 +148,26 @@
     </div>
   </form>
 
-  <!-- Results Card -->
+
   <div class="card shadow-sm">
     {% if users %}
-      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h6 class="mb-0">
           <i class="bi bi-list-ul me-2"></i>Users
-          <span class="badge bg-secondary ms-2">{{ page_obj.paginator.count }} {% if q %}result{{ page_obj.paginator.count|pluralize }}{% else %}total{% endif %}</span>
+          <span class="badge bg-secondary ms-2">
+            {{ page_obj.paginator.count }}
+            {% if q %}result{{ page_obj.paginator.count|pluralize }}{% else %}total{% endif %}
+          </span>
         </h6>
+
         {% if q %}
           <small class="text-muted">
-            <i class="bi bi-funnel me-1"></i>Filtered results for "<strong>{{ q }}</strong>"
+            <i class="bi bi-funnel me-1"></i>
+            Filtered results for "<strong>{{ q }}</strong>"
           </small>
         {% endif %}
       </div>
+
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
           <thead class="table-light">
@@ -134,77 +176,152 @@
               <th>Full Name</th>
               <th>Email Address</th>
               <th>Role</th>
-              {% if show_office_column %}<th>Country Office</th>{% endif %}
+              <th>Country Office</th>
+              <th>UNPASS Status</th>
               <th>Employee ID</th>
             </tr>
           </thead>
+
           <tbody>
             {% for u in users %}
-            <tr>
-              <td>
-                <div class="d-flex align-items-center">
-                  {% if u.is_active %}
-                    <i class="bi bi-person-circle me-2 text-primary"></i>
-                  {% else %}
-                    <i class="bi bi-person-slash me-2 text-muted"></i>
-                  {% endif %}
-                  <a href="{% url 'accounts:ict_user_detail' pk=u.pk %}"
-                     class="fw-semibold text-decoration-none {% if not u.is_active %}text-muted{% else %}text-dark{% endif %}">
-                    {{ u.username }}
-                  </a>
-                  {% if not u.is_active %}
-                    <span class="badge bg-warning text-dark ms-2 small">Inactive</span>
-                  {% endif %}
-                </div>
-              </td>
-              <td>
-                {% if u.get_full_name %}
-                  <span class="fw-medium">{{ u.get_full_name }}</span>
-                {% else %}
-                  <span class="text-muted fst-italic">(No name set)</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if u.email %}
-                  <a href="mailto:{{ u.email }}" class="text-decoration-none">
-                    <i class="bi bi-envelope me-1"></i>{{ u.email }}
-                  </a>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if u.role %}
-                  <span class="badge bg-primary">
-                    <i class="bi bi-shield-check me-1"></i>{{ u.get_role_display }}
-                  </span>
-                {% else %}
-                  <span class="badge bg-secondary">No Role</span>
-                {% endif %}
-              </td>
-              {% if show_office_column %}
+              {% user_scope_status u as access %}
+
+              <tr class="{% if not u.is_active or not access.active %}table-light{% endif %}">
                 <td>
-                  {% if u.country_office %}
-                    <span class="text-nowrap">{{ u.country_office.name }}</span>
+                  <div class="d-flex align-items-center">
+                    {% if not u.is_active %}
+                      <i class="bi bi-person-slash me-2 text-secondary"></i>
+                    {% elif not access.active %}
+                      <i class="bi bi-person-x-fill me-2 text-danger"></i>
+                    {% else %}
+                      <i class="bi bi-person-circle me-2 text-primary"></i>
+                    {% endif %}
+
+                    <a href="{% url 'accounts:ict_user_detail' pk=u.pk %}"
+                       class="fw-semibold text-decoration-none
+                       {% if not u.is_active or not access.active %}text-muted{% else %}text-dark{% endif %}">
+                      {{ u.username }}
+                    </a>
+                  </div>
+                </td>
+
+                <td>
+                  {% if u.get_full_name %}
+                    <span class="fw-medium">{{ u.get_full_name }}</span>
                   {% else %}
-                    <span class="badge bg-warning text-dark">No office</span>
+                    <span class="text-muted fst-italic">(No name set)</span>
                   {% endif %}
                 </td>
-              {% endif %}
-              <td>
-                {% if u.employee_id %}
-                  <span class="font-monospace text-dark">{{ u.employee_id }}</span>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-            </tr>
+
+                <td>
+                  {% if u.email %}
+                    <a href="mailto:{{ u.email }}" class="text-decoration-none">
+                      <i class="bi bi-envelope me-1"></i>{{ u.email }}
+                    </a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if u.role %}
+                    <span class="badge bg-primary">
+                      <i class="bi bi-shield-check me-1"></i>{{ u.get_role_display }}
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary">No Role</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if u.country_office %}
+                    <div class="fw-semibold text-nowrap">
+                      <i class="bi bi-geo-alt me-1"></i>{{ u.country_office.name }}
+                    </div>
+
+                    <div class="small text-muted">
+                      {% if u.country_office.code %}
+                        {{ u.country_office.code }}
+                      {% endif %}
+                      {% if u.country_office.country %}
+                        {% if u.country_office.code %} · {% endif %}
+                        {{ u.country_office.country }}
+                      {% endif %}
+                    </div>
+
+                    {% if not access.agency_active %}
+                      <span class="badge bg-danger mt-1">
+                        <i class="bi bi-building-x me-1"></i>Agency disabled
+                      </span>
+                    {% elif not access.office_active %}
+                      <span class="badge bg-danger mt-1">
+                        <i class="bi bi-toggle-off me-1"></i>Disabled
+                      </span>
+                    {% else %}
+                      <span class="badge bg-success mt-1">
+                        <i class="bi bi-toggle-on me-1"></i>Enabled
+                      </span>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge bg-warning text-dark">No office</span>
+
+                    {% if not access.agency_active %}
+                      <div>
+                        <span class="badge bg-danger mt-1">Agency disabled</span>
+                      </div>
+                    {% endif %}
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if not u.is_active %}
+                    <span class="badge bg-secondary">
+                      <i class="bi bi-person-slash me-1"></i>Inactive
+                    </span>
+                    <div class="small text-muted mt-1">
+                      User account is disabled
+                    </div>
+
+                  {% elif not access.agency_active %}
+                    <span class="badge bg-danger">
+                      <i class="bi bi-pause-circle-fill me-1"></i>Suspended
+                    </span>
+                    <div class="small text-danger mt-1 fw-semibold">
+                      Agency disabled
+                    </div>
+
+                  {% elif not access.office_active %}
+                    <span class="badge bg-danger">
+                      <i class="bi bi-pause-circle-fill me-1"></i>Suspended
+                    </span>
+                    <div class="small text-danger mt-1 fw-semibold">
+                      Country Office disabled
+                    </div>
+
+                  {% else %}
+                    <span class="badge bg-success">
+                      <i class="bi bi-check-circle-fill me-1"></i>Active
+                    </span>
+                    <div class="small text-muted mt-1">
+                      Access available
+                    </div>
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if u.employee_id %}
+                    <span class="font-monospace text-dark">{{ u.employee_id }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
 
-      <!-- Pagination -->
+
       {% if is_paginated %}
         <div class="card-footer bg-light">
           <nav aria-label="Page navigation">
@@ -212,15 +329,13 @@
               {% if page_obj.has_previous %}
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
-                     aria-label="First">
+                     href="?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}">
                     <i class="bi bi-chevron-double-left"></i>
                   </a>
                 </li>
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
-                     aria-label="Previous">
+                     href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}">
                     <i class="bi bi-chevron-left"></i>
                   </a>
                 </li>
@@ -242,15 +357,13 @@
               {% if page_obj.has_next %}
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
-                     aria-label="Next">
+                     href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}">
                     <i class="bi bi-chevron-right"></i>
                   </a>
                 </li>
                 <li class="page-item">
                   <a class="page-link"
-                     href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}"
-                     aria-label="Last">
+                     href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if selected_office %}&office={{ selected_office|urlencode }}{% endif %}{% if selected_role %}&role={{ selected_role|urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status|urlencode }}{% endif %}">
                     <i class="bi bi-chevron-double-right"></i>
                   </a>
                 </li>
@@ -268,12 +381,13 @@
       {% endif %}
 
     {% else %}
-      <!-- Empty State -->
       <div class="card-body text-center py-5">
         <div class="mb-4">
           <i class="bi bi-people fs-1 text-muted"></i>
         </div>
+
         <h5 class="mb-2">No Users Found</h5>
+
         <p class="text-muted mb-4">
           {% if q or selected_office or selected_role or selected_status %}
             No users match the current filters.
@@ -282,19 +396,19 @@
           {% elif my_agency %}
             There are no users under {{ my_agency }} yet.
           {% else %}
-            Your account is not assigned to an agency or country office, so
-            there is nobody for you to administer. Ask the platform superuser
-            to assign you to an office.
+            Your account is not assigned to an agency or country office.
           {% endif %}
         </p>
+
         <div class="d-flex gap-2 justify-content-center">
           {% if q or selected_office or selected_role or selected_status %}
             <a href="{% url 'accounts:ict_user_list' %}" class="btn btn-outline-primary">
-              <i class="bi bi-x-circle me-1"></i> Clear Filters
+              <i class="bi bi-x-circle me-1"></i>Clear Filters
             </a>
           {% endif %}
+
           <a href="{% url 'accounts:ict_user_create' %}" class="btn btn-primary">
-            <i class="bi bi-person-plus me-1"></i> Add First User
+            <i class="bi bi-person-plus me-1"></i>Add First User
           </a>
         </div>
       </div>
