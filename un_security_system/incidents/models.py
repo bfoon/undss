@@ -206,7 +206,6 @@ class CommonServiceRequest(models.Model):
     category = models.CharField(
         max_length=40,
         default=Category.COMMON_PREMISES,
-        db_index=True,
     )
 
     description = models.TextField()
