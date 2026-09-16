@@ -3,71 +3,85 @@
 
 {% block content %}
 <div class="container-fluid py-4 px-xl-4">
-
-  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-    <div>
-      <div class="d-flex align-items-center gap-2 flex-wrap">
-        <h2 class="mb-0">
-          <i class="bi bi-bar-chart-line-fill me-2 text-primary"></i>
-          eSign · Forms · Flow Usage Dashboard
-        </h2>
-        <span class="badge bg-primary">Level {{ access.level }}</span>
+  <div class="dashboard-shell mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+      <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <h2 class="mb-0">
+            <i class="bi bi-bar-chart-line-fill me-2 text-primary"></i>
+            eSign · Forms · Flow Analytics
+          </h2>
+          <span class="badge bg-primary">Level {{ access.level }}</span>
+        </div>
+        <div class="text-muted mt-2">
+          <i class="bi bi-building me-1"></i>{{ access.label }}
+          <span class="mx-2">·</span>{{ access.level_label }}
+          <span class="mx-2">·</span>{{ period_label }}
+          <span class="mx-2">·</span>Generated {{ generated_at|date:"d M Y H:i" }}
+        </div>
       </div>
-      <div class="text-muted mt-2">
-        <i class="bi bi-building me-1"></i>{{ access.label }}
-        <span class="mx-2">·</span>{{ access.level_label }}
-        <span class="mx-2">·</span>{{ period_label }}
-      </div>
-    </div>
 
-    <div class="d-flex gap-2 flex-wrap">
-      {% if access.can_manage_access %}
-        <a href="{% url 'esign_analytics:manage_access' %}?scope={{ access.key }}"
-           class="btn btn-outline-primary">
-          <i class="bi bi-people-fill me-1"></i>Dashboard Access
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'esign_analytics:dashboard_export_csv' %}?scope={{ access.key }}&period={{ period_value }}"
+           class="btn btn-outline-secondary">
+          <i class="bi bi-filetype-csv me-1"></i>Export CSV
         </a>
-      {% endif %}
-      {% if access.can_drilldown %}
-        <a href="{% url 'esign_analytics:drilldown' 'envelopes' %}?scope={{ access.key }}&period={{ period_value }}"
-           class="btn btn-primary">
-          <i class="bi bi-search me-1"></i>Drill Down
+        <a href="{% url 'esign_analytics:dashboard_download' %}?scope={{ access.key }}&period={{ period_value }}"
+           class="btn btn-outline-secondary">
+          <i class="bi bi-download me-1"></i>Download Report
         </a>
-      {% endif %}
+        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+          <i class="bi bi-printer me-1"></i>Print
+        </button>
+        {% if access.can_manage_access %}
+          <a href="{% url 'esign_analytics:manage_access' %}?scope={{ access.key }}"
+             class="btn btn-primary">
+            <i class="bi bi-person-lock me-1"></i>Dashboard Access
+          </a>
+        {% endif %}
+      </div>
     </div>
   </div>
 
   <div class="card shadow-sm mb-4">
     <div class="card-body">
       <form method="get" class="row g-3 align-items-end">
-        <div class="col-lg-5">
+        <div class="col-xl-5">
           <label class="form-label fw-semibold">Dashboard Scope</label>
           <select name="scope" class="form-select">
             {% for scope in available_scopes %}
-              <option value="{{ scope.key }}"
-                      {% if scope.key == access.key %}selected{% endif %}>
+              <option value="{{ scope.key }}" {% if scope.key == access.key %}selected{% endif %}>
                 {{ scope.label }} — Level {{ scope.level }}
               </option>
             {% endfor %}
           </select>
         </div>
 
-        <div class="col-lg-3">
+        <div class="col-xl-3">
           <label class="form-label fw-semibold">Period</label>
           <select name="period" class="form-select">
             {% for value, label in period_choices %}
-              <option value="{{ value }}"
-                      {% if value == period_value %}selected{% endif %}>
+              <option value="{{ value }}" {% if value == period_value %}selected{% endif %}>
                 {{ label }}
               </option>
             {% endfor %}
           </select>
         </div>
 
-        <div class="col-lg-2">
+        <div class="col-xl-2">
           <button type="submit" class="btn btn-primary w-100">
-            <i class="bi bi-arrow-repeat me-1"></i>Apply
+            <i class="bi bi-arrow-repeat me-1"></i>Refresh
           </button>
         </div>
+
+        {% if access.can_drilldown %}
+        <div class="col-xl-2">
+          <a href="{% url 'esign_analytics:drilldown' 'envelopes' %}?scope={{ access.key }}&period={{ period_value }}"
+             class="btn btn-outline-primary w-100">
+            <i class="bi bi-search me-1"></i>Drill-down
+          </a>
+        </div>
+        {% endif %}
       </form>
     </div>
   </div>
@@ -75,367 +89,551 @@
   {% if office_attribution_note %}
     <div class="alert alert-light border small mb-4">
       <i class="bi bi-info-circle text-primary me-1"></i>
-      Forms and Flows already carry a Country Office snapshot. Existing eSign
-      envelopes do not currently store one, so historical envelope activity on
-      a CO dashboard is attributed using the sender's current Country Office.
+      Forms and Flows carry a Country Office snapshot. Existing eSign envelopes do not currently
+      store one, so CO eSign activity is attributed using the sender's current Country Office.
     </div>
   {% endif %}
 
-  <div class="d-flex align-items-center gap-2 mb-3">
-    <span class="badge rounded-pill bg-dark">Level 1</span>
-    <h5 class="mb-0">Executive Overview</h5>
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+      <div class="metric-card shadow-sm h-100">
+        <div class="metric-label">eSign envelopes</div>
+        <div class="metric-value">{{ metrics.envelope_total }}</div>
+        <div class="metric-sub">{{ metrics.comparison_label }}</div>
+        <div class="metric-delta">{{ metrics.delta_envelopes }}</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="metric-card shadow-sm h-100">
+        <div class="metric-label">Form submissions</div>
+        <div class="metric-value">{{ metrics.submissions_total }}</div>
+        <div class="metric-sub">{{ metrics.comparison_label }}</div>
+        <div class="metric-delta">{{ metrics.delta_submissions }}</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="metric-card shadow-sm h-100">
+        <div class="metric-label">Flow runs</div>
+        <div class="metric-value">{{ metrics.runs_total }}</div>
+        <div class="metric-sub">{{ metrics.comparison_label }}</div>
+        <div class="metric-delta">{{ metrics.delta_runs }}</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="metric-card shadow-sm h-100">
+        <div class="metric-label">Active users</div>
+        <div class="metric-value">{{ metrics.active_users }}</div>
+        <div class="metric-sub">{{ metrics.comparison_label }}</div>
+        <div class="metric-delta">{{ metrics.delta_active_users }}</div>
+      </div>
+    </div>
   </div>
 
   <div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-      <div class="card h-100 shadow-sm dashboard-metric">
-        <div class="card-body">
-          <div class="text-muted small fw-semibold">eSIGN ENVELOPES</div>
-          <div class="display-6 fw-bold">{{ metrics.envelope_total }}</div>
-          <div class="small">
-            <span class="text-success fw-semibold">{{ metrics.envelope_completion_rate }}%</span>
-            completed after sending
-          </div>
-        </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="mini-card shadow-sm h-100">
+        <div class="mini-title">eSign completion</div>
+        <div class="mini-value">{{ metrics.envelope_completion_rate }}%</div>
       </div>
     </div>
 
-    <div class="col-6 col-lg-3">
-      <div class="card h-100 shadow-sm dashboard-metric">
-        <div class="card-body">
-          <div class="text-muted small fw-semibold">SIGNATURE ACTIONS</div>
-          <div class="display-6 fw-bold">{{ metrics.signature_signed }}</div>
-          <div class="small">
-            {{ metrics.signature_completion_rate }}% of {{ metrics.signature_total }}
-          </div>
-        </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="mini-card shadow-sm h-100">
+        <div class="mini-title">Form completion</div>
+        <div class="mini-value">{{ metrics.form_completion_rate }}%</div>
       </div>
     </div>
 
-    <div class="col-6 col-lg-3">
-      <div class="card h-100 shadow-sm dashboard-metric">
-        <div class="card-body">
-          <div class="text-muted small fw-semibold">FORM SUBMISSIONS</div>
-          <div class="display-6 fw-bold">{{ metrics.submissions_total }}</div>
-          <div class="small">
-            <span class="text-success fw-semibold">{{ metrics.form_completion_rate }}%</span>
-            completed
-          </div>
-        </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="mini-card shadow-sm h-100">
+        <div class="mini-title">Flow completion</div>
+        <div class="mini-value">{{ metrics.run_completion_rate }}%</div>
       </div>
     </div>
 
-    <div class="col-6 col-lg-3">
-      <div class="card h-100 shadow-sm dashboard-metric">
-        <div class="card-body">
-          <div class="text-muted small fw-semibold">FLOW RUNS</div>
-          <div class="display-6 fw-bold">{{ metrics.runs_total }}</div>
-          <div class="small">
-            <span class="text-success fw-semibold">{{ metrics.run_completion_rate }}%</span>
-            completed
-          </div>
-        </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="mini-card shadow-sm h-100">
+        <div class="mini-title">Avg eSign turnaround</div>
+        <div class="mini-value mini-small">{{ metrics.avg_envelope_completion }}</div>
       </div>
     </div>
-  </div>
 
-  <div class="row g-3 mb-5">
     <div class="col-md-4 col-xl-2">
-      <div class="card shadow-sm h-100"><div class="card-body">
-        <div class="text-muted small">Active users</div>
-        <div class="fs-3 fw-bold">{{ metrics.active_users }}</div>
-      </div></div>
+      <div class="mini-card shadow-sm h-100">
+        <div class="mini-title">Avg flow turnaround</div>
+        <div class="mini-value mini-small">{{ metrics.avg_run_completion }}</div>
+      </div>
     </div>
 
     <div class="col-md-4 col-xl-2">
-      <div class="card shadow-sm h-100"><div class="card-body">
-        <div class="text-muted small">Forms / Published</div>
-        <div class="fs-3 fw-bold">{{ metrics.forms_total }}</div>
-        <div class="small text-muted">{{ metrics.forms_published }} published</div>
-      </div></div>
-    </div>
-
-    <div class="col-md-4 col-xl-2">
-      <div class="card shadow-sm h-100"><div class="card-body">
-        <div class="text-muted small">Flows / Active</div>
-        <div class="fs-3 fw-bold">{{ metrics.workflows_total }}</div>
-        <div class="small text-muted">{{ metrics.workflows_active }} active</div>
-      </div></div>
-    </div>
-
-    <div class="col-md-4 col-xl-2">
-      <div class="card shadow-sm h-100"><div class="card-body">
-        <div class="text-muted small">Open flow tasks</div>
-        <div class="fs-3 fw-bold">{{ metrics.open_tasks }}</div>
-        {% if metrics.overdue_tasks %}
-          <div class="small text-danger">{{ metrics.overdue_tasks }} overdue</div>
-        {% else %}
-          <div class="small text-muted">No overdue tasks</div>
-        {% endif %}
-      </div></div>
-    </div>
-
-    <div class="col-md-4 col-xl-2">
-      <div class="card shadow-sm h-100"><div class="card-body">
-        <div class="text-muted small">Avg eSign completion</div>
-        <div class="fs-5 fw-bold mt-2">{{ metrics.avg_envelope_completion }}</div>
-      </div></div>
-    </div>
-
-    <div class="col-md-4 col-xl-2">
-      <div class="card shadow-sm h-100"><div class="card-body">
-        <div class="text-muted small">Avg flow completion</div>
-        <div class="fs-5 fw-bold mt-2">{{ metrics.avg_run_completion }}</div>
-      </div></div>
+      <div class="mini-card shadow-sm h-100">
+        <div class="mini-title">Open / overdue tasks</div>
+        <div class="mini-value mini-small">{{ metrics.open_tasks }} / {{ metrics.overdue_tasks }}</div>
+      </div>
     </div>
   </div>
 
   {% if access.can_analytics %}
-    <div class="d-flex align-items-center gap-2 mb-3">
-      <span class="badge rounded-pill bg-primary">Level 2</span>
-      <h5 class="mb-0">Analytics &amp; Trends</h5>
-    </div>
-
-    <div class="row g-4 mb-4">
-      <div class="col-xl-8">
-        <div class="card shadow-sm h-100">
-          <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Usage Trend</h5>
-          </div>
-          <div class="card-body">
-            <canvas id="usageTrend" height="110"></canvas>
-          </div>
+  <div class="row g-4 mb-4">
+    <div class="col-xl-8">
+      <div class="chart-card shadow-sm h-100">
+        <div class="chart-header">
+          <h5 class="mb-0">Usage trend</h5>
+          <span class="text-muted small">eSign, Forms and Flow activity over time</span>
         </div>
-      </div>
-
-      <div class="col-xl-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>eSign Status</h5>
-          </div>
-          <div class="card-body">
-            <canvas id="esignStatus" height="220"></canvas>
-          </div>
+        <div class="chart-body">
+          <canvas id="usageTrend" height="110"></canvas>
         </div>
       </div>
     </div>
 
-    <div class="row g-4 mb-5">
-      <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-          <div class="card-header"><h5 class="mb-0">Most Used Forms</h5></div>
-          <div class="table-responsive">
-            <table class="table align-middle mb-0">
-              <thead><tr><th>Form</th><th class="text-end">Submissions</th></tr></thead>
-              <tbody>
-                {% for row in level2.top_forms %}
-                  <tr>
-                    <td>{{ row.form_name|default:"Unnamed form" }}</td>
-                    <td class="text-end fw-bold">{{ row.total }}</td>
-                  </tr>
-                {% empty %}
-                  <tr><td colspan="2" class="text-center text-muted py-4">No submissions in this period.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+    <div class="col-xl-4">
+      <div class="chart-card shadow-sm h-100">
+        <div class="chart-header">
+          <h5 class="mb-0">Activity mix</h5>
+          <span class="text-muted small">Volume distribution in the selected period</span>
         </div>
-      </div>
-
-      <div class="col-lg-6">
-        <div class="card shadow-sm h-100">
-          <div class="card-header"><h5 class="mb-0">Most Used Flows</h5></div>
-          <div class="table-responsive">
-            <table class="table align-middle mb-0">
-              <thead><tr><th>Flow</th><th class="text-end">Runs</th></tr></thead>
-              <tbody>
-                {% for row in level2.top_flows %}
-                  <tr>
-                    <td>{{ row.workflow_name|default:"Unnamed flow" }}</td>
-                    <td class="text-end fw-bold">{{ row.total }}</td>
-                  </tr>
-                {% empty %}
-                  <tr><td colspan="2" class="text-center text-muted py-4">No flow runs in this period.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+        <div class="chart-body">
+          <canvas id="activityMix" height="220"></canvas>
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-4">
+      <div class="chart-card shadow-sm h-100">
+        <div class="chart-header">
+          <h5 class="mb-0">Completion rates</h5>
+          <span class="text-muted small">Operational efficiency</span>
+        </div>
+        <div class="chart-body">
+          <canvas id="completionRates" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="chart-card shadow-sm h-100">
+        <div class="chart-header">
+          <h5 class="mb-0">eSign status</h5>
+          <span class="text-muted small">Current envelope status mix</span>
+        </div>
+        <div class="chart-body">
+          <canvas id="esignStatus" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="chart-card shadow-sm h-100">
+        <div class="chart-header">
+          <h5 class="mb-0">Task status</h5>
+          <span class="text-muted small">Flow task distribution</span>
+        </div>
+        <div class="chart-body">
+          <canvas id="taskBreakdown" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-6">
+      <div class="chart-card shadow-sm h-100">
+        <div class="chart-header">
+          <h5 class="mb-0">Top forms</h5>
+          <span class="text-muted small">Most used forms in this period</span>
+        </div>
+        <div class="chart-body">
+          <canvas id="topFormsChart" height="240"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="chart-card shadow-sm h-100">
+        <div class="chart-header">
+          <h5 class="mb-0">Top flows</h5>
+          <span class="text-muted small">Most used workflows in this period</span>
+        </div>
+        <div class="chart-body">
+          <canvas id="topFlowsChart" height="240"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-5">
+    <div class="col-xl-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">Analyst highlights</h5>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for insight in level2.insights %}
+            <div class="list-group-item d-flex gap-2">
+              <i class="bi bi-stars text-primary mt-1"></i>
+              <span>{{ insight }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">Inventory snapshot</h5>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <tbody>
+              <tr><th>Forms</th><td class="text-end fw-semibold">{{ metrics.forms_total }}</td></tr>
+              <tr><th>Published forms</th><td class="text-end fw-semibold">{{ metrics.forms_published }}</td></tr>
+              <tr><th>Flows</th><td class="text-end fw-semibold">{{ metrics.workflows_total }}</td></tr>
+              <tr><th>Active flows</th><td class="text-end fw-semibold">{{ metrics.workflows_active }}</td></tr>
+              <tr><th>Signed actions</th><td class="text-end fw-semibold">{{ metrics.signature_signed }} / {{ metrics.signature_total }}</td></tr>
+              <tr><th>Completed runs</th><td class="text-end fw-semibold">{{ metrics.runs_completed }} / {{ metrics.runs_total }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
   {% endif %}
 
   {% if access.can_drilldown %}
-    <div class="d-flex align-items-center gap-2 mb-3">
-      <span class="badge rounded-pill bg-success">Level 3</span>
-      <h5 class="mb-0">Record-level Drill-down</h5>
-    </div>
-
-    <div class="row g-3 mb-4">
-      <div class="col-md-4 col-xl-2">
-        <a class="btn btn-outline-primary w-100"
-           href="{% url 'esign_analytics:drilldown' 'envelopes' %}?scope={{ access.key }}&period={{ period_value }}">
-          eSign Envelopes
-        </a>
-      </div>
-      <div class="col-md-4 col-xl-2">
-        <a class="btn btn-outline-primary w-100"
-           href="{% url 'esign_analytics:drilldown' 'forms' %}?scope={{ access.key }}&period={{ period_value }}">
-          Forms
-        </a>
-      </div>
-      <div class="col-md-4 col-xl-2">
-        <a class="btn btn-outline-primary w-100"
-           href="{% url 'esign_analytics:drilldown' 'submissions' %}?scope={{ access.key }}&period={{ period_value }}">
-          Submissions
-        </a>
-      </div>
-      <div class="col-md-4 col-xl-2">
-        <a class="btn btn-outline-primary w-100"
-           href="{% url 'esign_analytics:drilldown' 'workflows' %}?scope={{ access.key }}&period={{ period_value }}">
-          Flows
-        </a>
-      </div>
-      <div class="col-md-4 col-xl-2">
-        <a class="btn btn-outline-primary w-100"
-           href="{% url 'esign_analytics:drilldown' 'runs' %}?scope={{ access.key }}&period={{ period_value }}">
-          Flow Runs
-        </a>
-      </div>
-      <div class="col-md-4 col-xl-2">
-        <a class="btn btn-outline-primary w-100"
-           href="{% url 'esign_analytics:drilldown' 'tasks' %}?scope={{ access.key }}&period={{ period_value }}">
-          Flow Tasks
-        </a>
-      </div>
-    </div>
-
-    <div class="row g-4 mb-5">
-      <div class="col-xl-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header"><h5 class="mb-0">Recent eSign</h5></div>
-          <div class="list-group list-group-flush">
-            {% for item in level3.recent_envelopes %}
-              <div class="list-group-item">
-                <div class="fw-semibold">{{ item.subject }}</div>
-                <div class="small text-muted">
-                  {{ item.get_status_display }} · {{ item.created_at|date:"d M Y H:i" }}
-                </div>
-              </div>
-            {% empty %}
-              <div class="list-group-item text-muted">No activity.</div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-xl-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header"><h5 class="mb-0">Recent Form Submissions</h5></div>
-          <div class="list-group list-group-flush">
-            {% for item in level3.recent_submissions %}
-              <div class="list-group-item">
-                <div class="fw-semibold">{{ item.form_name|default:item.reference }}</div>
-                <div class="small text-muted">
-                  {{ item.get_status_display }} · {{ item.created_at|date:"d M Y H:i" }}
-                </div>
-              </div>
-            {% empty %}
-              <div class="list-group-item text-muted">No activity.</div>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-
-      <div class="col-xl-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header"><h5 class="mb-0">Recent Flow Runs</h5></div>
-          <div class="list-group list-group-flush">
-            {% for item in level3.recent_runs %}
-              <div class="list-group-item">
-                <div class="fw-semibold">{{ item.subject }}</div>
-                <div class="small text-muted">
-                  {{ item.reference }} · {{ item.get_status_display }}
-                </div>
-              </div>
-            {% empty %}
-              <div class="list-group-item text-muted">No activity.</div>
-            {% endfor %}
-          </div>
+  <div class="row g-4 mb-4">
+    <div class="col-xl-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white"><h5 class="mb-0">Recent eSign</h5></div>
+        <div class="list-group list-group-flush">
+          {% for item in level3.recent_envelopes %}
+            <div class="list-group-item">
+              <div class="fw-semibold">{{ item.subject }}</div>
+              <div class="small text-muted">{{ item.get_status_display }} · {{ item.created_at|date:"d M Y H:i" }}</div>
+            </div>
+          {% empty %}
+            <div class="list-group-item text-muted">No activity.</div>
+          {% endfor %}
         </div>
       </div>
     </div>
-  {% endif %}
 
-  {% if access.can_manage_access %}
-    <div class="card border-primary shadow-sm mb-4">
-      <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <div>
-          <div class="d-flex align-items-center gap-2">
-            <span class="badge rounded-pill bg-dark">Level 4</span>
-            <h5 class="mb-0">Dashboard Access Management</h5>
-          </div>
-          <p class="text-muted mb-0 mt-2">
-            Grant dashboard levels to authorized users within this scope.
-          </p>
+    <div class="col-xl-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white"><h5 class="mb-0">Recent submissions</h5></div>
+        <div class="list-group list-group-flush">
+          {% for item in level3.recent_submissions %}
+            <div class="list-group-item">
+              <div class="fw-semibold">{{ item.form_name|default:item.reference }}</div>
+              <div class="small text-muted">{{ item.get_status_display }} · {{ item.created_at|date:"d M Y H:i" }}</div>
+            </div>
+          {% empty %}
+            <div class="list-group-item text-muted">No activity.</div>
+          {% endfor %}
         </div>
-        <a href="{% url 'esign_analytics:manage_access' %}?scope={{ access.key }}"
-           class="btn btn-primary">
-          <i class="bi bi-person-lock me-1"></i>Manage Access
-        </a>
       </div>
     </div>
+
+    <div class="col-xl-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white"><h5 class="mb-0">Recent flow runs</h5></div>
+        <div class="list-group list-group-flush">
+          {% for item in level3.recent_runs %}
+            <div class="list-group-item">
+              <div class="fw-semibold">{{ item.subject }}</div>
+              <div class="small text-muted">{{ item.reference }} · {{ item.get_status_display }}</div>
+            </div>
+          {% empty %}
+            <div class="list-group-item text-muted">No activity.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4 col-xl-2">
+      <a class="btn btn-outline-primary w-100"
+         href="{% url 'esign_analytics:drilldown' 'envelopes' %}?scope={{ access.key }}&period={{ period_value }}">
+        eSign Envelopes
+      </a>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <a class="btn btn-outline-primary w-100"
+         href="{% url 'esign_analytics:drilldown' 'forms' %}?scope={{ access.key }}&period={{ period_value }}">
+        Forms
+      </a>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <a class="btn btn-outline-primary w-100"
+         href="{% url 'esign_analytics:drilldown' 'submissions' %}?scope={{ access.key }}&period={{ period_value }}">
+        Submissions
+      </a>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <a class="btn btn-outline-primary w-100"
+         href="{% url 'esign_analytics:drilldown' 'workflows' %}?scope={{ access.key }}&period={{ period_value }}">
+        Flows
+      </a>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <a class="btn btn-outline-primary w-100"
+         href="{% url 'esign_analytics:drilldown' 'runs' %}?scope={{ access.key }}&period={{ period_value }}">
+        Flow Runs
+      </a>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <a class="btn btn-outline-primary w-100"
+         href="{% url 'esign_analytics:drilldown' 'tasks' %}?scope={{ access.key }}&period={{ period_value }}">
+        Flow Tasks
+      </a>
+    </div>
+  </div>
   {% endif %}
 </div>
 
-{% if access.can_analytics %}
-  {{ level2.trend|json_script:"trendData" }}
-  {{ level2.envelope_status|json_script:"esignStatusData" }}
+{{ level2.trend|json_script:"trendData" }}
+{{ level2.activity_mix|json_script:"activityMixData" }}
+{{ level2.completion_rates|json_script:"completionRatesData" }}
+{{ level2.envelope_status|json_script:"esignStatusData" }}
+{{ level2.task_breakdown|json_script:"taskBreakdownData" }}
+{{ level2.top_forms_chart|json_script:"topFormsData" }}
+{{ level2.top_flows_chart|json_script:"topFlowsData" }}
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    if (typeof Chart === "undefined") return;
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (typeof Chart === "undefined") return;
 
-    const trend = JSON.parse(document.getElementById("trendData").textContent);
-    const status = JSON.parse(document.getElementById("esignStatusData").textContent);
+  const trend = JSON.parse(document.getElementById("trendData").textContent);
+  const activityMix = JSON.parse(document.getElementById("activityMixData").textContent);
+  const completionRates = JSON.parse(document.getElementById("completionRatesData").textContent);
+  const esignStatus = JSON.parse(document.getElementById("esignStatusData").textContent);
+  const taskBreakdown = JSON.parse(document.getElementById("taskBreakdownData").textContent);
+  const topForms = JSON.parse(document.getElementById("topFormsData").textContent);
+  const topFlows = JSON.parse(document.getElementById("topFlowsData").textContent);
 
-    new Chart(document.getElementById("usageTrend"), {
-      type: "line",
-      data: {
-        labels: trend.labels,
-        datasets: [
-          {label: "eSign envelopes", data: trend.envelopes, tension: .25},
-          {label: "Form submissions", data: trend.submissions, tension: .25},
-          {label: "Flow runs", data: trend.runs, tension: .25}
-        ]
-      },
-      options: {
-        responsive: true,
-        interaction: {mode: "index", intersect: false},
-        scales: {y: {beginAtZero: true}}
-      }
-    });
+  const baseOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {position: "bottom"}
+    }
+  };
 
-    new Chart(document.getElementById("esignStatus"), {
-      type: "doughnut",
-      data: {
-        labels: Object.keys(status),
-        datasets: [{data: Object.values(status)}]
-      },
-      options: {responsive: true}
-    });
+  new Chart(document.getElementById("usageTrend"), {
+    type: "line",
+    data: {
+      labels: trend.labels,
+      datasets: [
+        {
+          label: "eSign envelopes",
+          data: trend.envelopes,
+          borderColor: "#009EDB",
+          backgroundColor: "rgba(0,158,219,.14)",
+          fill: true,
+          tension: .3
+        },
+        {
+          label: "Form submissions",
+          data: trend.submissions,
+          borderColor: "#6D28D9",
+          backgroundColor: "rgba(109,40,217,.10)",
+          fill: true,
+          tension: .3
+        },
+        {
+          label: "Flow runs",
+          data: trend.runs,
+          borderColor: "#B45309",
+          backgroundColor: "rgba(180,83,9,.10)",
+          fill: true,
+          tension: .3
+        }
+      ]
+    },
+    options: {
+      ...baseOptions,
+      interaction: {mode: "index", intersect: false},
+      scales: {y: {beginAtZero: true}}
+    }
   });
-  </script>
-{% endif %}
+
+  new Chart(document.getElementById("activityMix"), {
+    type: "bar",
+    data: {
+      labels: activityMix.labels,
+      datasets: [{
+        label: "Volume",
+        data: activityMix.values,
+        backgroundColor: ["#009EDB", "#6D28D9", "#B45309"],
+        borderRadius: 8
+      }]
+    },
+    options: {
+      ...baseOptions,
+      plugins: {legend: {display: false}},
+      scales: {y: {beginAtZero: true}}
+    }
+  });
+
+  new Chart(document.getElementById("completionRates"), {
+    type: "bar",
+    data: {
+      labels: completionRates.labels,
+      datasets: [{
+        label: "Completion rate (%)",
+        data: completionRates.values,
+        backgroundColor: ["#0F766E", "#2563EB", "#9333EA"],
+        borderRadius: 8
+      }]
+    },
+    options: {
+      ...baseOptions,
+      plugins: {legend: {display: false}},
+      scales: {y: {beginAtZero: true, suggestedMax: 100}}
+    }
+  });
+
+  new Chart(document.getElementById("esignStatus"), {
+    type: "doughnut",
+    data: {
+      labels: Object.keys(esignStatus),
+      datasets: [{
+        data: Object.values(esignStatus)
+      }]
+    },
+    options: baseOptions
+  });
+
+  new Chart(document.getElementById("taskBreakdown"), {
+    type: "doughnut",
+    data: {
+      labels: taskBreakdown.labels,
+      datasets: [{
+        data: taskBreakdown.values
+      }]
+    },
+    options: baseOptions
+  });
+
+  new Chart(document.getElementById("topFormsChart"), {
+    type: "bar",
+    data: {
+      labels: topForms.labels,
+      datasets: [{
+        label: "Submissions",
+        data: topForms.values,
+        backgroundColor: "#6D28D9",
+        borderRadius: 8
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      ...baseOptions,
+      plugins: {legend: {display: false}},
+      scales: {x: {beginAtZero: true}}
+    }
+  });
+
+  new Chart(document.getElementById("topFlowsChart"), {
+    type: "bar",
+    data: {
+      labels: topFlows.labels,
+      datasets: [{
+        label: "Runs",
+        data: topFlows.values,
+        backgroundColor: "#B45309",
+        borderRadius: 8
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      ...baseOptions,
+      plugins: {legend: {display: false}},
+      scales: {x: {beginAtZero: true}}
+    }
+  });
+});
+</script>
 
 <style>
-.dashboard-metric {
-  border-top: 4px solid var(--un-blue, #009edb);
+.dashboard-shell{
+  background: linear-gradient(135deg, rgba(0,158,219,.10), rgba(124,58,237,.06));
+  border: 1px solid rgba(0,158,219,.14);
+  border-radius: 1rem;
+  padding: 1.25rem 1.4rem;
 }
-.dashboard-metric .display-6 {
+.metric-card{
+  background: #fff;
+  border-radius: 1rem;
+  padding: 1.15rem 1.1rem;
+  border-top: 4px solid #009EDB;
+}
+.metric-label{
+  color: #64748B;
+  font-size: .78rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+.metric-value{
+  font-size: 2rem;
+  font-weight: 800;
+  color: #0F172A;
+  margin-top: .35rem;
   line-height: 1.05;
-  margin: .45rem 0;
+}
+.metric-sub{
+  color: #64748B;
+  font-size: .78rem;
+  margin-top: .3rem;
+}
+.metric-delta{
+  font-weight: 700;
+  color: #0F766E;
+  margin-top: .2rem;
+}
+.mini-card{
+  background: #fff;
+  border-radius: .85rem;
+  padding: 1rem;
+}
+.mini-title{
+  color: #64748B;
+  font-size: .78rem;
+  font-weight: 600;
+}
+.mini-value{
+  margin-top: .4rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0F172A;
+}
+.mini-small{
+  font-size: 1.1rem;
+}
+.chart-card{
+  background: #fff;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+.chart-header{
+  padding: 1rem 1rem .3rem 1rem;
+}
+.chart-body{
+  padding: .3rem 1rem 1rem 1rem;
+  height: 320px;
+}
+@media print {
+  .btn, form, .navbar, .sidebar, .appnav, .no-print { display:none !important; }
+  .chart-body { height: 260px; }
 }
 </style>
 {% endblock %}

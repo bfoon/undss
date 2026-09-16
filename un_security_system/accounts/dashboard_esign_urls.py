@@ -6,6 +6,8 @@ app_name = "esign_analytics"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("export/summary.csv", views.dashboard_export_csv, name="dashboard_export_csv"),
+    path("download/report.html", views.dashboard_download, name="dashboard_download"),
     path("drill/<str:dataset>/", views.drilldown, name="drilldown"),
     path("access/", views.manage_access, name="manage_access"),
     path("access/<int:pk>/revoke/", views.revoke_access, name="revoke_access"),

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>eSign Analytics Report</title>
+<style>
+body{font-family:Arial,sans-serif;margin:24px;color:#0F172A}
+h1,h2,h3{margin:0 0 10px 0}
+.muted{color:#64748B}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:20px 0}
+.card{border:1px solid #E2E8F0;border-radius:12px;padding:16px;background:#fff}
+.metric{font-size:28px;font-weight:700;margin-top:8px}
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{border:1px solid #E2E8F0;padding:10px;text-align:left}
+th{background:#F8FAFC}
+.section{margin-top:26px}
+ul{padding-left:18px}
+</style>
+</head>
+<body>
+  <h1>eSign · Forms · Flow Analytics Report</h1>
+  <div class="muted">
+    Scope: {{ access.label }} · {{ access.level_label }} · {{ period_label }} · Generated {{ generated_at|date:"d M Y H:i" }}
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="muted">eSign envelopes</div><div class="metric">{{ metrics.envelope_total }}</div></div>
+    <div class="card"><div class="muted">Form submissions</div><div class="metric">{{ metrics.submissions_total }}</div></div>
+    <div class="card"><div class="muted">Flow runs</div><div class="metric">{{ metrics.runs_total }}</div></div>
+    <div class="card"><div class="muted">Active users</div><div class="metric">{{ metrics.active_users }}</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Operational KPIs</h2>
+    <table>
+      <tbody>
+        <tr><th>eSign completion rate</th><td>{{ metrics.envelope_completion_rate }}%</td></tr>
+        <tr><th>Form completion rate</th><td>{{ metrics.form_completion_rate }}%</td></tr>
+        <tr><th>Flow completion rate</th><td>{{ metrics.run_completion_rate }}%</td></tr>
+        <tr><th>Average eSign completion</th><td>{{ metrics.avg_envelope_completion }}</td></tr>
+        <tr><th>Average flow completion</th><td>{{ metrics.avg_run_completion }}</td></tr>
+        <tr><th>Open tasks</th><td>{{ metrics.open_tasks }}</td></tr>
+        <tr><th>Overdue tasks</th><td>{{ metrics.overdue_tasks }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Highlights</h2>
+    <ul>
+      {% for insight in level2.insights %}
+        <li>{{ insight }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Top forms</h2>
+    <table>
+      <thead><tr><th>Form</th><th>Submissions</th></tr></thead>
+      <tbody>
+        {% for row in level2.top_forms %}
+          <tr><td>{{ row.form_name|default:"Unnamed form" }}</td><td>{{ row.total }}</td></tr>
+        {% empty %}
+          <tr><td colspan="2">No form submissions in this period.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Top flows</h2>
+    <table>
+      <thead><tr><th>Flow</th><th>Runs</th></tr></thead>
+      <tbody>
+        {% for row in level2.top_flows %}
+          <tr><td>{{ row.workflow_name|default:"Unnamed flow" }}</td><td>{{ row.total }}</td></tr>
+        {% empty %}
+          <tr><td colspan="2">No flow runs in this period.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
