@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load esign_studio_tags %}
+{% load esign_studio_tags esign_dashboard_tags %}
 {% block title %}eSign | UN PASS {% endblock %}
 {% block extra_js %}
 <script>
@@ -64,6 +64,7 @@ document.querySelectorAll('.es-del').forEach(btn => {
 {% endblock %}
 
 {% block content %}
+{% esign_dashboard_access as usage_dashboard %}
 <div class="row g-4">
   <div class="col-12">
     <div class="card es-hero">
@@ -87,6 +88,17 @@ document.querySelectorAll('.es-del').forEach(btn => {
             <a class="btn btn-outline-primary" href="{% url 'accounts:esign_signatures' %}">
               <i class="bi bi-pen me-1"></i> My signature
             </a>
+
+            {% if request.user.is_superuser or usage_dashboard.can_view %}
+              <a class="btn btn-outline-dark"
+                 href="{% url 'esign_analytics:dashboard' %}?scope={{ usage_dashboard.preferred_scope }}">
+                <i class="bi bi-bar-chart-line-fill me-1"></i>
+                Usage Dashboard
+                {% if usage_dashboard.max_level %}
+                  <span class="badge bg-dark ms-1">L{{ usage_dashboard.max_level }}</span>
+                {% endif %}
+              </a>
+            {% endif %}
           </div>
         </div>
       </div>
