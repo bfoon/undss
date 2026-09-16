@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Edit CSR Request Type{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width:760px;">
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+      <h2 class="mb-1"><i class="bi bi-pencil-square me-2"></i>Edit CSR Request Type</h2>
+      <p class="text-muted mb-0">Code: <code>{{ item.code }}</code></p>
+    </div>
+    <a href="{% url 'incidents:csr_type_list' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+  </div>
+
+  <div class="card shadow-sm"><div class="card-body p-4">
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Name</label>
+        <input type="text" name="name" class="form-control" maxlength="120" required value="{{ item.name }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Description</label>
+        <textarea name="description" class="form-control" rows="3" maxlength="255">{{ item.description }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Sort order</label>
+        <input type="number" name="sort_order" class="form-control" min="0" value="{{ item.sort_order }}">
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="requires_disruption_window" id="requiresWindow"
+               {% if item.requires_disruption_window %}checked{% endif %}>
+        <label class="form-check-label" for="requiresWindow">Requires disruption start/end time</label>
+      </div>
+      <div class="form-check mb-4">
+        <input class="form-check-input" type="checkbox" name="is_active" id="isActive"
+               {% if item.is_active %}checked{% endif %}>
+        <label class="form-check-label" for="isActive">Active — available for new requests</label>
+      </div>
+      <div class="alert alert-light border small">
+        <i class="bi bi-shield-lock me-1"></i>The internal code cannot be changed because existing CSR records use it.
+      </div>
+      <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Save Changes</button>
+    </form>
+  </div></div>
+</div>
+{% endblock %}
