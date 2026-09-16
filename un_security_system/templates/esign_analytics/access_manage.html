@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Access{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:1200px;">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <h2 class="mb-1">
+        <i class="bi bi-person-lock me-2 text-primary"></i>Dashboard Access
+      </h2>
+      <div class="text-muted">{{ access.label }} · {{ access.level_label }}</div>
+    </div>
+    <a href="{% url 'esign_analytics:dashboard' %}?scope={{ access.key }}"
+       class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Dashboard
+    </a>
+  </div>
+
+  {% if available_scopes|length > 1 %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <label class="form-label fw-semibold">Manage scope</label>
+        <div class="d-flex flex-wrap gap-2">
+          {% for scope in available_scopes %}
+            <a href="?scope={{ scope.key }}"
+               class="btn btn-sm {% if scope.key == access.key %}btn-primary{% else %}btn-outline-primary{% endif %}">
+              {{ scope.label }}
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="alert alert-info">
+    <strong>Dashboard levels:</strong>
+    Level 1 = overview; Level 2 = analytics and trends; Level 3 = record-level
+    drill-down; Level 4 = access management. Active Country Office admins receive
+    Level 4 automatically for their own CO.
+  </div>
+
+  {% if not grant_table_ready %}
+    <div class="alert alert-danger">
+      Manual grants are not available until the dashboard access table is created.
+      Run <code>python manage.py ensure_esign_dashboard</code>.
+    </div>
+  {% endif %}
+
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="mb-0">Grant / Change Access</h5>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="scope" value="{{ access.key }}">
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">User</label>
+              <select name="user_id" class="form-select" required>
+                <option value="">— Select user —</option>
+                {% for u in users %}
+                  <option value="{{ u.pk }}">
+                    {{ u.get_full_name|default:u.username }}
+                    {% if u.country_office %} · {{ u.country_office.name }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">
+                Users shown here are restricted to the scope you are managing.
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Dashboard Level</label>
+              <select name="level" class="form-select" required>
+                {% for value, label in level_choices %}
+                  <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+
+              {% if max_grant_level < 4 %}
+                <div class="form-text">
+                  CO dashboard admins can grant Levels 1–3. Only the platform
+                  superuser can grant Level 4.
+                </div>
+              {% endif %}
+            </div>
+
+            <button class="btn btn-primary w-100"
+                    {% if not grant_table_ready %}disabled{% endif %}>
+              <i class="bi bi-person-check me-1"></i>Save Access
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {% if automatic_admins %}
+        <div class="card shadow-sm mt-4">
+          <div class="card-header">
+            <h5 class="mb-0">Automatic CO Admin Access</h5>
+          </div>
+          <div class="list-group list-group-flush">
+            {% for role in automatic_admins %}
+              <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">
+                    {{ role.user.get_full_name|default:role.user.username }}
+                  </div>
+                  <div class="small text-muted">{{ role.get_level_display }}</div>
+                </div>
+                <span class="badge bg-dark">Level 4</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Explicit Access Grants</h5>
+          <span class="badge bg-secondary">{{ grants|length }}</span>
+        </div>
+
+        <div class="table-responsive dashboard-access-scroll">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Level</th>
+                <th>Granted by</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for grant in grants %}
+                <tr>
+                  <td>
+                    <div class="fw-semibold">
+                      {{ grant.user.get_full_name|default:grant.user.username }}
+                    </div>
+                    <div class="small text-muted">{{ grant.user.email }}</div>
+                  </td>
+
+                  <td>
+                    <span class="badge {% if grant.level == 4 %}bg-dark{% elif grant.level == 3 %}bg-success{% else %}bg-primary{% endif %}">
+                      Level {{ grant.level }}
+                    </span>
+                    <div class="small text-muted">{{ grant.get_level_display }}</div>
+                  </td>
+
+                  <td>
+                    {% if grant.granted_by %}
+                      {{ grant.granted_by.get_full_name|default:grant.granted_by.username }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+
+                  <td class="text-end">
+                    {% if request.user.is_superuser or grant.level < 4 %}
+                      <form method="post"
+                            action="{% url 'esign_analytics:revoke_access' grant.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="scope" value="{{ access.key }}">
+                        <button class="btn btn-sm btn-outline-danger"
+                                onclick="return confirm('Revoke this dashboard access?')">
+                          Revoke
+                        </button>
+                      </form>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="4" class="text-center text-muted py-5">
+                    No explicit dashboard access has been granted in this scope.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.dashboard-access-scroll {
+  max-height: 560px;
+  overflow-y: auto;
+}
+.dashboard-access-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+</style>
+{% endblock %}
