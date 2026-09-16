@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -40,6 +41,9 @@ from .security_console import (
     policy_table_exists,
     resolve_security_scope,
 )
+
+
+User = get_user_model()
 
 
 PERIOD_CHOICES = (
@@ -294,6 +298,73 @@ def _risk_signals(qs):
 
 def _build_dashboard_context(request, scope):
     period_value, start, period_label = _period(request)
+
+    # Keep the ICT console usable even before telemetry is initialized.
+    # Password policy can still be viewed/managed while the event table is
+    # being created, and the dashboard will show zero-value analytics instead
+    # of raising a database exception.
+    if not event_table_exists():
+        effective_policy = effective_password_policy(
+            scope.scope_id if scope.kind == SCOPE_OFFICE else None
+        )
+        return {
+            "scope": scope,
+            "available_scopes": available_security_scopes(request.user),
+            "period_choices": PERIOD_CHOICES,
+            "period_value": period_value,
+            "period_label": period_label,
+            "generated_at": timezone.now(),
+            "table_ready": False,
+            "metrics": {
+                "credential_attempts": 0,
+                "password_accepted": 0,
+                "login_failures": 0,
+                "credential_success_rate": 0.0,
+                "completed_logins": 0,
+                "otp_challenges": 0,
+                "otp_attempts": 0,
+                "otp_success": 0,
+                "otp_failure": 0,
+                "otp_success_rate": 0.0,
+                "unique_users": 0,
+                "unique_ips": 0,
+                "trusted_logins": 0,
+                "otp_logins": 0,
+            },
+            "trend": {
+                "labels": [],
+                "login_success": [],
+                "login_failure": [],
+                "otp_success": [],
+                "otp_failure": [],
+            },
+            "hourly": {
+                "labels": [f"{hour:02d}:00" for hour in range(24)],
+                "values": [0] * 24,
+            },
+            "browser_data": {"labels": ["No data"], "values": [1]},
+            "device_data": {"labels": ["No data"], "values": [1]},
+            "failure_reasons": {"labels": ["No failures"], "values": [0]},
+            "login_paths": {
+                "labels": ["Trusted device", "Email OTP"],
+                "values": [0, 0],
+            },
+            "risk_signals": [
+                {
+                    "severity": "info",
+                    "title": "Telemetry not initialized",
+                    "detail": (
+                        "Run python manage.py ensure_security_console "
+                        "to create the security event table."
+                    ),
+                }
+            ],
+            "repeated_ips": [],
+            "repeated_users": [],
+            "recent_events": [],
+            "effective_policy": effective_policy,
+        }
+
     qs = _events_for_scope(scope).filter(at__gte=start).select_related("user")
 
     counts = _event_counts(qs)
