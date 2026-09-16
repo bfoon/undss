@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Security Event Log{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 px-xl-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <h2 class="mb-1"><i class="bi bi-list-check me-2 text-primary"></i>Security Event Log</h2>
+      <div class="text-muted">{{ scope.label }} · {{ period_label }}</div>
+    </div>
+    <a class="btn btn-outline-secondary"
+       href="{% url 'security_console:dashboard' %}?scope={{ scope.key }}&period={{ period_value }}">
+      <i class="bi bi-arrow-left me-1"></i>Security Dashboard
+    </a>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        <input type="hidden" name="scope" value="{{ scope.key }}">
+
+        <div class="col-lg-3">
+          <label class="form-label fw-semibold">Search</label>
+          <input class="form-control" name="q" value="{{ q }}"
+                 placeholder="User, masked account or IP">
+        </div>
+
+        <div class="col-lg-3">
+          <label class="form-label fw-semibold">Event</label>
+          <select class="form-select" name="event">
+            <option value="">All events</option>
+            {% for value, label in event_choices %}
+              <option value="{{ value }}" {% if selected_event == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-lg-2">
+          <label class="form-label fw-semibold">Result</label>
+          <select class="form-select" name="result">
+            <option value="">All results</option>
+            <option value="success" {% if selected_result == "success" %}selected{% endif %}>Success</option>
+            <option value="failure" {% if selected_result == "failure" %}selected{% endif %}>Failure</option>
+            <option value="issued" {% if selected_result == "issued" %}selected{% endif %}>Issued</option>
+          </select>
+        </div>
+
+        <div class="col-lg-2">
+          <label class="form-label fw-semibold">Period</label>
+          <select class="form-select" name="period">
+            {% for value, label in period_choices %}
+              <option value="{{ value }}" {% if period_value == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-lg-2">
+          <button class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i>Apply</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="alert alert-light border small">
+    <i class="bi bi-shield-check text-primary me-1"></i>
+    This log stores outcomes and security metadata only. Passwords and OTP codes are never stored.
+    Unknown account identifiers are masked and hashed.
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Authentication events</h5>
+      <span class="badge bg-secondary">{{ page_obj.paginator.count }}</span>
+    </div>
+    <div class="table-responsive event-scroll">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Time</th><th>Event</th><th>User / account</th><th>IP</th>
+            <th>Method</th><th>Browser</th><th>Device</th><th>Reason</th><th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in page_obj %}
+            <tr>
+              <td class="text-nowrap">{{ event.at|date:"d M Y H:i:s" }}</td>
+              <td>{{ event.event_label }}</td>
+              <td>
+                {% if event.user %}
+                  {{ event.user.get_full_name|default:event.user.username }}
+                {% else %}
+                  {{ event.identifier_hint|default:"Unknown account" }}
+                {% endif %}
+              </td>
+              <td><code>{{ event.ip_address|default:"—" }}</code></td>
+              <td>{{ event.auth_method|default:"—" }}</td>
+              <td>{{ event.browser_family }}</td>
+              <td>{{ event.device_family }}</td>
+              <td>{{ event.reason|default:"—" }}</td>
+              <td>
+                {% if event.result == "success" %}
+                  <span class="badge bg-success">Success</span>
+                {% elif event.result == "failure" %}
+                  <span class="badge bg-danger">Failure</span>
+                {% elif event.result == "issued" %}
+                  <span class="badge bg-info text-dark">Issued</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ event.result|default:"Event" }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9" class="text-center text-muted py-5">No matching events.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+      <div class="card-footer">
+        <nav>
+          <ul class="pagination pagination-sm justify-content-center mb-0">
+            {% if page_obj.has_previous %}
+              <li class="page-item">
+                <a class="page-link" href="?scope={{ scope.key }}&period={{ period_value }}&q={{ q|urlencode }}&event={{ selected_event|urlencode }}&result={{ selected_result|urlencode }}&page={{ page_obj.previous_page_number }}">Previous</a>
+              </li>
+            {% endif %}
+            <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+            {% if page_obj.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="?scope={{ scope.key }}&period={{ period_value }}&q={{ q|urlencode }}&event={{ selected_event|urlencode }}&result={{ selected_result|urlencode }}&page={{ page_obj.next_page_number }}">Next</a>
+              </li>
+            {% endif %}
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+.event-scroll{max-height:70vh;overflow:auto}
+.event-scroll thead th{position:sticky;top:0;z-index:2;background:#F8FAFC}
+</style>
+{% endblock %}

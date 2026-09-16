@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+{% block title %}ICT Security Analytics{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 px-xl-4">
+
+  <div class="sec-hero mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+      <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="sec-icon"><i class="bi bi-shield-lock-fill"></i></span>
+          <div>
+            <h2 class="mb-0">ICT Security Analytics</h2>
+            <div class="text-muted mt-1">
+              {{ scope.label }} · {{ period_label }}
+              <span class="mx-1">·</span>
+              Generated {{ generated_at|date:"d M Y H:i" }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary"
+           href="{% url 'security_console:export_csv' %}?scope={{ scope.key }}&period={{ period_value }}">
+          <i class="bi bi-filetype-csv me-1"></i>Export Events
+        </a>
+        <a class="btn btn-outline-secondary"
+           href="{% url 'security_console:download_report' %}?scope={{ scope.key }}&period={{ period_value }}">
+          <i class="bi bi-download me-1"></i>Download Report
+        </a>
+        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+          <i class="bi bi-printer me-1"></i>Print
+        </button>
+        <a class="btn btn-primary"
+           href="{% url 'security_console:events' %}?scope={{ scope.key }}&period={{ period_value }}">
+          <i class="bi bi-list-check me-1"></i>Event Log
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" class="row g-3 align-items-end">
+        {% if available_scopes|length > 1 %}
+        <div class="col-lg-5">
+          <label class="form-label fw-semibold">Security scope</label>
+          <select name="scope" class="form-select">
+            {% for item in available_scopes %}
+              <option value="{{ item.key }}" {% if item.key == scope.key %}selected{% endif %}>
+                {{ item.label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+          <input type="hidden" name="scope" value="{{ scope.key }}">
+        {% endif %}
+
+        <div class="col-lg-3">
+          <label class="form-label fw-semibold">Period</label>
+          <select name="period" class="form-select">
+            {% for value, label in period_choices %}
+              <option value="{{ value }}" {% if value == period_value %}selected{% endif %}>
+                {{ label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-lg-2">
+          <button class="btn btn-primary w-100">
+            <i class="bi bi-arrow-repeat me-1"></i>Refresh
+          </button>
+        </div>
+
+        <div class="col-lg-2">
+          <a class="btn btn-outline-primary w-100"
+             href="{% url 'security_console:password_policy' %}?scope={{ scope.key }}">
+            <i class="bi bi-key me-1"></i>Password Policy
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if not table_ready %}
+    <div class="alert alert-warning">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      Security telemetry is not installed yet. Run
+      <code>python manage.py ensure_security_console</code>.
+    </div>
+  {% endif %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+      <div class="sec-kpi h-100">
+        <div class="kpi-icon"><i class="bi bi-door-open"></i></div>
+        <div class="kpi-label">Credential attempts</div>
+        <div class="kpi-value">{{ metrics.credential_attempts }}</div>
+        <div class="kpi-foot">
+          {{ metrics.credential_success_rate }}% password acceptance rate
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="sec-kpi h-100">
+        <div class="kpi-icon"><i class="bi bi-check-circle"></i></div>
+        <div class="kpi-label">Completed logins</div>
+        <div class="kpi-value">{{ metrics.completed_logins }}</div>
+        <div class="kpi-foot">
+          {{ metrics.trusted_logins }} trusted · {{ metrics.otp_logins }} OTP
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="sec-kpi h-100 {% if metrics.login_failures %}sec-danger{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-x-octagon"></i></div>
+        <div class="kpi-label">Login failures</div>
+        <div class="kpi-value">{{ metrics.login_failures }}</div>
+        <div class="kpi-foot">Rejected credentials</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="sec-kpi h-100 {% if metrics.otp_failure %}sec-warning{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-shield-check"></i></div>
+        <div class="kpi-label">OTP verification</div>
+        <div class="kpi-value">{{ metrics.otp_success_rate }}%</div>
+        <div class="kpi-foot">
+          {{ metrics.otp_success }} success · {{ metrics.otp_failure }} failed
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4 col-xl-2">
+      <div class="sec-mini">
+        <div class="mini-label">OTP challenges</div>
+        <div class="mini-value">{{ metrics.otp_challenges }}</div>
+      </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="sec-mini">
+        <div class="mini-label">Unique users</div>
+        <div class="mini-value">{{ metrics.unique_users }}</div>
+      </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="sec-mini">
+        <div class="mini-label">Unique IPs</div>
+        <div class="mini-value">{{ metrics.unique_ips }}</div>
+      </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="sec-mini">
+        <div class="mini-label">Trusted-device logins</div>
+        <div class="mini-value">{{ metrics.trusted_logins }}</div>
+      </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="sec-mini">
+        <div class="mini-label">OTP logins</div>
+        <div class="mini-value">{{ metrics.otp_logins }}</div>
+      </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+      <div class="sec-mini">
+        <div class="mini-label">OTP attempts</div>
+        <div class="mini-value">{{ metrics.otp_attempts }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-8">
+      <div class="sec-chart-card h-100">
+        <div class="chart-head">
+          <div>
+            <h5 class="mb-0">Authentication activity</h5>
+            <div class="small text-muted">Login and OTP outcomes over time</div>
+          </div>
+        </div>
+        <div class="chart-wrap chart-lg">
+          <canvas id="authTrend"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="sec-chart-card h-100">
+        <div class="chart-head">
+          <div>
+            <h5 class="mb-0">Successful login path</h5>
+            <div class="small text-muted">Trusted device vs email OTP</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="loginPaths"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-6">
+      <div class="sec-chart-card h-100">
+        <div class="chart-head">
+          <div>
+            <h5 class="mb-0">Authentication by hour</h5>
+            <div class="small text-muted">When people are trying to sign in</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="hourlyActivity"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="sec-chart-card h-100">
+        <div class="chart-head">
+          <div>
+            <h5 class="mb-0">Failure reasons</h5>
+            <div class="small text-muted">Why authentication attempts failed</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="failureReasons"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-6">
+      <div class="sec-chart-card h-100">
+        <div class="chart-head">
+          <div>
+            <h5 class="mb-0">Browser family</h5>
+            <div class="small text-muted">Client software seen in authentication activity</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="browserChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="sec-chart-card h-100">
+        <div class="chart-head">
+          <div>
+            <h5 class="mb-0">Device category</h5>
+            <div class="small text-muted">Desktop / laptop vs mobile / tablet</div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="deviceChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0"><i class="bi bi-radar me-2"></i>Security review signals</h5>
+            <div class="small text-muted mt-1">Threshold-based indicators for admin review</div>
+          </div>
+        </div>
+        <div class="list-group list-group-flush">
+          {% for signal in risk_signals %}
+            <div class="list-group-item d-flex gap-3 align-items-start py-3">
+              <span class="signal-dot signal-{{ signal.severity }}"></span>
+              <div>
+                <div class="fw-semibold">{{ signal.title }}</div>
+                <div class="small text-muted">{{ signal.detail }}</div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0"><i class="bi bi-key-fill me-2"></i>Effective password policy</h5>
+            <div class="small text-muted mt-1">{{ effective_policy.source }}</div>
+          </div>
+          <a class="btn btn-sm btn-outline-primary"
+             href="{% url 'security_console:password_policy' %}?scope={{ scope.key }}">
+            View
+          </a>
+        </div>
+        <div class="card-body">
+          <div class="policy-grid">
+            <div><span>Minimum length</span><strong>{{ effective_policy.min_length }}</strong></div>
+            <div><span>Uppercase</span><strong>{% if effective_policy.require_uppercase %}Required{% else %}Optional{% endif %}</strong></div>
+            <div><span>Lowercase</span><strong>{% if effective_policy.require_lowercase %}Required{% else %}Optional{% endif %}</strong></div>
+            <div><span>Number</span><strong>{% if effective_policy.require_number %}Required{% else %}Optional{% endif %}</strong></div>
+            <div><span>Special character</span><strong>{% if effective_policy.require_symbol %}Required{% else %}Optional{% endif %}</strong></div>
+            <div><span>Common passwords</span><strong>{% if effective_policy.block_common_passwords %}Blocked{% else %}Allowed{% endif %}</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if repeated_ips or repeated_users %}
+  <div class="row g-4 mb-4">
+    <div class="col-xl-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">Repeated failure sources</h5>
+        </div>
+        <div class="table-responsive sec-scroll">
+          <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>IP address</th><th class="text-end">Failures</th><th class="text-end">Users</th></tr></thead>
+            <tbody>
+              {% for row in repeated_ips %}
+                <tr>
+                  <td><code>{{ row.ip_address }}</code></td>
+                  <td class="text-end fw-bold">{{ row.total }}</td>
+                  <td class="text-end">{{ row.users }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="3" class="text-muted text-center py-4">No IP crossed the review threshold.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <h5 class="mb-0">Accounts with repeated failures</h5>
+        </div>
+        <div class="table-responsive sec-scroll">
+          <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>User</th><th class="text-end">Failures</th></tr></thead>
+            <tbody>
+              {% for row in repeated_users %}
+                <tr>
+                  <td>{{ row.label }}</td>
+                  <td class="text-end fw-bold">{{ row.total }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="2" class="text-muted text-center py-4">No account crossed the review threshold.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent authentication events</h5>
+        <div class="small text-muted mt-1">
+          Passwords and OTP codes are never stored in this security log.
+        </div>
+      </div>
+      <a class="btn btn-sm btn-outline-primary"
+         href="{% url 'security_console:events' %}?scope={{ scope.key }}&period={{ period_value }}">
+        View full event log
+      </a>
+    </div>
+
+    <div class="table-responsive sec-scroll-lg">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Event</th>
+            <th>User / account</th>
+            <th>IP</th>
+            <th>Method</th>
+            <th>Browser</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in recent_events %}
+            <tr>
+              <td class="text-nowrap">{{ event.at|date:"d M H:i:s" }}</td>
+              <td>{{ event.event_label }}</td>
+              <td>
+                {% if event.user %}
+                  {{ event.user.get_full_name|default:event.user.username }}
+                {% else %}
+                  {{ event.identifier_hint|default:"Unknown account" }}
+                {% endif %}
+              </td>
+              <td><code>{{ event.ip_address|default:"—" }}</code></td>
+              <td>{{ event.auth_method|default:"—" }}</td>
+              <td>{{ event.browser_family }}</td>
+              <td>
+                {% if event.result == "success" %}
+                  <span class="badge bg-success">Success</span>
+                {% elif event.result == "failure" %}
+                  <span class="badge bg-danger">Failure</span>
+                {% elif event.result == "issued" %}
+                  <span class="badge bg-info text-dark">Issued</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ event.result|default:"Event" }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-5">No security events in this period yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{{ trend|json_script:"secTrend" }}
+{{ hourly|json_script:"secHourly" }}
+{{ browser_data|json_script:"secBrowsers" }}
+{{ device_data|json_script:"secDevices" }}
+{{ failure_reasons|json_script:"secFailures" }}
+{{ login_paths|json_script:"secPaths" }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+  if (typeof Chart === "undefined") return;
+
+  const trend = JSON.parse(document.getElementById("secTrend").textContent);
+  const hourly = JSON.parse(document.getElementById("secHourly").textContent);
+  const browsers = JSON.parse(document.getElementById("secBrowsers").textContent);
+  const devices = JSON.parse(document.getElementById("secDevices").textContent);
+  const failures = JSON.parse(document.getElementById("secFailures").textContent);
+  const paths = JSON.parse(document.getElementById("secPaths").textContent);
+
+  const common = {
+    responsive:true,
+    maintainAspectRatio:false,
+    plugins:{legend:{position:"bottom"}}
+  };
+
+  new Chart(document.getElementById("authTrend"),{
+    type:"line",
+    data:{
+      labels:trend.labels,
+      datasets:[
+        {label:"Login success",data:trend.login_success,borderColor:"#198754",backgroundColor:"rgba(25,135,84,.10)",fill:true,tension:.3},
+        {label:"Login failure",data:trend.login_failure,borderColor:"#dc3545",backgroundColor:"rgba(220,53,69,.08)",fill:true,tension:.3},
+        {label:"OTP success",data:trend.otp_success,borderColor:"#009EDB",backgroundColor:"rgba(0,158,219,.08)",fill:false,tension:.3},
+        {label:"OTP failure",data:trend.otp_failure,borderColor:"#F59E0B",backgroundColor:"rgba(245,158,11,.08)",fill:false,tension:.3}
+      ]
+    },
+    options:{...common,interaction:{mode:"index",intersect:false},scales:{y:{beginAtZero:true}}}
+  });
+
+  new Chart(document.getElementById("loginPaths"),{
+    type:"doughnut",
+    data:{labels:paths.labels,datasets:[{data:paths.values,backgroundColor:["#0F766E","#009EDB"]}]},
+    options:common
+  });
+
+  new Chart(document.getElementById("hourlyActivity"),{
+    type:"bar",
+    data:{labels:hourly.labels,datasets:[{label:"Authentication events",data:hourly.values,backgroundColor:"#0B3D5C",borderRadius:5}]},
+    options:{...common,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+  });
+
+  new Chart(document.getElementById("failureReasons"),{
+    type:"bar",
+    data:{labels:failures.labels,datasets:[{label:"Failures",data:failures.values,backgroundColor:"#dc3545",borderRadius:6}]},
+    options:{indexAxis:"y",...common,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}
+  });
+
+  new Chart(document.getElementById("browserChart"),{
+    type:"doughnut",
+    data:{labels:browsers.labels,datasets:[{data:browsers.values}]},
+    options:common
+  });
+
+  new Chart(document.getElementById("deviceChart"),{
+    type:"bar",
+    data:{labels:devices.labels,datasets:[{label:"Events",data:devices.values,backgroundColor:["#2563EB","#7C3AED","#64748B"],borderRadius:7}]},
+    options:{...common,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+  });
+});
+</script>
+
+<style>
+.sec-hero{
+  background:linear-gradient(135deg,rgba(11,61,92,.08),rgba(0,158,219,.08));
+  border:1px solid rgba(0,158,219,.15);
+  border-radius:1rem;
+  padding:1.3rem 1.4rem;
+}
+.sec-icon{
+  width:50px;height:50px;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;
+  background:#0B3D5C;color:#fff;font-size:1.35rem;
+}
+.sec-kpi,.sec-mini,.sec-chart-card{
+  background:#fff;border:1px solid rgba(15,23,42,.08);border-radius:1rem;
+  box-shadow:0 2px 10px rgba(15,23,42,.04);
+}
+.sec-kpi{padding:1.1rem;position:relative;border-top:4px solid #009EDB}
+.sec-kpi.sec-danger{border-top-color:#dc3545}
+.sec-kpi.sec-warning{border-top-color:#F59E0B}
+.kpi-icon{position:absolute;right:1rem;top:1rem;font-size:1.35rem;color:#94A3B8}
+.kpi-label,.mini-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:#64748B;font-weight:700}
+.kpi-value{font-size:2rem;font-weight:800;line-height:1;margin-top:.55rem;color:#0F172A}
+.kpi-foot{font-size:.78rem;color:#64748B;margin-top:.55rem}
+.sec-mini{padding:1rem;height:100%}
+.mini-value{font-size:1.45rem;font-weight:800;margin-top:.35rem}
+.chart-head{padding:1rem 1.1rem .2rem}
+.chart-wrap{height:280px;padding:.5rem 1rem 1rem}
+.chart-wrap.chart-lg{height:330px}
+.signal-dot{width:11px;height:11px;border-radius:50%;margin-top:.35rem;flex:0 0 11px}
+.signal-high{background:#dc3545}.signal-warning{background:#F59E0B}.signal-info{background:#009EDB}.signal-success{background:#198754}
+.policy-grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.policy-grid>div{display:flex;justify-content:space-between;gap:1rem;padding:.65rem .75rem;background:#F8FAFC;border-radius:.6rem}
+.policy-grid span{color:#64748B}.policy-grid strong{text-align:right}
+.sec-scroll{max-height:330px;overflow:auto}.sec-scroll-lg{max-height:540px;overflow:auto}
+.sec-scroll thead th,.sec-scroll-lg thead th{position:sticky;top:0;z-index:2;background:#F8FAFC}
+@media(max-width:767.98px){.policy-grid{grid-template-columns:1fr}.chart-wrap{height:250px}}
+@media print{
+  .btn,form,.appnav-sidebar,.appnav-topbar,.appnav-bottom{display:none!important}
+  body{padding:0!important}.chart-wrap{height:230px}
+}
+</style>
+{% endblock %}

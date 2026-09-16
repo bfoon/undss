@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UNPASS ICT Security Report</title>
+<style>
+body{font-family:Arial,sans-serif;margin:28px;color:#0F172A}
+h1,h2{margin:0 0 10px}.muted{color:#64748B}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:22px 0}
+.card{border:1px solid #E2E8F0;border-radius:10px;padding:14px}
+.value{font-size:26px;font-weight:700;margin-top:6px}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{border:1px solid #E2E8F0;padding:8px;text-align:left}
+th{background:#F8FAFC}.section{margin-top:26px}
+.bad{color:#B91C1C}.good{color:#047857}
+</style>
+</head>
+<body>
+<h1>UNPASS ICT Security Analytics</h1>
+<div class="muted">{{ scope.label }} · {{ period_label }} · Generated {{ generated_at|date:"d M Y H:i" }}</div>
+<p class="muted">Privacy: passwords and OTP codes are never stored in this report or telemetry data.</p>
+
+<div class="grid">
+  <div class="card"><div class="muted">Credential attempts</div><div class="value">{{ metrics.credential_attempts }}</div></div>
+  <div class="card"><div class="muted">Completed logins</div><div class="value">{{ metrics.completed_logins }}</div></div>
+  <div class="card"><div class="muted">Login failures</div><div class="value bad">{{ metrics.login_failures }}</div></div>
+  <div class="card"><div class="muted">OTP success rate</div><div class="value">{{ metrics.otp_success_rate }}%</div></div>
+</div>
+
+<div class="section">
+<h2>Security review signals</h2>
+<ul>
+{% for signal in risk_signals %}
+  <li><strong>{{ signal.title }}:</strong> {{ signal.detail }}</li>
+{% endfor %}
+</ul>
+</div>
+
+<div class="section">
+<h2>Effective Password Policy</h2>
+<table>
+<tr><th>Source</th><td>{{ effective_policy.source }}</td></tr>
+<tr><th>Minimum length</th><td>{{ effective_policy.min_length }}</td></tr>
+<tr><th>Uppercase</th><td>{% if effective_policy.require_uppercase %}Required{% else %}Optional{% endif %}</td></tr>
+<tr><th>Lowercase</th><td>{% if effective_policy.require_lowercase %}Required{% else %}Optional{% endif %}</td></tr>
+<tr><th>Number</th><td>{% if effective_policy.require_number %}Required{% else %}Optional{% endif %}</td></tr>
+<tr><th>Special character</th><td>{% if effective_policy.require_symbol %}Required{% else %}Optional{% endif %}</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>Repeated Failure Sources</h2>
+<table>
+<thead><tr><th>IP address</th><th>Failures</th><th>Distinct users</th></tr></thead>
+<tbody>
+{% for row in repeated_ips %}
+<tr><td>{{ row.ip_address }}</td><td>{{ row.total }}</td><td>{{ row.users }}</td></tr>
+{% empty %}<tr><td colspan="3">No IP crossed the review threshold.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+
+<div class="section">
+<h2>Accounts with Repeated Failures</h2>
+<table>
+<thead><tr><th>Account</th><th>Failures</th></tr></thead>
+<tbody>
+{% for row in repeated_users %}
+<tr><td>{{ row.label }}</td><td>{{ row.total }}</td></tr>
+{% empty %}<tr><td colspan="2">No account crossed the review threshold.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+</body>
+</html>
