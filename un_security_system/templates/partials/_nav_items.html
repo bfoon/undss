@@ -1,3 +1,4 @@
+{% load esign_dashboard_tags security_console_tags %}
 
 <nav class="appnav-tree" aria-label="Main">
 
@@ -334,6 +335,20 @@
           <a class="appnav-link appnav-link-sub {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
             <i class="bi bi-vector-pen" aria-hidden="true"></i><span>My Signature</span>
           </a>
+
+          {% esign_dashboard_access as esign_usage_access %}
+          {% if esign_usage_access.can_view %}
+            {% url 'esign_analytics:dashboard' as u_esign_analytics %}
+            <a class="appnav-link appnav-link-sub {% if '/insights/esign/' in request.path %}is-active{% endif %}"
+               href="{{ u_esign_analytics }}?scope={{ esign_usage_access.preferred_scope }}"
+               data-appnav-label="eSign Analytics & Reports">
+              <i class="bi bi-bar-chart-line-fill" aria-hidden="true"></i>
+              <span>Analytics &amp; Reports</span>
+              {% if esign_usage_access.max_level %}
+                <span class="appnav-count">L{{ esign_usage_access.max_level }}</span>
+              {% endif %}
+            </a>
+          {% endif %}
         </div>
       </div>
     {% endif %}
@@ -402,7 +417,8 @@
   </div>
   {% endif %}
 
-  {% if user.is_superuser or user.role == 'ict_focal' %}
+  {% security_console_access as security_access %}
+  {% if user.is_superuser or user.role == 'ict_focal' or security_access.can_view %}
   <div class="appnav-section">
     <div class="appnav-heading">Administration</div>
 
@@ -414,6 +430,26 @@
       {% url 'accounts:ict_user_create' as u %}
       <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}">
         <i class="bi bi-person-plus" aria-hidden="true"></i><span>Create User</span>
+      </a>
+    {% endif %}
+
+    {% if security_access.can_view %}
+      {% url 'security_console:dashboard' as u_security %}
+      <a class="appnav-link {% if '/ict/security/' in request.path and '/password-policy/' not in request.path %}is-active{% endif %}"
+         href="{{ u_security }}?scope={{ security_access.preferred_scope }}"
+         data-appnav-label="ICT Security Analytics">
+        <i class="bi bi-shield-lock-fill" aria-hidden="true"></i>
+        <span>ICT Security Analytics</span>
+      </a>
+    {% endif %}
+
+    {% if security_access.can_manage_policy %}
+      {% url 'security_console:password_policy' as u_security_policy %}
+      <a class="appnav-link {% if '/ict/security/password-policy/' in request.path %}is-active{% endif %}"
+         href="{{ u_security_policy }}?scope={{ security_access.preferred_scope }}"
+         data-appnav-label="Password Policy">
+        <i class="bi bi-key-fill" aria-hidden="true"></i>
+        <span>Password Policy</span>
       </a>
     {% endif %}
 
