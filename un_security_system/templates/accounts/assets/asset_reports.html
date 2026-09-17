@@ -3,99 +3,370 @@
 
 {% block extra_css %}
 <style>
+  :root {
+    --report-blue: #005a8b;
+    --report-cyan: #009edb;
+    --report-ink: #1f2937;
+    --report-muted: #6b7280;
+    --report-border: #e5e7eb;
+    --report-soft: #f8fafc;
+    --report-success: #198754;
+    --report-warning: #f59e0b;
+    --report-danger: #dc3545;
+  }
+
+  .report-shell {
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+
   .report-hero {
-    background: linear-gradient(135deg, rgba(0,158,219,.12), rgba(0,90,139,.08));
-    border: 1px solid rgba(0,158,219,.18);
-  }
-  .report-kpi {
     border: 0;
-    border-left: 4px solid var(--un-blue, #009EDB);
-    box-shadow: 0 .125rem .35rem rgba(0,0,0,.05);
+    color: #fff;
+    overflow: hidden;
+    position: relative;
+    background:
+      radial-gradient(circle at 90% 20%, rgba(255,255,255,.18), transparent 30%),
+      linear-gradient(135deg, var(--report-blue), var(--report-cyan));
+    box-shadow: 0 12px 30px rgba(0, 90, 139, .16);
   }
-  .report-kpi .value {
+
+  .report-hero::after {
+    content: "";
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    border: 28px solid rgba(255,255,255,.08);
+    border-radius: 50%;
+    right: -50px;
+    bottom: -80px;
+  }
+
+  .report-hero .report-subtitle {
+    color: rgba(255,255,255,.82);
+  }
+
+  .report-actions {
+    position: relative;
+    z-index: 2;
+  }
+
+  .report-kpi {
+    border: 1px solid var(--report-border);
+    box-shadow: 0 5px 18px rgba(15, 23, 42, .05);
+    transition: transform .16s ease, box-shadow .16s ease;
+    overflow: hidden;
+  }
+
+  .report-kpi:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 9px 24px rgba(15, 23, 42, .08);
+  }
+
+  .report-kpi .kpi-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,158,219,.10);
+    color: var(--report-blue);
+    font-size: 1.25rem;
+  }
+
+  .report-kpi .kpi-value {
     font-size: 1.75rem;
-    font-weight: 700;
     line-height: 1;
+    font-weight: 800;
+    color: var(--report-ink);
   }
+
+  .report-kpi .kpi-label {
+    color: var(--report-muted);
+    font-size: .79rem;
+  }
+
+  .report-card {
+    border: 1px solid var(--report-border);
+    box-shadow: 0 5px 18px rgba(15, 23, 42, .04);
+  }
+
+  .report-card > .card-header {
+    background: #fff;
+    border-bottom: 1px solid var(--report-border);
+  }
+
   .report-section-title {
+    color: var(--report-blue);
     font-weight: 700;
-    color: var(--un-primary, #005A8B);
+    margin: 0;
   }
+
+  .report-section-subtitle {
+    color: var(--report-muted);
+    font-size: .8rem;
+  }
+
   .report-chart {
     position: relative;
     min-height: 310px;
   }
-  .report-table thead th {
-    white-space: nowrap;
-    font-size: .82rem;
+
+  .report-chart-sm {
+    position: relative;
+    min-height: 260px;
   }
+
+  .report-tabs {
+    position: sticky;
+    top: 70px;
+    z-index: 20;
+    background: #fff;
+    border-radius: 12px;
+    padding: .35rem;
+    box-shadow: 0 5px 20px rgba(15, 23, 42, .06);
+    border: 1px solid var(--report-border);
+  }
+
+  .report-tabs .nav-link {
+    border: 0;
+    border-radius: 9px;
+    color: #475569;
+    font-weight: 600;
+    padding: .65rem .9rem;
+  }
+
+  .report-tabs .nav-link.active {
+    background: var(--report-blue);
+    color: #fff;
+  }
+
+  .report-toolbar {
+    background: var(--report-soft);
+    border: 1px solid var(--report-border);
+    border-radius: 10px;
+    padding: .75rem;
+  }
+
+  .report-table {
+    margin-bottom: 0;
+  }
+
+  .report-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: #f8fafc;
+    white-space: nowrap;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .025em;
+    color: #475569;
+    border-bottom: 1px solid #dbe4ee;
+  }
+
   .report-table tbody td {
     vertical-align: middle;
-    font-size: .9rem;
+    font-size: .88rem;
   }
-  .report-muted {
-    color: #6c757d;
+
+  .report-table tbody tr:hover {
+    background: rgba(0,158,219,.035);
   }
-  .report-badge-number {
-    min-width: 2rem;
+
+  /* Requested: issued assets and mobile lines are independently scrollable. */
+  .report-scroll-table {
+    max-height: 560px;
+    overflow: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .report-scroll-table.compact {
+    max-height: 430px;
+  }
+
+  .report-scroll-table::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  .report-scroll-table::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+
+  .report-scroll-table::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+  }
+
+  .report-scroll-table::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .report-summary-strip {
+    background: #fff;
+    border: 1px solid var(--report-border);
+    border-radius: 12px;
+  }
+
+  .summary-metric {
+    min-width: 145px;
+    padding: .85rem 1rem;
+  }
+
+  .summary-metric + .summary-metric {
+    border-left: 1px solid var(--report-border);
+  }
+
+  .summary-metric .metric-label {
+    font-size: .72rem;
+    color: var(--report-muted);
+    text-transform: uppercase;
+    letter-spacing: .045em;
+  }
+
+  .summary-metric .metric-value {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--report-ink);
+  }
+
+  .progress-thin {
+    height: 7px;
+    border-radius: 999px;
+  }
+
+  .report-empty {
+    padding: 2.2rem 1rem;
+    text-align: center;
+    color: #94a3b8;
+  }
+
+  .report-empty i {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: .45rem;
+  }
+
+  .report-count {
+    min-width: 2.4rem;
     text-align: center;
   }
+
+  .table-search {
+    max-width: 320px;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    display: inline-block;
+    border-radius: 50%;
+    margin-right: .4rem;
+  }
+
+  .status-available { background: #198754; }
+  .status-assigned { background: #0d6efd; }
+  .status-maintenance { background: #f59e0b; }
+  .status-retired { background: #6c757d; }
+
+  @media (max-width: 991.98px) {
+    .report-tabs {
+      top: 56px;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      white-space: nowrap;
+    }
+
+    .summary-metric + .summary-metric {
+      border-left: 0;
+      border-top: 1px solid var(--report-border);
+    }
+
+    .report-scroll-table {
+      max-height: 500px;
+    }
+  }
+
   @media print {
     .no-print,
-    .sidebar,
-    nav,
-    header,
-    footer {
+    .report-tabs {
       display: none !important;
     }
-    .card {
-      break-inside: avoid;
-      box-shadow: none !important;
+
+    .tab-pane {
+      display: block !important;
+      opacity: 1 !important;
+      margin-bottom: 1rem;
     }
-    .container,
-    .container-fluid {
-      max-width: 100% !important;
+
+    .report-scroll-table,
+    .report-scroll-table.compact {
+      max-height: none !important;
+      overflow: visible !important;
+    }
+
+    .report-table thead th {
+      position: static !important;
+    }
+
+    .report-hero,
+    .report-kpi,
+    .report-card,
+    .report-summary-strip {
+      box-shadow: none !important;
+      break-inside: avoid;
+    }
+
+    .report-chart,
+    .report-chart-sm {
+      min-height: 240px;
     }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 report-shell">
 
+  <!-- HERO -->
   <div class="card report-hero mb-4">
-    <div class="card-body p-4">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <div>
-          <h3 class="mb-1 text-un-primary fw-bold">
-            <i class="bi bi-bar-chart-line me-2"></i>
+    <div class="card-body p-4 p-lg-5">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-4">
+        <div class="position-relative" style="z-index:2;">
+          <div class="text-uppercase small fw-semibold mb-2 opacity-75">
+            UN PASS · Asset Intelligence
+          </div>
+          <h2 class="mb-2 fw-bold">
+            <i class="bi bi-bar-chart-line-fill me-2"></i>
             Asset Management Report
-          </h3>
-          <div class="report-muted">
-            {{ agency }} · Generated {{ generated_at|date:"d M Y H:i" }}
+          </h2>
+          <div class="report-subtitle">
+            {{ agency }} · Generated {{ generated_at|date:"d M Y, H:i" }}
           </div>
         </div>
 
-        <div class="d-flex flex-wrap gap-2 no-print">
-          <a class="btn btn-outline-secondary"
+        <div class="d-flex flex-wrap gap-2 report-actions no-print">
+          <a class="btn btn-light"
              href="{% url 'accounts:asset_management' %}">
             <i class="bi bi-arrow-left me-1"></i>
             Asset Management
           </a>
 
-          <a class="btn btn-outline-success"
+          <a class="btn btn-outline-light"
              href="/accounts/asset-reports/download/excel/">
             <i class="bi bi-file-earmark-excel me-1"></i>
             Excel
           </a>
 
-          <a class="btn btn-outline-primary"
+          <a class="btn btn-outline-light"
              href="/accounts/asset-reports/download/word/">
             <i class="bi bi-file-earmark-word me-1"></i>
             Word
           </a>
 
-          <button class="btn btn-outline-dark"
+          <button class="btn btn-outline-light"
                   type="button"
                   onclick="window.print()">
             <i class="bi bi-printer me-1"></i>
@@ -106,56 +377,157 @@
     </div>
   </div>
 
+  <!-- KPI CARDS -->
   <div class="row g-3 mb-4">
-    <div class="col-xl-3 col-md-6">
+    <div class="col-xxl-2 col-xl-4 col-md-6">
       <div class="card report-kpi h-100">
         <div class="card-body">
-          <div class="small text-muted mb-2">Total Assets</div>
-          <div class="value">{{ total_assets }}</div>
-          <div class="small text-muted mt-2">All registered assets</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-xl-3 col-md-6">
-      <div class="card report-kpi h-100">
-        <div class="card-body">
-          <div class="small text-muted mb-2">Available</div>
-          <div class="value text-success">{{ available_assets }}</div>
-          <div class="small text-muted mt-2">Ready for allocation</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-xl-3 col-md-6">
-      <div class="card report-kpi h-100">
-        <div class="card-body">
-          <div class="small text-muted mb-2">Assigned / In Use</div>
-          <div class="value text-primary">{{ assigned_assets }}</div>
-          <div class="small text-muted mt-2">Currently issued to staff</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-xl-3 col-md-6">
-      <div class="card report-kpi h-100">
-        <div class="card-body">
-          <div class="small text-muted mb-2">Maintenance / EOL</div>
-          <div class="value text-warning">
-            {{ maintenance_assets }}
-            <span class="fs-6 text-danger">/ {{ eol_assets|length }}</span>
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="kpi-label mb-2">TOTAL ASSETS</div>
+              <div class="kpi-value">{{ total_assets }}</div>
+              <div class="small text-muted mt-2">Registered inventory</div>
+            </div>
+            <span class="kpi-icon"><i class="bi bi-box-seam"></i></span>
           </div>
-          <div class="small text-muted mt-2">Maintenance / due for replacement</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-2 col-xl-4 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="kpi-label mb-2">AVAILABLE</div>
+              <div class="kpi-value text-success">{{ available_assets }}</div>
+              <div class="small text-muted mt-2">Ready for allocation</div>
+            </div>
+            <span class="kpi-icon"><i class="bi bi-check-circle"></i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-2 col-xl-4 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="kpi-label mb-2">ASSIGNED</div>
+              <div class="kpi-value text-primary">{{ assigned_assets }}</div>
+              <div class="small text-muted mt-2">Currently in use</div>
+            </div>
+            <span class="kpi-icon"><i class="bi bi-person-check"></i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-2 col-xl-4 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="kpi-label mb-2">MAINTENANCE</div>
+              <div class="kpi-value text-warning">{{ maintenance_assets }}</div>
+              <div class="small text-muted mt-2">Requires attention</div>
+            </div>
+            <span class="kpi-icon"><i class="bi bi-tools"></i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-2 col-xl-4 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="kpi-label mb-2">RETIRED</div>
+              <div class="kpi-value text-secondary">{{ retired_assets }}</div>
+              <div class="small text-muted mt-2">Retired / disposed</div>
+            </div>
+            <span class="kpi-icon"><i class="bi bi-archive"></i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xxl-2 col-xl-4 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="kpi-label mb-2">EOL / REPLACE</div>
+              <div class="kpi-value text-danger">{{ eol_assets|length }}</div>
+              <div class="small text-muted mt-2">Due for replacement</div>
+            </div>
+            <span class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- EXECUTIVE SUMMARY -->
+  <div class="report-summary-strip mb-4">
+    <div class="d-flex flex-column flex-lg-row align-items-stretch">
+      <div class="summary-metric flex-fill">
+        <div class="metric-label">Allocation Rate</div>
+        <div class="metric-value" id="allocationRate">—</div>
+        <div class="progress progress-thin mt-2">
+          <div class="progress-bar bg-primary" id="allocationProgress" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="summary-metric flex-fill">
+        <div class="metric-label">Availability Rate</div>
+        <div class="metric-value" id="availabilityRate">—</div>
+        <div class="progress progress-thin mt-2">
+          <div class="progress-bar bg-success" id="availabilityProgress" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="summary-metric flex-fill">
+        <div class="metric-label">Asset Requests</div>
+        <div class="metric-value">{{ total_requests }}</div>
+        <div class="small text-muted mt-1">
+          {% if avg_fulfillment_days %}
+            Avg. {{ avg_fulfillment_days }} days fulfillment
+          {% else %}
+            Fulfillment average not yet available
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="summary-metric flex-fill">
+        <div class="metric-label">Pending Returns</div>
+        <div class="metric-value">{{ pending_returns|length }}</div>
+        <div class="small text-muted mt-1">Awaiting ICT processing</div>
+      </div>
+
+      <div class="summary-metric flex-fill">
+        <div class="metric-label">Mobile Lines</div>
+        <div class="metric-value">{{ total_lines }}</div>
+        <div class="small text-muted mt-1">Registered lines</div>
+      </div>
+
+      <div class="summary-metric flex-fill">
+        <div class="metric-label">Supply Requests</div>
+        <div class="metric-value">{{ total_creqs }}</div>
+        <div class="small text-muted mt-1">Consumables workflow</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOP ANALYTICS -->
   <div class="row g-3 mb-4">
-    <div class="col-xl-8">
-      <div class="card h-100">
-        <div class="card-header bg-white">
-          <h6 class="mb-0 report-section-title">Asset Status Overview</h6>
+    <div class="col-xl-4">
+      <div class="card report-card h-100">
+        <div class="card-header py-3">
+          <h6 class="report-section-title">Asset Status</h6>
+          <div class="report-section-subtitle">Current inventory distribution</div>
         </div>
         <div class="card-body report-chart">
           <canvas id="chartAssetStatus"></canvas>
@@ -164,222 +536,293 @@
     </div>
 
     <div class="col-xl-4">
-      <div class="card h-100">
-        <div class="card-header bg-white">
-          <h6 class="mb-0 report-section-title">Request Performance</h6>
+      <div class="card report-card h-100">
+        <div class="card-header py-3">
+          <h6 class="report-section-title">Requests Pipeline</h6>
+          <div class="report-section-subtitle">Approval and fulfillment status</div>
         </div>
-        <div class="card-body">
-          <div class="d-flex justify-content-between border-bottom py-2">
-            <span>Total asset requests</span>
-            <strong>{{ total_requests }}</strong>
-          </div>
-          <div class="d-flex justify-content-between border-bottom py-2">
-            <span>Average fulfillment</span>
-            <strong>
-              {% if avg_fulfillment_days %}
-                {{ avg_fulfillment_days }} days
-              {% else %}
-                N/A
-              {% endif %}
-            </strong>
-          </div>
-          <div class="d-flex justify-content-between border-bottom py-2">
-            <span>Pending returns</span>
-            <strong>{{ pending_returns|length }}</strong>
-          </div>
-          <div class="d-flex justify-content-between py-2">
-            <span>Total mobile lines</span>
-            <strong>{{ total_lines }}</strong>
-          </div>
+        <div class="card-body report-chart">
+          <canvas id="chartRequestStatus"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="card report-card h-100">
+        <div class="card-header py-3">
+          <h6 class="report-section-title">Mobile Line Status</h6>
+          <div class="report-section-subtitle">Availability and allocation</div>
+        </div>
+        <div class="card-body report-chart">
+          <canvas id="chartLineStatus"></canvas>
         </div>
       </div>
     </div>
   </div>
 
-  <ul class="nav nav-tabs mb-3 no-print" id="reportTabs" role="tablist">
-    <li class="nav-item">
-      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#report-overview" type="button">
-        Overview
+  <!-- ADVANCED ANALYTICS -->
+  <div class="row g-3 mb-4">
+    <div class="col-xl-6">
+      <div class="card report-card h-100">
+        <div class="card-header py-3">
+          <h6 class="report-section-title">Assets by Category</h6>
+          <div class="report-section-subtitle">Top categories by inventory volume</div>
+        </div>
+        <div class="card-body report-chart">
+          <canvas id="chartAssetsByCategory"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="card report-card h-100">
+        <div class="card-header py-3">
+          <h6 class="report-section-title">Assets by Unit</h6>
+          <div class="report-section-subtitle">Allocation across organisational units</div>
+        </div>
+        <div class="card-body report-chart">
+          <canvas id="chartAssetsByUnit"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="card report-card h-100">
+        <div class="card-header py-3">
+          <h6 class="report-section-title">12-Month Asset Request Trend</h6>
+          <div class="report-section-subtitle">Request activity over time</div>
+        </div>
+        <div class="card-body report-chart">
+          <canvas id="chartMonthlyRequests"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="card report-card h-100">
+        <div class="card-header py-3">
+          <h6 class="report-section-title">12-Month Supply Request Trend</h6>
+          <div class="report-section-subtitle">Consumable demand over time</div>
+        </div>
+        <div class="card-body report-chart">
+          <canvas id="chartMonthlySupplies"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <ul class="nav nav-pills report-tabs mb-4 no-print" id="reportTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active"
+              data-bs-toggle="tab"
+              data-bs-target="#report-overview"
+              type="button">
+        <i class="bi bi-grid-1x2 me-1"></i> Overview
       </button>
     </li>
-    <li class="nav-item">
-      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-issued" type="button">
-        Assets Issued
+    <li class="nav-item" role="presentation">
+      <button class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#report-issued"
+              type="button">
+        <i class="bi bi-laptop me-1"></i> Issued Assets
+        <span class="badge bg-light text-dark ms-1">{{ issued_assets|length }}</span>
       </button>
     </li>
-    <li class="nav-item">
-      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-lines" type="button">
-        Mobile Lines
+    <li class="nav-item" role="presentation">
+      <button class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#report-lines"
+              type="button">
+        <i class="bi bi-sim me-1"></i> Mobile Lines
+        <span class="badge bg-light text-dark ms-1">{{ total_lines }}</span>
       </button>
     </li>
-    <li class="nav-item">
-      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-supplies" type="button">
-        Supplies
+    <li class="nav-item" role="presentation">
+      <button class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#report-supplies"
+              type="button">
+        <i class="bi bi-box2-heart me-1"></i> Supplies
       </button>
     </li>
-    <li class="nav-item">
-      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-eol" type="button">
-        EOL
+    <li class="nav-item" role="presentation">
+      <button class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#report-eol"
+              type="button">
+        <i class="bi bi-exclamation-triangle me-1"></i> EOL / Replacement
+        <span class="badge bg-danger ms-1">{{ eol_assets|length }}</span>
       </button>
     </li>
   </ul>
 
   <div class="tab-content">
 
+    <!-- OVERVIEW -->
     <div class="tab-pane fade show active" id="report-overview">
       <div class="row g-3">
 
         <div class="col-xl-6">
-          <div class="card h-100">
-            <div class="card-header bg-white">
-              <h6 class="mb-0 report-section-title">Assets by Category</h6>
+          <div class="card report-card h-100">
+            <div class="card-header py-3">
+              <h6 class="report-section-title">Inventory by Category</h6>
+              <div class="report-section-subtitle">Availability and assignment by asset type</div>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover mb-0 report-table">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Category</th>
-                      <th class="text-end">Total</th>
-                      <th class="text-end">Available</th>
-                      <th class="text-end">Assigned</th>
-                      <th class="text-end">Retired</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in assets_by_cat %}
-                    <tr>
-                      <td>{{ row.category__name|default:"Uncategorised" }}</td>
-                      <td class="text-end fw-semibold">{{ row.total }}</td>
-                      <td class="text-end text-success">{{ row.available }}</td>
-                      <td class="text-end text-primary">{{ row.assigned }}</td>
-                      <td class="text-end text-muted">{{ row.retired }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="5" class="text-center text-muted py-4">No asset data available.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="col-xl-6">
-          <div class="card h-100">
-            <div class="card-header bg-white">
-              <h6 class="mb-0 report-section-title">Assets by Unit</h6>
-            </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover mb-0 report-table">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Unit</th>
-                      <th class="text-end">Total</th>
-                      <th class="text-end">Available</th>
-                      <th class="text-end">Assigned</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in assets_by_unit %}
-                    <tr>
-                      <td>{{ row.unit__name|default:"Unallocated / Core" }}</td>
-                      <td class="text-end fw-semibold">{{ row.total }}</td>
-                      <td class="text-end text-success">{{ row.available }}</td>
-                      <td class="text-end text-primary">{{ row.assigned }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="4" class="text-center text-muted py-4">No unit allocation data available.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+            <div class="report-scroll-table compact">
+              <table class="table table-hover report-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th class="text-end">Total</th>
+                    <th class="text-end">Available</th>
+                    <th class="text-end">Assigned</th>
+                    <th class="text-end">Retired</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in assets_by_cat %}
+                  <tr>
+                    <td class="fw-semibold">{{ row.category__name|default:"Uncategorised" }}</td>
+                    <td class="text-end">{{ row.total }}</td>
+                    <td class="text-end text-success">{{ row.available }}</td>
+                    <td class="text-end text-primary">{{ row.assigned }}</td>
+                    <td class="text-end text-muted">{{ row.retired }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="5" class="report-empty">
+                      <i class="bi bi-inbox"></i>
+                      No asset category data available.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
         <div class="col-xl-6">
-          <div class="card h-100">
-            <div class="card-header bg-white">
-              <h6 class="mb-0 report-section-title">Asset Requests by Category</h6>
+          <div class="card report-card h-100">
+            <div class="card-header py-3">
+              <h6 class="report-section-title">Inventory by Unit</h6>
+              <div class="report-section-subtitle">Asset allocation across organisational units</div>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover mb-0 report-table">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Category</th>
-                      <th class="text-end">Total</th>
-                      <th class="text-end">Pending</th>
-                      <th class="text-end">Fulfilled</th>
-                      <th class="text-end">Rejected</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in requests_by_cat %}
-                    <tr>
-                      <td>{{ row.category__name|default:"Uncategorised" }}</td>
-                      <td class="text-end fw-semibold">{{ row.total }}</td>
-                      <td class="text-end text-warning">{{ row.pending }}</td>
-                      <td class="text-end text-success">{{ row.fulfilled }}</td>
-                      <td class="text-end text-danger">{{ row.rejected }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="5" class="text-center text-muted py-4">No request data available.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+            <div class="report-scroll-table compact">
+              <table class="table table-hover report-table">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th class="text-end">Total</th>
+                    <th class="text-end">Available</th>
+                    <th class="text-end">Assigned</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in assets_by_unit %}
+                  <tr>
+                    <td class="fw-semibold">{{ row.unit__name|default:"Unallocated / Core" }}</td>
+                    <td class="text-end">{{ row.total }}</td>
+                    <td class="text-end text-success">{{ row.available }}</td>
+                    <td class="text-end text-primary">{{ row.assigned }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="4" class="report-empty">
+                      <i class="bi bi-diagram-3"></i>
+                      No unit allocation data available.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
         <div class="col-xl-6">
-          <div class="card h-100">
-            <div class="card-header bg-white">
-              <h6 class="mb-0 report-section-title">Allocation by Unit</h6>
+          <div class="card report-card h-100">
+            <div class="card-header py-3">
+              <h6 class="report-section-title">Asset Requests by Category</h6>
+              <div class="report-section-subtitle">Demand, fulfillment and rejections</div>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover mb-0 report-table">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Unit</th>
-                      <th class="text-end">Assets</th>
-                      <th class="text-end">Assigned</th>
-                      <th class="text-end">Available</th>
-                      <th class="text-end">Lines</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in allocation_by_unit %}
-                    <tr>
-                      <td>
-                        {{ row.unit }}
-                        {% if row.is_core %}
-                          <span class="badge bg-info text-dark ms-1">Core</span>
-                        {% endif %}
-                      </td>
-                      <td class="text-end">{{ row.assets_total }}</td>
-                      <td class="text-end text-primary">{{ row.assets_assigned }}</td>
-                      <td class="text-end text-success">{{ row.assets_available }}</td>
-                      <td class="text-end">{{ row.lines_assigned }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="5" class="text-center text-muted py-4">No allocation data available.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+            <div class="report-scroll-table compact">
+              <table class="table table-hover report-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th class="text-end">Total</th>
+                    <th class="text-end">Pending</th>
+                    <th class="text-end">Fulfilled</th>
+                    <th class="text-end">Rejected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in requests_by_cat %}
+                  <tr>
+                    <td class="fw-semibold">{{ row.category__name|default:"Uncategorised" }}</td>
+                    <td class="text-end">{{ row.total }}</td>
+                    <td class="text-end text-warning">{{ row.pending }}</td>
+                    <td class="text-end text-success">{{ row.fulfilled }}</td>
+                    <td class="text-end text-danger">{{ row.rejected }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="5" class="report-empty">
+                      <i class="bi bi-clipboard-data"></i>
+                      No request data available.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-xl-6">
+          <div class="card report-card h-100">
+            <div class="card-header py-3">
+              <h6 class="report-section-title">Allocation by Unit</h6>
+              <div class="report-section-subtitle">Assets and mobile lines assigned by unit</div>
+            </div>
+            <div class="report-scroll-table compact">
+              <table class="table table-hover report-table">
+                <thead>
+                  <tr>
+                    <th>Unit</th>
+                    <th class="text-end">Assets</th>
+                    <th class="text-end">Assigned</th>
+                    <th class="text-end">Available</th>
+                    <th class="text-end">Lines</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in allocation_by_unit %}
+                  <tr>
+                    <td class="fw-semibold">
+                      {{ row.unit }}
+                      {% if row.is_core %}
+                        <span class="badge bg-info text-dark ms-1">Core</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-end">{{ row.assets_total }}</td>
+                    <td class="text-end text-primary">{{ row.assets_assigned }}</td>
+                    <td class="text-end text-success">{{ row.assets_available }}</td>
+                    <td class="text-end">{{ row.lines_assigned }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="5" class="report-empty">
+                      <i class="bi bi-diagram-2"></i>
+                      No allocation data available.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -387,287 +830,624 @@
       </div>
     </div>
 
+    <!-- ISSUED ASSETS - SCROLLABLE -->
     <div class="tab-pane fade" id="report-issued">
-      <div class="card">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center">
-          <h6 class="mb-0 report-section-title">Assets Currently Issued</h6>
-          <span class="badge bg-primary report-badge-number">{{ issued_assets|length }}</span>
-        </div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-hover mb-0 report-table">
-              <thead class="table-light">
-                <tr>
-                  <th>Asset</th>
-                  <th>Category</th>
-                  <th>Unit</th>
-                  <th>Current Holder</th>
-                  <th>Asset Tag</th>
-                  <th>Serial Number</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for a in issued_assets %}
-                <tr>
-                  <td class="fw-semibold">{{ a.name }}</td>
-                  <td>{{ a.category.name|default:"—" }}</td>
-                  <td>{{ a.unit.name|default:"Unallocated" }}</td>
-                  <td>
-                    {% if a.current_holder %}
-                      {{ a.current_holder.get_full_name|default:a.current_holder.username }}
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
-                  <td>{{ a.asset_tag|default:"—" }}</td>
-                  <td>{{ a.serial_number|default:"—" }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                  <td colspan="6" class="text-center text-muted py-4">No assets are currently assigned.</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-pane fade" id="report-lines">
-      <div class="row g-3">
-
-        <div class="col-12">
-          <div class="card">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
-              <h6 class="mb-0 report-section-title">Mobile Lines</h6>
-              <span class="badge bg-secondary report-badge-number">{{ total_lines }}</span>
-            </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover mb-0 report-table">
-                  <thead class="table-light">
-                    <tr>
-                      <th>MSISDN</th>
-                      <th>Type</th>
-                      <th>Provider</th>
-                      <th>Status</th>
-                      <th>Assigned To</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for line in all_lines %}
-                    <tr>
-                      <td class="fw-semibold">{{ line.msisdn }}</td>
-                      <td>{{ line.get_line_type_display|default:line.line_type }}</td>
-                      <td>{{ line.provider|default:"—" }}</td>
-                      <td>
-                        <span class="badge
-                          {% if line.status == 'assigned' %}bg-primary
-                          {% elif line.status == 'available' %}bg-success
-                          {% elif line.status == 'suspended' %}bg-warning text-dark
-                          {% else %}bg-secondary{% endif %}">
-                          {{ line.status|title }}
-                        </span>
-                      </td>
-                      <td>
-                        {% if line.assigned_to %}
-                          {{ line.assigned_to.get_full_name|default:line.assigned_to.username }}
-                        {% else %}
-                          —
-                        {% endif %}
-                      </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="5" class="text-center text-muted py-4">No mobile lines registered.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
+      <div class="card report-card">
+        <div class="card-header py-3">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+              <h6 class="report-section-title">Assets Currently Issued</h6>
+              <div class="report-section-subtitle">
+                Complete assigned-asset register · scroll inside the table
               </div>
             </div>
+            <span class="badge bg-primary report-count">{{ issued_assets|length }}</span>
           </div>
         </div>
 
+        <div class="card-body border-bottom no-print">
+          <div class="report-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="input-group input-group-sm table-search">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input type="search"
+                     class="form-control"
+                     id="issuedAssetSearch"
+                     placeholder="Search asset, holder, unit, tag...">
+            </div>
+            <div class="small text-muted">
+              Visible rows: <strong id="issuedAssetVisibleCount">{{ issued_assets|length }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="report-scroll-table" id="issuedAssetScroll">
+          <table class="table table-hover report-table" id="issuedAssetTable">
+            <thead>
+              <tr>
+                <th style="min-width:220px;">Asset</th>
+                <th style="min-width:150px;">Category</th>
+                <th style="min-width:170px;">Unit</th>
+                <th style="min-width:200px;">Current Holder</th>
+                <th style="min-width:130px;">Asset Tag</th>
+                <th style="min-width:160px;">Serial Number</th>
+                <th style="min-width:120px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in issued_assets %}
+              <tr>
+                <td class="fw-semibold">{{ a.name }}</td>
+                <td>{{ a.category.name|default:"—" }}</td>
+                <td>{{ a.unit.name|default:"Unallocated" }}</td>
+                <td>
+                  {% if a.current_holder %}
+                    {{ a.current_holder.get_full_name|default:a.current_holder.username }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>{{ a.asset_tag|default:"—" }}</td>
+                <td>{{ a.serial_number|default:"—" }}</td>
+                <td>
+                  <span class="badge bg-primary">
+                    <span class="status-dot status-assigned"></span>
+                    Assigned
+                  </span>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="7" class="report-empty">
+                  <i class="bi bi-check2-circle"></i>
+                  No assets are currently assigned.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card-footer bg-white small text-muted">
+          <i class="bi bi-info-circle me-1"></i>
+          The header remains fixed while you scroll through issued assets.
+        </div>
       </div>
     </div>
 
+    <!-- MOBILE LINES - SCROLLABLE -->
+    <div class="tab-pane fade" id="report-lines">
+      <div class="card report-card">
+        <div class="card-header py-3">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+              <h6 class="report-section-title">Mobile Lines Register</h6>
+              <div class="report-section-subtitle">
+                Complete mobile-line allocation register · scroll inside the table
+              </div>
+            </div>
+            <span class="badge bg-secondary report-count">{{ total_lines }}</span>
+          </div>
+        </div>
+
+        <div class="card-body border-bottom no-print">
+          <div class="report-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="input-group input-group-sm table-search">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input type="search"
+                     class="form-control"
+                     id="mobileLineSearch"
+                     placeholder="Search number, provider, holder, status...">
+            </div>
+
+            <div class="small text-muted">
+              Visible rows: <strong id="mobileLineVisibleCount">{{ total_lines }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="report-scroll-table" id="mobileLineScroll">
+          <table class="table table-hover report-table" id="mobileLineTable">
+            <thead>
+              <tr>
+                <th style="min-width:145px;">MSISDN</th>
+                <th style="min-width:130px;">Type</th>
+                <th style="min-width:140px;">Provider</th>
+                <th style="min-width:120px;">Status</th>
+                <th style="min-width:210px;">Assigned To</th>
+                <th style="min-width:150px;">SIM Serial</th>
+                <th style="min-width:240px;">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for line in all_lines %}
+              <tr>
+                <td class="fw-semibold">{{ line.msisdn }}</td>
+                <td>{{ line.get_line_type_display|default:line.line_type }}</td>
+                <td>{{ line.provider|default:"—" }}</td>
+                <td>
+                  {% if line.status == "assigned" %}
+                    <span class="badge bg-primary">
+                      <span class="status-dot status-assigned"></span>Assigned
+                    </span>
+                  {% elif line.status == "available" %}
+                    <span class="badge bg-success">
+                      <span class="status-dot status-available"></span>Available
+                    </span>
+                  {% elif line.status == "suspended" %}
+                    <span class="badge bg-warning text-dark">
+                      <span class="status-dot status-maintenance"></span>Suspended
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ line.status|title }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if line.assigned_to %}
+                    {{ line.assigned_to.get_full_name|default:line.assigned_to.username }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>{{ line.sim_serial|default:"—" }}</td>
+                <td class="text-muted">{{ line.notes|default:"—"|truncatechars:90 }}</td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="7" class="report-empty">
+                  <i class="bi bi-sim"></i>
+                  No mobile lines are registered.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card-footer bg-white small text-muted">
+          <i class="bi bi-info-circle me-1"></i>
+          The header remains fixed while you scroll through mobile lines.
+        </div>
+      </div>
+    </div>
+
+    <!-- SUPPLIES -->
     <div class="tab-pane fade" id="report-supplies">
       <div class="row g-3">
 
         <div class="col-xl-7">
-          <div class="card h-100">
-            <div class="card-header bg-white">
-              <h6 class="mb-0 report-section-title">Current Consumable Stock</h6>
+          <div class="card report-card h-100">
+            <div class="card-header py-3">
+              <h6 class="report-section-title">Current Consumable Stock</h6>
+              <div class="report-section-subtitle">Operational stock and low-stock thresholds</div>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover mb-0 report-table">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Item</th>
-                      <th>Category</th>
-                      <th class="text-end">Stock</th>
-                      <th class="text-end">Low Threshold</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for item in all_consumables %}
-                    <tr>
-                      <td class="fw-semibold">{{ item.name }}</td>
-                      <td>{{ item.category.name|default:"—" }}</td>
-                      <td class="text-end">{{ item.stock_qty }}</td>
-                      <td class="text-end">{{ item.low_stock_threshold }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="4" class="text-center text-muted py-4">No consumables registered.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+
+            <div class="report-scroll-table">
+              <table class="table table-hover report-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Category</th>
+                    <th class="text-end">Stock</th>
+                    <th class="text-end">Threshold</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in all_consumables %}
+                  <tr>
+                    <td class="fw-semibold">{{ item.name }}</td>
+                    <td>{{ item.category.name|default:"—" }}</td>
+                    <td class="text-end fw-semibold">{{ item.stock_qty }}</td>
+                    <td class="text-end">{{ item.low_stock_threshold }}</td>
+                    <td>
+                      {% if item.is_out_of_stock %}
+                        <span class="badge bg-danger">Out of stock</span>
+                      {% elif item.is_low_stock %}
+                        <span class="badge bg-warning text-dark">Low stock</span>
+                      {% else %}
+                        <span class="badge bg-success">Healthy</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="5" class="report-empty">
+                      <i class="bi bi-box2"></i>
+                      No consumables are registered.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
         <div class="col-xl-5">
-          <div class="card h-100">
-            <div class="card-header bg-white">
-              <h6 class="mb-0 report-section-title">Top Requested Supplies</h6>
+          <div class="card report-card mb-3">
+            <div class="card-header py-3">
+              <h6 class="report-section-title">Top Requested Supplies</h6>
+              <div class="report-section-subtitle">Highest demand items</div>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-hover mb-0 report-table">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Item</th>
-                      <th class="text-end">Qty</th>
-                      <th class="text-end">Requests</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in top_consumables %}
-                    <tr>
-                      <td>{{ row.item__name }}</td>
-                      <td class="text-end fw-semibold">{{ row.total_qty }}</td>
-                      <td class="text-end">{{ row.request_count }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="3" class="text-center text-muted py-4">No supply request data available.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
+            <div class="report-scroll-table compact">
+              <table class="table table-hover report-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th class="text-end">Qty</th>
+                    <th class="text-end">Requests</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in top_consumables %}
+                  <tr>
+                    <td class="fw-semibold">{{ row.item__name }}</td>
+                    <td class="text-end">{{ row.total_qty }}</td>
+                    <td class="text-end">{{ row.request_count }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="3" class="report-empty">
+                      <i class="bi bi-graph-up"></i>
+                      No supply-demand data available.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card report-card">
+            <div class="card-header py-3">
+              <h6 class="report-section-title">Recent Stock Activity</h6>
+              <div class="report-section-subtitle">Latest inventory movements</div>
+            </div>
+            <div class="report-scroll-table compact">
+              <table class="table table-hover report-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Action</th>
+                    <th class="text-end">Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for log in recent_stock_logs %}
+                  <tr>
+                    <td>{{ log.item.name|default:"—" }}</td>
+                    <td>{{ log.action|default:"Stock update"|title }}</td>
+                    <td class="text-end">
+                      {% if log.quantity %}
+                        {{ log.quantity }}
+                      {% elif log.qty %}
+                        {{ log.qty }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr>
+                    <td colspan="3" class="report-empty">
+                      <i class="bi bi-clock-history"></i>
+                      No recent stock activity.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- EOL -->
+    <div class="tab-pane fade" id="report-eol">
+      <div class="card report-card">
+        <div class="card-header py-3">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+              <h6 class="report-section-title">Assets Due for Replacement / EOL</h6>
+              <div class="report-section-subtitle">
+                Assets that have reached or passed the configured service life
               </div>
             </div>
+            <span class="badge bg-danger report-count">{{ eol_assets|length }}</span>
           </div>
         </div>
 
-      </div>
-    </div>
-
-    <div class="tab-pane fade" id="report-eol">
-      <div class="card">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center">
-          <h6 class="mb-0 report-section-title">Assets Due for Replacement / EOL</h6>
-          <span class="badge bg-danger report-badge-number">{{ eol_assets|length }}</span>
-        </div>
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-hover mb-0 report-table">
-              <thead class="table-light">
-                <tr>
-                  <th>Asset</th>
-                  <th>Category</th>
-                  <th>Unit</th>
-                  <th>Current Holder</th>
-                  <th>Acquired</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for a in eol_assets %}
-                <tr>
-                  <td class="fw-semibold">{{ a.name }}</td>
-                  <td>{{ a.category.name|default:"—" }}</td>
-                  <td>{{ a.unit.name|default:"Unallocated" }}</td>
-                  <td>
-                    {% if a.current_holder %}
-                      {{ a.current_holder.get_full_name|default:a.current_holder.username }}
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
-                  <td>{{ a.acquired_at|date:"d M Y"|default:"—" }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                  <td colspan="5" class="text-center text-success py-4">
-                    <i class="bi bi-check-circle me-1"></i>
-                    No assets are currently due for replacement.
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+        <div class="report-scroll-table">
+          <table class="table table-hover report-table">
+            <thead>
+              <tr>
+                <th style="min-width:220px;">Asset</th>
+                <th style="min-width:160px;">Category</th>
+                <th style="min-width:170px;">Unit</th>
+                <th style="min-width:200px;">Current Holder</th>
+                <th style="min-width:130px;">Acquired</th>
+                <th style="min-width:140px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in eol_assets %}
+              <tr>
+                <td class="fw-semibold">{{ a.name }}</td>
+                <td>{{ a.category.name|default:"—" }}</td>
+                <td>{{ a.unit.name|default:"Unallocated" }}</td>
+                <td>
+                  {% if a.current_holder %}
+                    {{ a.current_holder.get_full_name|default:a.current_holder.username }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>{{ a.acquired_at|date:"d M Y"|default:"—" }}</td>
+                <td><span class="badge bg-danger">Replacement due</span></td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="6" class="report-empty text-success">
+                  <i class="bi bi-check-circle"></i>
+                  No assets are currently due for replacement.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
 
   </div>
-
-  <div class="card mt-4">
-    <div class="card-header bg-white">
-      <h6 class="mb-0 report-section-title">12-Month Request Trend</h6>
-    </div>
-    <div class="card-body report-chart">
-      <canvas id="chartMonthlyRequests"></canvas>
-    </div>
-  </div>
-
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const assetStatus = {{ chart_asset_status|safe }};
-  const monthlyRequests = {{ chart_monthly_requests|safe }};
+<!-- Existing backend already supplies these Chart.js datasets -->
+<script id="asset-status-data" type="application/json">{{ chart_asset_status|safe }}</script>
+<script id="request-status-data" type="application/json">{{ chart_req_status|safe }}</script>
+<script id="monthly-requests-data" type="application/json">{{ chart_monthly_requests|safe }}</script>
+<script id="monthly-supplies-data" type="application/json">{{ chart_monthly_creqs|safe }}</script>
+<script id="assets-category-data" type="application/json">{{ chart_assets_by_cat|safe }}</script>
+<script id="assets-unit-data" type="application/json">{{ chart_assets_by_unit|safe }}</script>
+<script id="line-status-data" type="application/json">{{ chart_line_status|safe }}</script>
 
-  const assetStatusCanvas = document.getElementById("chartAssetStatus");
-  if (assetStatusCanvas && window.Chart) {
-    new Chart(assetStatusCanvas, {
-      type: "doughnut",
-      data: assetStatus,
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: "right" }
+<script>
+(function () {
+  "use strict";
+
+  function parseJsonScript(id) {
+    const node = document.getElementById(id);
+    if (!node) return null;
+    try {
+      return JSON.parse(node.textContent || "{}");
+    } catch (err) {
+      console.error("Could not parse chart data:", id, err);
+      return null;
+    }
+  }
+
+  function pct(part, total) {
+    part = Number(part || 0);
+    total = Number(total || 0);
+    if (!total) return 0;
+    return Math.max(0, Math.min(100, (part / total) * 100));
+  }
+
+  function setExecutiveMetrics() {
+    const total = Number("{{ total_assets|default:0 }}") || 0;
+    const assigned = Number("{{ assigned_assets|default:0 }}") || 0;
+    const available = Number("{{ available_assets|default:0 }}") || 0;
+
+    const allocation = pct(assigned, total);
+    const availability = pct(available, total);
+
+    const allocationRate = document.getElementById("allocationRate");
+    const availabilityRate = document.getElementById("availabilityRate");
+    const allocationProgress = document.getElementById("allocationProgress");
+    const availabilityProgress = document.getElementById("availabilityProgress");
+
+    if (allocationRate) allocationRate.textContent = allocation.toFixed(1) + "%";
+    if (availabilityRate) availabilityRate.textContent = availability.toFixed(1) + "%";
+    if (allocationProgress) allocationProgress.style.width = allocation + "%";
+    if (availabilityProgress) availabilityProgress.style.width = availability + "%";
+  }
+
+  function filterTable(inputId, tableId, countId) {
+    const input = document.getElementById(inputId);
+    const table = document.getElementById(tableId);
+    const counter = document.getElementById(countId);
+
+    if (!input || !table) return;
+
+    function runFilter() {
+      const query = (input.value || "").trim().toLowerCase();
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+      let visible = 0;
+
+      rows.forEach(function (row) {
+        if (row.querySelector(".report-empty")) {
+          row.style.display = "";
+          return;
+        }
+
+        const text = (row.innerText || "").toLowerCase();
+        const show = !query || text.includes(query);
+        row.style.display = show ? "" : "none";
+        if (show) visible += 1;
+      });
+
+      if (counter) counter.textContent = String(visible);
+    }
+
+    input.addEventListener("input", runFilter);
+    runFilter();
+  }
+
+  function createChart(canvasId, type, data, extraOptions) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.Chart || !data) return;
+
+    const baseOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        intersect: false,
+        mode: "index"
+      },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            usePointStyle: true,
+            boxWidth: 10,
+            padding: 16
+          }
+        },
+        tooltip: {
+          backgroundColor: "rgba(15,23,42,.94)",
+          padding: 10
         }
       }
+    };
+
+    const options = Object.assign({}, baseOptions, extraOptions || {});
+
+    new Chart(canvas, {
+      type: type,
+      data: data,
+      options: options
     });
   }
 
-  const monthlyCanvas = document.getElementById("chartMonthlyRequests");
-  if (monthlyCanvas && window.Chart) {
-    new Chart(monthlyCanvas, {
-      type: "line",
-      data: monthlyRequests,
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: { precision: 0 }
+  function initialiseCharts() {
+    createChart(
+      "chartAssetStatus",
+      "doughnut",
+      parseJsonScript("asset-status-data"),
+      {
+        cutout: "68%",
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { usePointStyle: true, boxWidth: 10, padding: 15 }
           }
         }
       }
-    });
+    );
+
+    createChart(
+      "chartRequestStatus",
+      "bar",
+      parseJsonScript("request-status-data"),
+      {
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    );
+
+    createChart(
+      "chartLineStatus",
+      "doughnut",
+      parseJsonScript("line-status-data"),
+      {
+        cutout: "68%",
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: { usePointStyle: true, boxWidth: 10, padding: 15 }
+          }
+        }
+      }
+    );
+
+    createChart(
+      "chartAssetsByCategory",
+      "bar",
+      parseJsonScript("assets-category-data"),
+      {
+        indexAxis: "y",
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    );
+
+    createChart(
+      "chartAssetsByUnit",
+      "bar",
+      parseJsonScript("assets-unit-data"),
+      {
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    );
+
+    createChart(
+      "chartMonthlyRequests",
+      "line",
+      parseJsonScript("monthly-requests-data"),
+      {
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    );
+
+    createChart(
+      "chartMonthlySupplies",
+      "line",
+      parseJsonScript("monthly-supplies-data"),
+      {
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    );
   }
-});
+
+  function loadChartJsAndStart() {
+    if (window.Chart) {
+      initialiseCharts();
+      return;
+    }
+
+    const existing = document.querySelector('script[data-unpass-chartjs="1"]');
+    if (existing) {
+      existing.addEventListener("load", initialiseCharts, { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js";
+    script.dataset.unpassChartjs = "1";
+    script.onload = initialiseCharts;
+    script.onerror = function () {
+      console.warn("Chart.js could not be loaded; report tables remain available.");
+    };
+    document.head.appendChild(script);
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    setExecutiveMetrics();
+
+    filterTable(
+      "issuedAssetSearch",
+      "issuedAssetTable",
+      "issuedAssetVisibleCount"
+    );
+
+    filterTable(
+      "mobileLineSearch",
+      "mobileLineTable",
+      "mobileLineVisibleCount"
+    );
+
+    loadChartJsAndStart();
+  });
+})();
 </script>
 {% endblock %}
