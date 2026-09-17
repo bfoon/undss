@@ -1,173 +1,673 @@
-{% if is_manager %}
-<div class="mb-3">
-  <h6 class="mb-0 fw-semibold">My Approval Queue</h6>
-  <small class="text-muted">Approve requests for your unit (or core assets if you are Operations Manager).</small>
-</div>
+{% extends "base.html" %}
+{% block title %}Asset Management Report | UN PASS{% endblock %}
 
-{% if is_ops %}
-  <div class="card mb-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <div class="fw-semibold">
-        Pending Line Reactivations
-        <span class="badge bg-warning text-dark ms-2">{{ pending_line_reactivations|length }}</span>
-      </div>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-sm mb-0">
-          <thead>
-            <tr>
-              <th>MSISDN</th>
-              <th>Requested By</th>
-              <th>Reason</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for rr in pending_line_reactivations %}
-            <tr>
-              <td class="fw-semibold">{{ rr.line.msisdn }}</td>
-              <td>{{ rr.requested_by.get_full_name|default:rr.requested_by.username }}</td>
-              <td class="text-muted">{{ rr.reason|default:"-" }}</td>
-              <td class="d-flex gap-2">
-                <form method="post" class="d-inline">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="approve_reactivate_line">
-                  <input type="hidden" name="reactivation_request_id" value="{{ rr.id }}">
-                  <button class="btn btn-sm btn-success">Approve</button>
-                </form>
-                <form method="post" class="d-inline">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="reject_reactivate_line">
-                  <input type="hidden" name="reactivation_request_id" value="{{ rr.id }}">
-                  <button class="btn btn-sm btn-outline-danger">Reject</button>
-                </form>
-              </td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="4" class="text-center text-muted py-3">No pending requests.</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-{% endif %}
-
-{# ── Bulk asset request approvals ─────────────────────────────────── #}
-{% if pending_approvals %}
-<form method="post" id="bulkApproveForm">
-  {% csrf_token %}
-  <input type="hidden" name="action" value="bulk_approve_requests">
-
-  <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-    <div class="d-flex align-items-center gap-3">
-      <div class="form-check mb-0">
-        <input class="form-check-input" type="checkbox" id="selectAllRequests">
-        <label class="form-check-label fw-semibold small" for="selectAllRequests">
-          Select all
-        </label>
-      </div>
-      <span class="text-muted small" id="selectedCount">0 selected</span>
-    </div>
-    <button type="submit" class="btn btn-sm btn-success" id="bulkApproveBtn" disabled>
-      <i class="bi bi-check-all me-1"></i> Approve Selected
-    </button>
-  </div>
-
-  <div class="table-responsive">
-    <table class="table align-middle">
-      <thead>
-        <tr>
-          <th style="width:36px;"></th>
-          <th>ID</th>
-          <th>Requester</th>
-          <th>Category</th>
-          <th>Unit</th>
-          <th>Justification</th>
-          <th class="text-end">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in pending_approvals %}
-          <tr>
-            <td>
-              <input class="form-check-input request-checkbox" type="checkbox"
-                     name="request_ids" value="{{ r.id }}"
-                     id="chk_req_{{ r.id }}">
-            </td>
-            <td class="fw-semibold">
-              <label for="chk_req_{{ r.id }}" class="mb-0">#{{ r.id }}</label>
-            </td>
-            <td>{{ r.requester.get_full_name|default:r.requester.username }}</td>
-            <td>{{ r.category.name }}</td>
-            <td>{{ r.unit.name|default:"Unallocated/Core" }}</td>
-            <td class="text-muted">{{ r.justification|default:"-"|truncatechars:80 }}</td>
-            <td class="text-end">
-              {# Single approve — submits just this one request #}
-              <button type="button" class="btn btn-sm btn-success"
-                      onclick="approveSingle('{{ r.id }}')">
-                <i class="bi bi-check-lg me-1"></i> Approve
-              </button>
-
-              <button class="btn btn-sm btn-outline-danger" type="button"
-                      data-bs-toggle="modal" data-bs-target="#modalReject"
-                      data-request-id="{{ r.id }}">
-                <i class="bi bi-x-lg me-1"></i> Reject
-              </button>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</form>
-
-{% else %}
-<div class="text-center text-muted py-4">
-  <i class="bi bi-clipboard-check fs-2 d-block mb-2 opacity-25"></i>
-  <p class="mb-0">No pending approvals for you right now.</p>
-</div>
-{% endif %}
-
-<script>
-(function () {
-  const selectAll  = document.getElementById('selectAllRequests');
-  const checkboxes = document.querySelectorAll('.request-checkbox');
-  const approveBtn = document.getElementById('bulkApproveBtn');
-  const countLabel = document.getElementById('selectedCount');
-
-  function updateState() {
-    const checked = document.querySelectorAll('.request-checkbox:checked');
-    const n = checked.length;
-    approveBtn.disabled = n === 0;
-    countLabel.textContent = n === 0 ? '0 selected' : n + ' selected';
-    selectAll.indeterminate = n > 0 && n < checkboxes.length;
-    selectAll.checked = n === checkboxes.length && checkboxes.length > 0;
+{% block extra_css %}
+<style>
+  .report-hero {
+    background: linear-gradient(135deg, rgba(0,158,219,.12), rgba(0,90,139,.08));
+    border: 1px solid rgba(0,158,219,.18);
   }
+  .report-kpi {
+    border: 0;
+    border-left: 4px solid var(--un-blue, #009EDB);
+    box-shadow: 0 .125rem .35rem rgba(0,0,0,.05);
+  }
+  .report-kpi .value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .report-section-title {
+    font-weight: 700;
+    color: var(--un-primary, #005A8B);
+  }
+  .report-chart {
+    position: relative;
+    min-height: 310px;
+  }
+  .report-table thead th {
+    white-space: nowrap;
+    font-size: .82rem;
+  }
+  .report-table tbody td {
+    vertical-align: middle;
+    font-size: .9rem;
+  }
+  .report-muted {
+    color: #6c757d;
+  }
+  .report-badge-number {
+    min-width: 2rem;
+    text-align: center;
+  }
+  @media print {
+    .no-print,
+    .sidebar,
+    nav,
+    header,
+    footer {
+      display: none !important;
+    }
+    .card {
+      break-inside: avoid;
+      box-shadow: none !important;
+    }
+    .container,
+    .container-fluid {
+      max-width: 100% !important;
+    }
+  }
+</style>
+{% endblock %}
 
-  if (selectAll) {
-    selectAll.addEventListener('change', function () {
-      checkboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
-      updateState();
+{% block content %}
+<div class="container-fluid py-3">
+
+  <div class="card report-hero mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+          <h3 class="mb-1 text-un-primary fw-bold">
+            <i class="bi bi-bar-chart-line me-2"></i>
+            Asset Management Report
+          </h3>
+          <div class="report-muted">
+            {{ agency }} · Generated {{ generated_at|date:"d M Y H:i" }}
+          </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 no-print">
+          <a class="btn btn-outline-secondary"
+             href="{% url 'accounts:asset_management' %}">
+            <i class="bi bi-arrow-left me-1"></i>
+            Asset Management
+          </a>
+
+          <a class="btn btn-outline-success"
+             href="/accounts/asset-reports/download/excel/">
+            <i class="bi bi-file-earmark-excel me-1"></i>
+            Excel
+          </a>
+
+          <a class="btn btn-outline-primary"
+             href="/accounts/asset-reports/download/word/">
+            <i class="bi bi-file-earmark-word me-1"></i>
+            Word
+          </a>
+
+          <button class="btn btn-outline-dark"
+                  type="button"
+                  onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>
+            Print
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-3 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="small text-muted mb-2">Total Assets</div>
+          <div class="value">{{ total_assets }}</div>
+          <div class="small text-muted mt-2">All registered assets</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="small text-muted mb-2">Available</div>
+          <div class="value text-success">{{ available_assets }}</div>
+          <div class="small text-muted mt-2">Ready for allocation</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="small text-muted mb-2">Assigned / In Use</div>
+          <div class="value text-primary">{{ assigned_assets }}</div>
+          <div class="small text-muted mt-2">Currently issued to staff</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+      <div class="card report-kpi h-100">
+        <div class="card-body">
+          <div class="small text-muted mb-2">Maintenance / EOL</div>
+          <div class="value text-warning">
+            {{ maintenance_assets }}
+            <span class="fs-6 text-danger">/ {{ eol_assets|length }}</span>
+          </div>
+          <div class="small text-muted mt-2">Maintenance / due for replacement</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-xl-8">
+      <div class="card h-100">
+        <div class="card-header bg-white">
+          <h6 class="mb-0 report-section-title">Asset Status Overview</h6>
+        </div>
+        <div class="card-body report-chart">
+          <canvas id="chartAssetStatus"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="card h-100">
+        <div class="card-header bg-white">
+          <h6 class="mb-0 report-section-title">Request Performance</h6>
+        </div>
+        <div class="card-body">
+          <div class="d-flex justify-content-between border-bottom py-2">
+            <span>Total asset requests</span>
+            <strong>{{ total_requests }}</strong>
+          </div>
+          <div class="d-flex justify-content-between border-bottom py-2">
+            <span>Average fulfillment</span>
+            <strong>
+              {% if avg_fulfillment_days %}
+                {{ avg_fulfillment_days }} days
+              {% else %}
+                N/A
+              {% endif %}
+            </strong>
+          </div>
+          <div class="d-flex justify-content-between border-bottom py-2">
+            <span>Pending returns</span>
+            <strong>{{ pending_returns|length }}</strong>
+          </div>
+          <div class="d-flex justify-content-between py-2">
+            <span>Total mobile lines</span>
+            <strong>{{ total_lines }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-3 no-print" id="reportTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#report-overview" type="button">
+        Overview
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-issued" type="button">
+        Assets Issued
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-lines" type="button">
+        Mobile Lines
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-supplies" type="button">
+        Supplies
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#report-eol" type="button">
+        EOL
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+
+    <div class="tab-pane fade show active" id="report-overview">
+      <div class="row g-3">
+
+        <div class="col-xl-6">
+          <div class="card h-100">
+            <div class="card-header bg-white">
+              <h6 class="mb-0 report-section-title">Assets by Category</h6>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 report-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Category</th>
+                      <th class="text-end">Total</th>
+                      <th class="text-end">Available</th>
+                      <th class="text-end">Assigned</th>
+                      <th class="text-end">Retired</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in assets_by_cat %}
+                    <tr>
+                      <td>{{ row.category__name|default:"Uncategorised" }}</td>
+                      <td class="text-end fw-semibold">{{ row.total }}</td>
+                      <td class="text-end text-success">{{ row.available }}</td>
+                      <td class="text-end text-primary">{{ row.assigned }}</td>
+                      <td class="text-end text-muted">{{ row.retired }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                      <td colspan="5" class="text-center text-muted py-4">No asset data available.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-xl-6">
+          <div class="card h-100">
+            <div class="card-header bg-white">
+              <h6 class="mb-0 report-section-title">Assets by Unit</h6>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 report-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Unit</th>
+                      <th class="text-end">Total</th>
+                      <th class="text-end">Available</th>
+                      <th class="text-end">Assigned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in assets_by_unit %}
+                    <tr>
+                      <td>{{ row.unit__name|default:"Unallocated / Core" }}</td>
+                      <td class="text-end fw-semibold">{{ row.total }}</td>
+                      <td class="text-end text-success">{{ row.available }}</td>
+                      <td class="text-end text-primary">{{ row.assigned }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                      <td colspan="4" class="text-center text-muted py-4">No unit allocation data available.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-xl-6">
+          <div class="card h-100">
+            <div class="card-header bg-white">
+              <h6 class="mb-0 report-section-title">Asset Requests by Category</h6>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 report-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Category</th>
+                      <th class="text-end">Total</th>
+                      <th class="text-end">Pending</th>
+                      <th class="text-end">Fulfilled</th>
+                      <th class="text-end">Rejected</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in requests_by_cat %}
+                    <tr>
+                      <td>{{ row.category__name|default:"Uncategorised" }}</td>
+                      <td class="text-end fw-semibold">{{ row.total }}</td>
+                      <td class="text-end text-warning">{{ row.pending }}</td>
+                      <td class="text-end text-success">{{ row.fulfilled }}</td>
+                      <td class="text-end text-danger">{{ row.rejected }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                      <td colspan="5" class="text-center text-muted py-4">No request data available.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-xl-6">
+          <div class="card h-100">
+            <div class="card-header bg-white">
+              <h6 class="mb-0 report-section-title">Allocation by Unit</h6>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 report-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Unit</th>
+                      <th class="text-end">Assets</th>
+                      <th class="text-end">Assigned</th>
+                      <th class="text-end">Available</th>
+                      <th class="text-end">Lines</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in allocation_by_unit %}
+                    <tr>
+                      <td>
+                        {{ row.unit }}
+                        {% if row.is_core %}
+                          <span class="badge bg-info text-dark ms-1">Core</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ row.assets_total }}</td>
+                      <td class="text-end text-primary">{{ row.assets_assigned }}</td>
+                      <td class="text-end text-success">{{ row.assets_available }}</td>
+                      <td class="text-end">{{ row.lines_assigned }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                      <td colspan="5" class="text-center text-muted py-4">No allocation data available.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="report-issued">
+      <div class="card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <h6 class="mb-0 report-section-title">Assets Currently Issued</h6>
+          <span class="badge bg-primary report-badge-number">{{ issued_assets|length }}</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0 report-table">
+              <thead class="table-light">
+                <tr>
+                  <th>Asset</th>
+                  <th>Category</th>
+                  <th>Unit</th>
+                  <th>Current Holder</th>
+                  <th>Asset Tag</th>
+                  <th>Serial Number</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in issued_assets %}
+                <tr>
+                  <td class="fw-semibold">{{ a.name }}</td>
+                  <td>{{ a.category.name|default:"—" }}</td>
+                  <td>{{ a.unit.name|default:"Unallocated" }}</td>
+                  <td>
+                    {% if a.current_holder %}
+                      {{ a.current_holder.get_full_name|default:a.current_holder.username }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td>{{ a.asset_tag|default:"—" }}</td>
+                  <td>{{ a.serial_number|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">No assets are currently assigned.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="report-lines">
+      <div class="row g-3">
+
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+              <h6 class="mb-0 report-section-title">Mobile Lines</h6>
+              <span class="badge bg-secondary report-badge-number">{{ total_lines }}</span>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 report-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>MSISDN</th>
+                      <th>Type</th>
+                      <th>Provider</th>
+                      <th>Status</th>
+                      <th>Assigned To</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for line in all_lines %}
+                    <tr>
+                      <td class="fw-semibold">{{ line.msisdn }}</td>
+                      <td>{{ line.get_line_type_display|default:line.line_type }}</td>
+                      <td>{{ line.provider|default:"—" }}</td>
+                      <td>
+                        <span class="badge
+                          {% if line.status == 'assigned' %}bg-primary
+                          {% elif line.status == 'available' %}bg-success
+                          {% elif line.status == 'suspended' %}bg-warning text-dark
+                          {% else %}bg-secondary{% endif %}">
+                          {{ line.status|title }}
+                        </span>
+                      </td>
+                      <td>
+                        {% if line.assigned_to %}
+                          {{ line.assigned_to.get_full_name|default:line.assigned_to.username }}
+                        {% else %}
+                          —
+                        {% endif %}
+                      </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                      <td colspan="5" class="text-center text-muted py-4">No mobile lines registered.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="report-supplies">
+      <div class="row g-3">
+
+        <div class="col-xl-7">
+          <div class="card h-100">
+            <div class="card-header bg-white">
+              <h6 class="mb-0 report-section-title">Current Consumable Stock</h6>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 report-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Item</th>
+                      <th>Category</th>
+                      <th class="text-end">Stock</th>
+                      <th class="text-end">Low Threshold</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in all_consumables %}
+                    <tr>
+                      <td class="fw-semibold">{{ item.name }}</td>
+                      <td>{{ item.category.name|default:"—" }}</td>
+                      <td class="text-end">{{ item.stock_qty }}</td>
+                      <td class="text-end">{{ item.low_stock_threshold }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                      <td colspan="4" class="text-center text-muted py-4">No consumables registered.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-xl-5">
+          <div class="card h-100">
+            <div class="card-header bg-white">
+              <h6 class="mb-0 report-section-title">Top Requested Supplies</h6>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 report-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Item</th>
+                      <th class="text-end">Qty</th>
+                      <th class="text-end">Requests</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in top_consumables %}
+                    <tr>
+                      <td>{{ row.item__name }}</td>
+                      <td class="text-end fw-semibold">{{ row.total_qty }}</td>
+                      <td class="text-end">{{ row.request_count }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                      <td colspan="3" class="text-center text-muted py-4">No supply request data available.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="report-eol">
+      <div class="card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <h6 class="mb-0 report-section-title">Assets Due for Replacement / EOL</h6>
+          <span class="badge bg-danger report-badge-number">{{ eol_assets|length }}</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0 report-table">
+              <thead class="table-light">
+                <tr>
+                  <th>Asset</th>
+                  <th>Category</th>
+                  <th>Unit</th>
+                  <th>Current Holder</th>
+                  <th>Acquired</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in eol_assets %}
+                <tr>
+                  <td class="fw-semibold">{{ a.name }}</td>
+                  <td>{{ a.category.name|default:"—" }}</td>
+                  <td>{{ a.unit.name|default:"Unallocated" }}</td>
+                  <td>
+                    {% if a.current_holder %}
+                      {{ a.current_holder.get_full_name|default:a.current_holder.username }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td>{{ a.acquired_at|date:"d M Y"|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="5" class="text-center text-success py-4">
+                    <i class="bi bi-check-circle me-1"></i>
+                    No assets are currently due for replacement.
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="card mt-4">
+    <div class="card-header bg-white">
+      <h6 class="mb-0 report-section-title">12-Month Request Trend</h6>
+    </div>
+    <div class="card-body report-chart">
+      <canvas id="chartMonthlyRequests"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const assetStatus = {{ chart_asset_status|safe }};
+  const monthlyRequests = {{ chart_monthly_requests|safe }};
+
+  const assetStatusCanvas = document.getElementById("chartAssetStatus");
+  if (assetStatusCanvas && window.Chart) {
+    new Chart(assetStatusCanvas, {
+      type: "doughnut",
+      data: assetStatus,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "right" }
+        }
+      }
     });
   }
 
-  checkboxes.forEach(function (cb) {
-    cb.addEventListener('change', updateState);
-  });
-
-  // Single approve: tick just that checkbox and submit
-  window.approveSingle = function (reqId) {
-    checkboxes.forEach(function (cb) { cb.checked = cb.value === reqId; });
-    document.getElementById('bulkApproveForm').submit();
-  };
-})();
+  const monthlyCanvas = document.getElementById("chartMonthlyRequests");
+  if (monthlyCanvas && window.Chart) {
+    new Chart(monthlyCanvas, {
+      type: "line",
+      data: monthlyRequests,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0 }
+          }
+        }
+      }
+    });
+  }
+});
 </script>
-
-{% else %}
-<div class="text-center text-muted py-5">
-  <i class="bi bi-lock fs-2 d-block mb-2"></i>
-  <p class="mb-0">Access restricted. Only unit heads, operations managers, and administrators can approve requests.</p>
-</div>
-{% endif %}
+{% endblock %}
