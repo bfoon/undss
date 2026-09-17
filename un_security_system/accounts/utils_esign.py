@@ -36,6 +36,7 @@ from reportlab.platypus import (
 from .converters_esign import ConversionError, convert_to_pdf, is_office_file
 from .models_esign import Envelope, EnvelopeEvent, EnvelopeRecipient, SignatureField
 
+
 def esign_brand() -> str:
     """Wordmark printed down the page border and in the certificate header.
     Override with ESIGN_BRAND in settings.py (e.g. "UNDP SoftSign")."""
@@ -289,8 +290,6 @@ def document_pdf_bytes(doc, force: bool = False) -> bytes:
             stem = (doc.name or "document").rsplit(".", 1)[0][:120]
             doc.converted_pdf.save(f"{stem}.pdf", ContentFile(raw), save=True)
         except Exception:
-            # Cache write failed (missing column, read-only media). Not fatal —
-            # we already have the bytes; we just reconvert next time.
             logging.getLogger(__name__).warning(
                 "eSign: could not cache converted PDF for document %s", getattr(doc, "pk", "?")
             )
@@ -301,12 +300,6 @@ def document_pdf_bytes(doc, force: bool = False) -> bytes:
 def prepare_document(doc) -> int:
     """
     Convert an uploaded document to PDF NOW, cache it, and record the page count.
-
-    Deliberately lets failures propagate. `pdf_page_count` swallows errors and
-    returns 1, which meant a Word file that failed to convert still produced a
-    perfectly normal-looking envelope — and the first person to discover it was
-    the signer, staring at an error. Conversion problems belong to the sender,
-    at upload time, while they can still do something about them.
     """
     raw = document_pdf_bytes(doc)
     if not raw or raw[:5] != b"%PDF-":
@@ -330,22 +323,22 @@ def pdf_page_count(doc_or_file) -> int:
 def _normalise_rotation(page):
     """
     Move a page's /Rotate into its content stream, so the page looks the same
-    but its coordinate space matches what a viewer shows. Anything drawn on top
-    afterwards (fields, stamps) then lands where it was placed.
+    but its coordinate space matches what a viewer shows.
     """
     try:
         if int(page.get("/Rotate", 0) or 0) % 360:
             page.transfer_rotation_to_content()
-    except Exception:  # noqa: BLE001 - never block signing over a cosmetic step
-        logging.getLogger(__name__).warning("eSign: could not normalise page rotation", exc_info=True)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "eSign: could not normalise page rotation", exc_info=True
+        )
     return page
 
 
 def pdf_page_sizes(doc_or_file):
     """
     Returns [(width_pt, height_pt), ...] used by the placement UI — the page as
-    it is DISPLAYED: the crop box, with width and height swapped for pages
-    turned 90° or 270°.
+    it is DISPLAYED.
     """
     try:
         raw = _bytes_for(doc_or_file)
@@ -374,13 +367,9 @@ def _bytes_for(doc_or_file) -> bytes:
 
 def _draw_envelope_token(c, width, height, envelope):
     """
-    Branded page marks, in the style DocuSign uses:
-      • the wordmark and full envelope ID printed vertically down the left
-        border of every page, and
-      • a light grey line across the top carrying the same ID.
+    Branded page marks, in the style DocuSign uses.
     """
     brand = esign_brand()
-    border_label = f"{brand} Envelope ID: {envelope.envelope_id}"
 
     c.saveState()
     c.setFont("Helvetica", 6.5)
@@ -392,7 +381,6 @@ def _draw_envelope_token(c, width, height, envelope):
     c.line(12 * mm, height - 9.6 * mm, width - 12 * mm, height - 9.6 * mm)
     c.restoreState()
 
-    # Vertical border stamp: brand in a slightly stronger weight, ID after it.
     c.saveState()
     c.translate(6.5 * mm, 20 * mm)
     c.rotate(90)
@@ -404,7 +392,6 @@ def _draw_envelope_token(c, width, height, envelope):
     c.setFillColor(LIGHT)
     c.drawString(brand_w + 4, 0, f"Envelope ID: {envelope.envelope_id}")
     c.restoreState()
-
 
 
 def _is_workflow_child_envelope(envelope) -> bool:
@@ -435,6 +422,36 @@ def _fit_font_size(c, text, max_w, max_h, font="Helvetica", start=11.0):
     return max(size, 5.0)
 
 
+def _fit_signature_caption_size(
+    c,
+    text,
+    max_w,
+    max_h,
+    font="Helvetica",
+    start=4.8,
+    min_size=3.8,
+):
+    """
+    Fit the signing metadata beneath a signature.
+
+    This caption is intentionally smaller than normal form text so that it
+    visually behaves like a subtle audit/underline line beneath the signature.
+    """
+    max_w = max(float(max_w or 0), 1.0)
+    max_h = max(float(max_h or 0), 1.0)
+
+    size = min(float(start), max_h * 0.78)
+    size = max(size, float(min_size))
+
+    while (
+        size > min_size
+        and c.stringWidth(str(text or ""), font, size) > max_w
+    ):
+        size = max(min_size, size - 0.2)
+
+    return max(float(min_size), size)
+
+
 def _draw_field(c, field, width, height, envelope):
     x = field.x * width
     w = field.w * width
@@ -442,34 +459,56 @@ def _draw_field(c, field, width, height, envelope):
     y = height - (field.y * height) - h
     kind = field.kind
 
-    # Every drawing operation is clipped to the field rectangle. This makes
-    # it impossible for a signature, date or long answer to escape its box.
+    # Everything remains clipped to the assigned field rectangle.
     c.saveState()
     _clip_rect(c, x, y, w, h)
     try:
         if kind in (SignatureField.KIND_SIGNATURE, SignatureField.KIND_INITIALS):
             if not field.image:
                 return
+
             try:
                 from reportlab.lib.utils import ImageReader
 
                 field.image.open("rb")
                 data = field.image.read()
                 field.image.close()
+
                 reader = ImageReader(io.BytesIO(data))
                 iw, ih = reader.getSize()
 
                 pad_x = min(max(w * 0.035, 2.0), 6.0)
                 pad_y = min(max(h * 0.04, 1.5), 4.0)
-                caption_h = min(9.0, max(0.0, h * 0.20)) if kind == SignatureField.KIND_SIGNATURE else 0
+
+                # Keep the audit line compact so the actual signature remains
+                # the dominant visual element.
+                caption_h = (
+                    min(7.5, max(0.0, h * 0.16))
+                    if kind == SignatureField.KIND_SIGNATURE
+                    else 0
+                )
+
                 avail_w = max(w - pad_x * 2, 4)
                 avail_h = max(h - caption_h - pad_y * 2, 4)
-                ratio = min(avail_w / max(iw, 1), avail_h / max(ih, 1))
+
+                ratio = min(
+                    avail_w / max(iw, 1),
+                    avail_h / max(ih, 1),
+                )
                 dw, dh = iw * ratio, ih * ratio
+
+                signature_x = x + pad_x + (avail_w - dw) / 2.0
+                signature_y = (
+                    y
+                    + caption_h
+                    + pad_y
+                    + (avail_h - dh) / 2.0
+                )
+
                 c.drawImage(
                     reader,
-                    x + pad_x + (avail_w - dw) / 2.0,
-                    y + caption_h + pad_y + (avail_h - dh) / 2.0,
+                    signature_x,
+                    signature_y,
                     dw,
                     dh,
                     mask="auto",
@@ -477,49 +516,103 @@ def _draw_field(c, field, width, height, envelope):
                     anchor="sw",
                 )
 
-                if caption_h >= 5:
+                if caption_h >= 4:
                     rec = field.recipient
-                    stamp_time = timezone.localtime(field.filled_at or timezone.now())
+                    stamp_time = timezone.localtime(
+                        field.filled_at or timezone.now()
+                    )
+
                     caption = (
                         f"Signed by {rec.name} · {rec.email} · "
-                        f"{stamp_time:%d %b %Y %H:%M %Z} · Token {rec.short_token}"
+                        f"{stamp_time:%d %b %Y %H:%M %Z} · "
+                        f"Token {rec.short_token}"
                     )
-                    cap_size = _fit_font_size(
-                        c, caption, max(w - pad_x * 2, 4), caption_h, start=5.6
+
+                    # Keep the line approximately the width of the rendered
+                    # signature. It may pass the signature slightly but cannot
+                    # exceed the available field width.
+                    signature_center_x = signature_x + (dw / 2.0)
+                    caption_target_w = min(
+                        avail_w,
+                        max(20.0, dw * 1.15),
                     )
+
+                    cap_size = _fit_signature_caption_size(
+                        c,
+                        caption,
+                        caption_target_w,
+                        caption_h,
+                        start=4.8,
+                        min_size=3.8,
+                    )
+
+                    # Only truncate after reaching the compact minimum size.
                     caption = _ellipsize(
-                        c, caption, "Helvetica", cap_size, max(w - pad_x * 2, 4)
+                        c,
+                        caption,
+                        "Helvetica",
+                        cap_size,
+                        caption_target_w,
                     )
+
+                    caption_w = c.stringWidth(
+                        caption,
+                        "Helvetica",
+                        cap_size,
+                    )
+
+                    caption_x = (
+                        signature_center_x
+                        - (caption_w / 2.0)
+                    )
+                    caption_y = y + max(
+                        1.2,
+                        (caption_h - cap_size) / 2.0,
+                    )
+
                     c.setFont("Helvetica", cap_size)
                     c.setFillColor(LIGHT)
                     c.drawString(
-                        x + pad_x,
-                        y + max(1.5, (caption_h - cap_size) / 2.0),
+                        caption_x,
+                        caption_y,
                         caption,
                     )
+
             except Exception:
                 logging.getLogger(__name__).warning(
                     "eSign: could not draw signature field %s",
                     getattr(field, "pk", "?"),
                     exc_info=True,
                 )
+
             return
 
         if kind == SignatureField.KIND_CHECKBOX:
             c.setStrokeColor(GREY)
             c.setLineWidth(0.8)
             box = min(w, h, 12)
-            c.rect(x, y + (h - box) / 2, box, box, stroke=1, fill=0)
+            c.rect(
+                x,
+                y + (h - box) / 2,
+                box,
+                box,
+                stroke=1,
+                fill=0,
+            )
             if field.value == "1":
                 c.setStrokeColor(UN_DARK)
                 c.setLineWidth(1.4)
                 c.line(
-                    x + box * 0.2, y + (h - box) / 2 + box * 0.5,
-                    x + box * 0.45, y + (h - box) / 2 + box * 0.22,
+                    x + box * 0.2,
+                    y + (h - box) / 2 + box * 0.5,
+                    x + box * 0.45,
+                    y + (h - box) / 2 + box * 0.22,
                 )
                 c.line(
-                    x + box * 0.45, y + (h - box) / 2 + box * 0.22,
-                    x + box * 0.82, y + (h - box) / 2 + box * 0.78,
+                    x + box * 0.45,
+                    y + (h - box) / 2 + box * 0.22,
+                    x + box * 0.82,
+                    y + (h - box) / 2 + box * 0.78,
                 )
             return
 
@@ -531,19 +624,35 @@ def _draw_field(c, field, width, height, envelope):
         inner_w = max(w - pad * 2, 4)
         inner_h = max(h - pad * 2, 4)
         lines = text.splitlines() or [text]
+
         size = _fit_font_size(
-            c, max(lines, key=len), inner_w, inner_h / max(len(lines), 1)
+            c,
+            max(lines, key=len),
+            inner_w,
+            inner_h / max(len(lines), 1),
         )
+
         c.setFillColor(colors.black)
         c.setFont("Helvetica", size)
+
         line_h = size * 1.15
-        max_lines = max(1, int(inner_h // max(line_h, 1)))
+        max_lines = max(
+            1,
+            int(inner_h // max(line_h, 1)),
+        )
         top = y + h - pad - size
+
         for i, line in enumerate(lines[:max_lines]):
             c.drawString(
                 x + pad,
                 top - i * line_h,
-                _ellipsize(c, line, "Helvetica", size, inner_w),
+                _ellipsize(
+                    c,
+                    line,
+                    "Helvetica",
+                    size,
+                    inner_w,
+                ),
             )
     finally:
         c.restoreState()
@@ -555,51 +664,83 @@ def build_final_pdf(envelope: Envelope) -> bytes:
     envelope token on each page, and return the flattened PDF bytes.
     """
     writer = PdfWriter()
+
     fields = list(
-        envelope.fields.select_related("recipient", "document").all()
+        envelope.fields.select_related(
+            "recipient",
+            "document",
+        ).all()
     )
 
     for doc in envelope.documents.all():
         raw = document_pdf_bytes(doc)
         reader = PdfReader(io.BytesIO(raw))
 
-        for page_index, page in enumerate(reader.pages, start=1):
-            # Fields are placed on the page as the signer SAW it. A page with
-            # /Rotate (common on scans) is shown turned, but a plain overlay is
-            # drawn in its unturned space — so a field placed top-left landed
-            # top-right, sideways. Bake the rotation into the content first.
+        for page_index, page in enumerate(
+            reader.pages,
+            start=1,
+        ):
             _normalise_rotation(page)
 
-            # The crop box is the visible page, and what field fractions are
-            # measured against. The overlay page spans every coordinate the
-            # original uses, or anything outside its own box is clipped.
             box = page.cropbox
-            width, height = float(box.width), float(box.height)
+            width, height = (
+                float(box.width),
+                float(box.height),
+            )
 
             overlay_buf = io.BytesIO()
+
             c = rl_canvas.Canvas(
                 overlay_buf,
                 pagesize=(
-                    max(float(page.mediabox.right), float(box.right), width),
-                    max(float(page.mediabox.top), float(box.top), height),
+                    max(
+                        float(page.mediabox.right),
+                        float(box.right),
+                        width,
+                    ),
+                    max(
+                        float(page.mediabox.top),
+                        float(box.top),
+                        height,
+                    ),
                 ),
             )
-            c.translate(float(box.left), float(box.bottom))
-            # Workflow child envelopes carry the same working PDF through
-            # several signature rounds. Do not stack a new child ID each time.
+
+            c.translate(
+                float(box.left),
+                float(box.bottom),
+            )
+
             if not _is_workflow_child_envelope(envelope):
-                _draw_envelope_token(c, width, height, envelope)
+                _draw_envelope_token(
+                    c,
+                    width,
+                    height,
+                    envelope,
+                )
 
             for f in fields:
-                if f.document_id == doc.id and f.page == page_index and f.is_filled:
-                    _draw_field(c, f, width, height, envelope)
+                if (
+                    f.document_id == doc.id
+                    and f.page == page_index
+                    and f.is_filled
+                ):
+                    _draw_field(
+                        c,
+                        f,
+                        width,
+                        height,
+                        envelope,
+                    )
 
             c.showPage()
             c.save()
             overlay_buf.seek(0)
 
             try:
-                overlay_page = PdfReader(overlay_buf).pages[0]
+                overlay_page = PdfReader(
+                    overlay_buf
+                ).pages[0]
                 page.merge_page(overlay_page)
             except Exception:
                 pass
@@ -612,11 +753,12 @@ def build_final_pdf(envelope: Envelope) -> bytes:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Certificate of Completion (the audit trail document)
+# Certificate of Completion
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_certificate_pdf(envelope: Envelope) -> bytes:
     buf = io.BytesIO()
+
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
@@ -624,137 +766,437 @@ def build_certificate_pdf(envelope: Envelope) -> bytes:
         rightMargin=16 * mm,
         topMargin=18 * mm,
         bottomMargin=16 * mm,
-        title=f"Certificate of Completion — {envelope.envelope_id}",
+        title=(
+            f"Certificate of Completion — "
+            f"{envelope.envelope_id}"
+        ),
     )
 
     ss = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1", parent=ss["Title"], fontSize=16, textColor=UN_DARK, spaceAfter=2)
-    sub = ParagraphStyle("sub", parent=ss["Normal"], fontSize=8, textColor=GREY)
-    h2 = ParagraphStyle(
-        "h2", parent=ss["Heading2"], fontSize=10.5, textColor=UN_DARK, spaceBefore=10, spaceAfter=4
+
+    h1 = ParagraphStyle(
+        "h1",
+        parent=ss["Title"],
+        fontSize=16,
+        textColor=UN_DARK,
+        spaceAfter=2,
     )
-    body = ParagraphStyle("body", parent=ss["Normal"], fontSize=8.4, leading=11)
-    small = ParagraphStyle("small", parent=ss["Normal"], fontSize=7.2, leading=9, textColor=GREY)
+
+    sub = ParagraphStyle(
+        "sub",
+        parent=ss["Normal"],
+        fontSize=8,
+        textColor=GREY,
+    )
+
+    h2 = ParagraphStyle(
+        "h2",
+        parent=ss["Heading2"],
+        fontSize=10.5,
+        textColor=UN_DARK,
+        spaceBefore=10,
+        spaceAfter=4,
+    )
+
+    body = ParagraphStyle(
+        "body",
+        parent=ss["Normal"],
+        fontSize=8.4,
+        leading=11,
+    )
+
+    small = ParagraphStyle(
+        "small",
+        parent=ss["Normal"],
+        fontSize=7.2,
+        leading=9,
+        textColor=GREY,
+    )
 
     story = []
-    story.append(Paragraph("Certificate of Completion", h1))
+
+    story.append(
+        Paragraph(
+            "Certificate of Completion",
+            h1,
+        )
+    )
+
     story.append(
         Paragraph(
             f"{esign_brand()} — tamper-evident audit trail",
             sub,
         )
     )
-    story.append(Spacer(1, 8))
+
+    story.append(
+        Spacer(
+            1,
+            8,
+        )
+    )
 
     summary = [
-        ["Envelope ID", envelope.envelope_id],
-        ["Subject", envelope.subject],
-        ["Status", envelope.get_status_display()],
-        ["Reference", envelope.reference or "—"],
-        ["Initiated by", f"{envelope.created_by} " if envelope.created_by else "—"],
+        [
+            "Envelope ID",
+            envelope.envelope_id,
+        ],
+        [
+            "Subject",
+            envelope.subject,
+        ],
+        [
+            "Status",
+            envelope.get_status_display(),
+        ],
+        [
+            "Reference",
+            envelope.reference or "—",
+        ],
+        [
+            "Initiated by",
+            f"{envelope.created_by} "
+            if envelope.created_by
+            else "—",
+        ],
         [
             "Created",
-            timezone.localtime(envelope.created_at).strftime("%d %b %Y %H:%M %Z"),
+            timezone.localtime(
+                envelope.created_at
+            ).strftime(
+                "%d %b %Y %H:%M %Z"
+            ),
         ],
         [
             "Sent",
-            timezone.localtime(envelope.sent_at).strftime("%d %b %Y %H:%M %Z")
+            timezone.localtime(
+                envelope.sent_at
+            ).strftime(
+                "%d %b %Y %H:%M %Z"
+            )
             if envelope.sent_at
             else "—",
         ],
         [
             "Completed",
-            timezone.localtime(envelope.completed_at).strftime("%d %b %Y %H:%M %Z")
+            timezone.localtime(
+                envelope.completed_at
+            ).strftime(
+                "%d %b %Y %H:%M %Z"
+            )
             if envelope.completed_at
             else "—",
         ],
-        ["Signing order", "Sequential" if envelope.enforce_order else "Parallel"],
-        ["Revision", str(getattr(envelope, "revision", 1))],
-        ["Documents", ", ".join(str(d) for d in envelope.documents.all()) or "—"],
+        [
+            "Signing order",
+            "Sequential"
+            if envelope.enforce_order
+            else "Parallel",
+        ],
+        [
+            "Revision",
+            str(
+                getattr(
+                    envelope,
+                    "revision",
+                    1,
+                )
+            ),
+        ],
+        [
+            "Documents",
+            ", ".join(
+                str(d)
+                for d in envelope.documents.all()
+            )
+            or "—",
+        ],
     ]
-    t = Table(summary, colWidths=[34 * mm, 130 * mm])
+
+    t = Table(
+        summary,
+        colWidths=[
+            34 * mm,
+            130 * mm,
+        ],
+    )
+
     t.setStyle(
         TableStyle(
             [
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8.2),
-                ("TEXTCOLOR", (0, 0), (0, -1), UN_DARK),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("LINEBELOW", (0, 0), (-1, -2), 0.25, colors.HexColor("#E5E7EB")),
+                (
+                    "FONTNAME",
+                    (0, 0),
+                    (0, -1),
+                    "Helvetica-Bold",
+                ),
+                (
+                    "FONTSIZE",
+                    (0, 0),
+                    (-1, -1),
+                    8.2,
+                ),
+                (
+                    "TEXTCOLOR",
+                    (0, 0),
+                    (0, -1),
+                    UN_DARK,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "TOP",
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    3,
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    3,
+                ),
+                (
+                    "LINEBELOW",
+                    (0, 0),
+                    (-1, -2),
+                    0.25,
+                    colors.HexColor(
+                        "#E5E7EB"
+                    ),
+                ),
             ]
         )
     )
+
     story.append(t)
 
-    # -- recipients -----------------------------------------------------
-    story.append(Paragraph("Recipients", h2))
-    rows = [["#", "Name / Email", "Role", "Token", "Status", "IP", "Timestamp"]]
-    for r in envelope.recipients.all().order_by("order", "id"):
-        ts = r.signed_at or r.viewed_at or r.sent_at
+    story.append(
+        Paragraph(
+            "Recipients",
+            h2,
+        )
+    )
+
+    rows = [[
+        "#",
+        "Name / Email",
+        "Role",
+        "Token",
+        "Status",
+        "IP",
+        "Timestamp",
+    ]]
+
+    for r in envelope.recipients.all().order_by(
+        "order",
+        "id",
+    ):
+        ts = (
+            r.signed_at
+            or r.viewed_at
+            or r.sent_at
+        )
+
         rows.append(
             [
                 str(r.order),
-                Paragraph(f"<b>{_esc(r.name)}</b><br/>{_esc(r.email)}", small),
+                Paragraph(
+                    (
+                        f"<b>{_esc(r.name)}</b>"
+                        f"<br/>{_esc(r.email)}"
+                    ),
+                    small,
+                ),
                 r.get_role_display(),
                 r.short_token,
                 r.get_status_display(),
                 r.signed_ip or "—",
-                timezone.localtime(ts).strftime("%d %b %Y %H:%M") if ts else "—",
+                (
+                    timezone.localtime(
+                        ts
+                    ).strftime(
+                        "%d %b %Y %H:%M"
+                    )
+                    if ts
+                    else "—"
+                ),
             ]
         )
-    rt = Table(rows, colWidths=[8 * mm, 52 * mm, 24 * mm, 22 * mm, 20 * mm, 22 * mm, 26 * mm], repeatRows=1)
-    rt.setStyle(_table_style())
+
+    rt = Table(
+        rows,
+        colWidths=[
+            8 * mm,
+            52 * mm,
+            24 * mm,
+            22 * mm,
+            20 * mm,
+            22 * mm,
+            26 * mm,
+        ],
+        repeatRows=1,
+    )
+
+    rt.setStyle(
+        _table_style()
+    )
+
     story.append(rt)
 
-    # -- audit trail ----------------------------------------------------
-    story.append(Paragraph("Audit trail", h2))
-    rows = [["Timestamp", "Event", "Actor", "IP address", "Detail"]]
-    for e in envelope.events.select_related("recipient", "actor").all():
-        actor = e.recipient.name if e.recipient else (str(e.actor) if e.actor else "System")
+    story.append(
+        Paragraph(
+            "Audit trail",
+            h2,
+        )
+    )
+
+    rows = [[
+        "Timestamp",
+        "Event",
+        "Actor",
+        "IP address",
+        "Detail",
+    ]]
+
+    for e in envelope.events.select_related(
+        "recipient",
+        "actor",
+    ).all():
+        actor = (
+            e.recipient.name
+            if e.recipient
+            else (
+                str(e.actor)
+                if e.actor
+                else "System"
+            )
+        )
+
         rows.append(
             [
-                timezone.localtime(e.at).strftime("%d %b %Y %H:%M:%S"),
+                timezone.localtime(
+                    e.at
+                ).strftime(
+                    "%d %b %Y %H:%M:%S"
+                ),
                 e.get_event_display(),
-                Paragraph(_esc(actor), small),
+                Paragraph(
+                    _esc(actor),
+                    small,
+                ),
                 e.ip or "—",
-                Paragraph(_esc(e.note or "—"), small),
+                Paragraph(
+                    _esc(
+                        e.note or "—"
+                    ),
+                    small,
+                ),
             ]
         )
-    at = Table(rows, colWidths=[30 * mm, 30 * mm, 34 * mm, 22 * mm, 58 * mm], repeatRows=1)
-    at.setStyle(_table_style())
+
+    at = Table(
+        rows,
+        colWidths=[
+            30 * mm,
+            30 * mm,
+            34 * mm,
+            22 * mm,
+            58 * mm,
+        ],
+        repeatRows=1,
+    )
+
+    at.setStyle(
+        _table_style()
+    )
+
     story.append(at)
 
-    # -- comments -------------------------------------------------------
     try:
-        comments = list(envelope.comments.filter(is_internal=False))
+        comments = list(
+            envelope.comments.filter(
+                is_internal=False
+            )
+        )
     except Exception:
         comments = []
 
     if comments:
-        story.append(Paragraph("Comments", h2))
-        rows = [["Timestamp", "Author", "Role", "Comment"]]
+        story.append(
+            Paragraph(
+                "Comments",
+                h2,
+            )
+        )
+
+        rows = [[
+            "Timestamp",
+            "Author",
+            "Role",
+            "Comment",
+        ]]
+
         for c in comments:
-            rows.append([
-                timezone.localtime(c.created_at).strftime("%d %b %Y %H:%M"),
-                Paragraph(_esc(c.display_name), small),
-                c.role_label,
-                Paragraph(_esc(c.text), small),
-            ])
-        ct = Table(rows, colWidths=[26 * mm, 34 * mm, 22 * mm, 82 * mm], repeatRows=1)
-        ct.setStyle(_table_style())
+            rows.append(
+                [
+                    timezone.localtime(
+                        c.created_at
+                    ).strftime(
+                        "%d %b %Y %H:%M"
+                    ),
+                    Paragraph(
+                        _esc(
+                            c.display_name
+                        ),
+                        small,
+                    ),
+                    c.role_label,
+                    Paragraph(
+                        _esc(c.text),
+                        small,
+                    ),
+                ]
+            )
+
+        ct = Table(
+            rows,
+            colWidths=[
+                26 * mm,
+                34 * mm,
+                22 * mm,
+                82 * mm,
+            ],
+            repeatRows=1,
+        )
+
+        ct.setStyle(
+            _table_style()
+        )
+
         story.append(ct)
 
-    story.append(Spacer(1, 10))
+    story.append(
+        Spacer(
+            1,
+            10,
+        )
+    )
+
     story.append(
         KeepTogether(
             Paragraph(
-                "This certificate is generated automatically and forms part of the "
-                "signed record. Each signature is bound to the recipient token shown "
-                "above and to the envelope ID printed on every page of the document. "
-                "Any modification of the document after completion invalidates this "
-                "certificate.",
+                (
+                    "This certificate is generated automatically and forms part of the "
+                    "signed record. Each signature is bound to the recipient token shown "
+                    "above and to the envelope ID printed on every page of the document. "
+                    "Any modification of the document after completion invalidates this "
+                    "certificate."
+                ),
                 small,
             )
         )
@@ -762,27 +1204,93 @@ def build_certificate_pdf(envelope: Envelope) -> bytes:
 
     def _footer(c, _doc):
         c.saveState()
-        c.setFont("Helvetica", 6.5)
-        c.setFillColor(LIGHT)
-        c.drawString(16 * mm, 10 * mm, f"{esign_brand()} Envelope ID: {envelope.envelope_id}")
-        c.drawRightString(A4[0] - 16 * mm, 10 * mm, f"Page {c.getPageNumber()}")
+        c.setFont(
+            "Helvetica",
+            6.5,
+        )
+        c.setFillColor(
+            LIGHT
+        )
+        c.drawString(
+            16 * mm,
+            10 * mm,
+            (
+                f"{esign_brand()} Envelope ID: "
+                f"{envelope.envelope_id}"
+            ),
+        )
+        c.drawRightString(
+            A4[0] - 16 * mm,
+            10 * mm,
+            f"Page {c.getPageNumber()}",
+        )
         c.restoreState()
 
-    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    doc.build(
+        story,
+        onFirstPage=_footer,
+        onLaterPages=_footer,
+    )
+
     return buf.getvalue()
 
 
 def _table_style():
     return TableStyle(
         [
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF6FC")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), UN_DARK),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.4),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E5E7EB")),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                colors.HexColor(
+                    "#EAF6FC"
+                ),
+            ),
+            (
+                "TEXTCOLOR",
+                (0, 0),
+                (-1, 0),
+                UN_DARK,
+            ),
+            (
+                "FONTNAME",
+                (0, 0),
+                (-1, 0),
+                "Helvetica-Bold",
+            ),
+            (
+                "FONTSIZE",
+                (0, 0),
+                (-1, -1),
+                7.4,
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "TOP",
+            ),
+            (
+                "GRID",
+                (0, 0),
+                (-1, -1),
+                0.25,
+                colors.HexColor(
+                    "#E5E7EB"
+                ),
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                3,
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                3,
+            ),
         ]
     )
 
@@ -790,9 +1298,18 @@ def _table_style():
 def _esc(v) -> str:
     return (
         str(v or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
+        .replace(
+            "&",
+            "&amp;",
+        )
+        .replace(
+            "<",
+            "&lt;",
+        )
+        .replace(
+            ">",
+            "&gt;",
+        )
     )
 
 
@@ -803,35 +1320,98 @@ def _esc(v) -> str:
 def finalize_envelope(envelope: Envelope, request=None) -> Envelope:
     """Stamp the PDF, build the certificate, mark complete. Idempotent-ish."""
     pdf_bytes = build_final_pdf(envelope)
-    envelope.completed_at = envelope.completed_at or timezone.now()
-    envelope.status = Envelope.STATUS_COMPLETED
-    envelope.save(update_fields=["completed_at", "status"])
+
+    envelope.completed_at = (
+        envelope.completed_at
+        or timezone.now()
+    )
+
+    envelope.status = (
+        Envelope.STATUS_COMPLETED
+    )
+
+    envelope.save(
+        update_fields=[
+            "completed_at",
+            "status",
+        ]
+    )
 
     envelope.completed_pdf.save(
-        f"{envelope.envelope_id}-signed.pdf", ContentFile(pdf_bytes), save=False
+        (
+            f"{envelope.envelope_id}"
+            "-signed.pdf"
+        ),
+        ContentFile(
+            pdf_bytes
+        ),
+        save=False,
     )
-    cert = build_certificate_pdf(envelope)
-    envelope.certificate_pdf.save(
-        f"{envelope.envelope_id}-certificate.pdf", ContentFile(cert), save=False
-    )
-    envelope.save(update_fields=["completed_pdf", "certificate_pdf"])
 
-    log_event(envelope, "completed", request=request, note="All signatures collected.")
+    cert = build_certificate_pdf(
+        envelope
+    )
+
+    envelope.certificate_pdf.save(
+        (
+            f"{envelope.envelope_id}"
+            "-certificate.pdf"
+        ),
+        ContentFile(
+            cert
+        ),
+        save=False,
+    )
+
+    envelope.save(
+        update_fields=[
+            "completed_pdf",
+            "certificate_pdf",
+        ]
+    )
+
+    log_event(
+        envelope,
+        "completed",
+        request=request,
+        note="All signatures collected.",
+    )
+
     return envelope
 
 
 def envelope_is_expired(envelope: Envelope) -> bool:
     return bool(
         envelope.expires_at
-        and envelope.status == Envelope.STATUS_SENT
-        and envelope.expires_at < timezone.now()
+        and envelope.status
+        == Envelope.STATUS_SENT
+        and envelope.expires_at
+        < timezone.now()
     )
 
 
 def due_for_reminder(envelope: Envelope) -> bool:
-    if not (envelope.reminders_enabled and envelope.status == Envelope.STATUS_SENT):
+    if not (
+        envelope.reminders_enabled
+        and envelope.status
+        == Envelope.STATUS_SENT
+    ):
         return False
-    last = envelope.last_reminded_at or envelope.sent_at
+
+    last = (
+        envelope.last_reminded_at
+        or envelope.sent_at
+    )
+
     if not last:
         return False
-    return timezone.now() - last >= timedelta(days=max(1, envelope.reminder_days))
+
+    return (
+        timezone.now() - last
+        >= timedelta(
+            days=max(
+                1,
+                envelope.reminder_days,
+            )
+        )
+    )
