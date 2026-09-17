@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}{{ asset.name }} Printer | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .pd-scroll {
+    max-height: 430px;
+    overflow: auto;
+  }
+  .pd-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <div class="small text-muted">Printer Management</div>
+      <h3 class="text-un-primary fw-bold mb-1">{{ asset.name }}</h3>
+      <div class="text-muted">
+        {{ device.ip_address|default:"No IP" }}
+        · Queue: {{ device.printer_queue_name|default:"Not configured" }}
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary"
+         href="{% url 'accounts:asset_health_detail' asset.id %}">
+        <i class="bi bi-heart-pulse me-1"></i> Health
+      </a>
+      <a class="btn btn-outline-secondary"
+         href="{% url 'accounts:printer_management' %}">
+        All Printers
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="small text-muted">Health</div>
+          <div class="fs-2 fw-bold">
+            {{ latest.health_score|default:"—" }}
+            {% if latest %}/100{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="small text-muted">Lifetime Pages</div>
+          <div class="fs-2 fw-bold">
+            {{ latest.page_count_total|default:"—" }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="small text-muted">Black Toner</div>
+          <div class="fs-2 fw-bold">
+            {{ latest.toner_black_percent|default:"—" }}
+            {% if latest.toner_black_percent != None %}%{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <div class="small text-muted">CUPS</div>
+          <div class="fs-5 fw-bold
+            {% if cups.available %}text-success
+            {% else %}text-secondary{% endif %}">
+            {% if cups.available %}Connected{% else %}Not connected{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if cups.available and device.printer_queue_name %}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+          <strong>Print Queue Control</strong>
+          <div class="small text-muted">
+            Pause/resume this printer and cancel individual jobs.
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <form method="post"
+                action="{% url 'accounts:printer_action' asset.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="pause">
+            <button class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-pause-circle me-1"></i> Pause Queue
+            </button>
+          </form>
+
+          <form method="post"
+                action="{% url 'accounts:printer_action' asset.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="resume">
+            <button class="btn btn-sm btn-outline-success">
+              <i class="bi bi-play-circle me-1"></i> Resume Queue
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {% if cups_jobs_error %}
+        <div class="alert alert-warning m-3 mb-0">
+          {{ cups_jobs_error }}
+        </div>
+      {% endif %}
+
+      <div class="pd-scroll">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>User</th>
+              <th>Document</th>
+              <th>State</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for job in print_jobs %}
+            <tr>
+              <td>#{{ job.id }}</td>
+              <td>{{ job.user }}</td>
+              <td>{{ job.name }}</td>
+              <td>{{ job.state }}</td>
+              <td class="text-end">
+                <form method="post"
+                      action="{% url 'accounts:printer_action' asset.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="cancel_job">
+                  <input type="hidden" name="job_id" value="{{ job.id }}">
+                  <button class="btn btn-sm btn-outline-danger">
+                    Cancel
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">
+                No jobs in the queue.
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white">
+      <strong>Printer Counter History</strong>
+      <div class="small text-muted">
+        Historical lifetime page counts collected by SNMP.
+      </div>
+    </div>
+
+    <div class="pd-scroll">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Total Pages</th>
+            <th>Supplies</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for c in printer_counters %}
+          <tr>
+            <td>{{ c.recorded_at }}</td>
+            <td class="fw-semibold">
+              {{ c.total_pages|default:"—" }}
+            </td>
+            <td>{{ c.supplies|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="3" class="text-center text-muted py-4">
+              No counter history yet.
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

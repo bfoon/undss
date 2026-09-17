@@ -1,40 +1,15 @@
 """
-tenancy/urls.py
-===============
+UN PASS accounts URL wrapper.
 
-Mount in the project urls.py:
+Deployment:
+1. Copy current accounts/urls.py to accounts/urls_legacy.py.
+2. Replace accounts/urls.py with this file.
 
-    path("platform/", include("tenancy.urls", namespace="tenancy")),
+All existing routes stay available; Asset Health routes are appended.
 """
+from .urls_legacy import *  # noqa: F401,F403
+from django.urls import include, path
 
-from django.urls import path
-
-from . import global_views, sso, views
-
-app_name = "tenancy"
-
-urlpatterns = [
-    # Superuser console
-    path("", global_views.platform_overview, name="overview"),
-    path("global-modules/", global_views.global_modules, name="global_modules"),
-    path("organizations/status/", global_views.organization_status, name="organization_status"),
-    path("features/<str:scope_key>/", global_views.feature_console, name="feature_console"),
-    path("features/<str:scope_key>/explain/<str:code>/", views.feature_explain, name="feature_explain"),
-
-    # Country offices
-    path("offices/", views.office_list, name="office_list"),
-    path("offices/<int:pk>/admins/", views.office_admins, name="office_admins"),
-    path("offices/<int:pk>/users/", views.office_users, name="office_users"),
-
-    # Cross-office visibility
-    path("sharing/", views.sharing_links, name="sharing_links"),
-
-    # Microsoft SSO (configuration now, sign-in flow later)
-    path("sso/", views.sso_settings, name="sso_settings"),
-    path("sso/start/", sso.sso_start, name="sso_start"),
-    path("sso/callback/", sso.sso_callback, name="sso_callback"),
-    path("sso/metadata/", sso.sso_metadata, name="sso_metadata"),
-
-    # Audit
-    path("audit/", views.audit_log, name="audit_log"),
+urlpatterns = list(urlpatterns) + [
+    path("", include("accounts.urls_asset_health")),
 ]

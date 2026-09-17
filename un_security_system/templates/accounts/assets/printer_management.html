@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Printer Management | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .pm-scroll {
+    max-height: 650px;
+    overflow: auto;
+  }
+  .pm-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc;
+  }
+  .pm-kpi {
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid var(--un-blue);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h3 class="text-un-primary fw-bold mb-1">
+        <i class="bi bi-printer me-2"></i>Printer Management
+      </h3>
+      <div class="text-muted">
+        Printer health, counters, toner and UNPASS Print Server queues.
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a href="{% url 'accounts:asset_health_dashboard' %}"
+         class="btn btn-outline-primary">
+        <i class="bi bi-heart-pulse me-1"></i> Asset Health
+      </a>
+      <a href="{% url 'accounts:asset_management' %}"
+         class="btn btn-outline-secondary">
+        Asset Management
+      </a>
+    </div>
+  </div>
+
+  {% if not cups.available %}
+    <div class="alert alert-info">
+      <div class="fw-semibold">
+        <i class="bi bi-info-circle me-1"></i>
+        Print Server queue control is not connected yet.
+      </div>
+      <div class="small">
+        {{ cups.error }}
+      </div>
+      <div class="small mt-1">
+        SNMP health, toner and page counting continue to work without CUPS.
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card pm-kpi h-100">
+        <div class="card-body">
+          <div class="small text-muted">Monitored Printers</div>
+          <div class="fs-2 fw-bold">{{ printers|length }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card pm-kpi h-100">
+        <div class="card-body">
+          <div class="small text-muted">Print Server</div>
+          <div class="fs-5 fw-bold {% if cups.available %}text-success{% else %}text-secondary{% endif %}">
+            {% if cups.available %}Connected{% else %}Not connected{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white">
+      <div class="fw-semibold">Printer Fleet</div>
+      <div class="small text-muted">
+        Scroll through all monitored printers. Open a printer for queue control
+        and detailed page-counter history.
+      </div>
+    </div>
+
+    <div class="pm-scroll">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="min-width:220px;">Printer</th>
+            <th style="min-width:130px;">IP</th>
+            <th>Status</th>
+            <th>Health</th>
+            <th>Black Toner</th>
+            <th>Lifetime Pages</th>
+            <th style="min-width:160px;">Queue</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for p in printers %}
+          <tr>
+            <td class="fw-semibold">
+              {{ p.asset.name|default:p.hostname|default:"Printer" }}
+            </td>
+            <td>{{ p.ip_address|default:"—" }}</td>
+            <td>
+              <span class="badge
+                {% if p.status == 'healthy' %}bg-success
+                {% elif p.status == 'warning' %}bg-warning text-dark
+                {% elif p.status == 'offline' or p.status == 'critical' %}bg-danger
+                {% else %}bg-secondary{% endif %}">
+                {{ p.status|title }}
+              </span>
+            </td>
+            <td>
+              {{ p.health_score|default:"—" }}
+              {% if p.health_score != None %}/100{% endif %}
+            </td>
+            <td>
+              {{ p.toner_black_percent|default:"—" }}
+              {% if p.toner_black_percent != None %}%{% endif %}
+            </td>
+            <td>{{ p.page_count_total|default:"—" }}</td>
+            <td>{{ p.queue|default:"—" }}</td>
+            <td class="text-end">
+              {% if p.asset %}
+                <a class="btn btn-sm btn-outline-primary"
+                   href="{% url 'accounts:printer_health_detail' p.asset.id %}">
+                  Manage
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="text-center text-muted py-5">
+              No printer assets are configured for health monitoring yet.
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

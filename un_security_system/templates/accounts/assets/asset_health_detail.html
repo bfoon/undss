@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+{% block title %}{{ asset.name }} Health | UN PASS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .health-score { font-size:3rem; font-weight:800; line-height:1; }
+  .metric-card {
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    padding:1rem;
+    height:100%;
+    background:#fff;
+  }
+  .health-scroll { max-height:420px; overflow:auto; }
+  .health-scroll thead th {
+    position:sticky;
+    top:0;
+    background:#f8fafc;
+    z-index:2;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <div class="small text-muted">Asset Health</div>
+      <h3 class="text-un-primary fw-bold mb-1">{{ asset.name }}</h3>
+      <div class="text-muted">
+        {{ asset.asset_tag|default:"No asset tag" }} · {{ asset.category.name }}
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      {% if device and device.monitor_type == "printer" %}
+        <a class="btn btn-outline-primary"
+           href="{% url 'accounts:printer_health_detail' asset.id %}">
+          <i class="bi bi-printer me-1"></i> Printer Console
+        </a>
+      {% endif %}
+      <a class="btn btn-outline-secondary"
+         href="{% url 'accounts:asset_detail' asset.id %}">
+        <i class="bi bi-arrow-left me-1"></i> Asset Detail
+      </a>
+    </div>
+  </div>
+
+  {% if not device %}
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <h5 class="fw-bold">Configure monitoring</h5>
+        <p class="text-muted">
+          Use Endpoint for computers, Printer for network printers,
+          and Switch for managed network switches.
+        </p>
+
+        {% if can_manage_health %}
+        <form method="post"
+              action="{% url 'accounts:asset_health_configure' asset.id %}"
+              class="row g-3">
+          {% csrf_token %}
+
+          <div class="col-md-3">
+            <label class="form-label">Monitor Type</label>
+            <select name="monitor_type" class="form-select">
+              <option value="endpoint">Computer / Endpoint Agent</option>
+              <option value="printer">Network Printer (SNMP)</option>
+              <option value="switch">Network Switch (SNMP)</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Hostname</label>
+            <input name="hostname" class="form-control">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">IP Address</label>
+            <input name="ip_address"
+                   class="form-control"
+                   placeholder="192.168.2.20">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">CUPS Queue (printers)</label>
+            <input name="printer_queue_name" class="form-control">
+          </div>
+
+          <input type="hidden" name="enabled" value="1">
+
+          <div class="col-12">
+            <button class="btn btn-un-primary">Save Monitoring</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+  {% else %}
+
+    <div class="row g-3 mb-4">
+      <div class="col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-body">
+            <div class="small text-muted mb-2">Overall Health</div>
+
+            <div class="health-score
+              {% if latest.status == 'healthy' %}text-success
+              {% elif latest.status == 'warning' %}text-warning
+              {% else %}text-danger{% endif %}">
+              {% if latest %}{{ latest.health_score }}{% else %}—{% endif %}
+            </div>
+
+            <div class="small text-muted">out of 100</div>
+
+            <hr>
+
+            <span class="badge
+              {% if device.status == 'healthy' %}bg-success
+              {% elif device.status == 'warning' %}bg-warning text-dark
+              {% else %}bg-danger{% endif %}">
+              {{ device.status|title }}
+            </span>
+
+            <div class="small text-muted mt-2">
+              Last seen:
+              {{ device.last_seen|timesince|default:"Never" }}
+              {% if device.last_seen %} ago{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-9">
+        <div class="row g-3 h-100">
+
+          {% if device.monitor_type == "endpoint" %}
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="small text-muted">CPU</div>
+                <div class="fs-3 fw-bold">
+                  {{ latest.cpu_percent|default:"—" }}
+                  {% if latest.cpu_percent != None %}%{% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="small text-muted">Memory</div>
+                <div class="fs-3 fw-bold">
+                  {{ latest.memory_percent|default:"—" }}
+                  {% if latest.memory_percent != None %}%{% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="small text-muted">Disk Free</div>
+                <div class="fs-3 fw-bold">
+                  {{ latest.disk_free_percent|default:"—" }}
+                  {% if latest.disk_free_percent != None %}%{% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="metric-card">
+                <div class="small text-muted">Battery Health</div>
+                <div class="fs-3 fw-bold">
+                  {{ latest.battery_health_percent|default:"—" }}
+                  {% if latest.battery_health_percent != None %}%{% endif %}
+                </div>
+              </div>
+            </div>
+
+          {% elif device.monitor_type == "printer" %}
+            <div class="col-md-4">
+              <div class="metric-card">
+                <div class="small text-muted">Lifetime Pages</div>
+                <div class="fs-3 fw-bold">
+                  {{ latest.page_count_total|default:"—" }}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="metric-card">
+                <div class="small text-muted">Black Toner</div>
+                <div class="fs-3 fw-bold">
+                  {{ latest.toner_black_percent|default:"—" }}
+                  {% if latest.toner_black_percent != None %}%{% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="metric-card">
+                <div class="small text-muted">Last 30 Days</div>
+                <div class="fs-3 fw-bold">
+                  {{ pages_last_30_days|default:"—" }}
+                </div>
+                <div class="small text-muted">pages</div>
+              </div>
+            </div>
+
+          {% elif device.monitor_type == "switch" %}
+            <div class="col-md-4">
+              <div class="metric-card">
+                <div class="small text-muted">Ports Up</div>
+                <div class="fs-3 fw-bold text-success">
+                  {{ latest.ports_up|default:"—" }}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="metric-card">
+                <div class="small text-muted">Ports Down</div>
+                <div class="fs-3 fw-bold text-secondary">
+                  {{ latest.ports_down|default:"—" }}
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="metric-card">
+                <div class="small text-muted">Interface Errors</div>
+                <div class="fs-3 fw-bold {% if latest.port_errors %}text-warning{% endif %}">
+                  {{ latest.port_errors|default:"0" }}
+                </div>
+              </div>
+            </div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header bg-white fw-bold">
+            <i class="bi bi-activity me-2"></i>
+            Health Trend · Last 7 Days
+          </div>
+          <div class="card-body" style="height:320px;">
+            <canvas id="healthChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header bg-white fw-bold">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Active Alerts
+          </div>
+
+          <div class="card-body health-scroll">
+            {% for a in health_alerts %}
+              <div class="alert
+                {% if a.severity == 'critical' %}alert-danger
+                {% else %}alert-warning{% endif %} py-2">
+                <div class="fw-semibold">{{ a.message }}</div>
+                <div class="small">
+                  {{ a.last_seen_at|timesince }} ago
+                </div>
+              </div>
+            {% empty %}
+              <div class="text-success py-4 text-center">
+                <i class="bi bi-check-circle fs-2 d-block mb-2"></i>
+                No active health alerts.
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-bold">
+        Device Information
+      </div>
+
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <div class="small text-muted">Monitor Type</div>
+            <div class="fw-semibold text-capitalize">
+              {{ device.monitor_type }}
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="small text-muted">Hostname</div>
+            <div class="fw-semibold">
+              {{ device.hostname|default:"—" }}
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="small text-muted">IP Address</div>
+            <div class="fw-semibold">
+              {{ device.ip_address|default:"—" }}
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="small text-muted">MAC Address</div>
+            <div class="fw-semibold">
+              {{ device.mac_address|default:"—" }}
+            </div>
+          </div>
+
+          {% if latest %}
+            <div class="col-md-3">
+              <div class="small text-muted">Operating System</div>
+              <div class="fw-semibold">
+                {{ latest.os_name|default:"—" }}
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="small text-muted">OS Version</div>
+              <div class="fw-semibold">
+                {{ latest.os_version|default:"—" }}
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="small text-muted">Firewall</div>
+              <div class="fw-semibold">
+                {{ latest.firewall_status|default:"—" }}
+              </div>
+            </div>
+
+            <div class="col-md-3">
+              <div class="small text-muted">Antivirus</div>
+              <div class="fw-semibold">
+                {{ latest.antivirus_status|default:"—" }}
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if can_manage_health %}
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white fw-bold">
+          Monitoring Configuration
+        </div>
+
+        <div class="card-body">
+          <form method="post"
+                action="{% url 'accounts:asset_health_configure' asset.id %}"
+                class="row g-3">
+            {% csrf_token %}
+
+            <div class="col-md-3">
+              <label class="form-label">Monitor Type</label>
+              <select name="monitor_type" class="form-select">
+                <option value="endpoint"
+                        {% if device.monitor_type == "endpoint" %}selected{% endif %}>
+                  Computer / Endpoint Agent
+                </option>
+                <option value="printer"
+                        {% if device.monitor_type == "printer" %}selected{% endif %}>
+                  Network Printer
+                </option>
+                <option value="switch"
+                        {% if device.monitor_type == "switch" %}selected{% endif %}>
+                  Network Switch
+                </option>
+                <option value="other"
+                        {% if device.monitor_type == "other" %}selected{% endif %}>
+                  Other
+                </option>
+              </select>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Hostname</label>
+              <input name="hostname"
+                     value="{{ device.hostname }}"
+                     class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">IP Address</label>
+              <input name="ip_address"
+                     value="{{ device.ip_address|default:'' }}"
+                     class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">CUPS Queue</label>
+              <input name="printer_queue_name"
+                     value="{{ device.printer_queue_name }}"
+                     class="form-control">
+            </div>
+
+            <input type="hidden" name="enabled" value="1">
+
+            <div class="col-12 d-flex gap-2">
+              <button class="btn btn-un-primary">
+                Save
+              </button>
+
+              {% if device.monitor_type == "endpoint" %}
+                <button type="button"
+                        id="issueAgentToken"
+                        class="btn btn-outline-primary">
+                  Issue / Rotate Agent Token
+                </button>
+              {% endif %}
+            </div>
+          </form>
+
+          <div id="agentTokenResult" class="mt-3"></div>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+
+{{ health_history|json_script:"health-history-data" }}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const issueBtn = document.getElementById("issueAgentToken");
+
+  if (issueBtn) {
+    issueBtn.addEventListener("click", async function () {
+      if (!confirm(
+        "Rotate the agent token for this asset? " +
+        "The old agent token will stop working."
+      )) return;
+
+      const csrftoken =
+        document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
+
+      const response = await fetch(
+        "{% url 'accounts:asset_health_agent_token' asset.id %}",
+        {
+          method: "POST",
+          headers: {"X-CSRFToken": csrftoken}
+        }
+      );
+
+      const data = await response.json();
+      const box = document.getElementById("agentTokenResult");
+
+      if (data.ok) {
+        box.innerHTML =
+          '<div class="alert alert-warning">' +
+          '<strong>Copy this token now:</strong><br>' +
+          '<code style="word-break:break-all">' +
+          data.token +
+          '</code><br><small>Endpoint: ' +
+          data.endpoint +
+          '</small></div>';
+      } else {
+        box.innerHTML =
+          '<div class="alert alert-danger">' +
+          (data.error || "Could not issue token.") +
+          '</div>';
+      }
+    });
+  }
+
+  const dataNode = document.getElementById("health-history-data");
+  if (!dataNode) return;
+
+  let rows = [];
+
+  try {
+    rows = JSON.parse(dataNode.textContent || "[]");
+  } catch (e) {}
+
+  function draw() {
+    const canvas = document.getElementById("healthChart");
+    if (!window.Chart || !canvas) return;
+
+    new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: rows.map(
+          r => new Date(r.recorded_at).toLocaleString()
+        ),
+        datasets: [{
+          label: "Health Score",
+          data: rows.map(r => r.health_score),
+          tension: .25,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            min: 0,
+            max: 100
+          }
+        }
+      }
+    });
+  }
+
+  if (window.Chart) {
+    draw();
+  } else {
+    const script = document.createElement("script");
+    script.src =
+      "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js";
+    script.onload = draw;
+    document.head.appendChild(script);
+  }
+});
+</script>
+{% endblock %}
