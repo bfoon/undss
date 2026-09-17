@@ -1,105 +1,101 @@
-<!-- templates/accounts/assets/partials/_assets_table.html -->
-<!-- Updated: Pagination + Select All (current page) + Keeps your analytics + printing -->
-
-<!-- Enhanced Assets Table with Filter, Search, and Analysis -->
-
-<!-- Filter and Search Controls -->
+<!-- Fast server-paginated asset registry -->
 <div class="card mb-3">
   <div class="card-body">
-    <div class="row g-3 align-items-end">
-      <!-- Search -->
-      <div class="col-md-4">
-        <label class="form-label small fw-semibold">Search Assets</label>
-        <input type="text"
-               class="form-control"
-               id="assetSearchInput"
-               placeholder="Search by name, serial, tag...">
+    <form method="get" class="row g-3 align-items-end" id="assetServerFilterForm">
+      <input type="hidden" name="asset_tab" value="1">
+      <input type="hidden" name="asset_page" value="1" id="assetPageInput">
+
+      <div class="col-lg-4 col-md-6">
+        <label class="form-label small fw-semibold" for="assetSearchInput">Search Assets</label>
+        <input type="search" class="form-control" id="assetSearchInput"
+               name="asset_q" value="{{ asset_filters.q }}"
+               placeholder="Name, serial, tag, holder...">
       </div>
 
-      <!-- Category Filter -->
-      <div class="col-md-2">
-        <label class="form-label small fw-semibold">Category</label>
-        <select class="form-select" id="assetCategoryFilter">
+      <div class="col-lg-2 col-md-3">
+        <label class="form-label small fw-semibold" for="assetCategoryFilter">Category</label>
+        <select class="form-select" id="assetCategoryFilter" name="asset_category">
           <option value="">All Categories</option>
           {% for cat in categories %}
-            <option value="{{ cat.name }}">{{ cat.name }}</option>
+            <option value="{{ cat.id }}" {% if asset_filters.category == cat.id|stringformat:"s" %}selected{% endif %}>
+              {{ cat.name }}
+            </option>
           {% endfor %}
         </select>
       </div>
 
-      <!-- Unit Filter -->
-      <div class="col-md-2">
-        <label class="form-label small fw-semibold">Unit</label>
-        <select class="form-select" id="assetUnitFilter">
+      <div class="col-lg-2 col-md-3">
+        <label class="form-label small fw-semibold" for="assetUnitFilter">Unit</label>
+        <select class="form-select" id="assetUnitFilter" name="asset_unit">
           <option value="">All Units</option>
-          <option value="unallocated">Unallocated/Core</option>
+          <option value="unallocated" {% if asset_filters.unit == "unallocated" %}selected{% endif %}>Unallocated/Core</option>
           {% for unit in units %}
-            <option value="{{ unit.name }}">{{ unit.name }}</option>
+            <option value="{{ unit.id }}" {% if asset_filters.unit == unit.id|stringformat:"s" %}selected{% endif %}>
+              {{ unit.name }}
+            </option>
           {% endfor %}
         </select>
       </div>
 
-      <!-- Status Filter -->
-      <div class="col-md-2">
-        <label class="form-label small fw-semibold">Status</label>
-        <select class="form-select" id="assetStatusFilter">
+      <div class="col-lg-2 col-md-3">
+        <label class="form-label small fw-semibold" for="assetStatusFilter">Status</label>
+        <select class="form-select" id="assetStatusFilter" name="asset_status">
           <option value="">All Status</option>
-          <option value="available">Available</option>
-          <option value="assigned">Assigned</option>
-          <option value="maintenance">Maintenance</option>
-          <option value="retired">Retired</option>
+          <option value="available" {% if asset_filters.status == "available" %}selected{% endif %}>Available</option>
+          <option value="assigned" {% if asset_filters.status == "assigned" %}selected{% endif %}>Assigned</option>
+          <option value="maintenance" {% if asset_filters.status == "maintenance" %}selected{% endif %}>Maintenance</option>
+          <option value="retired" {% if asset_filters.status == "retired" %}selected{% endif %}>Retired</option>
         </select>
       </div>
 
-      <!-- Action Buttons -->
-      <div class="col-md-2">
-        <div class="d-flex gap-2">
-          <button class="btn btn-outline-secondary btn-sm" id="btnResetFilters" title="Reset Filters">
-            <i class="bi bi-arrow-counterclockwise"></i>
-          </button>
-          <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAssetAnalysis" title="View Analytics">
-            <i class="bi bi-graph-up"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Results Summary -->
-    <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <small class="text-muted">
-        Showing <span id="assetResultCount" class="fw-semibold">{{ assets|length }}</span> of {{ assets|length }} assets
-      </small>
-
-      <!-- NEW: Pagination Controls -->
-      <div class="d-flex align-items-center gap-2">
-        <label class="small text-muted mb-0">Rows</label>
-        <select id="assetPageSize" class="form-select form-select-sm" style="width:110px;">
-          <option value="10">10</option>
-          <option value="25" selected>25</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
+      <div class="col-lg-2 col-md-3">
+        <label class="form-label small fw-semibold" for="assetPageSize">Rows</label>
+        <select class="form-select" id="assetPageSize" name="asset_page_size">
+          <option value="25" {% if asset_filters.page_size == 25 %}selected{% endif %}>25</option>
+          <option value="50" {% if asset_filters.page_size == 50 %}selected{% endif %}>50</option>
+          <option value="100" {% if asset_filters.page_size == 100 %}selected{% endif %}>100</option>
         </select>
-
-        <nav aria-label="Assets pagination">
-          <ul class="pagination pagination-sm mb-0" id="assetPagination"></ul>
-        </nav>
       </div>
+
+      <div class="col-12 d-flex flex-wrap gap-2">
+        <button class="btn btn-primary btn-sm" type="submit">
+          <i class="bi bi-search me-1"></i> Search / Filter
+        </button>
+        <a class="btn btn-outline-secondary btn-sm"
+           href="{% url 'accounts:asset_management' %}?asset_tab=1#pane-assets">
+          <i class="bi bi-arrow-counterclockwise me-1"></i> Reset
+        </a>
+        <button class="btn btn-outline-primary btn-sm ms-auto" type="button"
+                data-bs-toggle="modal" data-bs-target="#modalAssetAnalysis">
+          <i class="bi bi-graph-up me-1"></i> Analytics
+        </button>
+      </div>
+    </form>
+
+    <div class="mt-3 small text-muted">
+      {% if asset_filtered_count %}
+        Showing <strong>{{ asset_page.start_index }}–{{ asset_page.end_index }}</strong>
+        of <strong>{{ asset_filtered_count }}</strong> matching assets
+        {% if asset_filtered_count != asset_total_count %}
+          ({{ asset_total_count }} total visible to you)
+        {% endif %}
+      {% else %}
+        No matching assets.
+      {% endif %}
     </div>
   </div>
 </div>
 
-<!-- Header with Actions -->
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <div>
     <h6 class="mb-0 fw-semibold">Assets Registry</h6>
-    <small class="text-muted">Agency-owned inventory (laptops, phones, accessories, etc.).</small>
+    <small class="text-muted">Fast server-side pagination; only the current page is rendered.</small>
   </div>
-
   <div class="d-flex gap-2">
     <button class="btn btn-outline-primary" type="button" id="btnPrintSelected">
       <i class="bi bi-printer me-1"></i> Print Selected
     </button>
-    {% if user.is_superuser or user.role == "ict_focal" %}
+    {% if is_ict %}
       <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalRegisterAsset">
         <i class="bi bi-plus-circle me-1"></i> Register Asset
       </button>
@@ -107,18 +103,11 @@
   </div>
 </div>
 
-<!-- Assets Table -->
 <div class="table-responsive">
   <table class="table align-middle" id="assetsTable">
     <thead>
       <tr>
-        <!-- UPDATED: Select All checkbox in header -->
-        <th>
-          <div class="d-flex align-items-center gap-2">
-            <input type="checkbox" class="form-check-input" id="selectAllAssets">
-            <span>Name</span>
-          </div>
-        </th>
+        <th><input type="checkbox" class="form-check-input me-2" id="selectAllAssets">Name</th>
         <th>Category</th>
         <th>Unit</th>
         <th>Status</th>
@@ -127,44 +116,23 @@
         <th class="text-end">Action</th>
       </tr>
     </thead>
-
     <tbody>
       {% for a in assets %}
-        <tr class="asset-row"
-            data-name="{{ a.name|lower }}"
-            data-category="{{ a.category.name }}"
-            data-unit="{{ a.unit.name|default:'unallocated' }}"
-            data-status="{{ a.status }}"
-            data-serial="{{ a.serial_number|default:'' }}"
-            data-tag="{{ a.asset_tag|default:'' }}"
-            data-holder="{{ a.current_holder.get_full_name|default:'' }}">
+        <tr>
           <td class="fw-semibold">
             <input type="checkbox" class="form-check-input am-asset-check me-2" value="{{ a.id }}">
-            <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' a.id %}">
-              {{ a.name }}
-            </a>
+            <a class="fw-semibold text-decoration-none" href="{% url 'accounts:asset_detail' a.id %}">{{ a.name }}</a>
           </td>
-
           <td>{{ a.category.name }}</td>
           <td>{{ a.unit.name|default:"Unallocated/Core" }}</td>
-
           <td>
-            <span class="badge
-              {% if a.status == 'available' %}bg-success
-              {% elif a.status == 'assigned' %}bg-primary
-              {% elif a.status == 'maintenance' %}bg-warning text-dark
-              {% elif a.status == 'retired' %}bg-secondary
-              {% else %}bg-secondary{% endif %}">
+            <span class="badge {% if a.status == 'available' %}bg-success{% elif a.status == 'assigned' %}bg-primary{% elif a.status == 'maintenance' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
               {{ a.get_status_display }}
             </span>
-
             {% if a.id in returning_asset_ids %}
-              <span class="badge bg-warning text-dark ms-1">
-                <i class="bi bi-arrow-return-left me-1"></i> Return Pending
-              </span>
+              <span class="badge bg-warning text-dark ms-1"><i class="bi bi-arrow-return-left me-1"></i>Return Pending</span>
             {% endif %}
           </td>
-
           <td>
             {% if a.current_holder %}
               {{ a.current_holder.get_full_name|default:a.current_holder.username }}
@@ -172,19 +140,12 @@
               <span class="text-muted">—</span>
             {% endif %}
           </td>
-
-          <td class="text-muted small">
-            SN: {{ a.serial_number|default:"-" }} <br>
-            Tag: {{ a.asset_tag|default:"-" }}
-          </td>
-
+          <td class="text-muted small">SN: {{ a.serial_number|default:"-" }}<br>Tag: {{ a.asset_tag|default:"-" }}</td>
           <td class="text-end">
             {% if a.status == "assigned" and a.current_holder and a.current_holder.id == user.id and not a.id in returning_asset_ids %}
               <button class="btn btn-sm btn-outline-primary"
-                      data-bs-toggle="modal"
-                      data-bs-target="#modalReturnAsset"
-                      data-asset-id="{{ a.id }}"
-                      data-asset-name="{{ a.name|escape }}">
+                      data-bs-toggle="modal" data-bs-target="#modalReturnAsset"
+                      data-asset-id="{{ a.id }}" data-asset-name="{{ a.name|escape }}">
                 <i class="bi bi-arrow-return-left me-1"></i> Return
               </button>
             {% else %}
@@ -193,466 +154,120 @@
           </td>
         </tr>
       {% empty %}
-        <tr class="no-results">
-          <td colspan="7" class="text-center text-muted py-4">No assets registered yet.</td>
-        </tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">No assets match the current filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>
-
-  <!-- No Results Message (Hidden by default) -->
-  <div id="noAssetResults" class="text-center text-muted py-4" style="display: none;">
-    <i class="bi bi-search fs-3 mb-2"></i>
-    <p>No assets match your current filters.</p>
-  </div>
 </div>
 
-<!-- Asset Analysis Modal -->
-<div class="modal fade" id="modalAssetAnalysis" tabindex="-1">
+{% if asset_page.paginator.num_pages > 1 %}
+<nav aria-label="Assets pagination" class="mt-3">
+  <ul class="pagination pagination-sm flex-wrap mb-0">
+    {% if asset_page.has_previous %}
+      <li class="page-item"><a class="page-link"
+        href="?asset_tab=1&asset_q={{ asset_filters.q|urlencode }}&asset_category={{ asset_filters.category|urlencode }}&asset_unit={{ asset_filters.unit|urlencode }}&asset_status={{ asset_filters.status|urlencode }}&asset_page_size={{ asset_filters.page_size }}&asset_page={{ asset_page.previous_page_number }}#pane-assets">«</a></li>
+    {% endif %}
+    {% for p in asset_page_range %}
+      {% if p == "…" %}
+        <li class="page-item disabled"><span class="page-link">{{ p }}</span></li>
+      {% elif p == asset_page.number %}
+        <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+      {% else %}
+        <li class="page-item"><a class="page-link"
+          href="?asset_tab=1&asset_q={{ asset_filters.q|urlencode }}&asset_category={{ asset_filters.category|urlencode }}&asset_unit={{ asset_filters.unit|urlencode }}&asset_status={{ asset_filters.status|urlencode }}&asset_page_size={{ asset_filters.page_size }}&asset_page={{ p }}#pane-assets">{{ p }}</a></li>
+      {% endif %}
+    {% endfor %}
+    {% if asset_page.has_next %}
+      <li class="page-item"><a class="page-link"
+        href="?asset_tab=1&asset_q={{ asset_filters.q|urlencode }}&asset_category={{ asset_filters.category|urlencode }}&asset_unit={{ asset_filters.unit|urlencode }}&asset_status={{ asset_filters.status|urlencode }}&asset_page_size={{ asset_filters.page_size }}&asset_page={{ asset_page.next_page_number }}#pane-assets">»</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+<div class="modal fade" id="modalAssetAnalysis" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">
-          <i class="bi bi-graph-up me-2"></i>Asset Analytics Dashboard
-        </h5>
+        <h5 class="modal-title"><i class="bi bi-graph-up me-2"></i>Asset Analytics</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <!-- Summary Cards -->
         <div class="row g-3 mb-4">
-          <div class="col-md-3">
-            <div class="card bg-primary text-white">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="card-subtitle mb-2 opacity-75">Total Assets</h6>
-                    <h3 class="mb-0" id="totalAssets">{{ assets|length }}</h3>
-                  </div>
-                  <i class="bi bi-box-seam fs-1 opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="card bg-success text-white">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="card-subtitle mb-2 opacity-75">Available</h6>
-                    <h3 class="mb-0" id="availableAssets">0</h3>
-                  </div>
-                  <i class="bi bi-check-circle fs-1 opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="card bg-info text-white">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="card-subtitle mb-2 opacity-75">Assigned</h6>
-                    <h3 class="mb-0" id="assignedAssets">0</h3>
-                  </div>
-                  <i class="bi bi-person-check fs-1 opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div class="card bg-warning text-dark">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h6 class="card-subtitle mb-2">In Maintenance</h6>
-                    <h3 class="mb-0" id="maintenanceAssets">0</h3>
-                  </div>
-                  <i class="bi bi-tools fs-1 opacity-50"></i>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div class="col-md-3"><div class="card bg-primary text-white h-100"><div class="card-body"><div class="small opacity-75">Total Assets</div><div class="fs-3 fw-bold">{{ asset_total_count }}</div></div></div></div>
+          <div class="col-md-3"><div class="card bg-success text-white h-100"><div class="card-body"><div class="small opacity-75">Available</div><div class="fs-3 fw-bold">{{ asset_available_count }}</div></div></div></div>
+          <div class="col-md-3"><div class="card bg-info text-white h-100"><div class="card-body"><div class="small opacity-75">Assigned</div><div class="fs-3 fw-bold">{{ asset_assigned_count }}</div></div></div></div>
+          <div class="col-md-3"><div class="card bg-warning text-dark h-100"><div class="card-body"><div class="small">Maintenance</div><div class="fs-3 fw-bold">{{ asset_maintenance_count }}</div></div></div></div>
         </div>
-
-        <!-- Charts -->
         <div class="row g-3">
-          <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">
-                <h6 class="mb-0">Assets by Category</h6>
-              </div>
-              <div class="card-body">
-                <canvas id="chartCategory" height="250"></canvas>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">
-                <h6 class="mb-0">Assets by Status</h6>
-              </div>
-              <div class="card-body">
-                <canvas id="chartStatus" height="250"></canvas>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-12">
-            <div class="card">
-              <div class="card-header">
-                <h6 class="mb-0">Assets by Unit</h6>
-              </div>
-              <div class="card-body">
-                <canvas id="chartUnit" height="150"></canvas>
-              </div>
-            </div>
-          </div>
+          <div class="col-lg-6"><div class="card h-100"><div class="card-header fw-semibold">Assets by Category</div><div class="card-body" style="height:320px"><canvas id="chartCategory"></canvas></div></div></div>
+          <div class="col-lg-6"><div class="card h-100"><div class="card-header fw-semibold">Assets by Unit</div><div class="card-body" style="height:320px"><canvas id="chartUnit"></canvas></div></div></div>
         </div>
-
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        {{ asset_category_chart|json_script:"assetCategoryChartData" }}
+        {{ asset_unit_chart|json_script:"assetUnitChartData" }}
       </div>
     </div>
   </div>
 </div>
 
 <script>
-(function() {
-  // Asset Table Filtering + Pagination + Select All (current page)
-
-  const searchInput = document.getElementById('assetSearchInput');
-  const categoryFilter = document.getElementById('assetCategoryFilter');
-  const unitFilter = document.getElementById('assetUnitFilter');
-  const statusFilter = document.getElementById('assetStatusFilter');
-  const resetBtn = document.getElementById('btnResetFilters');
-  const resultCount = document.getElementById('assetResultCount');
-  const noResults = document.getElementById('noAssetResults');
-  const tableBody = document.querySelector('#assetsTable tbody');
-
-  // NEW
-  const paginationEl = document.getElementById("assetPagination");
-  const pageSizeEl = document.getElementById("assetPageSize");
-  const selectAllEl = document.getElementById("selectAllAssets");
-
-  let currentPage = 1;
-  let pageSize = parseInt(pageSizeEl?.value || "25", 10);
-
-  function getAllRows() {
-    return Array.from(document.querySelectorAll('.asset-row'));
-  }
-
-  function getFilteredRows() {
-    const searchTerm = (searchInput?.value || '').toLowerCase();
-    const category = categoryFilter?.value || '';
-    const unit = unitFilter?.value || '';
-    const status = statusFilter?.value || '';
-
-    return getAllRows().filter(row => {
-      const name = (row.dataset.name || '').toLowerCase();
-      const serial = (row.dataset.serial || '').toLowerCase();
-      const tag = (row.dataset.tag || '').toLowerCase();
-      const holder = (row.dataset.holder || '').toLowerCase();
-      const rowCategory = row.dataset.category || '';
-      const rowUnit = row.dataset.unit || '';
-      const rowStatus = row.dataset.status || '';
-
-      const matchesSearch = !searchTerm ||
-        name.includes(searchTerm) ||
-        serial.includes(searchTerm) ||
-        tag.includes(searchTerm) ||
-        holder.includes(searchTerm);
-
-      const matchesCategory = !category || rowCategory === category;
-      const matchesUnit = !unit || rowUnit === unit;
-      const matchesStatus = !status || rowStatus === status;
-
-      return matchesSearch && matchesCategory && matchesUnit && matchesStatus;
-    });
-  }
-
-  function getVisiblePageRows(filteredRows) {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    return filteredRows.slice(start, end);
-  }
-
-  function renderPagination(totalItems) {
-    if (!paginationEl) return;
-
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-    if (currentPage > totalPages) currentPage = totalPages;
-
-    paginationEl.innerHTML = "";
-
-    const makeBtn = (label, page, disabled = false, active = false) => {
-      const li = document.createElement("li");
-      li.className = "page-item" + (disabled ? " disabled" : "") + (active ? " active" : "");
-      const a = document.createElement("a");
-      a.className = "page-link";
-      a.href = "javascript:void(0)";
-      a.textContent = label;
-      a.addEventListener("click", () => {
-        if (disabled) return;
-        currentPage = page;
-        applyFilters(); // rerender
-      });
-      li.appendChild(a);
-      return li;
-    };
-
-    // Prev
-    paginationEl.appendChild(makeBtn("«", Math.max(1, currentPage - 1), currentPage === 1));
-
-    // Page numbers (compact)
-    const windowSize = 5;
-    let start = Math.max(1, currentPage - 2);
-    let end = Math.min(totalPages, start + windowSize - 1);
-    start = Math.max(1, end - windowSize + 1);
-
-    if (start > 1) paginationEl.appendChild(makeBtn("1", 1, false, currentPage === 1));
-    if (start > 2) {
-      const li = document.createElement("li");
-      li.className = "page-item disabled";
-      li.innerHTML = `<span class="page-link">…</span>`;
-      paginationEl.appendChild(li);
-    }
-
-    for (let p = start; p <= end; p++) {
-      paginationEl.appendChild(makeBtn(String(p), p, false, p === currentPage));
-    }
-
-    if (end < totalPages - 1) {
-      const li = document.createElement("li");
-      li.className = "page-item disabled";
-      li.innerHTML = `<span class="page-link">…</span>`;
-      paginationEl.appendChild(li);
-    }
-    if (end < totalPages) paginationEl.appendChild(makeBtn(String(totalPages), totalPages, false, currentPage === totalPages));
-
-    // Next
-    paginationEl.appendChild(makeBtn("»", Math.min(totalPages, currentPage + 1), currentPage === totalPages));
-  }
-
-  function updateSelectAllState(pageRows) {
-    if (!selectAllEl) return;
-    const checks = pageRows.map(r => r.querySelector(".am-asset-check")).filter(Boolean);
-    const checkedCount = checks.filter(cb => cb.checked).length;
-
-    if (checks.length === 0) {
-      selectAllEl.checked = false;
-      selectAllEl.indeterminate = false;
-      return;
-    }
-
-    if (checkedCount === 0) {
-      selectAllEl.checked = false;
-      selectAllEl.indeterminate = false;
-    } else if (checkedCount === checks.length) {
-      selectAllEl.checked = true;
-      selectAllEl.indeterminate = false;
-    } else {
-      selectAllEl.checked = false;
-      selectAllEl.indeterminate = true;
-    }
-  }
-
-  function applyFilters() {
-    const filteredRows = getFilteredRows();
-
-    if (resultCount) resultCount.textContent = filteredRows.length;
-
-    // No results
-    if (filteredRows.length === 0) {
-      // hide rows
-      getAllRows().forEach(r => (r.style.display = "none"));
-      tableBody.style.display = 'none';
-      noResults.style.display = 'block';
-      renderPagination(0);
-      updateSelectAllState([]);
-      return;
-    }
-
-    tableBody.style.display = '';
-    noResults.style.display = 'none';
-
-    // Hide all rows first
-    getAllRows().forEach(r => (r.style.display = "none"));
-
-    // Show page rows
-    const pageRows = getVisiblePageRows(filteredRows);
-    pageRows.forEach(r => (r.style.display = ""));
-
-    renderPagination(filteredRows.length);
-    updateSelectAllState(pageRows);
-  }
-
-  function resetFilters() {
-    if (searchInput) searchInput.value = '';
-    if (categoryFilter) categoryFilter.value = '';
-    if (unitFilter) unitFilter.value = '';
-    if (statusFilter) statusFilter.value = '';
-    currentPage = 1;
-    applyFilters();
-  }
-
-  // Event listeners (filters)
-  searchInput?.addEventListener('input', () => { currentPage = 1; applyFilters(); });
-  categoryFilter?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
-  unitFilter?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
-  statusFilter?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
-  resetBtn?.addEventListener('click', resetFilters);
-
-  // Page size
-  pageSizeEl?.addEventListener("change", () => {
-    pageSize = parseInt(pageSizeEl.value, 10) || 25;
-    currentPage = 1;
-    applyFilters();
+(function () {
+  const selectAll = document.getElementById("selectAllAssets");
+  selectAll?.addEventListener("change", function () {
+    document.querySelectorAll(".am-asset-check").forEach(cb => cb.checked = selectAll.checked);
   });
 
-  // Select all (current page)
-  selectAllEl?.addEventListener("change", () => {
-    const filtered = getFilteredRows();
-    const pageRows = getVisiblePageRows(filtered);
-    pageRows.forEach(r => {
-      const cb = r.querySelector(".am-asset-check");
-      if (cb) cb.checked = selectAllEl.checked;
-    });
-    updateSelectAllState(pageRows);
-  });
-
-  // Update select-all state on individual checkbox changes
-  document.addEventListener("change", (e) => {
-    if (!e.target.classList?.contains("am-asset-check")) return;
-    const filtered = getFilteredRows();
-    const pageRows = getVisiblePageRows(filtered);
-    updateSelectAllState(pageRows);
-  });
-
-  // Print selected assets (selection persists across pages)
-  document.getElementById("btnPrintSelected")?.addEventListener("click", () => {
-    const ids = Array.from(document.querySelectorAll(".am-asset-check:checked"))
-      .map(cb => cb.value).join(",");
-
-    if (!ids) {
-      alert("Please select at least one asset to print.");
-      return;
-    }
-
+  document.getElementById("btnPrintSelected")?.addEventListener("click", function () {
+    const ids = Array.from(document.querySelectorAll(".am-asset-check:checked")).map(cb => cb.value).join(",");
+    if (!ids) { alert("Please select at least one asset on this page to print."); return; }
     const url = "{% url 'accounts:asset_labels_pdf' %}?mode=a4&include_url=1&ids=" + encodeURIComponent(ids);
     window.open(url, "_blank");
   });
 
-  // Asset Analytics Charts (unchanged)
-  const modalElement = document.getElementById('modalAssetAnalysis');
-  if (modalElement) {
-    modalElement.addEventListener('shown.bs.modal', function() {
-      initializeAssetCharts();
-    });
-  }
-
-  function initializeAssetCharts() {
-    const assets = [
-      {% for a in assets %}
-      {
-        category: "{{ a.category.name|escapejs }}",
-        unit: "{{ a.unit.name|default:'Unallocated/Core'|escapejs }}",
-        status: "{{ a.status }}"
-      },
-      {% endfor %}
-    ];
-
-    const categoryData = {};
-    const unitData = {};
-    const statusData = { available: 0, assigned: 0, maintenance: 0, retired: 0 };
-
-    assets.forEach(asset => {
-      categoryData[asset.category] = (categoryData[asset.category] || 0) + 1;
-      unitData[asset.unit] = (unitData[asset.unit] || 0) + 1;
-      if (Object.prototype.hasOwnProperty.call(statusData, asset.status)) statusData[asset.status]++;
-    });
-
-    document.getElementById('availableAssets').textContent = statusData.available;
-    document.getElementById('assignedAssets').textContent = statusData.assigned;
-    document.getElementById('maintenanceAssets').textContent = statusData.maintenance;
-
-    const colors = {
-      primary: ['#0d6efd', '#6610f2', '#6f42c1', '#d63384', '#dc3545', '#fd7e14', '#ffc107', '#198754', '#20c997', '#0dcaf0'],
-      status: { available: '#198754', assigned: '#0d6efd', maintenance: '#ffc107', retired: '#6c757d' }
-    };
-
-    const ctxCategory = document.getElementById('chartCategory');
-    if (ctxCategory) {
-      new Chart(ctxCategory, {
-        type: 'doughnut',
-        data: {
-          labels: Object.keys(categoryData),
-          datasets: [{ data: Object.values(categoryData), backgroundColor: colors.primary, borderWidth: 2, borderColor: '#fff' }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'right' },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const label = context.label || '';
-                  const value = context.parsed || 0;
-                  const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                  const percentage = ((value / total) * 100).toFixed(1);
-                  return `${label}: ${value} (${percentage}%)`;
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-
-    const ctxStatus = document.getElementById('chartStatus');
-    if (ctxStatus) {
-      new Chart(ctxStatus, {
-        type: 'pie',
-        data: {
-          labels: ['Available', 'Assigned', 'Maintenance', 'Retired'],
-          datasets: [{
-            data: [statusData.available, statusData.assigned, statusData.maintenance, statusData.retired],
-            backgroundColor: [colors.status.available, colors.status.assigned, colors.status.maintenance, colors.status.retired],
-            borderWidth: 2, borderColor: '#fff'
-          }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
-      });
-    }
-
-    const ctxUnit = document.getElementById('chartUnit');
-    if (ctxUnit) {
-      new Chart(ctxUnit, {
-        type: 'bar',
-        data: {
-          labels: Object.keys(unitData),
-          datasets: [{
-            label: 'Number of Assets',
-            data: Object.values(unitData),
-            backgroundColor: '#0d6efd',
-            borderColor: '#0d6efd',
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-          plugins: { legend: { display: false } }
-        }
-      });
-    }
-  }
-
-  // INIT
-  document.addEventListener("DOMContentLoaded", () => {
-    applyFilters();
+  document.getElementById("assetPageSize")?.addEventListener("change", function () {
+    document.getElementById("assetPageInput").value = "1";
+    document.getElementById("assetServerFilterForm").submit();
   });
 
+  {% if asset_tab_active %}
+  document.addEventListener("DOMContentLoaded", function () {
+    const tabButton = document.getElementById("tab-assets");
+    if (tabButton && window.bootstrap) bootstrap.Tab.getOrCreateInstance(tabButton).show();
+  });
+  {% endif %}
+
+  let chartsInitialised = false;
+  function getJson(id) {
+    try {
+      const node = document.getElementById(id);
+      return node ? JSON.parse(node.textContent || "[]") : [];
+    } catch (e) { return []; }
+  }
+  function drawAssetCharts() {
+    if (chartsInitialised || typeof Chart === "undefined") return;
+    chartsInitialised = true;
+    const categoryRows = getJson("assetCategoryChartData");
+    const unitRows = getJson("assetUnitChartData");
+    const categoryCtx = document.getElementById("chartCategory");
+    if (categoryCtx) new Chart(categoryCtx, {
+      type: "doughnut",
+      data: { labels: categoryRows.map(r => r.label), datasets: [{ data: categoryRows.map(r => r.value) }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
+    });
+    const unitCtx = document.getElementById("chartUnit");
+    if (unitCtx) new Chart(unitCtx, {
+      type: "bar",
+      data: { labels: unitRows.map(r => r.label), datasets: [{ label: "Assets", data: unitRows.map(r => r.value) }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } }
+    });
+  }
+  const modal = document.getElementById("modalAssetAnalysis");
+  modal?.addEventListener("shown.bs.modal", function () {
+    if (typeof Chart !== "undefined") { drawAssetCharts(); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js";
+    s.onload = drawAssetCharts;
+    document.head.appendChild(s);
+  });
 })();
 </script>
