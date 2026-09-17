@@ -1337,13 +1337,38 @@
       }
     );
 
+    const requestStatusData = parseJsonScript("request-status-data");
+    if (
+      requestStatusData
+      && Array.isArray(requestStatusData.datasets)
+      && requestStatusData.datasets.length
+    ) {
+      // The backend sends the request-status dataset without a label.
+      // Chart.js otherwise renders the legend/tooltip label as "undefined".
+      requestStatusData.datasets[0].label = "Requests";
+    }
+
     createChart(
       "chartRequestStatus",
       "bar",
-      parseJsonScript("request-status-data"),
+      requestStatusData,
       {
         scales: {
           y: { beginAtZero: true, ticks: { precision: 0 } }
+        },
+        plugins: {
+          // The X-axis already names every request state, so a one-item
+          // dataset legend adds no useful information.
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "rgba(15,23,42,.94)",
+            padding: 10,
+            callbacks: {
+              label: function (context) {
+                return "Requests: " + context.parsed.y;
+              }
+            }
+          }
         }
       }
     );
