@@ -1,8 +1,12 @@
-<div class="card border-0 shadow-sm">
+{% load static %}
+<div class="card border-0 shadow-sm" id="ahs-card-{{ asset.id }}">
   <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
     <div>
       <h6 class="mb-1 text-un-primary fw-bold">
         <i class="bi bi-heart-pulse me-2"></i>Asset Health
+        {% if device %}
+          <span class="ahs-dot ms-1" title="Live"></span>
+        {% endif %}
       </h6>
       <div class="small text-muted">
         Live device health, performance, security and lifecycle telemetry.
@@ -42,49 +46,195 @@
       </div>
 
     {% else %}
-      <div class="row g-3">
-        <div class="col-md-3">
-          <div class="small text-muted">Health</div>
-          <div class="fw-bold fs-4
-            {% if latest.status == 'healthy' %}text-success
-            {% elif latest.status == 'warning' %}text-warning
-            {% else %}text-danger{% endif %}">
-            {% if latest %}{{ latest.health_score }}/100{% else %}—{% endif %}
+      <div class="d-flex flex-wrap align-items-center gap-4">
+        <div class="ahs-ring-wrap">
+          <svg width="88" height="88" viewBox="0 0 88 88" class="ahs-ring">
+            <circle cx="44" cy="44" r="36" fill="none" stroke="#eef2f7" stroke-width="9"></circle>
+            <circle class="ahs-arc" cx="44" cy="44" r="36" fill="none" stroke-width="9"
+                    stroke-linecap="round" stroke-dasharray="226.2" stroke-dashoffset="226.2"
+                    data-score="{{ latest.health_score|default:0 }}"
+                    stroke="{% if latest.status == 'healthy' %}#1a9d5b{% elif latest.status == 'warning' %}#e8a723{% else %}#d3402f{% endif %}"></circle>
+          </svg>
+          <div class="ahs-ring-value">
+            <span class="fw-bold fs-5">{% if latest %}{{ latest.health_score }}{% else %}—{% endif %}</span>
+            <span class="d-block small text-muted" style="margin-top:-4px;">/100</span>
           </div>
         </div>
 
-        <div class="col-md-3">
-          <div class="small text-muted">Status</div>
-          <div class="fw-semibold text-capitalize">
-            {{ device.status|default:"Unknown" }}
-          </div>
-        </div>
+        <div class="flex-grow-1">
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <div class="small text-muted">Status</div>
+              <span class="badge
+                {% if device.status == 'healthy' %}bg-success
+                {% elif device.status == 'warning' %}bg-warning text-dark
+                {% elif device.status == 'unknown' %}bg-secondary
+                {% else %}bg-danger{% endif %}">
+                {{ device.status|title }}
+              </span>
+            </div>
 
-        <div class="col-md-3">
-          <div class="small text-muted">Monitor</div>
-          <div class="fw-semibold text-capitalize">
-            {{ device.monitor_type }}
-          </div>
-        </div>
+            <div class="col-6 col-md-3">
+              <div class="small text-muted">Monitor</div>
+              <div class="fw-semibold text-capitalize">{{ device.monitor_type }}</div>
+            </div>
 
-        <div class="col-md-3">
-          <div class="small text-muted">Last Seen</div>
-          <div class="fw-semibold">
-            {{ device.last_seen|timesince|default:"Never" }}
-            {% if device.last_seen %} ago{% endif %}
+            <div class="col-6 col-md-3">
+              <div class="small text-muted">Last seen</div>
+              <div class="fw-semibold">
+                {{ device.last_seen|timesince|default:"Never" }}{% if device.last_seen %} ago{% endif %}
+              </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+              <div class="small text-muted">Uptime</div>
+              <div class="fw-semibold">{{ stats.uptime_human|default:"—" }}</div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            {% if device.monitor_type == "printer" %}
+              <div class="col-6 col-md-3">
+                <div class="small text-muted">Black toner</div>
+                <div class="fw-semibold">
+                  {% if latest.toner_black_percent != None %}{{ latest.toner_black_percent|floatformat:0 }}%{% else %}—{% endif %}
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="small text-muted">Lifetime pages</div>
+                <div class="fw-semibold">{{ latest.page_count_total|default:"—" }}</div>
+              </div>
+            {% elif device.monitor_type == "switch" %}
+              <div class="col-6 col-md-3">
+                <div class="small text-muted">Ports up / down</div>
+                <div class="fw-semibold">
+                  {{ latest.ports_up|default:"—" }} / {{ latest.ports_down|default:"—" }}
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="small text-muted">Interface errors</div>
+                <div class="fw-semibold">{{ latest.port_errors|default:"0" }}</div>
+              </div>
+            {% else %}
+              <div class="col-6 col-md-3">
+                <div class="small text-muted">CPU</div>
+                <div class="fw-semibold">
+                  {% if latest.cpu_percent != None %}{{ latest.cpu_percent|floatformat:0 }}%{% else %}—{% endif %}
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="small text-muted">Memory</div>
+                <div class="fw-semibold">
+                  {% if latest.memory_percent != None %}{{ latest.memory_percent|floatformat:0 }}%{% else %}—{% endif %}
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="small text-muted">Disk free</div>
+                <div class="fw-semibold">
+                  {% if latest.disk_free_percent != None %}{{ latest.disk_free_percent|floatformat:0 }}%{% else %}—{% endif %}
+                </div>
+              </div>
+            {% endif %}
+
+            <div class="col-6 col-md-3">
+              <div class="small text-muted">24h average</div>
+              <div class="fw-semibold">{{ stats.score_avg_24h|default:"—" }}</div>
+            </div>
           </div>
         </div>
       </div>
 
+      {% if profile.posture %}
+        <div class="mt-3">
+          {% for item in profile.posture %}
+            <span class="ahs-posture {% if item.ok %}ok{% else %}bad{% endif %}">
+              <i class="bi bi-{% if item.ok %}shield-check{% else %}shield-exclamation{% endif %}"></i>
+              {{ item.label }}
+            </span>
+          {% endfor %}
+        </div>
+      {% endif %}
+
       {% if health_alerts %}
         <hr>
-        <div class="small fw-semibold text-danger mb-1">
-          {{ health_alerts|length }} active health alert{{ health_alerts|length|pluralize }}
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="small fw-semibold text-danger">
+            {{ health_alerts|length }} active health alert{{ health_alerts|length|pluralize }}
+          </div>
+          <div class="small">
+            {% if alert_counts.critical %}<span class="badge bg-danger">{{ alert_counts.critical }} critical</span>{% endif %}
+            {% if alert_counts.warning %}<span class="badge bg-warning text-dark">{{ alert_counts.warning }} warning</span>{% endif %}
+          </div>
         </div>
-        <div class="small text-muted">
-          {{ health_alerts.0.message }}
+        <ul class="small text-muted mb-0 ps-3">
+          {% for alert in health_alerts|slice:":3" %}
+            <li>{{ alert.message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if stats.is_stale %}
+        <div class="alert alert-warning py-2 mt-3 mb-0 small">
+          <i class="bi bi-wifi-off me-1"></i>
+          No heartbeat in the last {{ stats.seconds_since_seen|floatformat:0 }} seconds — the
+          readings above may be out of date.
         </div>
       {% endif %}
     {% endif %}
   </div>
 </div>
+
+<style>
+  .ahs-ring-wrap { position: relative; width: 88px; height: 88px; }
+  .ahs-ring { transform: rotate(-90deg); }
+  .ahs-ring .ahs-arc { transition: stroke-dashoffset 1.1s cubic-bezier(.22,.8,.32,1); }
+  .ahs-ring-value {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+  }
+  .ahs-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #1a9d5b;
+    display: inline-block; position: relative; vertical-align: middle;
+  }
+  .ahs-dot::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 50%;
+    border: 2px solid rgba(26,157,91,.5); animation: ahs-ping 1.9s ease-out infinite;
+  }
+  @keyframes ahs-ping {
+    0% { transform: scale(.6); opacity: .9; }
+    80%, 100% { transform: scale(1.7); opacity: 0; }
+  }
+  .ahs-posture {
+    display: inline-flex; align-items: center; gap: .3rem; border-radius: 999px;
+    padding: .22rem .6rem; font-size: .74rem; font-weight: 600; margin: 0 .3rem .3rem 0;
+  }
+  .ahs-posture.ok { background: #e7f7ee; color: #127a45; }
+  .ahs-posture.bad { background: #fdecea; color: #a52a1c; }
+  @media (prefers-reduced-motion: reduce) {
+    .ahs-dot::after { animation: none; }
+    .ahs-ring .ahs-arc { transition: none; }
+  }
+</style>
+
+<script>
+(function () {
+  var card = document.getElementById("ahs-card-{{ asset.id }}");
+  if (!card) return;
+
+  function fillRing() {
+    var arc = card.querySelector(".ahs-arc");
+    if (!arc) return;
+    var circumference = 226.2;
+    var score = Number(arc.getAttribute("data-score")) || 0;
+    requestAnimationFrame(function () {
+      arc.setAttribute("stroke-dashoffset", circumference - circumference * (score / 100));
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", fillRing);
+  } else {
+    fillRing();
+  }
+})();
+</script>

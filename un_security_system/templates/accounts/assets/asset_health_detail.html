@@ -3,44 +3,126 @@
 
 {% block extra_css %}
 <style>
-  .health-score { font-size:3rem; font-weight:800; line-height:1; }
-  .metric-card {
-    border:1px solid #e5e7eb;
-    border-radius:12px;
-    padding:1rem;
-    height:100%;
-    background:#fff;
+  .ahd-hero {
+    border: 1px solid #e9eef5; border-radius: 16px; background: #fff;
+    padding: 1.25rem; height: 100%;
   }
-  .health-scroll { max-height:420px; overflow:auto; }
-  .health-scroll thead th {
-    position:sticky;
-    top:0;
-    background:#f8fafc;
-    z-index:2;
+  .ahd-gauge { position: relative; width: 132px; height: 132px; }
+  .ahd-gauge svg { transform: rotate(-90deg); }
+  .ahd-gauge circle.ahd-arc {
+    transition: stroke-dashoffset 1.1s cubic-bezier(.22,.8,.32,1), stroke .5s ease;
+  }
+  .ahd-gauge .ahd-gauge-value {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .ahd-gauge .ahd-score { font-size: 2.4rem; font-weight: 800; line-height: 1; }
+
+  .ahd-delta { font-size: .78rem; font-weight: 700; }
+  .ahd-delta.up { color: #127a45; }
+  .ahd-delta.down { color: #a52a1c; }
+
+  .metric-card {
+    border: 1px solid #e9eef5; border-radius: 14px; padding: .9rem 1rem; height: 100%;
+    background: #fff; transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .metric-card:hover { transform: translateY(-3px); box-shadow: 0 10px 22px rgba(16,42,67,.08); }
+  .metric-card .mv { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+  .metric-bar { height: 6px; border-radius: 999px; background: #eef2f7; overflow: hidden; margin-top: .6rem; }
+  .metric-bar i { display: block; height: 100%; width: 0; transition: width .9s cubic-bezier(.22,.8,.32,1), background-color .4s; }
+
+  .ahd-live-dot { width: 9px; height: 9px; border-radius: 50%; background: #1a9d5b; display: inline-block; position: relative; }
+  .ahd-live-dot::after {
+    content: ""; position: absolute; inset: -4px; border-radius: 50%;
+    border: 2px solid rgba(26,157,91,.55); animation: ahd-ping 1.8s ease-out infinite;
+  }
+  .ahd-live-dot.paused { background: #9aa6b5; }
+  .ahd-live-dot.paused::after { animation: none; border-color: transparent; }
+  @keyframes ahd-ping {
+    0% { transform: scale(.6); opacity: .9; }
+    80%, 100% { transform: scale(1.7); opacity: 0; }
+  }
+
+  .health-scroll { max-height: 420px; overflow: auto; }
+  .health-scroll thead th { position: sticky; top: 0; background: #f8fafc; z-index: 2; }
+
+  .ahd-alert { animation: ahd-slide .35s ease both; }
+  @keyframes ahd-slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+
+  .ahd-kv { display: flex; flex-direction: column; gap: .15rem; padding: .55rem 0; border-bottom: 1px dashed #eef2f7; }
+  .ahd-kv .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7a90; }
+  .ahd-kv .v { font-weight: 600; word-break: break-word; }
+
+  .ahd-posture { display: inline-flex; align-items: center; gap: .4rem; border-radius: 999px;
+                 padding: .3rem .7rem; font-size: .78rem; font-weight: 600; margin: 0 .35rem .35rem 0; }
+  .ahd-posture.ok { background: #e7f7ee; color: #127a45; }
+  .ahd-posture.bad { background: #fdecea; color: #a52a1c; }
+
+  .ahd-bar-sm { height: 5px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
+  .ahd-bar-sm i { display: block; height: 100%; width: 0; transition: width .9s cubic-bezier(.22,.8,.32,1); }
+
+  .ahd-tab-pane { animation: ahd-fade .3s ease both; }
+  @keyframes ahd-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .ahd-chip { cursor: pointer; border: 1px solid #dde4ec; background: #fff; border-radius: 999px;
+              padding: .2rem .7rem; font-size: .76rem; transition: all .2s ease; }
+  .ahd-chip.active { background: var(--un-blue); border-color: var(--un-blue); color: #fff; }
+
+  .ahd-refreshing .ahd-spin { animation: ahd-rotate .9s linear infinite; }
+  @keyframes ahd-rotate { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ahd-alert, .ahd-tab-pane, .ahd-live-dot::after, .ahd-refreshing .ahd-spin { animation: none !important; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
     <div>
       <div class="small text-muted">Asset Health</div>
       <h3 class="text-un-primary fw-bold mb-1">{{ asset.name }}</h3>
       <div class="text-muted">
         {{ asset.asset_tag|default:"No asset tag" }} · {{ asset.category.name }}
+        {% if asset.current_holder %} · Held by {{ asset.current_holder.get_full_name|default:asset.current_holder.username }}{% endif %}
       </div>
     </div>
 
-    <div class="d-flex gap-2">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      {% if device %}
+        <span class="d-inline-flex align-items-center gap-2 small text-muted me-2">
+          <span class="ahd-live-dot" id="ahdDot"></span>
+          <span id="ahdUpdated">connecting…</span>
+        </span>
+
+        <select id="ahdRange" class="form-select form-select-sm" style="width:auto;">
+          <option value="6">Last 6h</option>
+          <option value="24">Last 24h</option>
+          <option value="168" selected>Last 7 days</option>
+          <option value="720">Last 30 days</option>
+        </select>
+
+        <select id="ahdInterval" class="form-select form-select-sm" style="width:auto;">
+          <option value="10000">10s</option>
+          <option value="15000" selected>15s</option>
+          <option value="30000">30s</option>
+          <option value="60000">60s</option>
+          <option value="0">Paused</option>
+        </select>
+
+        <button id="ahdRefresh" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-clockwise ahd-spin"></i>
+        </button>
+      {% endif %}
+
       {% if device and device.monitor_type == "printer" %}
-        <a class="btn btn-outline-primary"
-           href="{% url 'accounts:printer_health_detail' asset.id %}">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:printer_health_detail' asset.id %}">
           <i class="bi bi-printer me-1"></i> Printer Console
         </a>
       {% endif %}
-      <a class="btn btn-outline-secondary"
-         href="{% url 'accounts:asset_detail' asset.id %}">
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:asset_detail' asset.id %}">
         <i class="bi bi-arrow-left me-1"></i> Asset Detail
       </a>
     </div>
@@ -56,9 +138,7 @@
         </p>
 
         {% if can_manage_health %}
-        <form method="post"
-              action="{% url 'accounts:asset_health_configure' asset.id %}"
-              class="row g-3">
+        <form method="post" action="{% url 'accounts:asset_health_configure' asset.id %}" class="row g-3">
           {% csrf_token %}
 
           <div class="col-md-3">
@@ -78,9 +158,7 @@
 
           <div class="col-md-3">
             <label class="form-label">IP Address</label>
-            <input name="ip_address"
-                   class="form-control"
-                   placeholder="192.168.2.20">
+            <input name="ip_address" class="form-control" placeholder="192.168.2.20">
           </div>
 
           <div class="col-md-3">
@@ -100,321 +178,160 @@
 
   {% else %}
 
-    <div class="row g-3 mb-4">
-      <div class="col-lg-3">
-        <div class="card shadow-sm border-0 h-100">
-          <div class="card-body">
-            <div class="small text-muted mb-2">Overall Health</div>
-
-            <div class="health-score
-              {% if latest.status == 'healthy' %}text-success
-              {% elif latest.status == 'warning' %}text-warning
-              {% else %}text-danger{% endif %}">
-              {% if latest %}{{ latest.health_score }}{% else %}—{% endif %}
+    <!-- Hero + metrics -->
+    <div class="row g-3 mb-3">
+      <div class="col-lg-4">
+        <div class="ahd-hero">
+          <div class="d-flex align-items-center gap-3">
+            <div class="ahd-gauge">
+              <svg width="132" height="132" viewBox="0 0 132 132">
+                <circle cx="66" cy="66" r="52" fill="none" stroke="#eef2f7" stroke-width="12"></circle>
+                <circle id="ahdArc" class="ahd-arc" cx="66" cy="66" r="52" fill="none"
+                        stroke="#009edb" stroke-width="12" stroke-linecap="round"
+                        stroke-dasharray="326.7" stroke-dashoffset="326.7"></circle>
+              </svg>
+              <div class="ahd-gauge-value">
+                <div class="ahd-score" id="ahdScore">—</div>
+                <div class="small text-muted">of 100</div>
+              </div>
             </div>
 
-            <div class="small text-muted">out of 100</div>
+            <div>
+              <span class="badge" id="ahdStatusBadge">—</span>
+              <div class="ahd-delta mt-2" id="ahdDelta"></div>
+              <div class="small text-muted mt-2">
+                Last seen <span id="ahdLastSeen">—</span>
+              </div>
+              <div class="small text-muted" id="ahdStaleFlag"></div>
+            </div>
+          </div>
 
-            <hr>
+          <hr>
 
-            <span class="badge
-              {% if device.status == 'healthy' %}bg-success
-              {% elif device.status == 'warning' %}bg-warning text-dark
-              {% else %}bg-danger{% endif %}">
-              {{ device.status|title }}
-            </span>
-
-            <div class="small text-muted mt-2">
-              Last seen:
-              {{ device.last_seen|timesince|default:"Never" }}
-              {% if device.last_seen %} ago{% endif %}
+          <div class="row g-2 small">
+            <div class="col-6">
+              <div class="text-muted">24h average</div>
+              <div class="fw-bold" id="ahdAvg24">—</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted">Healthy samples</div>
+              <div class="fw-bold" id="ahdHealthyRatio">—</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted">Check-in every</div>
+              <div class="fw-bold" id="ahdCadence">—</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted">Samples in window</div>
+              <div class="fw-bold" id="ahdSamples">—</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted">Score range</div>
+              <div class="fw-bold" id="ahdRangeScore">—</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted">Uptime</div>
+              <div class="fw-bold" id="ahdUptime">—</div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="col-lg-9">
-        <div class="row g-3 h-100">
-
-          {% if device.monitor_type == "endpoint" %}
-            <div class="col-md-3">
-              <div class="metric-card">
-                <div class="small text-muted">CPU</div>
-                <div class="fs-3 fw-bold">
-                  {{ latest.cpu_percent|default:"—" }}
-                  {% if latest.cpu_percent != None %}%{% endif %}
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-3">
-              <div class="metric-card">
-                <div class="small text-muted">Memory</div>
-                <div class="fs-3 fw-bold">
-                  {{ latest.memory_percent|default:"—" }}
-                  {% if latest.memory_percent != None %}%{% endif %}
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-3">
-              <div class="metric-card">
-                <div class="small text-muted">Disk Free</div>
-                <div class="fs-3 fw-bold">
-                  {{ latest.disk_free_percent|default:"—" }}
-                  {% if latest.disk_free_percent != None %}%{% endif %}
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-3">
-              <div class="metric-card">
-                <div class="small text-muted">Battery Health</div>
-                <div class="fs-3 fw-bold">
-                  {{ latest.battery_health_percent|default:"—" }}
-                  {% if latest.battery_health_percent != None %}%{% endif %}
-                </div>
-              </div>
-            </div>
-
-          {% elif device.monitor_type == "printer" %}
-            <div class="col-md-4">
-              <div class="metric-card">
-                <div class="small text-muted">Lifetime Pages</div>
-                <div class="fs-3 fw-bold">
-                  {{ latest.page_count_total|default:"—" }}
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-4">
-              <div class="metric-card">
-                <div class="small text-muted">Black Toner</div>
-                <div class="fs-3 fw-bold">
-                  {{ latest.toner_black_percent|default:"—" }}
-                  {% if latest.toner_black_percent != None %}%{% endif %}
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-4">
-              <div class="metric-card">
-                <div class="small text-muted">Last 30 Days</div>
-                <div class="fs-3 fw-bold">
-                  {{ pages_last_30_days|default:"—" }}
-                </div>
-                <div class="small text-muted">pages</div>
-              </div>
-            </div>
-
-          {% elif device.monitor_type == "switch" %}
-            <div class="col-md-4">
-              <div class="metric-card">
-                <div class="small text-muted">Ports Up</div>
-                <div class="fs-3 fw-bold text-success">
-                  {{ latest.ports_up|default:"—" }}
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-4">
-              <div class="metric-card">
-                <div class="small text-muted">Ports Down</div>
-                <div class="fs-3 fw-bold text-secondary">
-                  {{ latest.ports_down|default:"—" }}
-                </div>
-              </div>
-            </div>
-
-            <div class="col-md-4">
-              <div class="metric-card">
-                <div class="small text-muted">Interface Errors</div>
-                <div class="fs-3 fw-bold {% if latest.port_errors %}text-warning{% endif %}">
-                  {{ latest.port_errors|default:"0" }}
-                </div>
-              </div>
-            </div>
-          {% endif %}
-
-        </div>
+      <div class="col-lg-8">
+        <div class="row g-3" id="ahdMetrics"></div>
       </div>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-lg-7">
+    <!-- Trend + alerts -->
+    <div class="row g-3 mb-3">
+      <div class="col-lg-8">
         <div class="card shadow-sm border-0 h-100">
-          <div class="card-header bg-white fw-bold">
-            <i class="bi bi-activity me-2"></i>
-            Health Trend · Last 7 Days
+          <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="fw-bold"><i class="bi bi-activity me-2"></i>Telemetry trend</span>
+            <div class="d-flex flex-wrap gap-1" id="ahdSeriesChips"></div>
           </div>
-          <div class="card-body" style="height:320px;">
+          <div class="card-body" style="height:340px;">
             <canvas id="healthChart"></canvas>
           </div>
         </div>
       </div>
 
-      <div class="col-lg-5">
+      <div class="col-lg-4">
         <div class="card shadow-sm border-0 h-100">
-          <div class="card-header bg-white fw-bold">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            Active Alerts
+          <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-exclamation-triangle me-2"></i>Active alerts</span>
+            <span class="badge bg-secondary" id="ahdAlertCount">0</span>
           </div>
-
-          <div class="card-body health-scroll">
-            {% for a in health_alerts %}
-              <div class="alert
-                {% if a.severity == 'critical' %}alert-danger
-                {% else %}alert-warning{% endif %} py-2">
-                <div class="fw-semibold">{{ a.message }}</div>
-                <div class="small">
-                  {{ a.last_seen_at|timesince }} ago
-                </div>
-              </div>
-            {% empty %}
-              <div class="text-success py-4 text-center">
-                <i class="bi bi-check-circle fs-2 d-block mb-2"></i>
-                No active health alerts.
-              </div>
-            {% endfor %}
-          </div>
+          <div class="card-body health-scroll" id="ahdAlerts"></div>
         </div>
       </div>
     </div>
 
-    <div class="card shadow-sm border-0 mb-4">
-      <div class="card-header bg-white fw-bold">
-        Device Information
+    <!-- Device intelligence -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-header bg-white">
+        <ul class="nav nav-tabs card-header-tabs" id="ahdTabs" role="tablist">
+          <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-system" type="button">System</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-hardware" type="button">Hardware</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-storage" type="button">Storage</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-network" type="button">Network</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-security" type="button">Security</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-processes" type="button">Processes</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-raw" type="button">Raw telemetry</button></li>
+        </ul>
       </div>
 
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-md-3">
-            <div class="small text-muted">Monitor Type</div>
-            <div class="fw-semibold text-capitalize">
-              {{ device.monitor_type }}
-            </div>
-          </div>
-
-          <div class="col-md-3">
-            <div class="small text-muted">Hostname</div>
-            <div class="fw-semibold">
-              {{ device.hostname|default:"—" }}
-            </div>
-          </div>
-
-          <div class="col-md-3">
-            <div class="small text-muted">IP Address</div>
-            <div class="fw-semibold">
-              {{ device.ip_address|default:"—" }}
-            </div>
-          </div>
-
-          <div class="col-md-3">
-            <div class="small text-muted">MAC Address</div>
-            <div class="fw-semibold">
-              {{ device.mac_address|default:"—" }}
-            </div>
-          </div>
-
-          {% if latest %}
-            <div class="col-md-3">
-              <div class="small text-muted">Operating System</div>
-              <div class="fw-semibold">
-                {{ latest.os_name|default:"—" }}
-              </div>
-            </div>
-
-            <div class="col-md-3">
-              <div class="small text-muted">OS Version</div>
-              <div class="fw-semibold">
-                {{ latest.os_version|default:"—" }}
-              </div>
-            </div>
-
-            <div class="col-md-3">
-              <div class="small text-muted">Firewall</div>
-              <div class="fw-semibold">
-                {{ latest.firewall_status|default:"—" }}
-              </div>
-            </div>
-
-            <div class="col-md-3">
-              <div class="small text-muted">Antivirus</div>
-              <div class="fw-semibold">
-                {{ latest.antivirus_status|default:"—" }}
-              </div>
-            </div>
-          {% endif %}
-        </div>
+      <div class="card-body tab-content">
+        <div class="tab-pane fade show active ahd-tab-pane" id="tab-system"><div class="row g-3" id="ahdSystem"></div></div>
+        <div class="tab-pane fade ahd-tab-pane" id="tab-hardware"><div class="row g-3" id="ahdHardware"></div></div>
+        <div class="tab-pane fade ahd-tab-pane" id="tab-storage"><div id="ahdStorage"></div></div>
+        <div class="tab-pane fade ahd-tab-pane" id="tab-network"><div id="ahdNetwork"></div></div>
+        <div class="tab-pane fade ahd-tab-pane" id="tab-security"><div id="ahdSecurity"></div></div>
+        <div class="tab-pane fade ahd-tab-pane" id="tab-processes"><div id="ahdProcesses"></div></div>
+        <div class="tab-pane fade ahd-tab-pane" id="tab-raw"><div id="ahdRaw"></div></div>
       </div>
     </div>
 
     {% if can_manage_health %}
       <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white fw-bold">
-          Monitoring Configuration
-        </div>
+        <div class="card-header bg-white fw-bold">Monitoring configuration</div>
 
         <div class="card-body">
-          <form method="post"
-                action="{% url 'accounts:asset_health_configure' asset.id %}"
-                class="row g-3">
+          <form method="post" action="{% url 'accounts:asset_health_configure' asset.id %}" class="row g-3">
             {% csrf_token %}
 
             <div class="col-md-3">
               <label class="form-label">Monitor Type</label>
               <select name="monitor_type" class="form-select">
-                <option value="endpoint"
-                        {% if device.monitor_type == "endpoint" %}selected{% endif %}>
-                  Computer / Endpoint Agent
-                </option>
-                <option value="printer"
-                        {% if device.monitor_type == "printer" %}selected{% endif %}>
-                  Network Printer
-                </option>
-                <option value="switch"
-                        {% if device.monitor_type == "switch" %}selected{% endif %}>
-                  Network Switch
-                </option>
-                <option value="other"
-                        {% if device.monitor_type == "other" %}selected{% endif %}>
-                  Other
-                </option>
+                <option value="endpoint" {% if device.monitor_type == "endpoint" %}selected{% endif %}>Computer / Endpoint Agent</option>
+                <option value="printer" {% if device.monitor_type == "printer" %}selected{% endif %}>Network Printer</option>
+                <option value="switch" {% if device.monitor_type == "switch" %}selected{% endif %}>Network Switch</option>
+                <option value="other" {% if device.monitor_type == "other" %}selected{% endif %}>Other</option>
               </select>
             </div>
 
             <div class="col-md-3">
               <label class="form-label">Hostname</label>
-              <input name="hostname"
-                     value="{{ device.hostname }}"
-                     class="form-control">
+              <input name="hostname" value="{{ device.hostname }}" class="form-control">
             </div>
 
             <div class="col-md-3">
               <label class="form-label">IP Address</label>
-              <input name="ip_address"
-                     value="{{ device.ip_address|default:'' }}"
-                     class="form-control">
+              <input name="ip_address" value="{{ device.ip_address|default:'' }}" class="form-control">
             </div>
 
             <div class="col-md-3">
               <label class="form-label">CUPS Queue</label>
-              <input name="printer_queue_name"
-                     value="{{ device.printer_queue_name }}"
-                     class="form-control">
+              <input name="printer_queue_name" value="{{ device.printer_queue_name }}" class="form-control">
             </div>
 
             <input type="hidden" name="enabled" value="1">
 
             <div class="col-12 d-flex gap-2">
-              <button class="btn btn-un-primary">
-                Save
-              </button>
+              <button class="btn btn-un-primary">Save</button>
 
               {% if device.monitor_type == "endpoint" %}
-                <button type="button"
-                        id="issueAgentToken"
-                        class="btn btn-outline-primary">
+                <button type="button" id="issueAgentToken" class="btn btn-outline-primary">
                   Issue / Rotate Agent Token
                 </button>
               {% endif %}
@@ -428,99 +345,632 @@
   {% endif %}
 </div>
 
-{{ health_history|json_script:"health-history-data" }}
+{{ initial_payload|json_script:"ahd-initial" }}
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-  const issueBtn = document.getElementById("issueAgentToken");
+(function () {
+  "use strict";
 
-  if (issueBtn) {
-    issueBtn.addEventListener("click", async function () {
-      if (!confirm(
-        "Rotate the agent token for this asset? " +
-        "The old agent token will stop working."
-      )) return;
+  var LIVE_URL = "{{ live_url|default:'' }}";
+  if (!LIVE_URL) { return; }
 
-      const csrftoken =
-        document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
+  var state = {
+    hours: 168,
+    interval: 15000,
+    timer: null,
+    lastUpdated: null,
+    data: null,
+    chart: null,
+    series: ["score"],
+    inFlight: false
+  };
 
-      const response = await fetch(
-        "{% url 'accounts:asset_health_agent_token' asset.id %}",
-        {
-          method: "POST",
-          headers: {"X-CSRFToken": csrftoken}
-        }
-      );
+  var el = function (id) { return document.getElementById(id); };
 
-      const data = await response.json();
-      const box = document.getElementById("agentTokenResult");
+  function esc(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
 
-      if (data.ok) {
-        box.innerHTML =
-          '<div class="alert alert-warning">' +
-          '<strong>Copy this token now:</strong><br>' +
-          '<code style="word-break:break-all">' +
-          data.token +
-          '</code><br><small>Endpoint: ' +
-          data.endpoint +
-          '</small></div>';
-      } else {
-        box.innerHTML =
-          '<div class="alert alert-danger">' +
-          (data.error || "Could not issue token.") +
-          '</div>';
+  function has(value) {
+    return value !== null && value !== undefined && value !== "" &&
+           !(Array.isArray(value) && value.length === 0);
+  }
+
+  function scoreColor(score) {
+    if (!has(score)) return "#9aa6b5";
+    if (score >= 80) return "#1a9d5b";
+    if (score >= 50) return "#e8a723";
+    return "#d3402f";
+  }
+
+  function relTime(iso) {
+    if (!iso) return "never";
+    var seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    if (seconds < 60) return seconds + "s ago";
+    if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
+    if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
+    return Math.floor(seconds / 86400) + "d ago";
+  }
+
+  function tween(node, to, suffix) {
+    suffix = suffix || "";
+    if (!has(to)) { node.textContent = "—"; return; }
+    var from = parseFloat(String(node.textContent).replace(/[^0-9.\-]/g, ""));
+    if (isNaN(from)) from = 0;
+    var start = performance.now(), duration = 700;
+    function step(now) {
+      var progress = Math.min(1, (now - start) / duration);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      var value = from + (to - from) * eased;
+      node.textContent = (Math.abs(value) >= 10 ? Math.round(value) : Math.round(value * 10) / 10) + suffix;
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function kv(label, value) {
+    if (!has(value)) return "";
+    return '<div class="col-md-4 col-lg-3"><div class="ahd-kv">' +
+             '<span class="k">' + esc(label) + "</span>" +
+             '<span class="v">' + esc(value) + "</span>" +
+           "</div></div>";
+  }
+
+  function emptyBlock(message) {
+    return '<div class="text-muted py-4 text-center">' +
+           '<i class="bi bi-inbox fs-3 d-block mb-2"></i>' + esc(message) + "</div>";
+  }
+
+  // ----- hero -------------------------------------------------------------
+  function renderHero(data) {
+    var latest = data.latest || {};
+    var stats = data.stats || {};
+    var device = data.device || {};
+    var score = latest.health_score;
+    var color = scoreColor(score);
+
+    tween(el("ahdScore"), score);
+    el("ahdScore").style.color = color;
+
+    var circumference = 326.7;
+    var arc = el("ahdArc");
+    arc.setAttribute("stroke", color);
+    arc.setAttribute("stroke-dashoffset", circumference - circumference * ((score || 0) / 100));
+
+    var status = (device.status || latest.status || "unknown");
+    var badge = el("ahdStatusBadge");
+    badge.textContent = status.toUpperCase();
+    badge.className = "badge " + (
+      status === "healthy" ? "bg-success" :
+      status === "warning" ? "bg-warning text-dark" :
+      status === "unknown" ? "bg-secondary" : "bg-danger"
+    );
+
+    var delta = stats.score_delta;
+    var deltaNode = el("ahdDelta");
+    if (has(delta) && delta !== 0) {
+      deltaNode.className = "ahd-delta mt-2 " + (delta > 0 ? "up" : "down");
+      deltaNode.innerHTML = '<i class="bi bi-arrow-' + (delta > 0 ? "up" : "down") +
+        '-short"></i>' + Math.abs(delta) + " pts since previous check-in";
+    } else {
+      deltaNode.className = "ahd-delta mt-2 text-muted";
+      deltaNode.textContent = "No change since previous check-in";
+    }
+
+    el("ahdLastSeen").textContent = relTime(device.last_seen);
+    el("ahdStaleFlag").innerHTML = stats.is_stale
+      ? '<span class="text-danger"><i class="bi bi-wifi-off"></i> No heartbeat — treated as offline</span>'
+      : "";
+
+    el("ahdAvg24").textContent = has(stats.score_avg_24h) ? stats.score_avg_24h : "—";
+    el("ahdHealthyRatio").textContent = has(stats.healthy_ratio) ? stats.healthy_ratio + "%" : "—";
+    el("ahdCadence").textContent = has(stats.cadence_seconds)
+      ? (stats.cadence_seconds >= 60
+          ? Math.round(stats.cadence_seconds / 60) + " min"
+          : stats.cadence_seconds + " s")
+      : "—";
+    el("ahdSamples").textContent = has(stats.samples) ? stats.samples : "—";
+    el("ahdRangeScore").textContent = (has(stats.score_min) && has(stats.score_max))
+      ? stats.score_min + "–" + stats.score_max : "—";
+    el("ahdUptime").textContent = stats.uptime_human || latest.uptime_human || "—";
+  }
+
+  // ----- metric tiles -----------------------------------------------------
+  function renderMetrics(metrics) {
+    var container = el("ahdMetrics");
+    if (!metrics || !metrics.length) { container.innerHTML = ""; return; }
+
+    container.innerHTML = metrics.map(function (metric) {
+      var numeric = typeof metric.value === "number";
+      var display = has(metric.value) ? metric.value : "—";
+      var pct = null;
+      if (numeric && metric.max) {
+        pct = Math.max(0, Math.min(100, (metric.value / metric.max) * 100));
       }
+
+      var barColor = "#009edb";
+      if (numeric && metric.max === 100) {
+        var good = metric.invert ? metric.value >= 40 : metric.value <= 75;
+        var bad = metric.invert ? metric.value < 15 : metric.value >= 90;
+        barColor = bad ? "#d3402f" : (good ? "#1a9d5b" : "#e8a723");
+      }
+
+      var deltaHtml = "";
+      if (has(metric.delta) && metric.delta !== 0) {
+        var improving = metric.invert ? metric.delta > 0 : metric.delta < 0;
+        deltaHtml = '<span class="ahd-delta ' + (improving ? "up" : "down") + '">' +
+          '<i class="bi bi-arrow-' + (metric.delta > 0 ? "up" : "down") + '-short"></i>' +
+          Math.abs(metric.delta) + "</span>";
+      }
+
+      return '<div class="col-6 col-lg-4">' +
+        '<div class="metric-card">' +
+          '<div class="d-flex justify-content-between align-items-center">' +
+            '<span class="small text-muted"><i class="bi bi-' + esc(metric.icon || "activity") +
+              ' me-1"></i>' + esc(metric.label) + "</span>" + deltaHtml +
+          "</div>" +
+          '<div class="mv" data-metric-value="' + (numeric ? metric.value : "") + '">' +
+            esc(display) + esc(numeric ? (metric.unit || "") : "") +
+          "</div>" +
+          (pct === null ? "" :
+            '<div class="metric-bar"><i data-width="' + pct.toFixed(1) +
+            '" style="background:' + barColor + '"></i></div>') +
+        "</div></div>";
+    }).join("");
+
+    requestAnimationFrame(function () {
+      container.querySelectorAll(".metric-bar i").forEach(function (bar) {
+        bar.style.width = bar.getAttribute("data-width") + "%";
+      });
     });
   }
 
-  const dataNode = document.getElementById("health-history-data");
-  if (!dataNode) return;
+  // ----- alerts -----------------------------------------------------------
+  function renderAlerts(alerts) {
+    var box = el("ahdAlerts");
+    el("ahdAlertCount").textContent = alerts.length;
+    el("ahdAlertCount").className = "badge " + (alerts.length ? "bg-danger" : "bg-secondary");
 
-  let rows = [];
+    if (!alerts.length) {
+      box.innerHTML = '<div class="text-success py-4 text-center">' +
+        '<i class="bi bi-check-circle fs-2 d-block mb-2"></i>No active health alerts.</div>';
+      return;
+    }
 
-  try {
-    rows = JSON.parse(dataNode.textContent || "[]");
-  } catch (e) {}
+    box.innerHTML = alerts.map(function (alert, index) {
+      var cls = alert.severity === "critical" ? "alert-danger"
+              : alert.severity === "warning" ? "alert-warning" : "alert-info";
+      return '<div class="alert ' + cls + ' py-2 ahd-alert" style="animation-delay:' +
+        (index * 60) + 'ms">' +
+        '<div class="fw-semibold">' + esc(alert.message) + "</div>" +
+        '<div class="small d-flex justify-content-between">' +
+          "<span>" + esc(alert.code) + "</span>" +
+          "<span>open " + relTime(alert.opened_at) + "</span>" +
+        "</div></div>";
+    }).join("");
+  }
 
-  function draw() {
-    const canvas = document.getElementById("healthChart");
-    if (!window.Chart || !canvas) return;
+  // ----- device intelligence ---------------------------------------------
+  function renderProfile(profile, device, latest) {
+    profile = profile || {};
+    var system = profile.system || {};
+    var hardware = profile.hardware || {};
+    var security = profile.security || {};
+    var network = profile.network || {};
 
-    new Chart(canvas, {
+    var systemHtml =
+      kv("Hostname", system.hostname || device.hostname) +
+      kv("Operating system", system.os_name) +
+      kv("OS version", system.os_version) +
+      kv("Build / kernel", system.os_build) +
+      kv("Architecture", system.architecture) +
+      kv("Domain / workgroup", system.domain) +
+      kv("Signed-in user", system.logged_in_user) +
+      kv("Device time zone", system.timezone) +
+      kv("Last boot", system.last_boot) +
+      kv("Uptime", system.uptime) +
+      kv("Agent version", system.agent_version) +
+      kv("Monitor type", device.monitor_type) +
+      kv("Monitoring since", device.created_at ? new Date(device.created_at).toLocaleDateString() : null);
+    el("ahdSystem").innerHTML = systemHtml || emptyBlock("No system facts reported yet.");
+
+    var hardwareHtml =
+      kv("Vendor", hardware.vendor) +
+      kv("Model", hardware.model) +
+      kv("Serial", hardware.serial) +
+      kv("Processor", hardware.cpu_model) +
+      kv("Cores / threads", has(hardware.cpu_cores)
+          ? hardware.cpu_cores + (has(hardware.cpu_threads) ? " / " + hardware.cpu_threads : "") : null) +
+      kv("Clock", has(hardware.cpu_speed_ghz) ? hardware.cpu_speed_ghz + " GHz" : null) +
+      kv("Installed memory", has(hardware.memory_total_gb) ? hardware.memory_total_gb + " GB" : null) +
+      kv("Graphics", hardware.gpu) +
+      kv("BIOS / firmware", hardware.bios_version) +
+      kv("Chassis", hardware.chassis) +
+      kv("Battery charge", has(hardware.battery_charge_percent) ? hardware.battery_charge_percent + "%" : null) +
+      kv("Battery cycles", hardware.battery_cycles) +
+      kv("Power source", hardware.power_source) +
+      kv("Warranty expiry", hardware.warranty_expiry);
+    el("ahdHardware").innerHTML = hardwareHtml || emptyBlock("No hardware inventory reported yet.");
+
+    // Storage
+    var disks = profile.storage || [];
+    if (!disks.length) {
+      var diskFree = latest ? latest.disk_free_percent : null;
+      el("ahdStorage").innerHTML = has(diskFree)
+        ? '<div class="p-2"><div class="d-flex justify-content-between small mb-1">' +
+          "<span>System volume</span><span>" + Math.round(diskFree) + "% free</span></div>" +
+          '<div class="ahd-bar-sm"><i data-width="' + (100 - diskFree) +
+          '" style="background:' + (diskFree < 15 ? "#d3402f" : "#009edb") + '"></i></div></div>'
+        : emptyBlock("No volume details reported yet.");
+    } else {
+      el("ahdStorage").innerHTML =
+        '<div class="table-responsive"><table class="table table-sm align-middle mb-0">' +
+        "<thead><tr><th>Volume</th><th>Type</th><th>Capacity</th><th>Free</th><th style='min-width:160px'>Used</th><th>SMART</th></tr></thead><tbody>" +
+        disks.map(function (disk) {
+          var used = has(disk.used_percent) ? disk.used_percent : null;
+          var barColor = used === null ? "#009edb" : (used >= 90 ? "#d3402f" : used >= 80 ? "#e8a723" : "#1a9d5b");
+          var smartOk = !disk.smart || ["ok", "passed", "good", "healthy"].indexOf(String(disk.smart).toLowerCase()) !== -1;
+          return "<tr><td class='fw-semibold'>" + esc(disk.name) + "</td>" +
+            "<td class='small text-muted'>" + esc(disk.fstype || "—") + "</td>" +
+            "<td>" + (has(disk.total_gb) ? disk.total_gb + " GB" : "—") + "</td>" +
+            "<td>" + (has(disk.free_gb) ? disk.free_gb + " GB" : "—") + "</td>" +
+            "<td>" + (used === null ? "—" :
+              '<div class="d-flex align-items-center gap-2"><div class="ahd-bar-sm flex-grow-1">' +
+              '<i data-width="' + used + '" style="background:' + barColor + '"></i></div>' +
+              "<span class='small'>" + used + "%</span></div>") + "</td>" +
+            "<td>" + (disk.smart
+              ? '<span class="badge ' + (smartOk ? "bg-success" : "bg-danger") + '">' + esc(disk.smart) + "</span>"
+              : "<span class='text-muted small'>—</span>") + "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    }
+
+    // Network
+    var interfaces = network.interfaces || [];
+    var networkHtml = '<div class="row g-3 mb-2">' +
+      kv("Primary IP", network.ip_address) +
+      kv("MAC address", network.mac_address) +
+      kv("Default gateway", network.gateway) +
+      kv("DNS servers", Array.isArray(network.dns_servers) ? network.dns_servers.join(", ") : network.dns_servers) +
+      kv("Wi-Fi SSID", network.ssid) +
+      kv("Signal", network.wifi_signal) +
+      kv("Link speed", has(network.link_speed_mbps) ? network.link_speed_mbps + " Mbps" : null) +
+      kv("VPN", network.vpn_status) +
+      "</div>";
+
+    if (interfaces.length) {
+      networkHtml += '<div class="table-responsive"><table class="table table-sm align-middle mb-0">' +
+        "<thead><tr><th>Interface</th><th>State</th><th>IPv4</th><th>MAC</th><th>Speed</th></tr></thead><tbody>" +
+        interfaces.map(function (nic) {
+          var up = String(nic.state || "").toLowerCase().indexOf("up") !== -1;
+          return "<tr><td class='fw-semibold'>" + esc(nic.name) + "</td>" +
+            "<td><span class='badge " + (up ? "bg-success" : "bg-secondary") + "'>" +
+              esc(nic.state || "unknown") + "</span></td>" +
+            "<td>" + esc(nic.ipv4 || "—") + "</td>" +
+            "<td class='small text-muted'>" + esc(nic.mac || "—") + "</td>" +
+            "<td>" + (has(nic.speed_mbps) ? nic.speed_mbps + " Mbps" : "—") + "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    }
+    el("ahdNetwork").innerHTML = networkHtml;
+
+    // Security
+    var posture = profile.posture || [];
+    var securityHtml = posture.length
+      ? '<div class="mb-3">' + posture.map(function (item) {
+          return '<span class="ahd-posture ' + (item.ok ? "ok" : "bad") + '">' +
+            '<i class="bi bi-' + (item.ok ? "shield-check" : "shield-exclamation") + '"></i>' +
+            esc(item.label) + ": " + esc(item.value) + "</span>";
+        }).join("") + "</div>"
+      : "";
+
+    securityHtml += '<div class="row g-3">' +
+      kv("Firewall", security.firewall) +
+      kv("Antivirus", security.antivirus) +
+      kv("AV product", security.antivirus_product) +
+      kv("AV definitions", security.antivirus_updated) +
+      kv("Disk encryption", security.disk_encryption) +
+      kv("Secure Boot", security.secure_boot) +
+      kv("TPM", security.tpm) +
+      kv("Screen lock", security.screen_lock) +
+      kv("Pending updates", security.pending_updates) +
+      kv("Last patched", security.last_patched) +
+      kv("Local administrators", Array.isArray(security.local_admins)
+          ? security.local_admins.join(", ") : security.local_admins) +
+      kv("Restart required", security.reboot_required) +
+      kv("Removable media policy", security.usb_storage_policy) +
+      "</div>";
+    el("ahdSecurity").innerHTML = securityHtml.indexOf("ahd-kv") === -1 && !posture.length
+      ? emptyBlock("No security posture reported yet.") : securityHtml;
+
+    // Processes
+    var processes = profile.processes || [];
+    el("ahdProcesses").innerHTML = processes.length
+      ? '<div class="table-responsive"><table class="table table-sm align-middle mb-0">' +
+        "<thead><tr><th>Process</th><th>PID</th><th>User</th><th style='min-width:150px'>CPU</th><th>Memory</th></tr></thead><tbody>" +
+        processes.map(function (proc) {
+          var cpu = has(proc.cpu_percent) ? proc.cpu_percent : null;
+          return "<tr><td class='fw-semibold'>" + esc(proc.name) + "</td>" +
+            "<td class='small text-muted'>" + (has(proc.pid) ? proc.pid : "—") + "</td>" +
+            "<td class='small'>" + esc(proc.user || "—") + "</td>" +
+            "<td>" + (cpu === null ? "—" :
+              '<div class="d-flex align-items-center gap-2"><div class="ahd-bar-sm flex-grow-1">' +
+              '<i data-width="' + Math.min(100, cpu) + '" style="background:#009edb"></i></div>' +
+              "<span class='small'>" + cpu + "%</span></div>") + "</td>" +
+            "<td>" + (has(proc.memory_percent) ? proc.memory_percent + "%" : "—") + "</td></tr>";
+        }).join("") + "</tbody></table></div>"
+      : emptyBlock("The agent is not reporting process telemetry.");
+
+    // Raw extras + printer/switch specifics
+    var extras = profile.extras || [];
+    var rawHtml = "";
+
+    if (device.monitor_type === "printer") {
+      var printer = profile.printer || {};
+      var supplies = printer.supplies || [];
+      rawHtml += '<div class="row g-3 mb-2">' +
+        kv("Printer state", printer.state) +
+        kv("Lifetime pages", printer.page_count_total) +
+        kv("Duplex", printer.duplex) +
+        kv("Firmware", printer.firmware) + "</div>";
+      if (supplies.length) {
+        rawHtml += '<div class="mb-3">' + supplies.map(function (supply) {
+          var level = has(supply.percent) ? supply.percent : 0;
+          var color = level <= 10 ? "#d3402f" : level <= 25 ? "#e8a723" : "#1a9d5b";
+          return '<div class="mb-2"><div class="d-flex justify-content-between small">' +
+            "<span>" + esc(supply.name) + "</span><span>" + Math.round(level) + "%</span></div>" +
+            '<div class="ahd-bar-sm"><i data-width="' + level + '" style="background:' + color + '"></i></div></div>';
+        }).join("") + "</div>";
+      }
+    }
+
+    if (device.monitor_type === "switch") {
+      var sw = profile.switch || {};
+      rawHtml += '<div class="row g-3 mb-2">' +
+        kv("Ports up", sw.ports_up) +
+        kv("Ports down", sw.ports_down) +
+        kv("Interface errors", sw.port_errors) +
+        kv("Firmware", sw.firmware) + "</div>";
+    }
+
+    rawHtml += extras.length
+      ? '<div class="row g-3">' + extras.map(function (extra) {
+          return kv(extra.label, extra.value);
+        }).join("") + "</div>"
+      : (rawHtml ? "" : emptyBlock("No additional telemetry fields in the last payload."));
+
+    el("ahdRaw").innerHTML = rawHtml;
+
+    // Animate every bar that was just injected.
+    requestAnimationFrame(function () {
+      document.querySelectorAll(".ahd-bar-sm i").forEach(function (bar) {
+        bar.style.width = Math.max(0, Math.min(100, Number(bar.getAttribute("data-width")))) + "%";
+      });
+    });
+  }
+
+  // ----- chart ------------------------------------------------------------
+  var SERIES_DEFS = {
+    score:       { label: "Health score", color: "#009edb", key: "score", axis: "y" },
+    cpu:         { label: "CPU %", color: "#d3402f", key: "cpu", axis: "y" },
+    memory:      { label: "Memory %", color: "#7b4fd0", key: "memory", axis: "y" },
+    disk:        { label: "Disk free %", color: "#1a9d5b", key: "disk", axis: "y" },
+    temperature: { label: "Temp °C", color: "#e8a723", key: "temperature", axis: "y" },
+    toner:       { label: "Toner %", color: "#24303f", key: "toner", axis: "y" },
+    errors:      { label: "Port errors", color: "#a52a1c", key: "errors", axis: "y1" }
+  };
+
+  function availableSeries(monitorType) {
+    if (monitorType === "printer") return ["score", "toner"];
+    if (monitorType === "switch") return ["score", "errors"];
+    return ["score", "cpu", "memory", "disk", "temperature"];
+  }
+
+  function renderSeriesChips(monitorType) {
+    var box = el("ahdSeriesChips");
+    box.innerHTML = availableSeries(monitorType).map(function (key) {
+      var def = SERIES_DEFS[key];
+      var active = state.series.indexOf(key) !== -1;
+      return '<button class="ahd-chip' + (active ? " active" : "") + '" data-series="' + key + '">' +
+        esc(def.label) + "</button>";
+    }).join("");
+
+    box.querySelectorAll(".ahd-chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        var key = chip.getAttribute("data-series");
+        var index = state.series.indexOf(key);
+        if (index === -1) state.series.push(key);
+        else if (state.series.length > 1) state.series.splice(index, 1);
+        chip.classList.toggle("active");
+        drawChart(state.data, true);
+      });
+    });
+  }
+
+  function drawChart(data, rebuild) {
+    var canvas = el("healthChart");
+    if (!window.Chart || !canvas || !data) return;
+
+    var rows = data.series || [];
+    var labels = rows.map(function (row) {
+      var when = new Date(row.t);
+      return state.hours <= 24
+        ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : when.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit" });
+    });
+
+    var datasets = state.series.map(function (key) {
+      var def = SERIES_DEFS[key];
+      return {
+        label: def.label,
+        data: rows.map(function (row) { return row[def.key]; }),
+        borderColor: def.color,
+        backgroundColor: def.color + "22",
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        spanGaps: true,
+        fill: key === "score",
+        yAxisID: def.axis
+      };
+    });
+
+    if (state.chart && !rebuild) {
+      state.chart.data.labels = labels;
+      state.chart.data.datasets = datasets;
+      state.chart.update();
+      return;
+    }
+
+    if (state.chart) state.chart.destroy();
+
+    state.chart = new Chart(canvas, {
       type: "line",
-      data: {
-        labels: rows.map(
-          r => new Date(r.recorded_at).toLocaleString()
-        ),
-        datasets: [{
-          label: "Health Score",
-          data: rows.map(r => r.health_score),
-          tension: .25,
-          fill: false
-        }]
-      },
+      data: { labels: labels, datasets: datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: { duration: 900, easing: "easeOutCubic" },
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {} }
+        },
         scales: {
-          y: {
-            min: 0,
-            max: 100
-          }
+          y: { min: 0, max: 100, grid: { color: "#eef2f7" } },
+          y1: { display: false, position: "right", beginAtZero: true },
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 8, autoSkip: true } }
         }
       }
     });
   }
 
-  if (window.Chart) {
-    draw();
-  } else {
-    const script = document.createElement("script");
-    script.src =
-      "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js";
-    script.onload = draw;
-    document.head.appendChild(script);
+  // ----- polling ----------------------------------------------------------
+  function apply(data) {
+    if (!data || !data.ok || !data.device) return;
+    state.data = data;
+    state.lastUpdated = new Date();
+
+    renderHero(data);
+    renderMetrics(data.metrics || []);
+    renderAlerts(data.alerts || []);
+    renderProfile(data.profile, data.device, data.latest);
+    drawChart(data, false);
+    tickLabel();
   }
-});
+
+  function poll() {
+    if (state.inFlight) return;
+    state.inFlight = true;
+    document.body.classList.add("ahd-refreshing");
+
+    fetch(LIVE_URL + "?hours=" + state.hours, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin"
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(apply)
+      .catch(function () { el("ahdUpdated").textContent = "refresh failed — retrying"; })
+      .then(function () {
+        state.inFlight = false;
+        document.body.classList.remove("ahd-refreshing");
+      });
+  }
+
+  function schedule() {
+    if (state.timer) clearInterval(state.timer);
+    var dot = el("ahdDot");
+    if (!dot) return;                      // monitoring not configured yet
+    dot.classList.toggle("paused", state.interval === 0);
+    if (state.interval > 0) {
+      state.timer = setInterval(function () {
+        if (!document.hidden) poll();
+      }, state.interval);
+    }
+  }
+
+  function tickLabel() {
+    if (!state.lastUpdated || !el("ahdUpdated")) return;
+    var seconds = Math.floor((Date.now() - state.lastUpdated.getTime()) / 1000);
+    el("ahdUpdated").textContent = (state.interval === 0 ? "paused · " : "live · ") +
+      "updated " + (seconds < 2 ? "just now" : seconds + "s ago");
+    if (state.data && state.data.device) {
+      el("ahdLastSeen").textContent = relTime(state.data.device.last_seen);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var initialNode = el("ahd-initial");
+    var initial = null;
+    try { initial = JSON.parse(initialNode.textContent); } catch (e) { initial = null; }
+
+    if (initial && initial.device) {
+      state.hours = initial.hours || 168;
+      renderSeriesChips(initial.device.monitor_type);
+      apply(initial);
+    }
+
+    var rangeSelect = el("ahdRange");
+    if (rangeSelect) {
+      rangeSelect.value = String(state.hours);
+      rangeSelect.addEventListener("change", function () {
+        state.hours = Number(this.value);
+        poll();
+      });
+    }
+
+    var intervalSelect = el("ahdInterval");
+    if (intervalSelect) {
+      intervalSelect.addEventListener("change", function () {
+        state.interval = Number(this.value);
+        schedule();
+        tickLabel();
+      });
+    }
+
+    var refreshBtn = el("ahdRefresh");
+    if (refreshBtn) refreshBtn.addEventListener("click", poll);
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && state.interval > 0) poll();
+    });
+
+    // Agent token rotation
+    var issueBtn = el("issueAgentToken");
+    if (issueBtn) {
+      issueBtn.addEventListener("click", function () {
+        if (!confirm("Rotate the agent token for this asset? The old agent token will stop working.")) return;
+
+        var csrftoken = (document.querySelector("[name=csrfmiddlewaretoken]") || {}).value || "";
+
+        fetch("{% url 'accounts:asset_health_agent_token' asset.id %}", {
+          method: "POST",
+          headers: { "X-CSRFToken": csrftoken },
+          credentials: "same-origin"
+        })
+          .then(function (response) { return response.json(); })
+          .then(function (data) {
+            var box = el("agentTokenResult");
+            if (data.ok) {
+              box.innerHTML = '<div class="alert alert-warning">' +
+                "<strong>Copy this token now:</strong><br>" +
+                '<code style="word-break:break-all">' + esc(data.token) + "</code>" +
+                "<br><small>Endpoint: " + esc(data.endpoint) + "</small></div>";
+            } else {
+              box.innerHTML = '<div class="alert alert-danger">' +
+                esc(data.error || "Could not issue token.") + "</div>";
+            }
+          });
+      });
+    }
+
+    schedule();
+    setInterval(tickLabel, 1000);
+  });
+})();
 </script>
 {% endblock %}

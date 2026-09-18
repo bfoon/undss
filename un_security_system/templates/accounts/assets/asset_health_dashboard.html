@@ -1,92 +1,663 @@
 {% extends "base.html" %}
 {% block title %}Asset Health | UN PASS{% endblock %}
 
+{% block extra_css %}
+<style>
+  .ah-kpi {
+    border: 1px solid #e9eef5;
+    border-radius: 14px;
+    background: #fff;
+    padding: 1rem 1.1rem;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .ah-kpi:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(16,42,67,.08); }
+  .ah-kpi .ah-kpi-value { font-size: 2rem; font-weight: 800; line-height: 1; }
+  .ah-kpi .ah-kpi-label { font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; color: #6b7a90; }
+  .ah-kpi-accent {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 14px 0 0 14px;
+  }
+  .ah-accent-total    { background: var(--un-blue); }
+  .ah-accent-healthy  { background: #1a9d5b; }
+  .ah-accent-warning  { background: #e8a723; }
+  .ah-accent-critical { background: #d3402f; }
+  .ah-accent-alert    { background: #7b4fd0; }
+
+  .ah-live-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: #1a9d5b;
+    display: inline-block; position: relative;
+  }
+  .ah-live-dot::after {
+    content: ""; position: absolute; inset: -4px; border-radius: 50%;
+    border: 2px solid rgba(26,157,91,.55); animation: ah-ping 1.8s ease-out infinite;
+  }
+  .ah-live-dot.ah-paused { background: #9aa6b5; }
+  .ah-live-dot.ah-paused::after { animation: none; border-color: transparent; }
+  @keyframes ah-ping {
+    0%   { transform: scale(.6); opacity: .9; }
+    80%  { transform: scale(1.7); opacity: 0; }
+    100% { transform: scale(1.7); opacity: 0; }
+  }
+
+  .ah-distribution { height: 10px; border-radius: 999px; overflow: hidden; background: #eef2f7; display: flex; }
+  .ah-distribution span { height: 100%; width: 0; transition: width .9s cubic-bezier(.22,.8,.32,1); }
+
+  .ah-ring { transform: rotate(-90deg); }
+  .ah-ring circle { transition: stroke-dashoffset 1s cubic-bezier(.22,.8,.32,1), stroke .4s ease; }
+
+  .ah-table tbody tr {
+    animation: ah-rise .38s ease both;
+    transition: background-color .5s ease;
+  }
+  @keyframes ah-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .ah-flash { background-color: #fff6d8 !important; }
+  .ah-flash-up { background-color: #e7f7ee !important; }
+  .ah-flash-down { background-color: #fdecea !important; }
+
+  .ah-score-bar { height: 6px; border-radius: 999px; background: #eef2f7; overflow: hidden; width: 90px; }
+  .ah-score-bar i { display: block; height: 100%; width: 0; transition: width .8s cubic-bezier(.22,.8,.32,1), background-color .4s ease; }
+
+  .ah-spark { display: block; }
+  .ah-spark path.ah-spark-line {
+    fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 260; stroke-dashoffset: 260; animation: ah-draw 1.1s ease forwards;
+  }
+  @keyframes ah-draw { to { stroke-dashoffset: 0; } }
+
+  .ah-pill { font-size: .72rem; font-weight: 700; letter-spacing: .03em; padding: .25rem .55rem; border-radius: 999px; }
+  .ah-pill-healthy  { background: #e7f7ee; color: #127a45; }
+  .ah-pill-warning  { background: #fdf3dd; color: #8a6200; }
+  .ah-pill-critical { background: #fdecea; color: #a52a1c; animation: ah-pulse 2.2s ease-in-out infinite; }
+  .ah-pill-offline  { background: #eceff3; color: #56606d; }
+  .ah-pill-unknown  { background: #eceff3; color: #56606d; }
+  @keyframes ah-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(213,64,47,.35); }
+    50%      { box-shadow: 0 0 0 6px rgba(213,64,47,0); }
+  }
+
+  .ah-chip { cursor: pointer; user-select: none; border: 1px solid #dde4ec; background: #fff; border-radius: 999px;
+             padding: .25rem .75rem; font-size: .8rem; transition: all .2s ease; }
+  .ah-chip:hover { border-color: var(--un-blue); color: var(--un-dark-blue); }
+  .ah-chip.active { background: var(--un-blue); border-color: var(--un-blue); color: #fff; }
+
+  .ah-mini { font-size: .72rem; color: #6b7a90; white-space: nowrap; }
+  .ah-mini b { color: #24303f; font-weight: 700; }
+
+  .ah-refreshing .ah-refresh-icon { animation: ah-spin .9s linear infinite; }
+  @keyframes ah-spin { to { transform: rotate(360deg); } }
+
+  .ah-skeleton { background: linear-gradient(90deg,#eef2f7 25%,#f7fafc 37%,#eef2f7 63%);
+                 background-size: 400% 100%; animation: ah-shimmer 1.3s ease infinite; border-radius: 6px; height: 14px; }
+  @keyframes ah-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ah-table tbody tr, .ah-spark path.ah-spark-line, .ah-live-dot::after,
+    .ah-pill-critical, .ah-refreshing .ah-refresh-icon { animation: none !important; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-3">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
     <div>
       <h3 class="text-un-primary fw-bold mb-1">
         <i class="bi bi-heart-pulse me-2"></i>Asset Health
       </h3>
-      <div class="text-muted">
-        Live endpoint, printer and switch monitoring.
+      <div class="text-muted d-flex align-items-center gap-2 flex-wrap">
+        <span>Live endpoint, printer and switch monitoring.</span>
+        <span class="d-inline-flex align-items-center gap-2 small">
+          <span class="ah-live-dot" id="ahLiveDot"></span>
+          <span id="ahUpdatedLabel" class="text-muted">connecting…</span>
+        </span>
       </div>
     </div>
 
-    <div class="d-flex gap-2">
-      <a href="{% url 'accounts:printer_management' %}"
-         class="btn btn-outline-primary">
-        <i class="bi bi-printer me-1"></i> Printer Management
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <select id="ahInterval" class="form-select form-select-sm" style="width:auto;">
+        <option value="10000">Refresh 10s</option>
+        <option value="15000" selected>Refresh 15s</option>
+        <option value="30000">Refresh 30s</option>
+        <option value="60000">Refresh 60s</option>
+        <option value="0">Paused</option>
+      </select>
+
+      <button id="ahRefreshNow" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-clockwise ah-refresh-icon"></i> Refresh
+      </button>
+
+      <a href="{% url 'accounts:printer_management' %}" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-printer me-1"></i> Printers
       </a>
-      <a href="{% url 'accounts:asset_management' %}"
-         class="btn btn-outline-secondary">
+      <a href="{% url 'accounts:asset_management' %}" class="btn btn-sm btn-outline-secondary">
         Asset Management
       </a>
     </div>
   </div>
 
+  <!-- KPI strip -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+      <div class="ah-kpi">
+        <span class="ah-kpi-accent ah-accent-total"></span>
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="ah-kpi-label">Monitored</div>
+            <div class="ah-kpi-value" data-count="total">0</div>
+            <div class="small text-muted mt-1">
+              <span data-count="stale">0</span> stale ·
+              <span data-count="offline">0</span> offline
+            </div>
+          </div>
+          <svg class="ah-ring" width="58" height="58" viewBox="0 0 58 58">
+            <circle cx="29" cy="29" r="24" fill="none" stroke="#eef2f7" stroke-width="7"></circle>
+            <circle id="ahAvgRing" cx="29" cy="29" r="24" fill="none" stroke="#009edb"
+                    stroke-width="7" stroke-linecap="round"
+                    stroke-dasharray="150.8" stroke-dashoffset="150.8"></circle>
+          </svg>
+        </div>
+        <div class="small text-muted mt-2">
+          Fleet score <b data-count="avg_score">—</b>/100
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="ah-kpi">
+        <span class="ah-kpi-accent ah-accent-healthy"></span>
+        <div class="ah-kpi-label">Healthy</div>
+        <div class="ah-kpi-value text-success" data-count="healthy">0</div>
+        <div class="ah-distribution mt-3">
+          <span id="ahDistHealthy"  style="background:#1a9d5b"></span>
+          <span id="ahDistWarning"  style="background:#e8a723"></span>
+          <span id="ahDistCritical" style="background:#d3402f"></span>
+          <span id="ahDistOffline"  style="background:#9aa6b5"></span>
+        </div>
+        <div class="small text-muted mt-2">Distribution across the fleet</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="ah-kpi">
+        <span class="ah-kpi-accent ah-accent-warning"></span>
+        <div class="ah-kpi-label">Needs attention</div>
+        <div class="ah-kpi-value text-warning" data-count="warning">0</div>
+        <div class="small text-muted mt-2">
+          <span data-count="alerts_warning">0</span> open warning alert(s)
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+      <div class="ah-kpi">
+        <span class="ah-kpi-accent ah-accent-critical"></span>
+        <div class="ah-kpi-label">Critical</div>
+        <div class="ah-kpi-value text-danger" data-count="critical">0</div>
+        <div class="small text-muted mt-2">
+          <span data-count="alerts_critical">0</span> open critical alert(s)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-3 d-flex flex-wrap gap-2 align-items-center">
+      <div class="input-group input-group-sm" style="max-width:280px;">
+        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+        <input id="ahSearch" class="form-control" placeholder="Search name, host, IP, serial…">
+      </div>
+
+      <div class="d-flex flex-wrap gap-1" id="ahStatusChips">
+        <button class="ah-chip active" data-status="all">All</button>
+        <button class="ah-chip" data-status="healthy">Healthy</button>
+        <button class="ah-chip" data-status="warning">Warning</button>
+        <button class="ah-chip" data-status="critical">Critical</button>
+        <button class="ah-chip" data-status="offline">Offline</button>
+      </div>
+
+      <div class="d-flex flex-wrap gap-1 ms-lg-2" id="ahTypeChips">
+        <button class="ah-chip active" data-type="all">All types</button>
+        <button class="ah-chip" data-type="endpoint">Endpoints</button>
+        <button class="ah-chip" data-type="printer">Printers</button>
+        <button class="ah-chip" data-type="switch">Switches</button>
+      </div>
+
+      <select id="ahSort" class="form-select form-select-sm ms-auto" style="width:auto;">
+        <option value="severity">Sort: severity</option>
+        <option value="score">Sort: lowest score</option>
+        <option value="seen">Sort: least recently seen</option>
+        <option value="name">Sort: name</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Fleet table -->
   <div class="card shadow-sm border-0">
-    <div class="table-responsive" style="max-height:650px;overflow:auto;">
-      <table class="table table-hover align-middle mb-0">
+    <div class="table-responsive" style="max-height:680px;overflow:auto;">
+      <table class="table table-hover align-middle mb-0 ah-table">
         <thead class="table-light" style="position:sticky;top:0;z-index:2;">
           <tr>
-            <th>Asset</th>
+            <th style="min-width:210px;">Asset</th>
             <th>Type</th>
             <th>Host / IP</th>
-            <th>Health</th>
+            <th style="min-width:150px;">Health</th>
+            <th style="min-width:110px;">Trend (24h)</th>
+            <th>Live metrics</th>
             <th>Status</th>
-            <th>Last Seen</th>
+            <th>Last seen</th>
             <th></th>
           </tr>
         </thead>
-        <tbody>
-        {% for d in devices %}
+        <tbody id="ahTableBody">
           <tr>
-            <td class="fw-semibold">
-              {{ d.asset.name|default:d.hostname|default:"Asset" }}
-            </td>
-            <td class="text-capitalize">{{ d.monitor_type }}</td>
-            <td>
-              {{ d.hostname|default:"—" }}<br>
-              <span class="small text-muted">{{ d.ip_address|default:"—" }}</span>
-            </td>
-            <td>
-              {% if d.health_score != None %}
-                <strong>{{ d.health_score }}/100</strong>
-              {% else %}—{% endif %}
-            </td>
-            <td>
-              <span class="badge
-                {% if d.status == 'healthy' %}bg-success
-                {% elif d.status == 'warning' %}bg-warning text-dark
-                {% elif d.status == 'critical' or d.status == 'offline' %}bg-danger
-                {% else %}bg-secondary{% endif %}">
-                {{ d.status|title }}
-              </span>
-            </td>
-            <td>
-              {{ d.last_seen|timesince|default:"Never" }}
-              {% if d.last_seen %} ago{% endif %}
-            </td>
-            <td class="text-end">
-              {% if d.asset %}
-                <a class="btn btn-sm btn-outline-primary"
-                   href="{% url 'accounts:asset_health_detail' d.asset.id %}">
-                  Open
-                </a>
-              {% endif %}
+            <td colspan="9" class="py-4">
+              <div class="ah-skeleton mb-2" style="width:60%"></div>
+              <div class="ah-skeleton mb-2" style="width:45%"></div>
+              <div class="ah-skeleton" style="width:70%"></div>
             </td>
           </tr>
-        {% empty %}
-          <tr>
-            <td colspan="7" class="text-center text-muted py-5">
-              No monitored assets yet.
-            </td>
-          </tr>
-        {% endfor %}
         </tbody>
       </table>
     </div>
+    <div class="card-footer bg-white small text-muted d-flex justify-content-between">
+      <span id="ahRowCount">—</span>
+      <span>Devices go stale after <span id="ahStaleMins">15</span> minutes without a heartbeat.</span>
+    </div>
   </div>
 </div>
+
+{{ initial_payload|json_script:"ah-initial" }}
+
+<script>
+(function () {
+  "use strict";
+
+  var LIVE_URL = "{{ live_url }}";
+  var state = {
+    devices: [],
+    summary: {},
+    previous: {},
+    interval: 15000,
+    timer: null,
+    lastUpdated: null,
+    filters: { search: "", status: "all", type: "all", sort: "severity" },
+    firstRender: true
+  };
+
+  var el = function (id) { return document.getElementById(id); };
+  var esc = function (value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  };
+
+  var TYPE_ICON = {
+    endpoint: "bi-laptop",
+    printer: "bi-printer",
+    switch: "bi-hdd-network",
+    other: "bi-cpu"
+  };
+
+  var SEVERITY_RANK = { critical: 0, offline: 1, warning: 2, unknown: 3, healthy: 4 };
+
+  function scoreColor(score) {
+    if (score === null || score === undefined) return "#9aa6b5";
+    if (score >= 80) return "#1a9d5b";
+    if (score >= 50) return "#e8a723";
+    return "#d3402f";
+  }
+
+  function relTime(iso) {
+    if (!iso) return "Never";
+    var seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    if (seconds < 60) return seconds + "s ago";
+    if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
+    if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
+    return Math.floor(seconds / 86400) + "d ago";
+  }
+
+  function tween(node, to) {
+    if (to === null || to === undefined) { node.textContent = "—"; return; }
+    var from = parseFloat(node.textContent.replace(/[^0-9.\-]/g, ""));
+    if (isNaN(from)) from = 0;
+    var start = performance.now();
+    var duration = 650;
+    function step(now) {
+      var progress = Math.min(1, (now - start) / duration);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      node.textContent = Math.round(from + (to - from) * eased);
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function sparkline(points, color) {
+    if (!points || points.length < 2) {
+      return '<span class="text-muted small">—</span>';
+    }
+    var width = 84, height = 26, pad = 2;
+    var min = Math.min.apply(null, points);
+    var max = Math.max.apply(null, points);
+    var span = (max - min) || 1;
+    var stepX = (width - pad * 2) / (points.length - 1);
+    var path = points.map(function (value, index) {
+      var x = pad + index * stepX;
+      var y = height - pad - ((value - min) / span) * (height - pad * 2);
+      return (index === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1);
+    }).join(" ");
+    var last = points[points.length - 1];
+    var lastX = pad + (points.length - 1) * stepX;
+    var lastY = height - pad - ((last - min) / span) * (height - pad * 2);
+    return '<svg class="ah-spark" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
+           '<path class="ah-spark-line" stroke="' + color + '" d="' + path + '"></path>' +
+           '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="2.4" fill="' + color + '"></circle>' +
+           '</svg>';
+  }
+
+  function miniMetrics(device) {
+    var parts = [];
+    if (device.monitor_type === "printer") {
+      if (device.toner_black_percent !== null && device.toner_black_percent !== undefined)
+        parts.push("Toner <b>" + Math.round(device.toner_black_percent) + "%</b>");
+      if (device.page_count_total !== null && device.page_count_total !== undefined)
+        parts.push("Pages <b>" + Number(device.page_count_total).toLocaleString() + "</b>");
+    } else if (device.monitor_type === "switch") {
+      if (device.ports_up !== null && device.ports_up !== undefined)
+        parts.push("Up <b>" + device.ports_up + "</b>");
+      if (device.ports_down !== null && device.ports_down !== undefined)
+        parts.push("Down <b>" + device.ports_down + "</b>");
+      if (device.port_errors) parts.push("Err <b>" + device.port_errors + "</b>");
+    } else {
+      if (device.cpu_percent !== null && device.cpu_percent !== undefined)
+        parts.push("CPU <b>" + Math.round(device.cpu_percent) + "%</b>");
+      if (device.memory_percent !== null && device.memory_percent !== undefined)
+        parts.push("RAM <b>" + Math.round(device.memory_percent) + "%</b>");
+      if (device.disk_free_percent !== null && device.disk_free_percent !== undefined)
+        parts.push("Free <b>" + Math.round(device.disk_free_percent) + "%</b>");
+    }
+    if (device.uptime_human) parts.push("Up <b>" + esc(device.uptime_human) + "</b>");
+    return parts.length ? '<span class="ah-mini">' + parts.join(" · ") + "</span>"
+                        : '<span class="text-muted small">No telemetry yet</span>';
+  }
+
+  function alertBadge(device) {
+    var counts = device.alerts || {};
+    var chunks = [];
+    if (counts.critical) chunks.push('<span class="badge bg-danger">' + counts.critical + "</span>");
+    if (counts.warning) chunks.push('<span class="badge bg-warning text-dark">' + counts.warning + "</span>");
+    if (counts.info) chunks.push('<span class="badge bg-secondary">' + counts.info + "</span>");
+    return chunks.join(" ");
+  }
+
+  function rowHtml(device, index) {
+    var color = scoreColor(device.health_score);
+    var score = (device.health_score === null || device.health_score === undefined)
+      ? "—" : device.health_score;
+    var statusClass = "ah-pill ah-pill-" + (device.status || "unknown");
+    var openBtn = device.url
+      ? '<a class="btn btn-sm btn-outline-primary" href="' + device.url + '">Open</a>'
+      : "";
+    var printerBtn = device.printer_url
+      ? ' <a class="btn btn-sm btn-outline-secondary" href="' + device.printer_url + '" title="Printer console"><i class="bi bi-printer"></i></a>'
+      : "";
+
+    return '' +
+      '<tr data-asset="' + device.asset_id + '" style="animation-delay:' + Math.min(index * 22, 400) + 'ms">' +
+        '<td>' +
+          '<div class="fw-semibold">' + esc(device.name) + "</div>" +
+          '<div class="small text-muted">' +
+            esc(device.asset_tag || device.serial_number || "No tag") +
+            (device.category ? " · " + esc(device.category) : "") +
+          "</div>" +
+        "</td>" +
+        '<td><i class="bi ' + (TYPE_ICON[device.monitor_type] || "bi-cpu") + ' me-1 text-secondary"></i>' +
+          '<span class="text-capitalize">' + esc(device.monitor_type) + "</span></td>" +
+        "<td>" + esc(device.hostname || "—") +
+          '<div class="small text-muted">' + esc(device.ip_address || "—") + "</div></td>" +
+        "<td>" +
+          '<div class="d-flex align-items-center gap-2">' +
+            '<strong style="color:' + color + '">' + score + "</strong>" +
+            '<div class="ah-score-bar"><i data-width="' + (device.health_score || 0) +
+              '" style="background:' + color + '"></i></div>' +
+          "</div>" +
+          '<div class="mt-1">' + alertBadge(device) + "</div>" +
+        "</td>" +
+        "<td>" + sparkline(device.spark, color) + "</td>" +
+        "<td>" + miniMetrics(device) + "</td>" +
+        '<td><span class="' + statusClass + '">' +
+          esc((device.status || "unknown").toUpperCase()) + "</span></td>" +
+        "<td>" +
+          '<span class="small">' + relTime(device.last_seen) + "</span>" +
+          (device.is_stale ? '<div class="small text-danger"><i class="bi bi-wifi-off"></i> stale</div>' : "") +
+        "</td>" +
+        '<td class="text-end text-nowrap">' + openBtn + printerBtn + "</td>" +
+      "</tr>";
+  }
+
+  function visibleDevices() {
+    var f = state.filters;
+    var needle = f.search.trim().toLowerCase();
+
+    var rows = state.devices.filter(function (device) {
+      if (f.status !== "all" && device.status !== f.status) return false;
+      if (f.type !== "all" && device.monitor_type !== f.type) return false;
+      if (!needle) return true;
+      return [device.name, device.hostname, device.ip_address, device.serial_number,
+              device.model_name, device.vendor, device.asset_tag, device.os]
+        .some(function (value) {
+          return value && String(value).toLowerCase().indexOf(needle) !== -1;
+        });
+    });
+
+    rows.sort(function (a, b) {
+      if (f.sort === "score") {
+        return (a.health_score === null ? 999 : a.health_score) -
+               (b.health_score === null ? 999 : b.health_score);
+      }
+      if (f.sort === "seen") {
+        return (b.seconds_since_seen || 0) - (a.seconds_since_seen || 0);
+      }
+      if (f.sort === "name") {
+        return String(a.name).localeCompare(String(b.name));
+      }
+      var rank = (SEVERITY_RANK[a.status] || 3) - (SEVERITY_RANK[b.status] || 3);
+      if (rank !== 0) return rank;
+      return (a.health_score || 0) - (b.health_score || 0);
+    });
+
+    return rows;
+  }
+
+  function render() {
+    var body = el("ahTableBody");
+    var rows = visibleDevices();
+
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-5">' +
+        (state.devices.length ? "No devices match these filters." : "No monitored assets yet.") +
+        "</td></tr>";
+      el("ahRowCount").textContent = "0 of " + state.devices.length + " devices";
+      return;
+    }
+
+    body.innerHTML = rows.map(rowHtml).join("");
+    el("ahRowCount").textContent = rows.length + " of " + state.devices.length + " devices";
+
+    // Animate the score bars after paint.
+    requestAnimationFrame(function () {
+      Array.prototype.forEach.call(body.querySelectorAll(".ah-score-bar i"), function (bar) {
+        bar.style.width = Math.max(0, Math.min(100, Number(bar.getAttribute("data-width")))) + "%";
+      });
+    });
+
+    // Flash rows whose score or status changed since the last poll.
+    if (!state.firstRender) {
+      rows.forEach(function (device) {
+        var before = state.previous[device.asset_id];
+        if (!before) return;
+        var changedScore = before.health_score !== device.health_score;
+        var changedStatus = before.status !== device.status;
+        if (!changedScore && !changedStatus) return;
+
+        var tr = body.querySelector('tr[data-asset="' + device.asset_id + '"]');
+        if (!tr) return;
+        var cls = "ah-flash";
+        if (changedScore && before.health_score !== null && device.health_score !== null) {
+          cls = device.health_score > before.health_score ? "ah-flash-up" : "ah-flash-down";
+        }
+        tr.classList.add(cls);
+        setTimeout(function () { tr.classList.remove(cls); }, 2200);
+      });
+    }
+
+    state.firstRender = false;
+  }
+
+  function renderSummary(summary) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-count]"), function (node) {
+      var key = node.getAttribute("data-count");
+      var value = summary[key];
+      if (value === null || value === undefined) { node.textContent = "—"; return; }
+      tween(node, value);
+    });
+
+    var ring = el("ahAvgRing");
+    var circumference = 150.8;
+    var avg = summary.avg_score || 0;
+    ring.setAttribute("stroke-dashoffset", circumference - (circumference * avg / 100));
+    ring.setAttribute("stroke", scoreColor(summary.avg_score));
+
+    var total = summary.total || 1;
+    var widths = {
+      ahDistHealthy: summary.healthy || 0,
+      ahDistWarning: summary.warning || 0,
+      ahDistCritical: summary.critical || 0,
+      ahDistOffline: (summary.offline || 0) + (summary.unknown || 0)
+    };
+    Object.keys(widths).forEach(function (id) {
+      el(id).style.width = (100 * widths[id] / total) + "%";
+    });
+  }
+
+  function applyPayload(payload) {
+    if (!payload || !payload.ok) return;
+    state.previous = {};
+    state.devices.forEach(function (device) { state.previous[device.asset_id] = device; });
+    state.devices = payload.devices || [];
+    state.summary = payload.summary || {};
+    state.lastUpdated = new Date();
+    el("ahStaleMins").textContent = payload.stale_after_minutes || 15;
+    renderSummary(state.summary);
+    render();
+  }
+
+  var inFlight = false;
+
+  function poll(manual) {
+    if (inFlight) return;
+    inFlight = true;
+    document.body.classList.add("ah-refreshing");
+
+    fetch(LIVE_URL, { headers: { "X-Requested-With": "XMLHttpRequest" }, credentials: "same-origin" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(applyPayload)
+      .catch(function () {
+        el("ahUpdatedLabel").textContent = "refresh failed — retrying";
+      })
+      .then(function () {
+        inFlight = false;
+        document.body.classList.remove("ah-refreshing");
+        if (manual) tickLabel();
+      });
+  }
+
+  function schedule() {
+    if (state.timer) clearInterval(state.timer);
+    el("ahLiveDot").classList.toggle("ah-paused", state.interval === 0);
+    if (state.interval > 0) {
+      state.timer = setInterval(function () {
+        if (document.hidden) return;   // do not poll a background tab
+        poll(false);
+      }, state.interval);
+    }
+  }
+
+  function tickLabel() {
+    if (!state.lastUpdated) return;
+    var seconds = Math.floor((Date.now() - state.lastUpdated.getTime()) / 1000);
+    el("ahUpdatedLabel").textContent =
+      (state.interval === 0 ? "paused · " : "live · ") +
+      "updated " + (seconds < 2 ? "just now" : seconds + "s ago");
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var initialNode = el("ah-initial");
+    if (initialNode) {
+      try { applyPayload(JSON.parse(initialNode.textContent)); } catch (e) { /* ignore */ }
+    }
+
+    el("ahInterval").addEventListener("change", function () {
+      state.interval = Number(this.value);
+      schedule();
+      tickLabel();
+    });
+
+    el("ahRefreshNow").addEventListener("click", function () { poll(true); });
+
+    el("ahSearch").addEventListener("input", function () {
+      state.filters.search = this.value;
+      state.firstRender = true;
+      render();
+    });
+
+    el("ahSort").addEventListener("change", function () {
+      state.filters.sort = this.value;
+      state.firstRender = true;
+      render();
+    });
+
+    document.querySelectorAll("#ahStatusChips .ah-chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        document.querySelectorAll("#ahStatusChips .ah-chip").forEach(function (other) {
+          other.classList.remove("active");
+        });
+        chip.classList.add("active");
+        state.filters.status = chip.getAttribute("data-status");
+        state.firstRender = true;
+        render();
+      });
+    });
+
+    document.querySelectorAll("#ahTypeChips .ah-chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        document.querySelectorAll("#ahTypeChips .ah-chip").forEach(function (other) {
+          other.classList.remove("active");
+        });
+        chip.classList.add("active");
+        state.filters.type = chip.getAttribute("data-type");
+        state.firstRender = true;
+        render();
+      });
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && state.interval > 0) poll(false);
+    });
+
+    schedule();
+    setInterval(tickLabel, 1000);
+    tickLabel();
+  });
+})();
+</script>
 {% endblock %}
