@@ -13,7 +13,6 @@
 
         <div class="modal-body">
 
-          {# ── Context card shown when modal opens ─────────────────── #}
           <div id="assignContextCard" class="alert alert-info d-none py-2 mb-3 small">
             <div class="d-flex gap-3 flex-wrap">
               <div><span class="text-muted">Request&nbsp;#</span> <strong id="ctx_req_id">—</strong></div>
@@ -23,12 +22,7 @@
             </div>
           </div>
 
-          {# ── Asset data ───────────────────────────────────────────── #}
-          {# Preferred: view passes `available_assets` (a plain list of dicts)  #}
-          {# and we serialise it with Django's json_script, which escapes       #}
-          {# <, > and & so an asset name can never break out of the tag.        #}
-          {# Fallback branch keeps the old `available_assets_json` context key  #}
-          {# working if the view has not been updated yet.                      #}
+          {# Embedded copy is only a fallback. The modal fetches fresh data every time it opens. #}
           {% if available_assets_json %}
             {{ available_assets_json|safe }}
           {% else %}
@@ -36,19 +30,25 @@
           {% endif %}
 
           <label class="form-label fw-semibold" for="assignAssetSelect">Select an available asset</label>
+
+          <div id="assignAssetLoading" class="border rounded py-3 px-3 text-muted small d-none mb-2">
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Loading current available assets…
+          </div>
+
           <select class="form-select" name="asset_id" id="assignAssetSelect" required>
             <option value="">Choose asset…</option>
           </select>
 
           <div class="form-text mt-1" id="assignAssetHint">
+            The list is refreshed from UNPASS each time this window opens.
             Only <b>available</b> assets matching the request category are shown.
-            Assets from the request's unit appear first.
           </div>
 
           <div class="alert alert-warning d-none mt-2 py-2 small" id="assignNoMatchWarn">
             <i class="bi bi-exclamation-triangle me-1"></i>
             <span id="assignNoMatchText">
-              No available assets found for this category. Register a new asset or check existing ones.
+              No available assets found for this category.
             </span>
           </div>
 
@@ -67,182 +67,343 @@
 
 <script>
 (function () {
-  const modalEl = document.getElementById('modalAssignAsset');
+  "use strict";
+
+  const modalEl = document.getElementById("modalAssignAsset");
   if (!modalEl) return;
 
-  const selEl     = document.getElementById('assignAssetSelect');
-  const warnEl    = document.getElementById('assignNoMatchWarn');
-  const warnTxtEl = document.getElementById('assignNoMatchText');
-  const hintEl    = document.getElementById('assignAssetHint');
-  const submitEl  = document.getElementById('assignSubmitBtn');
-  const reqIdEl   = document.getElementById('assignRequestId');
-  const cardEl    = document.getElementById('assignContextCard');
+  const selEl     = document.getElementById("assignAssetSelect");
+  const warnEl    = document.getElementById("assignNoMatchWarn");
+  const warnTxtEl = document.getElementById("assignNoMatchText");
+  const hintEl    = document.getElementById("assignAssetHint");
+  const submitEl  = document.getElementById("assignSubmitBtn");
+  const reqIdEl   = document.getElementById("assignRequestId");
+  const cardEl    = document.getElementById("assignContextCard");
+  const loadingEl = document.getElementById("assignAssetLoading");
 
-  // Set by openAssignModal() so the show.bs.modal handler can pick it up.
   let pendingCtx = null;
-
-  // ── Data loading ────────────────────────────────────────────────────
-  // Read fresh on every open, and never throw: a missing or malformed
-  // payload degrades to an empty list with a console warning instead of
-  // killing this whole IIFE (which would leave openAssignModal undefined).
-  function loadAssets() {
-    const node = document.getElementById('availableAssetsData');
-    if (!node) {
-      console.warn('[assignAsset] #availableAssetsData not found. ' +
-                   'Check that the view passes `available_assets` in the template context.');
-      return [];
-    }
-    try {
-      const data = JSON.parse(node.textContent || '[]');
-      return Array.isArray(data) ? data : [];
-    } catch (err) {
-      console.error('[assignAsset] Could not parse asset payload:', err);
-      return [];
-    }
-  }
+  let activeFetch = null;
+  let openSequence = 0;
 
   function toInt(value) {
-    if (value === null || value === undefined || value === '') return null;
+    if (value === null || value === undefined || value === "") return null;
     const n = parseInt(value, 10);
     return Number.isNaN(n) ? null : n;
   }
 
   function makeOption(a) {
-    const opt = document.createElement('option');
+    const opt = document.createElement("option");
     opt.value = a.id;
-    const sn   = a.serial_number ? 'SN: ' + a.serial_number : '';
-    const tag  = a.asset_tag ? 'Tag: ' + a.asset_tag : '';
-    const meta = [sn, tag].filter(Boolean).join(' | ');
+
+    const sn = a.serial_number ? "SN: " + a.serial_number : "";
+    const tag = a.asset_tag ? "Tag: " + a.asset_tag : "";
+    const meta = [sn, tag].filter(Boolean).join(" | ");
+
     opt.textContent =
-      a.name +
-      (meta ? ' — ' + meta : '') +
-      (a.unit_name ? ' [' + a.unit_name + ']' : '');
+      (a.name || "Asset #" + a.id) +
+      (meta ? " — " + meta : "") +
+      (a.unit_name ? " [" + a.unit_name + "]" : "");
+
     return opt;
+  }
+
+  function clearSelect() {
+    selEl.innerHTML = '<option value="">Choose asset…</option>';
   }
 
   function showWarning(message) {
     warnTxtEl.textContent = message;
-    warnEl.classList.remove('d-none');
+    warnEl.classList.remove("d-none");
+  }
+
+  function hideWarning() {
+    warnEl.classList.add("d-none");
+    warnTxtEl.textContent = "";
+  }
+
+  function showLoading() {
+    loadingEl.classList.remove("d-none");
+    selEl.classList.add("d-none");
+    submitEl.disabled = true;
+  }
+
+  function hideLoading() {
+    loadingEl.classList.add("d-none");
+    selEl.classList.remove("d-none");
   }
 
   function reset() {
-    selEl.innerHTML = '<option value="">Choose asset…</option>';
-    warnEl.classList.add('d-none');
-    cardEl.classList.add('d-none');
-    submitEl.disabled = false;
-    hintEl.textContent =
-      'Only available assets matching the request category are shown. ' +
-      "Assets from the request's unit appear first.";
+    if (activeFetch) {
+      activeFetch.abort();
+      activeFetch = null;
+    }
+
+    clearSelect();
+    hideWarning();
+    loadingEl.classList.add("d-none");
+    selEl.classList.remove("d-none");
+    cardEl.classList.add("d-none");
+    submitEl.disabled = true;
+    reqIdEl.value = "";
+
+    hintEl.innerHTML =
+      'The list is refreshed from UNPASS each time this window opens. ' +
+      'Only <b>available</b> assets matching the request category are shown.';
   }
 
-  // ── Population ──────────────────────────────────────────────────────
-  function populate(ctx) {
+  function setContext(ctx) {
     ctx = ctx || {};
-    reset();
 
-    const reqId = ctx.req_id || '';
+    const reqId = ctx.req_id || ctx.id || "";
     reqIdEl.value = reqId;
 
-    document.getElementById('ctx_req_id').textContent    = reqId || '—';
-    document.getElementById('ctx_category').textContent  = ctx.category_name || '—';
-    document.getElementById('ctx_unit').textContent      = ctx.unit_name || 'Unallocated';
-    document.getElementById('ctx_requester').textContent = ctx.requester || '—';
-    cardEl.classList.remove('d-none');
+    document.getElementById("ctx_req_id").textContent =
+      reqId || "—";
+    document.getElementById("ctx_category").textContent =
+      ctx.category_name || "—";
+    document.getElementById("ctx_unit").textContent =
+      ctx.unit_name || "Unallocated/Core";
+    document.getElementById("ctx_requester").textContent =
+      ctx.requester || "—";
 
-    if (!reqId) {
-      showWarning('Could not determine which request this is for. ' +
-                  'Close this dialog and click Assign from the ICT queue row again.');
-      submitEl.disabled = true;
-      return;
-    }
+    cardEl.classList.remove("d-none");
+  }
 
-    const allAssets = loadAssets();
+  function embeddedAssetsFor(ctx) {
+    const node = document.getElementById("availableAssetsData");
+    if (!node) return [];
 
-    if (allAssets.length === 0) {
-      showWarning('There are no assets with status "Available" in this agency. ' +
-                  'Register a new asset, or return/free up an existing one first.');
-      submitEl.disabled = true;
-      return;
-    }
+    try {
+      const data = JSON.parse(node.textContent || "[]");
+      if (!Array.isArray(data)) return [];
 
-    const catId  = toInt(ctx.category_id);
-    const unitId = toInt(ctx.unit_id);
+      const categoryId = toInt(ctx.category_id);
+      if (categoryId === null) return data.slice();
 
-    // When the category is unknown, show everything available rather than an
-    // empty list — the server still enforces the category match on submit.
-    let matching;
-    if (catId === null) {
-      matching = allAssets.slice();
-      hintEl.textContent =
-        'Request category could not be determined, so all available assets are listed. ' +
-        'The category must still match the request or the assignment will be rejected.';
-    } else {
-      matching = allAssets.filter(a => toInt(a.category_id) === catId);
-    }
-
-    if (matching.length === 0) {
-      showWarning('No available assets found for this category' +
-                  (ctx.category_name ? ' (' + ctx.category_name + ')' : '') +
-                  '. Register a new asset or check existing ones.');
-      submitEl.disabled = true;
-      return;
-    }
-
-    submitEl.disabled = false;
-
-    const unitAssets  = unitId === null ? [] : matching.filter(a => toInt(a.unit_id) === unitId);
-    const otherAssets = unitId === null ? matching : matching.filter(a => toInt(a.unit_id) !== unitId);
-
-    if (unitAssets.length > 0 && otherAssets.length > 0) {
-      const grp1 = document.createElement('optgroup');
-      grp1.label = '\uD83D\uDCCC ' + (ctx.unit_name || 'Request Unit') +
-                   ' — ' + unitAssets.length + ' asset(s)';
-      unitAssets.forEach(a => grp1.appendChild(makeOption(a)));
-      selEl.appendChild(grp1);
-
-      const grp2 = document.createElement('optgroup');
-      grp2.label = 'Other Available — ' + otherAssets.length + ' asset(s)';
-      otherAssets.forEach(a => grp2.appendChild(makeOption(a)));
-      selEl.appendChild(grp2);
-    } else {
-      [...unitAssets, ...otherAssets].forEach(a => selEl.appendChild(makeOption(a)));
+      return data.filter(function (asset) {
+        return toInt(asset.category_id) === categoryId;
+      });
+    } catch (err) {
+      console.error("[assignAsset] Could not parse fallback asset payload:", err);
+      return [];
     }
   }
 
-  // ── Wiring ──────────────────────────────────────────────────────────
-  // Primary path: standard Bootstrap data-attributes on the trigger button,
-  // matching how every other modal on this page works.
-  modalEl.addEventListener('show.bs.modal', function (event) {
-    let ctx = pendingCtx;
-    pendingCtx = null;
+  function renderAssets(assets, ctx) {
+    clearSelect();
+    hideWarning();
 
-    if (!ctx) {
-      const btn = event.relatedTarget;
-      if (btn) {
-        ctx = {
-          req_id:        btn.getAttribute('data-request-id'),
-          category_id:   btn.getAttribute('data-category-id'),
-          category_name: btn.getAttribute('data-category-name'),
-          unit_id:       btn.getAttribute('data-unit-id'),
-          unit_name:     btn.getAttribute('data-unit-name'),
-          requester:     btn.getAttribute('data-requester'),
-        };
-      }
+    assets = Array.isArray(assets) ? assets : [];
+
+    if (!assets.length) {
+      showWarning(
+        "No available assets found for " +
+        (ctx.category_name ? ctx.category_name + ". " : "this category. ") +
+        "Register a new asset, return/free up an existing asset, or check the asset category."
+      );
+      submitEl.disabled = true;
+      return;
     }
 
-    populate(ctx);
+    const unitId = toInt(ctx.unit_id);
+    const unitAssets = unitId === null
+      ? []
+      : assets.filter(function (a) { return toInt(a.unit_id) === unitId; });
+
+    const otherAssets = unitId === null
+      ? assets
+      : assets.filter(function (a) { return toInt(a.unit_id) !== unitId; });
+
+    if (unitAssets.length && otherAssets.length) {
+      const unitGroup = document.createElement("optgroup");
+      unitGroup.label =
+        "\uD83D\uDCCC " +
+        (ctx.unit_name || "Request Unit") +
+        " — " + unitAssets.length + " asset(s)";
+
+      unitAssets.forEach(function (asset) {
+        unitGroup.appendChild(makeOption(asset));
+      });
+      selEl.appendChild(unitGroup);
+
+      const otherGroup = document.createElement("optgroup");
+      otherGroup.label =
+        "Other Available — " + otherAssets.length + " asset(s)";
+
+      otherAssets.forEach(function (asset) {
+        otherGroup.appendChild(makeOption(asset));
+      });
+      selEl.appendChild(otherGroup);
+    } else {
+      unitAssets.concat(otherAssets).forEach(function (asset) {
+        selEl.appendChild(makeOption(asset));
+      });
+    }
+
+    submitEl.disabled = false;
+  }
+
+  async function loadFreshAssets(ctx, sequence) {
+    const reqId = ctx.req_id || ctx.id || "";
+
+    if (!reqId) {
+      hideLoading();
+      showWarning(
+        "Could not determine which request this is for. " +
+        "Close this window and click Assign Asset from the ICT queue again."
+      );
+      submitEl.disabled = true;
+      return;
+    }
+
+    if (activeFetch) activeFetch.abort();
+    activeFetch = new AbortController();
+
+    const url = new URL(window.location.href);
+    url.hash = "";
+    url.search = "";
+    url.searchParams.set("assignment_options", "1");
+    url.searchParams.set("request_id", reqId);
+    url.searchParams.set("_ts", Date.now().toString());
+
+    showLoading();
+
+    try {
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: {
+          "Accept": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        signal: activeFetch.signal
+      });
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        data = null;
+      }
+
+      if (sequence !== openSequence) return;
+
+      if (!response.ok || !data || !data.ok) {
+        const message =
+          data && data.error
+            ? data.error
+            : "UNPASS could not refresh the available asset list.";
+
+        const fallback = embeddedAssetsFor(ctx);
+
+        hideLoading();
+
+        if (fallback.length) {
+          renderAssets(fallback, ctx);
+          hintEl.innerHTML =
+            '<span class="text-warning">Live refresh failed; showing the copy already on this page.</span>';
+        } else {
+          showWarning(message);
+          submitEl.disabled = true;
+        }
+        return;
+      }
+
+      const serverCtx = data.request || {};
+
+      ctx = {
+        req_id: serverCtx.id || reqId,
+        category_id: serverCtx.category_id,
+        category_name: serverCtx.category_name || ctx.category_name,
+        unit_id: serverCtx.unit_id,
+        unit_name: serverCtx.unit_name || ctx.unit_name,
+        requester: serverCtx.requester || ctx.requester
+      };
+
+      setContext(ctx);
+      hideLoading();
+      renderAssets(data.assets || [], ctx);
+
+      hintEl.innerHTML =
+        'Showing the current <b>available</b> assets for ' +
+        (ctx.category_name ? '<b>' + escapeHtml(ctx.category_name) + '</b>. ' : "this category. ") +
+        'The list refreshes every time this window opens.';
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+      if (sequence !== openSequence) return;
+
+      console.error("[assignAsset] Live asset refresh failed:", err);
+
+      const fallback = embeddedAssetsFor(ctx);
+      hideLoading();
+
+      if (fallback.length) {
+        renderAssets(fallback, ctx);
+        hintEl.innerHTML =
+          '<span class="text-warning">Could not reach the live asset list; showing the copy already on this page.</span>';
+      } else {
+        showWarning(
+          "Could not load available assets from UNPASS. " +
+          "Please close this window and try again."
+        );
+        submitEl.disabled = true;
+      }
+    } finally {
+      activeFetch = null;
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function contextFromButton(btn) {
+    if (!btn) return {};
+
+    return {
+      req_id: btn.getAttribute("data-request-id"),
+      category_id: btn.getAttribute("data-category-id"),
+      category_name: btn.getAttribute("data-category-name"),
+      unit_id: btn.getAttribute("data-unit-id"),
+      unit_name: btn.getAttribute("data-unit-name"),
+      requester: btn.getAttribute("data-requester")
+    };
+  }
+
+  modalEl.addEventListener("show.bs.modal", function (event) {
+    openSequence += 1;
+
+    const ctx = pendingCtx || contextFromButton(event.relatedTarget);
+    pendingCtx = null;
+
+    clearSelect();
+    hideWarning();
+    setContext(ctx);
+    loadFreshAssets(ctx, openSequence);
   });
 
-  // Secondary path: kept for any caller that still invokes this directly.
-  //   openAssignModal({ req_id, category_id, category_name, unit_id, unit_name, requester })
   window.openAssignModal = function (ctx) {
     pendingCtx = ctx || {};
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   };
 
-  modalEl.addEventListener('hidden.bs.modal', function () {
+  modalEl.addEventListener("hidden.bs.modal", function () {
+    openSequence += 1;
     reset();
-    reqIdEl.value = '';
+  });
+
+  // Browser Back/Forward Cache can restore an old DOM exactly as it was.
+  // Clear any stale modal state so the next open always performs a fresh fetch.
+  window.addEventListener("pageshow", function () {
+    if (!modalEl.classList.contains("show")) {
+      reset();
+    }
   });
 })();
 </script>

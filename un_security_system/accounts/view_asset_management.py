@@ -37,6 +37,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
 
@@ -73,6 +74,124 @@ def view_asset_management(request):
     is_ops = _legacy._is_ops_manager(user, agency)
     managed_units = _legacy._managed_unit_ids(user, agency)
     is_manager = user.is_superuser or bool(managed_units) or is_ops
+
+    # ------------------------------------------------------------------
+    # Live assignment options endpoint
+    #
+    # The assignment modal calls this every time it opens. This avoids stale
+    # browser/template data after assigning one asset, navigating back to the
+    # ICT queue, or restoring the page from the browser back/forward cache.
+    # No new URL is required; it uses the existing /accounts/assets/ route.
+    # ------------------------------------------------------------------
+    if request.GET.get("assignment_options") == "1":
+        if not is_ict:
+            response = JsonResponse(
+                {
+                    "ok": False,
+                    "error": "Only ICT custodians can load assignment options.",
+                },
+                status=403,
+            )
+            response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            return response
+
+        request_id = (request.GET.get("request_id") or "").strip()
+        if not request_id.isdigit():
+            response = JsonResponse(
+                {
+                    "ok": False,
+                    "error": "A valid asset request ID is required.",
+                },
+                status=400,
+            )
+            response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            return response
+
+        asset_request = (
+            AssetRequest.objects
+            .filter(
+                pk=int(request_id),
+                agency=agency,
+                status="pending_ict",
+            )
+            .select_related(
+                "category",
+                "unit",
+                "requester",
+            )
+            .first()
+        )
+
+        if asset_request is None:
+            response = JsonResponse(
+                {
+                    "ok": False,
+                    "error": (
+                        "This request is no longer waiting for ICT assignment. "
+                        "Refresh the queue and try again."
+                    ),
+                },
+                status=404,
+            )
+            response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            return response
+
+        assets = list(
+            Asset.objects
+            .filter(
+                agency=agency,
+                status="available",
+                category_id=asset_request.category_id,
+            )
+            .values(
+                "id",
+                "name",
+                "category_id",
+                "category__name",
+                "unit_id",
+                "unit__name",
+                "serial_number",
+                "asset_tag",
+            )
+            .order_by(
+                "category__name",
+                "name",
+            )
+        )
+
+        for row in assets:
+            row["category_name"] = row.pop("category__name") or ""
+            row["unit_name"] = row.pop("unit__name") or ""
+            row["serial_number"] = row["serial_number"] or ""
+            row["asset_tag"] = row["asset_tag"] or ""
+
+        requester_name = (
+            asset_request.requester.get_full_name()
+            or asset_request.requester.username
+        )
+
+        response = JsonResponse(
+            {
+                "ok": True,
+                "request": {
+                    "id": asset_request.id,
+                    "category_id": asset_request.category_id,
+                    "category_name": asset_request.category.name,
+                    "unit_id": asset_request.unit_id,
+                    "unit_name": (
+                        asset_request.unit.name
+                        if asset_request.unit_id
+                        else "Unallocated/Core"
+                    ),
+                    "requester": requester_name,
+                },
+                "assets": assets,
+            }
+        )
+        response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
 
     # ------------------------------------------------------------------
     # Small shared lists used by forms / filters
