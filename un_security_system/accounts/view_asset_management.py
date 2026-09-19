@@ -18,7 +18,8 @@ Performance changes:
 - Aggregate SQL for asset KPIs/charts instead of serialising every asset.
 - No per-row manager approval N+1 checks on dashboard GET.
 - EOL calculation only for the current registry page.
-- Lighter available-asset assignment payload.
+- Available-asset assignment payload includes all available agency assets;
+  the assignment modal filters them for the selected request.
 - Lighter asset list used by consumable linking.
 
 No migrations or schema changes.
@@ -565,65 +566,49 @@ def view_asset_management(request):
     # ------------------------------------------------------------------
     # Assignment modal payload
     #
-    # Only include available assets for categories actually waiting in the
-    # ICT queue. The original dashboard serialised every available asset.
+    # Send every AVAILABLE asset for this agency to the assignment modal.
+    # The modal performs the request-category filtering when the ICT
+    # custodian opens a specific request.
+    #
+    # Do not pre-filter this list using pending ICT categories. That can
+    # leave the modal with an empty payload when requests/categories change.
     # ------------------------------------------------------------------
     available_assets = []
 
     if is_ict:
-        pending_category_ids = list(
-            pending_ict
-            .exclude(category_id__isnull=True)
-            .values_list(
-                "category_id",
-                flat=True,
-            )
-            .distinct()
-        )
-
-        if pending_category_ids:
-            available_assets = [
-                {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "category_id": row["category_id"],
-                    "category_name": (
-                        row["category__name"] or ""
-                    ),
-                    "unit_id": row["unit_id"],
-                    "unit_name": (
-                        row["unit__name"] or ""
-                    ),
-                    "serial_number": (
-                        row["serial_number"] or ""
-                    ),
-                    "asset_tag": (
-                        row["asset_tag"] or ""
-                    ),
-                }
-                for row in (
-                    Asset.objects
-                    .filter(
-                        agency=agency,
-                        status="available",
-                        category_id__in=pending_category_ids,
-                    )
-                    .values(
-                        "id",
-                        "name",
-                        "category_id",
-                        "category__name",
-                        "unit_id",
-                        "unit__name",
-                        "serial_number",
-                        "asset_tag",
-                    )
-                    .order_by(
-                        "category__name",
-                        "name",
-                    )
+        available_assets = [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "category_id": row["category_id"],
+                "category_name": row["category__name"] or "",
+                "unit_id": row["unit_id"],
+                "unit_name": row["unit__name"] or "",
+                "serial_number": row["serial_number"] or "",
+                "asset_tag": row["asset_tag"] or "",
+            }
+            for row in (
+                Asset.objects
+                .filter(
+                    agency=agency,
+                    status="available",
                 )
-            ]
+                .values(
+                    "id",
+                    "name",
+                    "category_id",
+                    "category__name",
+                    "unit_id",
+                    "unit__name",
+                    "serial_number",
+                    "asset_tag",
+                )
+                .order_by(
+                    "category__name",
+                    "name",
+                )
+            )
+        ]
 
     # Lightweight rows for the consumable-link dropdown. Django templates can
     # access dictionary keys with dot notation (asset.id / asset.name).
