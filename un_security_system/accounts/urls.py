@@ -558,6 +558,7 @@ urlpatterns = [
     # Asset Health / Printer Management
     # ------------------------------------------------------------------
     path("", include("accounts.urls_asset_health")),
+    path("", include("accounts.urls_esign_docgen")),
 
 
 ]

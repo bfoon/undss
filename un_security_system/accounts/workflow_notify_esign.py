@@ -221,7 +221,18 @@ def run_blocked(run, request=None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_finished(run, request=None):
+    from . import esign_delivery
     from .models_esign_studio import WorkflowRun
+
+    # "One email at the end" is handled in full by esign_delivery: it gathers the
+    # signed document, the certificates and any follow-on documents and sends
+    # them once, to the signers and the initiator.
+    if (run.status == WorkflowRun.STATUS_COMPLETED
+            and esign_delivery.policy_for_run(run).get("mode") == esign_delivery.MODE_AT_END):
+        try:
+            return esign_delivery.deliver_final(run, request)
+        except Exception:  # noqa: BLE001
+            logger.exception("eSign Studio: bundled delivery failed for run %s — falling back", run.pk)
 
     name, email = _initiator(run)
     people = set(run.tasks.exclude(email="").values_list("email", flat=True))

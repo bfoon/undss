@@ -222,6 +222,17 @@ def _flow_steps(workflow):
 
 @login_required
 @require_GET
+def _delivery_summary(form):
+    from . import esign_delivery
+    from .models_esign_docgen import FormDocumentRule
+
+    line = esign_delivery.describe(esign_delivery.policy_for_form(form))
+    rules = FormDocumentRule.objects.filter(form=form, is_active=True).count()
+    if rules:
+        line += f" {rules} follow-on document rule(s)."
+    return line
+
+
 def esign_form_designer(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
@@ -257,6 +268,8 @@ def esign_form_designer(request, pk):
             "public_url": request.build_absolute_uri(reverse("accounts:esign_form_public", args=[form.public_token])),
             "flow_new_url": reverse("accounts:esign_workflow_new"),
             "designer_url": reverse("accounts:esign_workflow_designer", args=[0]),
+            "automation_url": reverse("accounts:esign_form_automation", args=[form.pk]),
+            "delivery_summary": _delivery_summary(form),
         }),
     ))
 
@@ -435,6 +448,15 @@ def _fill(request, form, *, public):
             messages.warning(request, f"Your form was saved as {sub.reference}, but its workflow couldn't start: {exc}")
 
     try:
+        from . import docgen_esign
+        from .models_esign_docgen import FormDocumentRule
+
+        docgen_esign.run_rules(sub, FormDocumentRule.TRIGGER_SUBMIT, run=run,
+                               request=request, actor=user)
+    except Exception:  # noqa: BLE001
+        logger.exception("eSign Studio: follow-on documents failed for submission %s", sub.pk)
+
+    try:
         from .asset_email import send_email_async
 
         if email:
@@ -564,7 +586,19 @@ def esign_submission_detail(request, pk):
         is_owner=bool(sub.form and sub.form.created_by_id == request.user.id),
         is_submitter=sub.submitted_by_id == request.user.id,
         live_run=next((r for r in runs if r.is_open), None),
+        documents=list(sub.generated_documents.select_related("rule").all()),
+        has_manual_rules=_has_manual_rules(sub),
     ))
+
+
+def _has_manual_rules(sub):
+    if not sub.form_id:
+        return False
+    from .models_esign_docgen import FormDocumentRule
+
+    return FormDocumentRule.objects.filter(
+        form_id=sub.form_id, is_active=True, trigger=FormDocumentRule.TRIGGER_MANUAL
+    ).exists()
 
 
 @login_required

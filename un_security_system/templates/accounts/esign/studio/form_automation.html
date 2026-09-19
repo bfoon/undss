@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/form_automation.html — signed copies and follow-on documents #}
+{% block title %}{{ form.name }} — Copies & documents | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="mx-auto" style="max-width:1020px">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <div class="small text-muted">Form automation</div>
+      <h4 class="text-un-primary fw-bold mb-1">{{ form.name }}</h4>
+      <div class="text-muted small">{{ policy_summary }}</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_form_designer' form.pk %}">
+        <i class="bi bi-arrow-left me-1"></i>Back to the designer
+      </a>
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_form_submissions' form.pk %}">
+        Submissions
+      </a>
+    </div>
+  </div>
+
+  {% if formula_problems %}
+    <div class="alert alert-warning">
+      <div class="fw-semibold mb-1"><i class="bi bi-calculator me-1"></i>Check these calculations</div>
+      <ul class="mb-0 small">{% for problem in formula_problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+  <!-- ── Signed copies ─────────────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-header bg-white fw-bold"><i class="bi bi-envelope-check me-2"></i>Who gets the signed copy</div>
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="st-card p-3 d-block h-100 {% if policy.mode == 'each' %}border-primary{% endif %}">
+              <input class="form-check-input me-2" type="radio" name="mode" value="each"
+                     {% if policy.mode == 'each' %}checked{% endif %}>
+              <span class="fw-semibold">A copy after every signature</span>
+              <div class="small text-muted mt-1">
+                Each signer is emailed the signed PDF as soon as their own step finishes.
+                A flow with three signature steps sends three copies.
+              </div>
+            </label>
+          </div>
+          <div class="col-md-6">
+            <label class="st-card p-3 d-block h-100 {% if policy.mode == 'at_end' %}border-primary{% endif %}">
+              <input class="form-check-input me-2" type="radio" name="mode" value="at_end"
+                     {% if policy.mode == 'at_end' %}checked{% endif %}>
+              <span class="fw-semibold">One copy when everything is finished</span>
+              <div class="small text-muted mt-1">
+                Nothing is emailed while the flow runs. When the last step is done, one message
+                goes out with the finished document, the certificate and any follow-on documents.
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="st-group-label mb-2">Send it to</div>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="include_signers" value="1" {% if policy.include_signers %}checked{% endif %}> Everyone who signed</label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="include_initiator" value="1" {% if policy.include_initiator %}checked{% endif %}> Whoever started it</label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="include_participants" value="1" {% if policy.include_participants %}checked{% endif %}> Everyone who took part (approvers, reviewers)</label>
+            <label class="form-check mt-2"><input class="form-check-input" type="checkbox" name="single_message" value="1" {% if policy.single_message %}checked{% endif %}> One message addressed to all of them</label>
+            <div class="form-text">Unticked, each person gets their own copy and cannot see the other addresses.</div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="st-group-label mb-2">Attach</div>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="attach_certificate" value="1" {% if policy.attach_certificate %}checked{% endif %}> The certificate of completion</label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="attach_documents" value="1" {% if policy.attach_documents %}checked{% endif %}> Follow-on documents (invoice, receipt…)</label>
+
+            <label class="form-label small fw-semibold mt-3 mb-1">Always copy these addresses</label>
+            <input class="form-control form-control-sm" name="extra_emails"
+                   value="{{ policy.extra_emails|join:', ' }}" placeholder="finance@un.org, records@un.org">
+
+            <label class="form-label small fw-semibold mt-3 mb-1">Note in the email</label>
+            <textarea class="form-control form-control-sm" name="message" rows="2" maxlength="600"
+                      placeholder="Please keep this for your records.">{{ policy.message }}</textarea>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <div class="small text-muted">
+            <i class="bi bi-info-circle me-1"></i>Runs already under way keep the setting they started with.
+          </div>
+          <button class="btn btn-un-primary"><i class="bi bi-check2 me-1"></i>Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Follow-on documents ───────────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <span class="fw-bold"><i class="bi bi-file-earmark-plus me-2"></i>Documents this form produces</span>
+      <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_document_rule_new' form.pk %}">
+        <i class="bi bi-plus-lg me-1"></i>Add a document
+      </a>
+    </div>
+
+    {% if rules %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Document</th><th>Built from</th><th>When</th><th>Numbering</th><th>Sent</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for rule in rules %}
+            <tr class="{% if not rule.is_active %}opacity-50{% endif %}">
+              <td>
+                <div class="fw-semibold">{{ rule.name }}</div>
+                {% if rule.description %}<div class="small text-muted">{{ rule.description }}</div>{% endif %}
+                {% if not rule.is_active %}<span class="badge bg-secondary">Paused</span>{% endif %}
+              </td>
+              <td class="small">{{ rule.target_form.name }}<div class="text-muted">{{ rule.mapped_count }} mapping(s)</div></td>
+              <td class="small">{{ rule.trigger_label }}</td>
+              <td class="small"><code>{{ rule.number_prefix }}</code></td>
+              <td class="small">{{ rule.get_send_when_display }}</td>
+              <td class="text-end text-nowrap">
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_document_rule_edit' form.pk rule.pk %}">Edit</a>
+                <form method="post" action="{% url 'accounts:esign_document_rule_delete' form.pk rule.pk %}" class="d-inline"
+                      onsubmit="return confirm('Remove “{{ rule.name|escapejs }}”? Documents already produced are kept.')">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body text-center text-muted py-5">
+        <i class="bi bi-file-earmark-plus fs-2 d-block mb-2"></i>
+        <div class="fw-semibold">Nothing yet</div>
+        <div class="small">
+          A request form can produce an invoice; a payment form can produce a receipt.
+          Design the invoice as its own form first, then map this form's answers into it.
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- ── What has been produced ────────────────────────────────────────── -->
+  {% if documents %}
+  <div class="card mb-5">
+    <div class="card-header bg-white fw-bold"><i class="bi bi-archive me-2"></i>Recently produced</div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light"><tr><th>Number</th><th>From</th><th>Made</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for document in documents %}
+          <tr>
+            <td class="fw-semibold">{{ document.number|default:"—" }}</td>
+            <td class="small">{{ document.source_submission.reference }}</td>
+            <td class="small">{{ document.created_at|date:"d M Y H:i" }}</td>
+            <td>
+              <span class="badge bg-{{ document.status_color }}">{{ document.get_status_display }}</span>
+              {% if document.error %}<div class="small text-danger">{{ document.error }}</div>{% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              {% if document.pdf %}
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_document_download' document.pk %}" target="_blank">
+                  <i class="bi bi-file-earmark-pdf"></i>
+                </a>
+                <form method="post" action="{% url 'accounts:esign_document_send' document.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-primary"><i class="bi bi-send"></i></button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

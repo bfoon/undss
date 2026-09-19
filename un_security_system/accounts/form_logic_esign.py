@@ -170,10 +170,12 @@ def annotate_states(schema, values, *, scope="submitter", extras=None):
     """
     import copy
 
+    from . import form_formula_esign as FX
     from .esign_condition_engine import derive_values
     from .form_pdf_esign import effective_fill
 
     out = copy.deepcopy(schema or {})
+    values, _formula_errors = FX.compute_values(out, values or {})
     scopes = effective_fill(out)          # a field may take its section's assignment
     for el in out.get("elements") or []:
         el["fill_by"] = scopes.get(el["id"], "submitter")
@@ -196,19 +198,31 @@ def logic_payload(schema, values, *, scope="submitter", extras=None, hide_keys=(
     workflow extras. Answers the viewer isn't allowed to see are left out
     unless a rule actually reads them.
     """
+    from . import form_formula_esign as FX
     from .esign_condition_engine import referenced_fields
     from .form_pdf_esign import resolved_schema
 
     schema = resolved_schema(schema or {})
+    values, _formula_errors = FX.compute_values(schema, values or {})
     needed = set()
     for el in schema.get("elements") or []:
         for rule in el.get("state_rules") or []:
             needed.update(referenced_fields(clean_state_rule(rule)["when"]))
+        formula = FX.formula_of(el)
+        if formula:
+            needed.update(r.split(".")[0] for r in FX.references(formula["expr"]))
+        for column in el.get("columns") or []:
+            if column.get("formula"):
+                needed.update(r.split(".")[0] for r in FX.references(column["formula"]))
     elements = []
     for el in schema.get("elements") or []:
-        slim = {k: el[k] for k in ("id", "key", "type", "label", "options", "required", "fill_by", "state_rules") if k in el}
+        slim = {k: el[k] for k in ("id", "key", "type", "label", "options", "required",
+                                   "fill_by", "state_rules", "formula") if k in el}
         if el.get("type") == "table":
-            slim["columns"] = [{"key": c.get("key"), "label": c.get("label"), "kind": c.get("kind")} for c in el.get("columns") or []]
+            slim["columns"] = [
+                {k: c[k] for k in ("key", "label", "kind", "formula", "total", "decimals") if k in c}
+                for c in el.get("columns") or []
+            ]
         elements.append(slim)
     hidden = set(hide_keys or ())
     vals = {k: v for k, v in (values or {}).items() if k not in hidden or k in needed}
@@ -263,9 +277,11 @@ def print_plan(schema, values):
     completed/read-only states that element_state() infers from `fill_by` are
     ignored here. A question switched off with "Print on the PDF" never prints.
     """
+    from . import form_formula_esign as FX
     from .esign_condition_engine import derive_values, evaluate_tree
 
     schema = schema or {}
+    values, _formula_errors = FX.compute_values(schema, values or {})
     resolved = derive_values(values or {}, schema)
     plan, section, section_prints = {}, None, True
     for el in schema.get("elements") or []:

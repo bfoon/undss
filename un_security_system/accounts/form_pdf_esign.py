@@ -29,6 +29,8 @@ from datetime import date, datetime
 from django.conf import settings
 from django.utils import timezone
 
+from . import esign_delivery as DELIVERY
+from . import form_formula_esign as FX
 from .form_logic_esign import clean_v2_element_metadata
 from PIL import Image
 from reportlab.lib import colors
@@ -143,7 +145,14 @@ def clean_schema(raw):
             used_keys.add(clean["key"])
         elements.append(clean)
 
-    return {"version": 1, "theme": theme, "header": header, "elements": elements}
+    # Signed-copy delivery lives on the schema so it survives a save and is
+    # frozen into each run. See accounts/esign_delivery.py.
+    delivery = DELIVERY.clean_policy(raw.get("delivery")) if raw.get("delivery") else None
+
+    out = {"version": 1, "theme": theme, "header": header, "elements": elements}
+    if delivery:
+        out["delivery"] = delivery
+    return out
 
 
 def _clean_element(el):
@@ -171,6 +180,9 @@ def _clean_element(el):
             "fill_by": _s(el.get("fill_by"), 40) or "inherit",
             "prefill": el.get("prefill") if el.get("prefill") in PREFILL_KEYS else "",
         })
+        formula = FX.clean_formula(el.get("formula"))
+        if formula:
+            out["formula"] = formula
         if t in ("select", "radio", "checkboxes"):
             opts = [_s(o, 120) for o in (el.get("options") or []) if _s(o, 120)]
             out["options"] = opts[:50] or ["Option 1", "Option 2"]
@@ -189,12 +201,22 @@ def _clean_element(el):
                 if not isinstance(c, dict):
                     continue
                 clabel = _s(c.get("label"), 80) or f"Column {i + 1}"
-                cols.append({
+                column = {
                     "key": slug_key(c.get("key") or clabel, f"c{i + 1}"),
                     "label": clabel,
                     "kind": c.get("kind") if c.get("kind") in ("text", "number", "date") else "text",
                     "width": _int(c.get("width"), 1, 6, 2),
-                })
+                }
+                # A column can be worked out from the other cells in its row,
+                # and can show a total of its own choosing under the table.
+                expr = FX.clean_column_formula(c.get("formula"))
+                if expr:
+                    column["formula"] = expr
+                    column["decimals"] = _int(c.get("decimals"), 0, 4, 2 if column["kind"] == "number" else 0)
+                total = FX.clean_total_mode(c.get("total"))
+                if total:
+                    column["total"] = total
+                cols.append(column)
             seen = set()
             for c in cols:
                 base_key, n = c["key"], 2
@@ -426,7 +448,25 @@ def read_values(schema, post, existing=None, scope="submitter", extras=None):
         if el.get("required") and not val and key not in errors:
             errors[key] = f"{label} is required."
 
+    values, errors = _recompute(schema, values, errors)
     return _apply_states(schema, values, errors, scope, extras)
+
+
+def _recompute(schema, values, errors):
+    """
+    The formulas are the authority. Whatever the browser posted into a
+    calculated box is thrown away and worked out again here, and a calculated
+    answer that turns out blank stops being "required" — nobody can type it.
+    """
+    if not FX.has_formulas(schema):
+        return values, errors
+    computed_keys = FX.computed_keys(schema)
+    values, formula_errors = FX.compute_values(schema, values)
+    for key in computed_keys:
+        errors.pop(key, None)
+    for key, message in formula_errors.items():
+        errors[key.split(".")[0]] = message
+    return values, errors
 
 
 def _apply_states(schema, values, errors, scope, extras=None):

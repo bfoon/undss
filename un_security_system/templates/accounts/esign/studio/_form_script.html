@@ -1,5 +1,6 @@
-{# accounts/templates/accounts/esign/studio/_form_script.html — table rows and live totals on fill pages #}
-{% load esign_studio_tags %}
+{# accounts/templates/accounts/esign/studio/_form_script.html — table rows, live totals and calculated fields on fill pages #}
+{% load static esign_studio_tags %}
+<script src="{% static 'accounts/esign/formula.js' %}"></script>
 <script>
 (function(){
   // Django refuses a submission with more fields than DATA_UPLOAD_MAX_NUMBER_FIELDS
@@ -32,6 +33,7 @@
     document.querySelectorAll("table[data-table]").forEach(syncAdd);
   }
   function totals(table){
+    if (window.__studioCalc) return;      // the formula engine owns the footer now
     table.querySelectorAll("[data-total]").forEach(cell => {
       let sum = 0; table.querySelectorAll(`tbody input[data-col="${cell.dataset.total}"]`).forEach(i => { const v = parseFloat((i.value || "").replace(/,/g, "")); if (!isNaN(v)) sum += v; });
       cell.textContent = sum.toLocaleString(undefined, {maximumFractionDigits: 2});
@@ -57,10 +59,18 @@
     syncAdd(table);
   });
 
-  // ── conditional states, kept up to date as people type ─────────────────
+  // ── calculations, kept up to date as people type ───────────────────────
   const payload = document.getElementById("formLogic");
-  if (!payload || !window.StudioRules) return;
+  if (!payload) return;
   const P = JSON.parse(payload.textContent);
+
+  if (window.StudioFormula){
+    const host = payload.closest("form") || document;
+    window.__studioCalc = StudioFormula.attach(host, P.elements, P.values);
+  }
+
+  // ── conditional states, kept up to date as people type ─────────────────
+  if (!window.StudioRules) return;
   const hasRules = P.elements.some(el => (el.state_rules || []).length);
   const byKey = {}; P.elements.forEach(el => { if (el.key) byKey[el.key] = el; });
 
@@ -79,7 +89,8 @@
   function answers(){
     const vals = Object.assign({}, P.values);
     document.querySelectorAll('.fs-item[data-mine="1"][data-key]').forEach(item => { vals[item.dataset.key] = readItem(item); });
-    return vals;
+    // a rule may test a total or any other calculated answer
+    return window.StudioFormula ? StudioFormula.compute(P.elements, vals).values : vals;
   }
   const STATES = ["active", "readonly", "completed", "disabled", "hidden"];
   function apply(){

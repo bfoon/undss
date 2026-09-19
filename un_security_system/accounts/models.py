@@ -1785,3 +1785,4 @@ class ConsumableAssetLink(models.Model):
 from .models_esign import *  # noqa: F401,F403
 from .models_esign_markup import *   # noqa: F401,F403
 from .models_esign_studio import *   # noqa: F401,F403
+from .models_esign_docgen import *    # noqa: F401,F403

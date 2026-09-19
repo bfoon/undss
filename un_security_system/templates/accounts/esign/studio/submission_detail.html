@@ -79,6 +79,55 @@
 </div>
 {% endblock %}
 
+
+<div class="mx-auto mb-4" style="max-width:1020px">
+{% if documents or has_manual_rules %}
+  <div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <span class="fw-bold"><i class="bi bi-file-earmark-plus me-2"></i>Documents from this submission</span>
+      {% if has_manual_rules %}
+      <form method="post" action="{% url 'accounts:esign_document_generate' sub.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-magic me-1"></i>Produce now</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if documents %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light"><tr><th>Number</th><th>What</th><th>Made</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for document in documents %}
+          <tr>
+            <td class="fw-semibold">{{ document.number|default:"—" }}</td>
+            <td class="small">{{ document.rule.name|default:document.title }}</td>
+            <td class="small">{{ document.created_at|date:"d M Y H:i" }}</td>
+            <td>
+              <span class="badge bg-{{ document.status_color }}">{{ document.get_status_display }}</span>
+              {% if document.sent_to %}<div class="small text-muted">to {{ document.sent_to|join:", " }}</div>{% endif %}
+              {% if document.error %}<div class="small text-danger">{{ document.error }}</div>{% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+              {% if document.pdf %}
+                <a class="btn btn-sm btn-outline-secondary" target="_blank"
+                   href="{% url 'accounts:esign_document_download' document.pk %}"><i class="bi bi-file-earmark-pdf"></i></a>
+                <form method="post" action="{% url 'accounts:esign_document_send' document.pk %}" class="d-inline">
+                  {% csrf_token %}<button class="btn btn-sm btn-outline-primary" title="Email it"><i class="bi bi-send"></i></button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="card-body small text-muted">Nothing produced yet for this submission.</div>
+    {% endif %}
+  </div>
+{% endif %}
+</div>
+
 {% block extra_js %}
 {% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}

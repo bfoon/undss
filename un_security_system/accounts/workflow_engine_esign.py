@@ -737,6 +737,20 @@ def start_run(workflow, initiator, *, agency, subject, message="", pdf_bytes=Non
         initiator=initiator, submission=submission,
         context={"slots": slots, "rounds": {}, "joins": {}, "overrides": {}},
     )
+    # Freeze how signed copies will be handed out, so changing the setting
+    # later never changes a run that is already under way.
+    try:
+        from . import esign_delivery
+
+        esign_delivery.freeze_policy(
+            run,
+            form=submission.form if (submission and submission.form_id) else None,
+            workflow=workflow,
+        )
+        run.save(update_fields=["context"])
+    except Exception:  # noqa: BLE001
+        logger.exception("eSign Studio: could not record the copy policy for run %s", run.pk)
+
     if pdf_bytes:
         set_run_document(run, pdf_bytes, document_name or f"{subject}.pdf")
     if submission:
@@ -1152,6 +1166,16 @@ def decide(task, action, *, request=None, comment="", values=None, actor=None):
             except WorkflowError as exc:
                 _block(run, str(exc))
             run.save()
+
+    if run.submission_id and action in ("approve", "acknowledge", "submit"):
+        try:
+            from . import docgen_esign
+            from .models_esign_docgen import FormDocumentRule
+
+            docgen_esign.run_rules(run.submission, FormDocumentRule.TRIGGER_STEP,
+                                   run=run, node_id=task.node_id, request=request, actor=actor)
+        except Exception:  # noqa: BLE001
+            logger.exception("eSign Studio: step documents failed for run %s", run.pk)
 
     try:
         from . import workflow_notify_esign as notify
@@ -1641,6 +1665,15 @@ def finish_run(run, status, note=""):
         FormSubmission.objects.filter(pk=run.submission_id).update(
             status=FormSubmission.STATUS_COMPLETED if status == WorkflowRun.STATUS_COMPLETED
             else FormSubmission.STATUS_REJECTED)
+
+    if run.submission_id and status == WorkflowRun.STATUS_COMPLETED:
+        try:
+            from . import docgen_esign
+            from .models_esign_docgen import FormDocumentRule
+
+            docgen_esign.run_rules(run.submission, FormDocumentRule.TRIGGER_COMPLETE, run=run)
+        except Exception:  # noqa: BLE001
+            logger.exception("eSign Studio: follow-on documents failed for run %s", run.pk)
 
     log_run(run, "completed" if status == WorkflowRun.STATUS_COMPLETED else "rejected",
             note=("Completed." if status == WorkflowRun.STATUS_COMPLETED else f"Rejected — {note}")[:300])

@@ -359,6 +359,20 @@ def notify_completed(request, envelope: Envelope):
     """
     subject = f"Completed: {envelope.subject}"
 
+    # A workflow can ask for one signed copy at the very end instead of a copy
+    # after every signature step. See accounts/esign_delivery.py.
+    try:
+        from . import esign_delivery
+
+        if esign_delivery.hold_signed_copies(envelope):
+            log_event(
+                envelope, "copy_delivered", request=request,
+                note="Signed copy held back — this flow sends one copy to everyone when it finishes.",
+            )
+            return
+    except Exception:  # noqa: BLE001
+        logger.exception("eSign: could not read the copy policy for envelope %s", envelope.pk)
+
     attachments, attach_note = build_completed_attachments(envelope)
     attached_names = [name for name, _, _ in attachments]
 

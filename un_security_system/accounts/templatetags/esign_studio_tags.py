@@ -64,6 +64,24 @@ def table_total(rows, col_key):
 
 
 @register.filter
+def has_column_totals(el):
+    """True when at least one column asks for a figure under the table."""
+    return any((c or {}).get("total") for c in (el or {}).get("columns") or [])
+
+
+@register.filter
+def totals_for(el, rows):
+    """{column key: formatted figure} for a table's footer, honouring each
+    column's own total mode (sum / avg / min / max / count)."""
+    from accounts.form_formula_esign import totals_for as compute_totals
+
+    out = {}
+    for key, value in compute_totals(el or {}, rows or []).items():
+        out[key] = f"{value:,.2f}".rstrip("0").rstrip(".") if isinstance(value, float) else value
+    return out
+
+
+@register.filter
 def human_size(n):
     try:
         n = float(n)

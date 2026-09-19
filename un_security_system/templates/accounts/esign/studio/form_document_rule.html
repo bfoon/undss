@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/form_document_rule.html — set up one follow-on document #}
+{% load static %}
+{% block title %}{{ rule.name|default:"New document" }} | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .dr-expr{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.8rem; }
+  .dr-row{ display:grid; grid-template-columns:minmax(150px,1fr) minmax(220px,1.6fr) 34px; gap:.4rem; margin-bottom:.4rem; align-items:start; }
+  .dr-chip{ cursor:pointer; border:1px solid var(--st-line); border-radius:999px; padding:.1rem .5rem; font-size:.72rem; background:#fff; }
+  .dr-chip:hover{ border-color:var(--un-blue); color:var(--un-dark-blue); }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="mx-auto" style="max-width:1020px">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <div class="small text-muted">Follow-on document · {{ form.name }}</div>
+      <h4 class="text-un-primary fw-bold mb-0">{{ rule.name|default:"New document" }}</h4>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_form_automation' form.pk %}">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+  </div>
+
+  <form method="post" id="ruleForm">
+    {% csrf_token %}
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-5">
+            <label class="form-label small fw-semibold">What is it called</label>
+            <input class="form-control" name="name" value="{{ rule.name }}" maxlength="150" required placeholder="Invoice">
+          </div>
+          <div class="col-md-7">
+            <label class="form-label small fw-semibold">Built from this form</label>
+            <select class="form-select" name="target_form" id="targetForm" required>
+              <option value="">Choose the invoice / receipt / certificate form…</option>
+              {% for target in targets %}
+                <option value="{{ target.pk }}" {% if rule.target_form_id == target.pk %}selected{% endif %}>
+                  {{ target.name }}{% if target.category %} · {{ target.category }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Design that document as its own form first — its layout is what gets printed.</div>
+          </div>
+
+          <div class="col-md-8">
+            <label class="form-label small fw-semibold">Short description</label>
+            <input class="form-control" name="description" value="{{ rule.description }}" maxlength="300">
+          </div>
+          <div class="col-md-4 d-flex align-items-end pb-2">
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="is_active" value="1"
+              {% if rule.is_active or not rule.pk %}checked{% endif %}> Active</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold"><i class="bi bi-clock-history me-2"></i>When to produce it</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <select class="form-select" name="trigger" id="trigger">
+              {% for value, label in trigger_choices %}
+                <option value="{{ value }}" {% if rule.trigger == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6" id="stepWrap">
+            <select class="form-select" name="node_id">
+              <option value="">Any step</option>
+              {% for step in steps %}
+                <option value="{{ step.id }}" {% if rule.node_id == step.id %}selected{% endif %}>{{ step.label }}</option>
+              {% endfor %}
+            </select>
+            {% if not steps %}<div class="form-text">This form has no workflow steps yet.</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-arrow-left-right me-2"></i>What goes where</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="addRow"><i class="bi bi-plus-lg me-1"></i>Add a line</button>
+      </div>
+      <div class="card-body">
+        <div class="small text-muted mb-2">
+          On the left, a question on the document. On the right, a formula over this form's answers —
+          the same language the form calculations use.
+          Try <code class="dr-expr">[requester_name]</code>,
+          <code class="dr-expr">SUM([items.line_total]) * 1.15</code>,
+          <code class="dr-expr">@today</code>.
+        </div>
+
+        <div id="mapRows">
+          {% for mapping in rule.field_map %}
+          <div class="dr-row">
+            <select class="form-select form-select-sm" name="map_target"></select>
+            <div>
+              <input class="form-control form-control-sm dr-expr" name="map_expr" value="{{ mapping.expr }}" spellcheck="false">
+              <div class="form-text dr-note"></div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary dr-del"><i class="bi bi-x"></i></button>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="mt-2">
+          <span class="small text-muted me-1">Insert:</span>
+          <span id="tokenChips"></span>
+        </div>
+
+        <hr>
+        <div class="fw-semibold small mb-1">Tables</div>
+        <div class="small text-muted mb-2">Copy the rows of a table here into a table on the document.</div>
+        <div id="tableMapRows"></div>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="addTableMap"><i class="bi bi-plus-lg me-1"></i>Copy a table</button>
+        <input type="hidden" name="table_map_json" id="tableMapJson" value="{{ table_map_json }}">
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold"><i class="bi bi-123 me-2"></i>Numbering</div>
+      <div class="card-body row g-3">
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold">Prefix</label>
+          <input class="form-control text-uppercase" name="number_prefix" value="{{ rule.number_prefix|default:'INV' }}" maxlength="16">
+        </div>
+        <div class="col-md-9">
+          <label class="form-label small fw-semibold">Pattern</label>
+          <input class="form-control dr-expr" name="number_format"
+                 value="{{ rule.number_format|default:'{prefix}-{year}-{sequence:04d}' }}" maxlength="60">
+          <div class="form-text">Placeholders: <code>{prefix}</code> <code>{year}</code> <code>{month}</code>
+            <code>{sequence}</code> <code>{reference}</code> — e.g. <code>INV-2026-0007</code>.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold"><i class="bi bi-send me-2"></i>Sending it</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">When</label>
+            <select class="form-select" name="send_when">
+              {% for value, label in send_choices %}
+                <option value="{{ value }}" {% if rule.send_when == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">“Attach it to the final signed copy” uses the setting on the automation page.</div>
+
+            <div class="st-group-label mt-3 mb-2">To</div>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="send_to_submitter" value="1" {% if rule.send_to_submitter or not rule.pk %}checked{% endif %}> Whoever filled the form in</label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="send_to_initiator" value="1" {% if rule.send_to_initiator or not rule.pk %}checked{% endif %}> Whoever started the workflow</label>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="send_to_signers" value="1" {% if rule.send_to_signers %}checked{% endif %}> The signers</label>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Fixed addresses</label>
+            <input class="form-control form-control-sm" name="send_to_emails"
+                   value="{{ rule.send_to_emails|join:', ' }}" placeholder="finance@un.org">
+
+            <label class="form-label small fw-semibold mt-2">Addresses taken from answers</label>
+            <input class="form-control form-control-sm dr-expr" name="send_to_email_fields"
+                   value="{{ rule.send_to_email_fields|join:', ' }}" placeholder="client_email, vendor_email">
+            <div class="form-text">Question names, not formulas — the answer must be an email address.</div>
+
+            <label class="form-label small fw-semibold mt-2">Subject</label>
+            <input class="form-control form-control-sm" name="email_subject" value="{{ rule.email_subject }}" maxlength="200"
+                   placeholder="Invoice for your request">
+            <label class="form-label small fw-semibold mt-2">Message</label>
+            <textarea class="form-control form-control-sm" name="email_message" rows="2" maxlength="2000">{{ rule.email_message }}</textarea>
+          </div>
+        </div>
+
+        <label class="form-check mt-3"><input class="form-check-input" type="checkbox" name="start_target_workflow" value="1"
+          {% if rule.start_target_workflow %}checked{% endif %}>
+          Also start the document's own workflow (so the invoice can be approved and signed in its turn)</label>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-5">
+      <div>
+        {% if rule.pk %}
+          <button type="button" class="btn btn-outline-secondary" id="previewBtn">
+            <i class="bi bi-eye me-1"></i>Try it on the latest submission
+          </button>
+        {% endif %}
+      </div>
+      <button class="btn btn-un-primary btn-lg px-4"><i class="bi bi-check2 me-1"></i>Save</button>
+    </div>
+
+    <div id="previewBox" class="mb-5"></div>
+  </form>
+</div>
+
+{{ source_fields|json_script:"sourceFields" }}
+{{ target_fields|json_script:"targetFields" }}
+{{ field_map|json_script:"fieldMap" }}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'accounts/esign/formula.js' %}"></script>
+<script>
+(function(){
+  "use strict";
+  var SOURCE = JSON.parse(document.getElementById("sourceFields").textContent);
+  var TARGET = JSON.parse(document.getElementById("targetFields").textContent);
+  var FIELD_MAP = JSON.parse(document.getElementById("fieldMap").textContent);
+  var FIELDS_URL = "{% url 'accounts:esign_document_rule_fields' form.pk %}";
+  var SAVED = JSON.parse(document.getElementById("tableMapJson").value || "[]");
+
+  var esc = function (value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  };
+
+  // ── mapping rows ────────────────────────────────────────────────────────
+  function targetOptions(selected){
+    return '<option value="">Choose a question…</option>' + TARGET
+      .filter(function (f) { return f.type !== "table"; })
+      .map(function (f) {
+        return '<option value="' + esc(f.key) + '"' + (f.key === selected ? " selected" : "") + ">"
+             + esc(f.label) + " (" + esc(f.key) + ")</option>";
+      }).join("");
+  }
+
+  function paintTargets(){
+    var savedTargets = FIELD_MAP.map(function (m) { return m.target; });
+    [].slice.call(document.querySelectorAll('select[name="map_target"]')).forEach(function (select, index) {
+      select.innerHTML = targetOptions(select.dataset.value || savedTargets[index] || "");
+    });
+  }
+
+  function checkExpr(input){
+    var note = input.parentElement.querySelector(".dr-note");
+    if (!window.StudioFormula || !input.value.trim()) { if (note) note.textContent = ""; return; }
+    var report = StudioFormula.check(input.value);
+    input.classList.toggle("is-invalid", !report.ok);
+    if (note){
+      note.textContent = report.ok ? "" : report.error;
+      note.className = "form-text dr-note text-danger";
+    }
+  }
+
+  function addRow(target, expr){
+    var row = document.createElement("div");
+    row.className = "dr-row";
+    row.innerHTML =
+      '<select class="form-select form-select-sm" name="map_target">' + targetOptions(target || "") + "</select>" +
+      '<div><input class="form-control form-control-sm dr-expr" name="map_expr" value="' + esc(expr || "") +
+        '" spellcheck="false" placeholder="[question] or SUM([table.column])"><div class="form-text dr-note"></div></div>' +
+      '<button type="button" class="btn btn-sm btn-outline-secondary dr-del"><i class="bi bi-x"></i></button>';
+    document.getElementById("mapRows").appendChild(row);
+    row.querySelector("input").addEventListener("input", function () { checkExpr(this); });
+    return row;
+  }
+
+  document.getElementById("addRow").addEventListener("click", function () {
+    var row = addRow("", "");
+    row.querySelector("select").focus();
+  });
+
+  document.getElementById("mapRows").addEventListener("click", function (e) {
+    var del = e.target.closest(".dr-del");
+    if (del) del.closest(".dr-row").remove();
+  });
+
+  document.getElementById("mapRows").addEventListener("input", function (e) {
+    if (e.target.name === "map_expr") checkExpr(e.target);
+  });
+
+  // ── the chips that paste a reference in ─────────────────────────────────
+  var chips = [{token: "@today", label: "Today"}, {token: "@reference", label: "This reference"},
+               {token: "@submitter", label: "Submitter"}, {token: "@submitter_email", label: "Submitter email"},
+               {token: "@initiator", label: "Initiator"}];
+  SOURCE.forEach(function (f) {
+    if (f.type === "table") (f.columns || []).forEach(function (c) {
+      chips.push({token: "SUM([" + f.key + "." + c.key + "])", label: f.label + " · total " + c.label});
+    });
+    else chips.push({token: "[" + f.key + "]", label: f.label});
+  });
+  document.getElementById("tokenChips").innerHTML = chips.slice(0, 40).map(function (c) {
+    return '<button type="button" class="dr-chip me-1 mb-1" data-token="' + esc(c.token) + '">' + esc(c.label) + "</button>";
+  }).join("");
+
+  var lastExpr = null;
+  document.addEventListener("focusin", function (e) {
+    if (e.target.name === "map_expr") lastExpr = e.target;
+  });
+  document.getElementById("tokenChips").addEventListener("click", function (e) {
+    var chip = e.target.closest("[data-token]");
+    if (!chip) return;
+    var box = lastExpr || document.querySelector('input[name="map_expr"]');
+    if (!box) { box = addRow("", "").querySelector("input"); }
+    var at = box.selectionStart === null || box.selectionStart === undefined ? box.value.length : box.selectionStart;
+    box.value = box.value.slice(0, at) + chip.dataset.token + box.value.slice(at);
+    box.focus();
+    checkExpr(box);
+  });
+
+  // ── table copying ───────────────────────────────────────────────────────
+  function renderTableMaps(entries){
+    var host = document.getElementById("tableMapRows");
+    var sourceTables = SOURCE.filter(function (f) { return f.type === "table"; });
+    var targetTables = TARGET.filter(function (f) { return f.type === "table"; });
+
+    if (!targetTables.length){
+      host.innerHTML = '<div class="small text-muted">The chosen document has no table to copy rows into.</div>';
+      return;
+    }
+
+    host.innerHTML = entries.map(function (entry, index) {
+      var targetTable = targetTables.filter(function (t) { return t.key === entry.target; })[0] || targetTables[0];
+      return '<div class="border rounded p-2 mb-2" data-tmap="' + index + '">' +
+        '<div class="row g-2 align-items-center mb-2">' +
+          '<div class="col-md-5"><select class="form-select form-select-sm" data-tm="target">' +
+            targetTables.map(function (t) { return '<option value="' + esc(t.key) + '"' + (t.key === entry.target ? " selected" : "") + ">" + esc(t.label) + "</option>"; }).join("") +
+          "</select></div>" +
+          '<div class="col-md-5"><select class="form-select form-select-sm" data-tm="from">' +
+            sourceTables.map(function (t) { return '<option value="' + esc(t.key) + '"' + (t.key === entry.from ? " selected" : "") + ">from " + esc(t.label) + "</option>"; }).join("") +
+          "</select></div>" +
+          '<div class="col-md-2 text-end"><button type="button" class="btn btn-sm btn-outline-secondary" data-tmdel="' + index + '"><i class="bi bi-x"></i></button></div>' +
+        "</div>" +
+        (targetTable.columns || []).map(function (c) {
+          var expr = (entry.columns || {})[c.key] || "";
+          return '<div class="dr-row"><div class="small pt-1">' + esc(c.label) + "</div>" +
+            '<input class="form-control form-control-sm dr-expr" data-tmcol="' + esc(c.key) + '" value="' + esc(expr) +
+              '" placeholder="[column] of the source row" spellcheck="false"><span></span></div>';
+        }).join("") +
+      "</div>";
+    }).join("");
+  }
+
+  function collectTableMaps(){
+    var out = [];
+    document.querySelectorAll("[data-tmap]").forEach(function (block) {
+      var columns = {};
+      block.querySelectorAll("[data-tmcol]").forEach(function (input) {
+        if (input.value.trim()) columns[input.dataset.tmcol] = input.value.trim();
+      });
+      out.push({
+        target: block.querySelector('[data-tm="target"]').value,
+        from: block.querySelector('[data-tm="from"]').value,
+        columns: columns
+      });
+    });
+    document.getElementById("tableMapJson").value = JSON.stringify(out);
+    return out;
+  }
+
+  document.getElementById("addTableMap").addEventListener("click", function () {
+    var entries = collectTableMaps();
+    entries.push({target: "", from: "", columns: {}});
+    renderTableMaps(entries);
+  });
+  document.getElementById("tableMapRows").addEventListener("click", function (e) {
+    var del = e.target.closest("[data-tmdel]");
+    if (!del) return;
+    var entries = collectTableMaps();
+    entries.splice(+del.dataset.tmdel, 1);
+    renderTableMaps(entries);
+  });
+  document.getElementById("tableMapRows").addEventListener("change", function (e) {
+    if (e.target.dataset.tm) renderTableMaps(collectTableMaps());
+  });
+  document.getElementById("ruleForm").addEventListener("submit", collectTableMaps);
+
+  // ── swapping the target form reloads its questions ──────────────────────
+  document.getElementById("targetForm").addEventListener("change", function () {
+    var id = this.value;
+    if (!id) { TARGET = []; paintTargets(); renderTableMaps([]); return; }
+    fetch(FIELDS_URL + "?target=" + encodeURIComponent(id), {credentials: "same-origin"})
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        TARGET = data.fields || [];
+        paintTargets();
+        renderTableMaps(collectTableMaps());
+      });
+  });
+
+  // ── try it ──────────────────────────────────────────────────────────────
+  var previewBtn = document.getElementById("previewBtn");
+  if (previewBtn) previewBtn.addEventListener("click", function () {
+    var box = document.getElementById("previewBox");
+    box.innerHTML = '<div class="text-muted small">Working it out…</div>';
+    fetch("{% if rule.pk %}{% url 'accounts:esign_document_rule_preview' form.pk rule.pk %}{% endif %}", {
+      method: "POST",
+      headers: {"X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value},
+      credentials: "same-origin"
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.ok) { box.innerHTML = '<div class="alert alert-warning">' + esc(data.error) + "</div>"; return; }
+      box.innerHTML = '<div class="card"><div class="card-header bg-white fw-bold">Using ' + esc(data.reference) + "</div>" +
+        (data.problems && data.problems.length
+          ? '<div class="card-body pb-0"><div class="alert alert-warning small mb-2"><ul class="mb-0">' +
+            data.problems.map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("") + "</ul></div></div>" : "") +
+        '<div class="table-responsive"><table class="table table-sm mb-0"><tbody>' +
+        data.rows.map(function (row) {
+          return "<tr" + (row.mapped ? "" : ' class="text-muted"') + "><td>" + esc(row.label) + "</td><td>" +
+                 (row.value ? esc(row.value) : "<em>empty</em>") + "</td></tr>";
+        }).join("") + "</tbody></table></div></div>";
+    });
+  });
+
+  // ── first paint ─────────────────────────────────────────────────────────
+  paintTargets();
+  document.querySelectorAll('input[name="map_expr"]').forEach(function (input) { checkExpr(input); });
+  renderTableMaps(SAVED);
+
+  var trigger = document.getElementById("trigger"), stepWrap = document.getElementById("stepWrap");
+  var syncStep = function () { stepWrap.style.display = trigger.value === "on_step" ? "" : "none"; };
+  trigger.addEventListener("change", syncStep);
+  syncStep();
+})();
+</script>
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {# accounts/templates/accounts/esign/studio/form_designer.html — drag-and-drop form builder #}
 {% block title %}{{ form.name }} — Form designer | UN PASS{% endblock %}
 {% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/studio/_form_styles.html" %}
@@ -11,6 +12,9 @@
   .fb-left .nav-link{ font-size:.8rem; padding:.5rem .6rem; color:#475569; border-radius:0; }
   .fb-left .nav-link.active{ color:#005A8B; background:#fff; border-bottom:2px solid #009EDB; font-weight:600; }
   .fb-pal{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .fb-formula{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.78rem; }
+  .fb-col-block{ border-left:2px solid var(--st-line); padding-left:.4rem; }
+  .fb-formula-note{ font-size:.72rem; }
   .fb-pal-item{ border:1px solid var(--st-line); border-radius:.45rem; background:#fff; padding:.5rem .35rem; text-align:center; font-size:.75rem; cursor:grab; user-select:none; color:#334155; }
   .fb-pal-item i{ display:block; font-size:1.1rem; color:#005A8B; margin-bottom:.1rem; }
   .fb-pal-item:hover{ border-color:rgba(0,158,219,.55); box-shadow:0 2px 6px rgba(15,23,42,.06); }
@@ -105,6 +109,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'accounts/esign/formula.js' %}"></script>
 {% include "accounts/esign/studio/_rules.html" %}
 {% include "accounts/esign/studio/_net.html" %}
 {% include "accounts/esign/studio/_pdf_viewer.html" %}
@@ -451,16 +456,43 @@
       if (el.type === "number") h += `<div class="row g-2">${["min", "max"].map(k => `<div class="col-4">${field(k === "min" ? "Min" : "Max", input(k, el[k], 'type="number" step="any"'))}</div>`).join("")}<div class="col-4">${field("Decimals", input("decimals", el.decimals, 'type="number" min="0" max="4"'))}</div></div>`;
       if (el.type === "textarea") h += field("Rows", input("rows", el.rows, 'type="number" min="2" max="12"'));
       if (el.type === "table"){
-        h += `<div class="mb-2"><label class="form-label small fw-semibold mb-1">Columns</label>${el.columns.map((c, i) => `<div class="fb-opt-row">
+        h += `<div class="mb-2"><label class="form-label small fw-semibold mb-1">Columns</label>${el.columns.map((c, i) => `<div class="fb-col-block mb-2">
+          <div class="fb-opt-row">
           <input class="form-control form-control-sm" data-col="${i}" data-ck="label" value="${esc(c.label)}" style="flex:2">
           <select class="form-select form-select-sm" data-col="${i}" data-ck="kind" style="flex:1.3">${["text", "number", "date"].map(k => `<option ${c.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select>
           <input class="form-control form-control-sm" data-col="${i}" data-ck="width" type="number" min="1" max="6" value="${c.width}" title="Relative width" style="flex:.8">
-          <button class="btn btn-sm btn-outline-secondary" data-coldel="${i}"><i class="bi bi-x"></i></button></div>`).join("")}
+          <button class="btn btn-sm btn-outline-secondary" data-coldel="${i}"><i class="bi bi-x"></i></button></div>
+          <div class="fb-opt-row mt-1">
+            <input class="form-control form-control-sm fb-formula" data-col="${i}" data-ck="formula" value="${esc(c.formula || "")}" placeholder="Row formula, e.g. [qty] * [price]" style="flex:2.6" spellcheck="false">
+            <select class="form-select form-select-sm" data-col="${i}" data-ck="total" style="flex:1" title="Figure under the table">
+              ${[["", "no total"], ["sum", "sum"], ["avg", "average"], ["min", "lowest"], ["max", "highest"], ["count", "count"]].map(([v, lab]) => `<option value="${v}" ${(c.total || "") === v ? "selected" : ""}>${lab}</option>`).join("")}
+            </select>
+          </div>
+          <div class="form-text fb-formula-note" data-colnote="${i}"></div>
+        </div>`).join("")}
           <button class="btn btn-sm btn-link px-0" id="colAdd" ${el.columns.length >= 10 ? "disabled" : ""}><i class="bi bi-plus-lg"></i> Add column</button></div>
           <div class="row g-2"><div class="col-5">${field("Starting rows", input("rows", el.rows, 'type="number" min="1" max="50"'))}</div>
           <div class="col-7 pt-4">${check("show_total", el.show_total, "Total number columns")}${check("allow_add", el.allow_add, "People can add rows")}</div></div>`;
       }
       h += `<hr class="my-2">`;
+      if (el.type !== "table"){
+        const fx = el.formula || {};
+        h += `<div class="st-group-label mb-1"><i class="bi bi-calculator me-1"></i>Work this answer out</div>
+          <label class="form-check mb-2"><input class="form-check-input" type="checkbox" data-k="formula.enabled" ${fx.enabled ? "checked" : ""}> Fill this in from other answers</label>`;
+        if (fx.enabled){
+          h += `<textarea class="form-control form-control-sm fb-formula mb-1" data-k="formula.expr" rows="2" spellcheck="false" placeholder="e.g. SUM([items.amount]) * 1.15">${esc(fx.expr || "")}</textarea>
+            <div class="form-text mb-2" id="fxNote"></div>
+            <div class="row g-2">
+              <div class="col-5">${field("Result", select("formula.output", fx.output || "number", [["number", "Number"], ["text", "Text"], ["date", "Date"], ["yesno", "Yes / No"]]))}</div>
+              <div class="col-3">${field("Decimals", input("formula.decimals", fx.decimals === undefined ? 2 : fx.decimals, 'type="number" min="0" max="4"'))}</div>
+              <div class="col-4">${field("Recalculate", select("formula.recalc", fx.recalc || "always", [["always", "Always"], ["if_empty", "Only if empty"]]))}</div>
+            </div>
+            <div class="mb-2"><label class="form-label small fw-semibold mb-1">Insert a question</label>
+              <select class="form-select form-select-sm" id="fxInsert"><option value="">Choose…</option>${fxTokens(el).map(t => `<option value="${esc(t.token)}">${esc(t.label)} — ${esc(t.token)}</option>`).join("")}</select>
+              <div class="form-text">Functions: ${(window.StudioFormula ? StudioFormula.functions.slice(0, 18) : []).join(", ")}…</div></div>`;
+        }
+        h += `<hr class="my-2">`;
+      }
       h += field("Filled in automatically with", select("prefill", el.prefill, Object.entries(CFG.prefill)), "Only for people signed in to UN PASS; they can still change it.");
       const steps = flow() ? flow().steps.filter(x => x.type === "fill") : [];
       h += field("Filled in at", select("fill_by", el.fill_by || "inherit",
@@ -542,6 +574,7 @@
         <div class="form-text">Shown in place of the answer, so people know why.</div>` : ""}` : ""}`;
     inspector.innerHTML = h;
     bindInspector(el);
+    bindFormulaHelpers(el);
     inspector.querySelectorAll("[data-v2p]").forEach(x=>x.onchange=()=>change(()=>el.presentation[x.dataset.v2p]=x.type==="number"?+x.value:x.value));
     inspector.querySelectorAll("[data-v2c]").forEach(x=>x.onchange=()=>change(()=>el.canvas[x.dataset.v2c]=+x.value));
     const fp=inspector.querySelector("#freePlace"); if(fp) fp.onchange=()=>change(()=>el.canvas.enabled=fp.checked);
@@ -578,6 +611,58 @@
         },
       });
     }
+  }
+
+  function fxTokens(current){
+    const items = [{token: "@today", label: "Today's date"}];
+    schema.elements.forEach(e => {
+      if (!e.key || e.id === current.id) return;
+      if (e.type === "table") (e.columns || []).forEach(c => items.push({token: `[${e.key}.${c.key}]`, label: `${e.label} \u00b7 every ${c.label}`}));
+      else items.push({token: `[${e.key}]`, label: e.label || e.key});
+    });
+    return items;
+  }
+  function fxCheck(expr){
+    if (!window.StudioFormula || !String(expr || "").trim()) return {ok: true, error: ""};
+    return StudioFormula.check(expr);
+  }
+  function bindFormulaHelpers(el){
+    const box = inspector.querySelector('[data-k="formula.expr"]'), note = inspector.querySelector("#fxNote");
+    if (box && note){
+      const show = () => {
+        const report = fxCheck(box.value);
+        note.textContent = report.ok ? "Looks right. The answer updates as people type." : report.error;
+        note.className = "form-text mb-2 " + (report.ok ? "text-success" : "text-danger");
+        box.classList.toggle("is-invalid", !report.ok);
+      };
+      box.addEventListener("input", show);
+      show();
+      const insert = inspector.querySelector("#fxInsert");
+      if (insert) insert.onchange = () => {
+        if (!insert.value) return;
+        const at = box.selectionStart === null || box.selectionStart === undefined ? box.value.length : box.selectionStart;
+        box.value = box.value.slice(0, at) + insert.value + box.value.slice(at);
+        insert.value = "";
+        box.dispatchEvent(new Event("input", {bubbles: true}));
+        box.dispatchEvent(new Event("change", {bubbles: true}));
+        box.focus();
+      };
+    }
+    inspector.querySelectorAll('[data-ck="formula"]').forEach(input => {
+      const noteEl = inspector.querySelector(`[data-colnote="${input.dataset.col}"]`);
+      const show = () => {
+        const report = fxCheck(input.value);
+        input.classList.toggle("is-invalid", !report.ok);
+        if (noteEl){
+          noteEl.textContent = input.value.trim()
+            ? (report.ok ? "Calculated for every row — people cannot type in it." : report.error)
+            : "";
+          noteEl.className = "form-text fb-formula-note " + (report.ok ? "text-muted" : "text-danger");
+        }
+      };
+      input.addEventListener("input", show);
+      show();
+    });
   }
 
   function setPath(obj, path, val){ const p = path.split("."); let o = obj; for (let i = 0; i < p.length - 1; i++) o = o[p[i]] = o[p[i]] || {}; o[p[p.length - 1]] = val; }
@@ -692,7 +777,12 @@
       ${meta.access === "link" ? `<div class="input-group input-group-sm mb-1"><input class="form-control" readonly value="${esc(CFG.public_url)}" id="pubLink"><button class="btn btn-outline-secondary" id="copyLink" type="button"><i class="bi bi-clipboard"></i></button></div><div class="form-text mb-2">${meta.is_published ? "Live." : "Works once the form is published."} People without an account give their name and email.</div>` : ""}
       <label class="small fw-semibold">Shared with</label>
       <select class="form-select form-select-sm mb-2" data-m="share_scope"><option value="private" ${meta.share_scope === "private" ? "selected" : ""}>Only me</option><option value="office" ${meta.share_scope === "office" ? "selected" : ""}>My country office</option><option value="agency" ${meta.share_scope === "agency" ? "selected" : ""}>My whole agency</option></select>
-      <label class="form-check small"><input class="form-check-input" type="checkbox" data-m="owner_sees_submissions" ${meta.owner_sees_submissions ? "checked" : ""}> I can see every submission</label>`;
+      <label class="form-check small"><input class="form-check-input" type="checkbox" data-m="owner_sees_submissions" ${meta.owner_sees_submissions ? "checked" : ""}> I can see every submission</label>
+
+      <div class="st-group-label mt-3 mb-2">Signed copies & follow-on documents</div>
+      <div class="small text-muted mb-2">${esc(CFG.delivery_summary || "")}</div>
+      <a class="btn btn-sm btn-outline-primary w-100" href="${CFG.automation_url}"><i class="bi bi-envelope-paper me-1"></i>Copies, invoices & receipts</a>
+      <div class="form-text">Choose whether every signer is emailed a copy as they sign, or one email goes out when the flow finishes — and build a second document from these answers.</div>`;
     const panel = document.getElementById("settingsPanel");
     panel.querySelectorAll("[data-m]").forEach(inp => inp.addEventListener("change", () => {
       let v = inp.type === "checkbox" ? inp.checked : inp.value;

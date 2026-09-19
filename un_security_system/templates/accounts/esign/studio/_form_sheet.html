@@ -76,18 +76,20 @@
               <thead><tr>{% for c in el.columns %}<th>{{ c.label }}</th>{% endfor %}<th style="width:34px"></th></tr></thead>
               <tbody>
                 {% for row in val|blank_rows:el.rows %}
-                <tr>{% for c in el.columns %}<td><input class="form-control form-control-sm" data-col="{{ c.key }}" data-kind="{{ c.kind }}" type="{% if c.kind == 'date' %}date{% else %}text{% endif %}" {% if c.kind == 'number' %}inputmode="decimal"{% endif %} name="f_{{ el.key }}__{{ forloop.parentloop.counter0 }}__{{ c.key }}" value="{{ row|get_item:c.key }}" {% if rs.state != 'active' %}disabled{% endif %}></td>{% endfor %}
+                <tr>{% for c in el.columns %}<td><input class="form-control form-control-sm{% if c.formula %} fs-calc-box{% endif %}" data-col="{{ c.key }}" data-kind="{{ c.kind }}" type="{% if c.kind == 'date' %}date{% else %}text{% endif %}" {% if c.kind == 'number' %}inputmode="decimal"{% endif %} name="f_{{ el.key }}__{{ forloop.parentloop.counter0 }}__{{ c.key }}" value="{{ row|get_item:c.key }}" {% if rs.state != 'active' %}disabled{% endif %}{% if c.formula %} readonly tabindex="-1" data-calc="1" title="Worked out automatically"{% endif %}></td>{% endfor %}
                   <td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0 fs-row-del" title="Remove row"><i class="bi bi-x-lg"></i></button></td></tr>
                 {% endfor %}
               </tbody>
-              {% if el.show_total %}<tfoot><tr>{% for c in el.columns %}<th class="small">{% if c.kind == 'number' %}<span data-total="{{ c.key }}">0</span>{% elif forloop.first %}Total{% endif %}</th>{% endfor %}<th></th></tr></tfoot>{% endif %}
+              {% if el.show_total or el|has_column_totals %}<tfoot><tr>{% for c in el.columns %}<th class="small">{% if c.total or c.kind == 'number' %}<span data-total="{{ c.key }}">0</span>{% if c.total and c.total != 'sum' %} <span class="text-muted fw-normal">{{ c.total }}</span>{% endif %}{% elif forloop.first %}Total{% endif %}</th>{% endfor %}<th></th></tr></tfoot>{% endif %}
             </table>
             <input type="hidden" name="f_{{ el.key }}__rows" value="{{ val|blank_rows:el.rows|length }}">
             {% if el.allow_add %}<button type="button" class="btn btn-sm btn-outline-primary fs-row-add" {% if rs.state != 'active' %}disabled{% endif %}><i class="bi bi-plus-lg me-1"></i>Add row</button>{% endif %}
           </div>
         {% else %}
-          <input class="form-control {% if err %}is-invalid{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" value="{{ val }}" placeholder="{{ el.placeholder }}"
-                 type="{% if el.type == 'email' %}email{% elif el.type == 'date' %}date{% else %}text{% endif %}" {% if el.type == 'number' %}inputmode="decimal"{% endif %} {% if el.required and rs.state == 'active' %}required{% endif %} {% if rs.state != 'active' %}disabled{% endif %}>
+          <input class="form-control {% if err %}is-invalid{% endif %}{% if el.formula.enabled %} fs-calc-box{% endif %}" id="f_{{ el.key }}" name="f_{{ el.key }}" value="{{ val }}" placeholder="{{ el.placeholder }}"
+                 type="{% if el.type == 'email' %}email{% elif el.type == 'date' %}date{% else %}text{% endif %}" {% if el.type == 'number' %}inputmode="decimal"{% endif %} {% if el.required and rs.state == 'active' %}required{% endif %} {% if rs.state != 'active' %}disabled{% endif %}{% if el.formula.enabled %} readonly tabindex="-1" data-calc="1"{% endif %}>
+          {% if el.formula.enabled %}<div class="form-text fs-calc-note"><i class="bi bi-calculator me-1"></i>Worked out automatically.</div>
+          <div class="invalid-feedback d-block d-none small" data-calc-error></div>{% endif %}
         {% endif %}
         {% if err %}<div class="invalid-feedback d-block">{{ err }}</div>{% elif el.help %}<div class="form-text">{{ el.help }}</div>{% endif %}
         {% endwith %}
@@ -102,7 +104,7 @@
           <div class="table-responsive"><table class="table table-sm table-bordered fs-table mb-0">
             <thead><tr>{% for c in el.columns %}<th>{{ c.label }}</th>{% endfor %}</tr></thead>
             <tbody>{% for row in val %}<tr>{% for c in el.columns %}<td>{{ row|get_item:c.key }}</td>{% endfor %}</tr>{% endfor %}</tbody>
-            {% if el.show_total %}<tfoot><tr>{% for c in el.columns %}<th>{% if c.kind == 'number' %}{{ val|table_total:c.key }}{% elif forloop.first %}Total{% endif %}</th>{% endfor %}</tr></tfoot>{% endif %}
+            {% if el.show_total or el|has_column_totals %}{% with totals=el|totals_for:val %}<tfoot><tr>{% for c in el.columns %}<th>{% if c.total or c.kind == 'number' %}{{ totals|get_item:c.key|default:"0" }}{% elif forloop.first %}Total{% endif %}</th>{% endfor %}</tr></tfoot>{% endwith %}{% endif %}
           </table></div>
           {% else %}<div class="fs-value text-muted">—</div>{% endif %}
         {% else %}
