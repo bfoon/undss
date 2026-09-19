@@ -402,17 +402,23 @@ def read_values(schema, post, existing=None, scope="submitter", extras=None):
             except (TypeError, ValueError):
                 n = 0
             rows = []
+            typed_columns = [c for c in el["columns"] if not str(c.get("formula") or "").strip()]
             for r in range(n):
                 row = {}
                 for col in el["columns"]:
                     cell = _s(post.get(f"{name}__{r}__{col['key']}"), 500)
+                    if str(col.get("formula") or "").strip():
+                        # Calculated cells are worked out again below; whatever
+                        # the browser posted is not evidence that the row is used.
+                        row[col["key"]] = ""
+                        continue
                     if cell and col["kind"] == "number":
                         try:
                             float(cell.replace(",", ""))
                         except ValueError:
                             errors[key] = f"{col['label']} in {label} must be a number (row {r + 1})."
                     row[col["key"]] = cell
-                if any(row.values()):
+                if any(row[c["key"]] for c in typed_columns):
                     rows.append(row)
             values[key] = rows
             if el.get("required") and not rows:

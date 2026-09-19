@@ -206,7 +206,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'accounts/esign/formula.js' %}"></script>
+{% include "accounts/esign/studio/_formula_builder.html" %}
 <script>
 (function(){
   "use strict";
@@ -254,12 +254,49 @@
     row.className = "dr-row";
     row.innerHTML =
       '<select class="form-select form-select-sm" name="map_target">' + targetOptions(target || "") + "</select>" +
-      '<div><input class="form-control form-control-sm dr-expr" name="map_expr" value="' + esc(expr || "") +
-        '" spellcheck="false" placeholder="[question] or SUM([table.column])"><div class="form-text dr-note"></div></div>' +
+      '<div class="d-flex gap-1 align-items-start">' +
+        '<input class="form-control form-control-sm dr-expr" name="map_expr" value="' + esc(expr || "") +
+          '" spellcheck="false" placeholder="[question] or SUM([table.column])">' +
+        '<button type="button" class="fx-open dr-fx"><i class="bi bi-calculator"></i> \u0192x</button>' +
+        '<div class="form-text dr-note w-100"></div>' +
+      "</div>" +
       '<button type="button" class="btn btn-sm btn-outline-secondary dr-del"><i class="bi bi-x"></i></button>';
     document.getElementById("mapRows").appendChild(row);
     row.querySelector("input").addEventListener("input", function () { checkExpr(this); });
     return row;
+  }
+
+  // the source form's questions, in the shape the builder expects
+  function builderFields(){
+    return SOURCE.map(function (f) {
+      return {key: f.key, label: f.label, type: f.type,
+              columns: (f.columns || []).map(function (c) { return {key: c.key, label: c.label, kind: c.kind}; })};
+    });
+  }
+  var DOC_CONTEXT = [
+    {token: "@today", label: "Today's date"},
+    {token: "@reference", label: "The source form's reference"},
+    {token: "@submitter", label: "Who filled the form in"},
+    {token: "@submitter_email", label: "Their email address"},
+    {token: "@initiator", label: "Who started the workflow"},
+    {token: "@run", label: "The workflow reference"},
+    {token: "@status", label: "The workflow's status"}
+  ];
+  function openBuilderFor(input){
+    if (!window.StudioFormulaBuilder) return;
+    var select = input.closest(".dr-row").querySelector('select[name="map_target"]');
+    var label = select && select.selectedOptions[0] ? select.selectedOptions[0].textContent : "this question";
+    StudioFormulaBuilder.open({
+      title: label.trim(),
+      expr: input.value,
+      scope: "field",
+      fields: builderFields(),
+      context: DOC_CONTEXT,
+      onSave: function (expr) {
+        input.value = expr;
+        checkExpr(input);
+      }
+    });
   }
 
   document.getElementById("addRow").addEventListener("click", function () {
@@ -269,7 +306,21 @@
 
   document.getElementById("mapRows").addEventListener("click", function (e) {
     var del = e.target.closest(".dr-del");
-    if (del) del.closest(".dr-row").remove();
+    if (del) { del.closest(".dr-row").remove(); return; }
+    var fx = e.target.closest(".dr-fx");
+    if (fx) openBuilderFor(fx.closest(".dr-row").querySelector('input[name="map_expr"]'));
+  });
+
+  // rows that came from the server need the button adding
+  document.querySelectorAll("#mapRows .dr-row").forEach(function (row) {
+    if (row.querySelector(".dr-fx")) return;
+    var input = row.querySelector('input[name="map_expr"]');
+    if (!input) return;
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "fx-open dr-fx ms-1";
+    button.innerHTML = '<i class="bi bi-calculator"></i> \u0192x';
+    input.after(button);
   });
 
   document.getElementById("mapRows").addEventListener("input", function (e) {
@@ -331,8 +382,10 @@
         (targetTable.columns || []).map(function (c) {
           var expr = (entry.columns || {})[c.key] || "";
           return '<div class="dr-row"><div class="small pt-1">' + esc(c.label) + "</div>" +
-            '<input class="form-control form-control-sm dr-expr" data-tmcol="' + esc(c.key) + '" value="' + esc(expr) +
-              '" placeholder="[column] of the source row" spellcheck="false"><span></span></div>';
+            '<div class="d-flex gap-1"><input class="form-control form-control-sm dr-expr" data-tmcol="' + esc(c.key) +
+              '" value="' + esc(expr) + '" placeholder="[column] of the source row" spellcheck="false">' +
+            '<button type="button" class="fx-open tm-fx"><i class="bi bi-calculator"></i> \u0192x</button></div>' +
+            "<span></span></div>";
         }).join("") +
       "</div>";
     }).join("");
@@ -361,6 +414,23 @@
     renderTableMaps(entries);
   });
   document.getElementById("tableMapRows").addEventListener("click", function (e) {
+    var fx = e.target.closest(".tm-fx");
+    if (fx){
+      var input = fx.parentElement.querySelector("[data-tmcol]");
+      var block = fx.closest("[data-tmap]");
+      var sourceKey = block.querySelector('[data-tm="from"]').value;
+      var sourceTable = SOURCE.filter(function (t) { return t.key === sourceKey; })[0];
+      StudioFormulaBuilder.open({
+        title: "Column mapping",
+        expr: input.value,
+        scope: "row",
+        row: sourceTable ? {key: sourceTable.key, columns: sourceTable.columns || []} : null,
+        fields: builderFields(),
+        context: DOC_CONTEXT,
+        onSave: function (expr) { input.value = expr; collectTableMaps(); }
+      });
+      return;
+    }
     var del = e.target.closest("[data-tmdel]");
     if (!del) return;
     var entries = collectTableMaps();
