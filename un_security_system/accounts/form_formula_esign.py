@@ -2,36 +2,36 @@
 """
 UN PASS — eSign Studio: calculations on forms.
 
-A field, or a column inside a table, can carry a formula. The formula is
-written the way people write them in a spreadsheet, but it refers to questions
-by name instead of by cell:
+Formulas are deliberately spreadsheet-like, but refer to form questions by
+their keys instead of cell coordinates:
 
     [quantity] * [unit_price]
-    SUM([items.amount]) * 0.15
+    SUM([items.amount])
+    COUNT([items.item])
+    ROWS([items.item])
     IF([staff_type] = "International", [rate] * 1.25, [rate])
-    ROUND(SUM([items.amount]) + [freight], 2)
-    DAYS([start_date], [end_date]) * [daily_rate]
 
-Where a formula can live
-------------------------
-field       element["formula"]  -> {"enabled", "expr", "output", "decimals", "recalc"}
-table cell  column["formula"]   -> a row-scope expression; inside it, a bare
-                                   [column_key] means "this row's cell"
-table total column["total"]     -> "" | sum | avg | min | max | count
+Inside a table-row formula you can also use:
 
-What it can read
-----------------
-[key]                a question on this form (any type)
-[table.column]       every cell of that column, as a list — feed it to SUM/AVG/…
-@today               today's date
+    @row                    current row number: 1, 2, 3, ...
+    @rows                   number of saved rows in the table
+    ALPHA(@row)             A, B, C, ... Z, AA, AB, ...
+    ROMAN(@row)             I, II, III, IV, ...
+    LOWER(ALPHA(@row))      a, b, c, ...
+    LOWER(ROMAN(@row))      i, ii, iii, ...
 
-Nothing else. There is no attribute access, no imports, no Python evaluation:
-the expression is tokenised, parsed into a small tree and walked. The browser
-runs the same grammar (static/accounts/esign/formula.js) so what someone sees
-while typing is what the server stores.
+Automatic serial numbers use the submission/document reference:
 
-The server always recomputes. A computed answer posted by the browser is
-discarded — the formula is the authority, not the input box.
+    SERIAL(@reference, "SN-{year}-{serial}", "number", 1, 4)
+    SERIAL(@reference, "REC-{serial}", "alpha")
+    SERIAL(@reference, "CERT-{serial}", "roman")
+
+COUNT now means what form users expect: count non-empty items, including text.
+COUNTNUM is available when the older numeric-only behaviour is needed.
+ROWS counts the rows/items in a list.
+
+The browser runs the same grammar in static/accounts/esign/formula.js. The
+server always recomputes calculated values and is the authority.
 """
 
 from __future__ import annotations
@@ -56,10 +56,6 @@ class FormulaError(ValueError):
     """A formula that cannot be parsed, or cannot be worked out."""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Values in and out
-# ─────────────────────────────────────────────────────────────────────────────
-
 BLANK = ""
 
 
@@ -78,9 +74,7 @@ def to_number(value, *, strict=False):
     try:
         return float(text)
     except ValueError:
-        if strict:
-            return None
-        return 0.0
+        return None if strict else 0.0
 
 
 def to_text(value):
@@ -123,32 +117,31 @@ def to_date(value):
 
 def _flatten(args):
     out = []
-    for a in args:
-        if isinstance(a, (list, tuple)):
-            out.extend(_flatten(a))
+    for value in args:
+        if isinstance(value, (list, tuple)):
+            out.extend(_flatten(value))
         else:
-            out.append(a)
+            out.append(value)
     return out
 
 
 def _numbers(args):
     values = []
     for item in _flatten(args):
-        num = to_number(item, strict=True)
-        if num is not None:
-            values.append(num)
+        number = to_number(item, strict=True)
+        if number is not None:
+            values.append(number)
     return values
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Functions
-# ─────────────────────────────────────────────────────────────────────────────
+def _nonblank(args):
+    return [item for item in _flatten(args) if to_text(item).strip()]
+
 
 def _round(value, digits=0):
     digits = int(to_number(digits))
     factor = 10 ** digits
     number = to_number(value)
-    # Half-up, the way an accountant expects — not banker's rounding.
     return math.floor(abs(number) * factor + 0.5) / factor * (1 if number >= 0 else -1)
 
 
@@ -186,7 +179,6 @@ def _add_days(value, days):
 
 
 def _lookup(value, table, default=""):
-    """LOOKUP([grade], "P3=1200, P4=1500, P5=1900", 0)"""
     needle = to_text(value).strip().casefold()
     for pair in str(table or "").split(","):
         if "=" not in pair:
@@ -202,15 +194,122 @@ def _choose(index, *options):
     return options[i - 1] if 1 <= i <= len(options) else ""
 
 
+def _alpha_number(value):
+    """1 -> A, 26 -> Z, 27 -> AA."""
+    n = int(to_number(value))
+    if n <= 0:
+        return ""
+    out = []
+    while n:
+        n, rem = divmod(n - 1, 26)
+        out.append(chr(65 + rem))
+    return "".join(reversed(out))
+
+
+def _roman_number(value):
+    n = int(to_number(value))
+    if n <= 0:
+        return ""
+    if n > 3999:
+        return str(n)
+    pairs = (
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+        (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+        (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+    )
+    out = []
+    for amount, symbol in pairs:
+        while n >= amount:
+            out.append(symbol)
+            n -= amount
+    return "".join(out)
+
+
+def _pad(value, width=4):
+    width = max(0, min(20, int(to_number(width))))
+    number = int(to_number(value))
+    return str(number).zfill(width)
+
+
+def sequence_value(value, style="number", pad=0):
+    """
+    Format a positive sequence number in the requested display style.
+
+    Supported styles:
+      number
+      alpha / letters / upper_alpha
+      lower_alpha
+      roman / upper_roman
+      lower_roman
+    """
+    n = int(to_number(value))
+    style = str(style or "number").strip().lower()
+    if style in {"alpha", "letters", "letter", "upper_alpha", "upper-alpha"}:
+        return _alpha_number(n)
+    if style in {"lower_alpha", "lower-alpha", "letters_lower", "letter_lower"}:
+        return _alpha_number(n).lower()
+    if style in {"roman", "upper_roman", "upper-roman"}:
+        return _roman_number(n)
+    if style in {"lower_roman", "lower-roman"}:
+        return _roman_number(n).lower()
+    return _pad(n, pad) if int(to_number(pad)) > 0 else str(n)
+
+
+def _reference_sequence(reference):
+    numbers = re.findall(r"(\d+)", str(reference or ""))
+    return int(numbers[-1]) if numbers else 1
+
+
+def _serial(reference, pattern="SN-{year}-{serial}", style="number", start=1, pad=4):
+    """
+    Produce a stable serial from a submission/document reference.
+
+    The reference supplies the sequence. For example FRM-2026-0042 uses 42.
+    Known pattern tokens:
+      {serial} / {seq}, {year}, {month}, {day}, {reference}
+    """
+    ref = to_text(reference).strip()
+    seq = _reference_sequence(ref)
+    seq += int(to_number(start)) - 1
+    seq = max(1, seq)
+    serial = sequence_value(seq, style, pad)
+
+    today = date.today()
+    replacements = {
+        "{serial}": serial,
+        "{seq}": serial,
+        "{year}": str(today.year),
+        "{month}": f"{today.month:02d}",
+        "{day}": f"{today.day:02d}",
+        "{reference}": ref,
+    }
+    result = str(pattern or "{serial}")
+    for token, value in replacements.items():
+        result = result.replace(token, value)
+    return result
+
+
+def _rows_count(*args):
+    # A single list reference is the common form: ROWS([items.item]).
+    if len(args) == 1 and isinstance(args[0], (list, tuple)):
+        return float(len(args[0]))
+    return float(len(_flatten(args)))
+
+
 FUNCTIONS = {
-    # maths
     "SUM": lambda *a: sum(_numbers(a)),
     "AVERAGE": lambda *a: (sum(_numbers(a)) / len(_numbers(a))) if _numbers(a) else 0.0,
     "AVG": lambda *a: (sum(_numbers(a)) / len(_numbers(a))) if _numbers(a) else 0.0,
     "MIN": lambda *a: min(_numbers(a)) if _numbers(a) else 0.0,
     "MAX": lambda *a: max(_numbers(a)) if _numbers(a) else 0.0,
-    "COUNT": lambda *a: float(len(_numbers(a))),
-    "COUNTA": lambda *a: float(len([x for x in _flatten(a) if to_text(x).strip()])),
+
+    # COUNT counts items, not only numbers. COUNTNUM preserves the old
+    # numeric-only behaviour for formulas that intentionally need it.
+    "COUNT": lambda *a: float(len(_nonblank(a))),
+    "COUNTA": lambda *a: float(len(_nonblank(a))),
+    "COUNTNUM": lambda *a: float(len(_numbers(a))),
+    "ROWS": _rows_count,
+
     "ROUND": _round,
     "ROUNDUP": lambda v, d=0: math.ceil(to_number(v) * 10 ** int(to_number(d))) / 10 ** int(to_number(d)),
     "ROUNDDOWN": lambda v, d=0: math.floor(to_number(v) * 10 ** int(to_number(d))) / 10 ** int(to_number(d)),
@@ -223,11 +322,11 @@ FUNCTIONS = {
     "SQRT": lambda v: math.sqrt(max(0.0, to_number(v))),
     "PERCENT": lambda part, whole: (to_number(part) / to_number(whole) * 100) if to_number(whole) else 0.0,
     "CLAMP": lambda v, lo, hi: max(to_number(lo), min(to_number(hi), to_number(v))),
-    # logic (IF / IFS / IFERROR / AND / OR are handled lazily by the evaluator)
+
     "NOT": lambda v: not to_bool(v),
     "ISBLANK": lambda v: not to_text(v).strip(),
     "ISNUMBER": lambda v: to_number(v, strict=True) is not None,
-    # text
+
     "CONCAT": lambda *a: "".join(to_text(x) for x in _flatten(a)),
     "JOIN": lambda sep, *a: str(sep).join(to_text(x) for x in _flatten(a) if to_text(x).strip()),
     "UPPER": lambda v: to_text(v).upper(),
@@ -244,7 +343,13 @@ FUNCTIONS = {
     "VALUE": lambda v: to_number(v),
     "LOOKUP": _lookup,
     "CHOOSE": _choose,
-    # dates
+
+    # Sequence/serial helpers.
+    "ALPHA": lambda v: _alpha_number(v),
+    "ROMAN": lambda v: _roman_number(v),
+    "PAD": _pad,
+    "SERIAL": _serial,
+
     "TODAY": lambda: date.today().isoformat(),
     "DAYS": _days,
     "ADDDAYS": _add_days,
@@ -257,18 +362,11 @@ LAZY_FUNCTIONS = {"IF", "IFS", "IFERROR", "AND", "OR"}
 FUNCTION_NAMES = sorted(set(FUNCTIONS) | LAZY_FUNCTIONS)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tokeniser and parser
-# ─────────────────────────────────────────────────────────────────────────────
-
 class _Token:
     __slots__ = ("kind", "value", "pos")
 
     def __init__(self, kind, value, pos):
         self.kind, self.value, self.pos = kind, value, pos
-
-    def __repr__(self):  # pragma: no cover - debugging only
-        return f"<{self.kind} {self.value!r}>"
 
 
 _OPERATORS = ["<=", ">=", "<>", "!=", "==", "&&", "||", "+", "-", "*", "/", "%",
@@ -356,7 +454,6 @@ class _Parser:
             raise FormulaError("The formula is too complicated.")
         return parts
 
-    # precedence climbing, loosest first
     def parse(self):
         tree = self.parse_or()
         if self.peek().kind != "end":
@@ -478,7 +575,6 @@ def parse(expr):
 
 
 def references(expr):
-    """Every [reference] a formula reads, as written."""
     try:
         tree = parse(expr)
     except FormulaError:
@@ -502,10 +598,6 @@ def references(expr):
     return found
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Evaluation
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _compare(op, left, right):
     left_num = to_number(left, strict=True)
     right_num = to_number(right, strict=True)
@@ -527,7 +619,6 @@ def _compare(op, left, right):
 
 
 def evaluate(expr, resolver):
-    """`resolver(name)` returns the value behind a [reference]."""
     return _eval(parse(expr), resolver)
 
 
@@ -614,12 +705,7 @@ def _call(name, args, resolver):
         raise FormulaError(f"{name} could not be worked out ({exc}).")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Schema cleaning
-# ─────────────────────────────────────────────────────────────────────────────
-
 def clean_formula(raw):
-    """Sanitise element["formula"]. Returns None when there is nothing to keep."""
     if not isinstance(raw, dict):
         return None
     expr = str(raw.get("expr") or "").strip()[:MAX_EXPR]
@@ -653,7 +739,7 @@ def clean_column_formula(raw):
     try:
         parse(expr)
     except FormulaError:
-        pass          # kept as typed so the designer can show the mistake
+        pass
     return expr
 
 
@@ -683,10 +769,6 @@ def has_formulas(schema):
     return False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Working the whole form out
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _rows(value):
     return [r for r in value if isinstance(r, dict)] if isinstance(value, list) else []
 
@@ -708,8 +790,8 @@ def _format(value, formula):
     return to_text(value)
 
 
-def _resolver(values, schema_index, row=None, today=None):
-    """Turn a [reference] into a value, in row scope or form scope."""
+def _resolver(values, schema_index, row=None, today=None, reference="", row_index=None, row_count=None):
+    """Turn a [reference] / @context token into a value."""
 
     def resolve(name):
         name = name.strip()
@@ -717,8 +799,12 @@ def _resolver(values, schema_index, row=None, today=None):
             key = name[1:].lower()
             if key == "today":
                 return (today or date.today()).isoformat()
-            if key in ("rowcount", "rows"):
-                return float(len(row or {}))
+            if key == "reference":
+                return reference or values.get("@reference", "")
+            if key in ("row", "rownumber", "row_number"):
+                return float(row_index or 0)
+            if key in ("rows", "rowcount", "row_count"):
+                return float(row_count or 0)
             return values.get(name, "")
         if row is not None and "." not in name and name in row:
             return row.get(name, "")
@@ -734,14 +820,13 @@ def _resolver(values, schema_index, row=None, today=None):
     return resolve
 
 
-def compute_values(schema, values, *, today=None):
+def compute_values(schema, values, *, today=None, reference=""):
     """
-    Work out every formula on the form and write the answers into `values`.
+    Recompute every calculated field/table cell.
 
-    Runs to a fixed point (at most MAX_PASSES rounds), so a field may feed a
-    table, a table total may feed another field, and so on, whichever order
-    they were drawn in. Returns (values, errors) — errors maps a field key, or
-    "table.column", to a readable message.
+    `reference` is optional during editing, but should be supplied when a
+    submission/document reference is known so SERIAL(@reference, ...) becomes
+    stable and is persisted by the post-save signal.
     """
     values = dict(values or {})
     schema = schema or {}
@@ -760,31 +845,44 @@ def compute_values(schema, values, *, today=None):
         before = _fingerprint(values, field_formulas, table_elements)
         errors = {}
 
-        # 1. every computed cell, table by table, row by row
         for el in table_elements:
             rows = _rows(values.get(el["key"]))
             columns = computed_columns(el)
-            for row in rows:
+            row_count = len(rows)
+            for row_index, row in enumerate(rows, start=1):
                 for column in columns:
-                    resolve = _resolver(values, index, row=row, today=today)
+                    resolve = _resolver(
+                        values, index, row=row, today=today, reference=reference,
+                        row_index=row_index, row_count=row_count,
+                    )
                     try:
                         result = evaluate(column["formula"], resolve)
+                        kind = column.get("kind") or "text"
+                        output = column.get("output") or {
+                            "number": "number",
+                            "date": "date",
+                            "text": "text",
+                        }.get(kind, "text")
                         row[column["key"]] = _format(
                             result,
-                            {"output": column.get("output") or ("number" if column.get("kind") != "date" else "date"),
-                             "decimals": column.get("decimals", 2 if column.get("kind") == "number" else 0)},
+                            {
+                                "output": output,
+                                "decimals": column.get(
+                                    "decimals",
+                                    2 if kind == "number" else 0,
+                                ),
+                            },
                         )
                     except FormulaError as exc:
                         errors[f"{el['key']}.{column['key']}"] = str(exc)
                         row[column["key"]] = ""
             values[el["key"]] = rows
 
-        # 2. then the fields
         for el, formula in field_formulas:
             key = el["key"]
             if formula.get("recalc") == "if_empty" and str(values.get(key) or "").strip():
                 continue
-            resolve = _resolver(values, index, today=today)
+            resolve = _resolver(values, index, today=today, reference=reference)
             try:
                 values[key] = _format(evaluate(formula["expr"], resolve), formula)
             except FormulaError as exc:
@@ -811,17 +909,28 @@ def _fingerprint(values, field_formulas, table_elements):
 
 
 def totals_for(element, rows):
-    """{column key: total} for the columns with a total mode set."""
+    """
+    Return {column key: footer figure}.
+
+    count means number of non-empty items, not a sum. This is the same rule
+    used by the browser and the PDF renderer.
+    """
     out = {}
+    clean_rows = _rows(rows)
     for column in element.get("columns") or []:
         mode = clean_total_mode(column.get("total"))
         if not mode and not (element.get("show_total") and column.get("kind") == "number"):
             continue
         mode = mode or "sum"
-        numbers = _numbers([r.get(column["key"]) for r in _rows(rows)])
+
         if mode == "count":
-            out[column["key"]] = float(len([r for r in _rows(rows) if to_text(r.get(column["key"])).strip()]))
-        elif not numbers:
+            out[column["key"]] = float(
+                len([r for r in clean_rows if to_text(r.get(column["key"])).strip()])
+            )
+            continue
+
+        numbers = _numbers([r.get(column["key"]) for r in clean_rows])
+        if not numbers:
             out[column["key"]] = 0.0
         elif mode == "sum":
             out[column["key"]] = sum(numbers)
@@ -835,40 +944,59 @@ def totals_for(element, rows):
 
 
 def computed_keys(schema):
-    """Keys the server owns — the browser may not post them."""
-    return {el["key"] for el in (schema or {}).get("elements") or []
-            if el.get("key") and formula_of(el)}
+    return {
+        el["key"]
+        for el in (schema or {}).get("elements") or []
+        if el.get("key") and formula_of(el)
+    }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Help for the designer
-# ─────────────────────────────────────────────────────────────────────────────
 
 def token_catalog(schema, *, exclude_id=None):
-    """
-    Everything a formula on this form can refer to, for the designer's
-    "insert a field" list: [{"token", "label", "kind"}].
-    """
-    items = [{"token": "@today", "label": "Today's date", "kind": "date"}]
+    items = [
+        {"token": "@today", "label": "Today's date", "kind": "date"},
+        {"token": "@reference", "label": "Submission / document reference", "kind": "text"},
+    ]
     for el in (schema or {}).get("elements") or []:
         key, kind = el.get("key"), el.get("type")
         if not key or el.get("id") == exclude_id:
             continue
         label = el.get("label") or key
         if kind == "table":
-            for column in el.get("columns") or []:
+            columns = el.get("columns") or []
+            if columns:
+                first = columns[0]
                 items.append({
-                    "token": f"[{key}.{column['key']}]",
-                    "label": f"{label} · every {column.get('label') or column['key']}",
-                    "kind": "list",
+                    "token": f"ROWS([{key}.{first['key']}])",
+                    "label": f"{label} · number of rows/items",
+                    "kind": "number",
                 })
+            for column in columns:
+                ckey = column["key"]
+                clabel = column.get("label") or ckey
+                items.extend([
+                    {
+                        "token": f"[{key}.{ckey}]",
+                        "label": f"{label} · every {clabel}",
+                        "kind": "list",
+                    },
+                    {
+                        "token": f"COUNT([{key}.{ckey}])",
+                        "label": f"{label} · count filled {clabel}",
+                        "kind": "number",
+                    },
+                ])
+                if column.get("kind") == "number":
+                    items.append({
+                        "token": f"SUM([{key}.{ckey}])",
+                        "label": f"{label} · total {clabel}",
+                        "kind": "number",
+                    })
             continue
         items.append({"token": f"[{key}]", "label": label, "kind": kind})
     return items
 
 
 def describe(expr):
-    """A one-line health check used by the designer and the save view."""
     try:
         parse(expr)
     except FormulaError as exc:
@@ -877,15 +1005,13 @@ def describe(expr):
 
 
 def check_schema(schema):
-    """
-    Readable problems with the formulas on a form: bad syntax, references to
-    questions that no longer exist, and circular calculations.
-    """
     problems = []
     keys = {el.get("key") for el in (schema or {}).get("elements") or [] if el.get("key")}
-    tables = {el["key"]: {c["key"] for c in el.get("columns") or []}
-              for el in (schema or {}).get("elements") or []
-              if el.get("key") and el.get("type") == "table"}
+    tables = {
+        el["key"]: {c["key"] for c in el.get("columns") or []}
+        for el in (schema or {}).get("elements") or []
+        if el.get("key") and el.get("type") == "table"
+    }
 
     def check(expr, where, *, row_columns=None):
         report = describe(expr)
@@ -914,10 +1040,12 @@ def check_schema(schema):
             check(formula["expr"], f"“{label}”")
         for column in el.get("columns") or []:
             if str(column.get("formula") or "").strip():
-                check(column["formula"], f"“{label}” · column “{column.get('label') or column['key']}”",
-                      row_columns={c["key"] for c in el.get("columns") or []})
+                check(
+                    column["formula"],
+                    f"“{label}” · column “{column.get('label') or column['key']}”",
+                    row_columns={c["key"] for c in el.get("columns") or []},
+                )
 
-    # circularity: compute_values reports it once it has run
     _v, errors = compute_values(schema, {})
     for key, message in errors.items():
         if "circle" in message:
