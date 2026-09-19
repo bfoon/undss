@@ -412,6 +412,15 @@
 
     var report = global.StudioFormula ? global.StudioFormula.check(expr) : { ok: true, error: "" };
     var unknown = unknownReferences(expr);
+    var plain = plainProblem(expr);
+
+    if (plain) {
+      status.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>' +
+        esc(plain) + "</span>";
+      readout.innerHTML = "";
+      el("fxbSave").disabled = true;
+      return;
+    }
 
     if (!report.ok) {
       status.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-circle me-1"></i>' +
@@ -455,6 +464,38 @@
       '<div class="fxb-readout-line"><span class="fxb-readout-tag">On sample answers</span>' +
         '<strong>' + esc(String(result)) + "</strong></div>";
     renderSamples();
+  }
+
+  // The mistakes people actually make when dragging, said in words rather than
+  // in parser language.
+  function plainProblem(expr) {
+    var tokens = lex(expr);
+    var depth = 0, i;
+    for (i = 0; i < tokens.length; i++) {
+      var text = tokens[i].text.trim();
+      if (tokens[i].kind === "fn" || text === "(") depth++;
+      else if (text === ")") depth--;
+      if (depth < 0) return "There is a closing bracket with nothing to close.";
+    }
+    if (depth > 0) {
+      return depth === 1 ? "A bracket is still open — add the closing one."
+                         : depth + " brackets are still open.";
+    }
+    var VALUE = { ref: 1, context: 1, number: 1, text: 1 };
+    for (i = 1; i < tokens.length; i++) {
+      if (VALUE[tokens[i].kind] && VALUE[tokens[i - 1].kind]) {
+        return "Two values are next to each other — put something between them, such as " +
+               "\u00d7 or +.";
+      }
+      if (tokens[i].kind === "fn" && VALUE[tokens[i - 1].kind]) {
+        return "A value is followed straight by a function — put an operator between them.";
+      }
+    }
+    var last = tokens[tokens.length - 1];
+    if (last && last.kind === "op" && [")", ","].indexOf(last.text.trim()) === -1) {
+      return "The formula ends on \u201c" + last.text.trim() + "\u201d — something is missing after it.";
+    }
+    return "";
   }
 
   function unknownReferences(expr) {
@@ -522,9 +563,15 @@
     el("fxbPalette").addEventListener("dragstart", function (event) {
       var card = event.target.closest(".fxb-card");
       if (!card) return;
-      event.dataTransfer.setData("text/plain", card.dataset.token);
-      event.dataTransfer.effectAllowed = "copy";
-      state.dragging = { token: card.dataset.token, from: null };
+      // State first: dataTransfer is not always handed over, and if setting it
+      // throws the drop would have nothing to work with.
+      state.dragging = { token: card.dataset.token, from: null, preset: !!card.dataset.preset };
+      if (event.dataTransfer) {
+        try {
+          event.dataTransfer.setData("text/plain", card.dataset.token);
+          event.dataTransfer.effectAllowed = "copy";
+        } catch (error) { /* the drop falls back to state.dragging */ }
+      }
     });
 
     var canvas = el("fxbCanvas");
@@ -543,9 +590,13 @@
     canvas.addEventListener("dragstart", function (event) {
       var chip = event.target.closest(".fxb-chip");
       if (!chip) return;
-      event.dataTransfer.setData("text/plain", state.tokens[+chip.dataset.index].text);
-      event.dataTransfer.effectAllowed = "move";
       state.dragging = { token: null, from: +chip.dataset.index };
+      if (event.dataTransfer) {
+        try {
+          event.dataTransfer.setData("text/plain", state.tokens[+chip.dataset.index].text);
+          event.dataTransfer.effectAllowed = "move";
+        } catch (error) { /* the drop falls back to state.dragging */ }
+      }
     });
 
     canvas.addEventListener("dragover", function (event) {
@@ -563,13 +614,24 @@
       var gap = nearestGap(event);
       var at = gap ? +gap.dataset.gap : state.tokens.length;
       canvas.querySelectorAll(".fxb-gap").forEach(function (g) { g.classList.remove("over"); });
-      if (state.dragging && state.dragging.from !== null) moveToken(state.dragging.from, at);
-      else {
-        var token = (state.dragging && state.dragging.token) || event.dataTransfer.getData("text/plain");
-        if (token) insert(token, at);
+      if (state.dragging && state.dragging.from !== null) {
+        moveToken(state.dragging.from, at);
+      } else {
+        var token = (state.dragging && state.dragging.token) || "";
+        if (!token && event.dataTransfer) {
+          try { token = event.dataTransfer.getData("text/plain"); } catch (error) { token = ""; }
+        }
+        if (token && state.dragging && state.dragging.preset) setExpr(token);
+        else if (token) insert(token, at);
       }
       state.dragging = null;
     });
+
+    canvas.addEventListener("dragend", function () {
+      state.dragging = null;
+      canvas.querySelectorAll(".fxb-gap").forEach(function (g) { g.classList.remove("over"); });
+    });
+    el("fxbPalette").addEventListener("dragend", function () { state.dragging = null; });
 
     el("fxbClear").addEventListener("click", function () { setExpr(""); state.caret = null; });
 
@@ -592,10 +654,20 @@
       validate();
     });
 
+    modal.querySelectorAll("[data-bs-dismiss='modal']").forEach(function (button) {
+      button.addEventListener("click", hideModal);
+    });
+    modal.addEventListener("mousedown", function (event) {
+      if (event.target === modal) hideModal();          // click outside the card
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && modal && modal.classList.contains("show")) hideModal();
+    });
+
     el("fxbSave").addEventListener("click", function () {
       var expr = state.expr;
       if (state.options.onSave) state.options.onSave(expr);
-      bootstrapModal().hide();
+      hideModal();
     });
   }
 
@@ -622,12 +694,49 @@
     if (!build) el("fxbRaw").focus();
   }
 
-  function bootstrapModal() {
-    return global.bootstrap.Modal.getOrCreateInstance(modal);
+  // The dialog opens and closes itself. It used to call bootstrap.Modal, which
+  // meant that on any page where Bootstrap's JS had not loaded yet the click
+  // threw and nothing at all happened — no dialog, no error the user could see.
+  var backdrop = null;
+
+  function showModal() {
+    if (global.bootstrap && global.bootstrap.Modal) {
+      global.bootstrap.Modal.getOrCreateInstance(modal).show();
+      return;
+    }
+    backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop fade show";
+    document.body.appendChild(backdrop);
+    document.body.classList.add("modal-open");
+    modal.classList.add("show");
+    modal.style.display = "block";
+    modal.removeAttribute("aria-hidden");
+    modal.setAttribute("aria-modal", "true");
+    var focusable = modal.querySelector("#fxbSearch");
+    if (focusable) setTimeout(function () { focusable.focus(); }, 30);
+  }
+
+  function hideModal() {
+    if (global.bootstrap && global.bootstrap.Modal) {
+      var instance = global.bootstrap.Modal.getInstance(modal);
+      if (instance) { instance.hide(); return; }
+    }
+    modal.classList.remove("show");
+    modal.style.display = "none";
+    modal.setAttribute("aria-hidden", "true");
+    modal.removeAttribute("aria-modal");
+    document.body.classList.remove("modal-open");
+    if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    backdrop = null;
   }
 
   // ── entry point ──────────────────────────────────────────────────────────
   function open(options) {
+    if (!global.StudioFormula) {
+      /* eslint-disable no-alert */
+      alert("The formula engine did not load. Run collectstatic and refresh the page.");
+      return;
+    }
     ensureModal();
     state = {
       options: options || {},
@@ -665,7 +774,7 @@
     setMode("build");
     renderPalette();
     setExpr(options.expr || "");
-    bootstrapModal().show();
+    showModal();
   }
 
   global.StudioFormulaBuilder = { open: open, lex: lex, explain: explain };

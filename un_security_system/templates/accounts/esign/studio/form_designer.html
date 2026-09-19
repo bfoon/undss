@@ -653,6 +653,7 @@
       columns: (e.columns || []).map(c => ({key: c.key, label: c.label, kind: c.kind})),
     }));
   }
+  let pendingFormulaOpen = null;
   function bindFormulaHelpers(el){
     if (!window.StudioFormulaBuilder) return;
 
@@ -687,6 +688,17 @@
     if (openBtn) openBtn.onclick = openField;
     if (preview) preview.onclick = openField;
     showNote();
+
+    // Ticking the box drops you straight into the builder — nobody wants to
+    // tick a box and then hunt for the next button.
+    const toggle = inspector.querySelector('[data-k="formula.enabled"]');
+    if (toggle) toggle.addEventListener("change", () => {
+      if (toggle.checked) pendingFormulaOpen = el.id;
+    });
+    if (pendingFormulaOpen === el.id && openBtn){
+      pendingFormulaOpen = null;
+      setTimeout(openField, 0);
+    }
 
     // ── a column that works itself out, row by row ────────────────────────
     inspector.querySelectorAll("[data-colfx]").forEach(button => {
