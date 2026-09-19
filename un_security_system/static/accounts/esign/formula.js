@@ -385,11 +385,19 @@
     return text(value);
   }
 
-  function resolverFor(values, index, row) {
+  function resolverFor(values, index, row, rowIndex, rowCount) {
     return function (name) {
       name = String(name).trim();
       if (name.charAt(0) === "@") {
-        if (name.toLowerCase() === "@today") return isoDate(new Date());
+        var key = name.slice(1).toLowerCase();
+        if (key === "today") return isoDate(new Date());
+        // 1, 2, 3 … down the table — what a "No." column wants.
+        if (key === "row" || key === "rownumber" || key === "rowno") {
+          return rowIndex === undefined || rowIndex === null ? "" : rowIndex + 1;
+        }
+        if (key === "rowcount" || key === "rows") {
+          return rowCount === undefined || rowCount === null ? "" : rowCount;
+        }
         return values[name] || "";
       }
       if (row && name.indexOf(".") === -1 && Object.prototype.hasOwnProperty.call(row, name)) return row[name];
@@ -425,7 +433,7 @@
         var computedHere = columns.map(function (c) { return c.key; });
         var typedKeys = (el.columns || []).map(function (c) { return c.key; })
           .filter(function (k) { return computedHere.indexOf(k) === -1; });
-        rows.forEach(function (row) {
+        rows.forEach(function (row, rowIndex) {
           // An untouched row stays visually empty rather than showing 0.00.
           var touched = typedKeys.some(function (k) { return String(row[k] || "").trim(); });
           if (typedKeys.length && !touched) {
@@ -434,7 +442,8 @@
           }
           columns.forEach(function (column) {
             try {
-              var result = evaluate(column.formula, resolverFor(values, index, row));
+              var result = evaluate(column.formula,
+                                    resolverFor(values, index, row, rowIndex, rows.length));
               row[column.key] = format(result, {
                 output: column.output || (column.kind === "date" ? "date" : "number"),
                 decimals: column.decimals === undefined ? (column.kind === "number" ? 2 : 0) : column.decimals

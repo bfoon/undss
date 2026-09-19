@@ -144,7 +144,10 @@
     return function (name) {
       name = String(name).trim();
       if (name.charAt(0) === "@") {
-        if (name.toLowerCase() === "@today") return new Date().toISOString().slice(0, 10);
+        var key = name.slice(1).toLowerCase();
+        if (key === "today") return new Date().toISOString().slice(0, 10);
+        if (key === "row" || key === "rownumber" || key === "rowno") return 2;   // "the second row"
+        if (key === "rowcount" || key === "rows") return 3;
         return values[name] === undefined ? "Sample" : values[name];
       }
       if (rowValues && name.indexOf(".") === -1 &&
@@ -261,11 +264,14 @@
       groups.push({
         name: "This row",
         hint: "The cells on the row being worked out",
-        items: (state.options.row.columns || [])
+        items: [
+          { label: "Row number", token: "@row", note: "1, 2, 3 \u2026", kind: "context" },
+          { label: "How many rows", token: "@rowcount", note: "", kind: "context" }
+        ].concat((state.options.row.columns || [])
           .filter(function (c) { return c.key !== state.options.columnKey; })
           .map(function (c) {
             return { label: c.label || c.key, token: "[" + c.key + "]", note: c.kind || "text", kind: "ref" };
-          })
+          }))
       });
     }
 

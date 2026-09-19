@@ -708,7 +708,7 @@ def _format(value, formula):
     return to_text(value)
 
 
-def _resolver(values, schema_index, row=None, today=None):
+def _resolver(values, schema_index, row=None, today=None, row_index=None, row_count=None):
     """Turn a [reference] into a value, in row scope or form scope."""
 
     def resolve(name):
@@ -717,8 +717,11 @@ def _resolver(values, schema_index, row=None, today=None):
             key = name[1:].lower()
             if key == "today":
                 return (today or date.today()).isoformat()
+            if key in ("row", "rownumber", "rowno"):
+                # 1, 2, 3 … down the table — what a "No." column wants.
+                return float(row_index + 1) if row_index is not None else ""
             if key in ("rowcount", "rows"):
-                return float(len(row or {}))
+                return float(row_count) if row_count is not None else ""
             return values.get(name, "")
         if row is not None and "." not in name and name in row:
             return row.get(name, "")
@@ -766,14 +769,15 @@ def compute_values(schema, values, *, today=None):
             columns = computed_columns(el)
             computed_keys_here = {c["key"] for c in columns}
             typed_keys = [c["key"] for c in el.get("columns") or [] if c["key"] not in computed_keys_here]
-            for row in rows:
+            for row_index, row in enumerate(rows):
                 # An untouched row stays visually empty rather than showing 0.00.
                 if typed_keys and not any(str(row.get(k) or "").strip() for k in typed_keys):
                     for column in columns:
                         row[column["key"]] = ""
                     continue
                 for column in columns:
-                    resolve = _resolver(values, index, row=row, today=today)
+                    resolve = _resolver(values, index, row=row, today=today,
+                                        row_index=row_index, row_count=len(rows))
                     try:
                         result = evaluate(column["formula"], resolve)
                         row[column["key"]] = _format(
