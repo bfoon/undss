@@ -559,6 +559,7 @@ urlpatterns = [
     # ------------------------------------------------------------------
     path("", include("accounts.urls_asset_health")),
     path("", include("accounts.urls_esign_docgen")),
+    path("", include("accounts.urls_esign_triggers")),
 
 
 ]

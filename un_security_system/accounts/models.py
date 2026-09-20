@@ -1205,12 +1205,19 @@ class AssetRequest(models.Model):
         self.status = "assigned"
         self.save()
 
+        from . import module_events
+        module_events.fire("asset_request.assigned", self, actor=by_user)
+
     def verify_receipt(self, by_user):
         if by_user.id != self.requester_id:
             raise ValueError("Only the requester can verify receipt.")
         self.requester_verified_at = timezone.now()
         self.status = "received"
         self.save(update_fields=["requester_verified_at", "status"])
+        # The asset is issued and confirmed — the end of this request, and the
+        # place a handover form or accountability flow can pick up.
+        from . import module_events
+        module_events.fire("asset_request.received", self, actor=by_user)
 
 
 class AssetHistory(models.Model):
@@ -1785,4 +1792,5 @@ class ConsumableAssetLink(models.Model):
 from .models_esign import *  # noqa: F401,F403
 from .models_esign_markup import *   # noqa: F401,F403
 from .models_esign_studio import *   # noqa: F401,F403
-# from .models_esign_docgen import *    # noqa: F401,F403
+from .models_esign_docgen import *    # noqa: F401,F403
+from .models_esign_triggers import *  # noqa: F401,F403

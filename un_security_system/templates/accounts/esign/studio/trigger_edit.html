@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/studio/trigger_edit.html #}
+{% load static %}
+{% block title %}{{ trigger.name|default:"New trigger" }} | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}
+<style>
+  .tg-row{ display:grid; grid-template-columns:minmax(150px,1fr) minmax(220px,1.6fr) 34px; gap:.4rem; margin-bottom:.4rem; align-items:start; }
+  .tg-cond{ display:grid; grid-template-columns:1.2fr 1fr 1.2fr 34px; gap:.4rem; margin-bottom:.4rem; }
+  .tg-expr{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.8rem; }
+  .tg-token{ cursor:pointer; border:1px solid var(--st-line); border-radius:999px; padding:.1rem .5rem;
+             font-size:.72rem; background:#fff; margin:0 .2rem .2rem 0; display:inline-block; }
+  .tg-token:hover{ border-color:var(--un-blue); color:var(--un-dark-blue); }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="mx-auto" style="max-width:1020px">
+  <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <div class="small text-muted">Automation · module trigger</div>
+      <h4 class="text-un-primary fw-bold mb-0">{{ trigger.name|default:"New trigger" }}</h4>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_trigger_list' %}">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+  </div>
+
+  <form method="post" id="triggerForm">
+    {% csrf_token %}
+
+    <div class="card mb-3">
+      <div class="card-body row g-3">
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold">What is this for</label>
+          <input class="form-control" name="name" value="{{ trigger.name }}" maxlength="150"
+                 required placeholder="Asset handover undertaking">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold">Short description</label>
+          <input class="form-control" name="description" value="{{ trigger.description }}" maxlength="300">
+        </div>
+        <div class="col-md-8">
+          <label class="form-label small fw-semibold">Wait for this moment</label>
+          <select class="form-select" name="event_code" id="eventCode" required>
+            <option value="">Choose…</option>
+            {% for module, events in events_by_module.items %}
+              <optgroup label="{{ module }}">
+                {% for e in events %}
+                  <option value="{{ e.code }}" {% if trigger.event_code == e.code %}selected{% endif %}>{{ e.label }}</option>
+                {% endfor %}
+              </optgroup>
+            {% endfor %}
+          </select>
+          <div class="form-text" id="eventNote">{{ event.description }}</div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-semibold">Only for</label>
+          <select class="form-select" name="agency">
+            <option value="">Every agency</option>
+            {% for a in agencies %}
+              <option value="{{ a.pk }}" {% if trigger.agency_id == a.pk %}selected{% endif %}>{{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 d-flex gap-3">
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="is_active" value="1"
+            {% if trigger.is_active or not trigger.pk %}checked{% endif %}> Active</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="once_per_record" value="1"
+            {% if trigger.once_per_record or not trigger.pk %}checked{% endif %}> Never start it twice for the same record</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-funnel me-2"></i>Only when</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="addCond">
+          <i class="bi bi-plus-lg me-1"></i>Add a condition
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="small text-muted mb-2">Leave this empty to fire every time. Conditions all have to hold.</div>
+        <div id="condRows">
+          {% for c in conditions %}
+          <div class="tg-cond">
+            <select class="form-select form-select-sm" name="cond_token" data-value="{{ c.token }}"></select>
+            <select class="form-select form-select-sm" name="cond_op">
+              {% for value, label in op_labels %}
+                <option value="{{ value }}" {% if c.op == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <input class="form-control form-control-sm" name="cond_value" value="{{ c.value }}">
+            <button type="button" class="btn btn-sm btn-outline-secondary cond-del"><i class="bi bi-x"></i></button>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold"><i class="bi bi-play-circle me-2"></i>Then</div>
+      <div class="card-body row g-3">
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold">Do this</label>
+          <select class="form-select" name="action">
+            {% for value, label in action_choices %}
+              <option value="{{ value }}" {% if trigger.action == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold">With this form</label>
+          <select class="form-select" name="target_form" id="targetForm" required>
+            <option value="">Choose…</option>
+            {% for f in forms %}
+              <option value="{{ f.pk }}" {% if trigger.target_form_id == f.pk %}selected{% endif %}>{{ f.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small fw-semibold">Workflow</label>
+          <select class="form-select" name="target_workflow">
+            <option value="">Use the form's own workflow</option>
+            {% for w in workflows %}
+              <option value="{{ w.pk }}" {% if trigger.target_workflow_id == w.pk %}selected{% endif %}>{{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold">Hand it to</label>
+          <select class="form-select" name="assign_to" id="assignTo">
+            {% for value, label in who_choices %}
+              <option value="{{ value }}" {% if trigger.assign_to == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3" id="assigneeWrap">
+          <label class="form-label small fw-semibold">Who</label>
+          <select class="form-select" name="assignee">
+            <option value="">—</option>
+            {% for p in people %}
+              <option value="{{ p.pk }}" {% if trigger.assignee_id == p.pk %}selected{% endif %}>
+                {{ p.get_full_name|default:p.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-arrow-left-right me-2"></i>Carry these answers over</span>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="addMap">
+          <i class="bi bi-plus-lg me-1"></i>Add a line
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="small text-muted mb-2">
+          On the left a question on the form; on the right what to put in it, taken from the record.
+          Click ƒx to build it, or click a value below to paste it in.
+        </div>
+        <div id="mapRows"></div>
+        <div class="mt-2"><span class="small text-muted me-1">The record gives you:</span>
+          <div id="tokenChips" class="mt-1"></div></div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header bg-white fw-bold"><i class="bi bi-envelope me-2"></i>Telling them</div>
+      <div class="card-body row g-3">
+        <div class="col-12">
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="notify" value="1"
+            {% if trigger.notify or not trigger.pk %}checked{% endif %}> Email them a link to the form</label>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label small fw-semibold">Subject</label>
+          <input class="form-control form-control-sm" name="email_subject" value="{{ trigger.email_subject }}" maxlength="200">
+        </div>
+        <div class="col-md-7">
+          <label class="form-label small fw-semibold">Message</label>
+          <textarea class="form-control form-control-sm" name="email_message" rows="2">{{ trigger.email_message }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-5">
+      {% if trigger.pk %}
+        <button type="button" class="btn btn-outline-secondary" id="previewBtn">
+          <i class="bi bi-eye me-1"></i>Try it on the latest record
+        </button>
+      {% else %}<span></span>{% endif %}
+      <button class="btn btn-un-primary btn-lg px-4"><i class="bi bi-check2 me-1"></i>Save</button>
+    </div>
+
+    <div id="previewBox" class="mb-5"></div>
+  </form>
+</div>
+
+{{ tokens_json|json_script:"eventTokens" }}
+{{ field_map|json_script:"fieldMap" }}
+{{ op_labels|json_script:"opLabels" }}
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_formula_builder.html" %}
+<script>
+(function(){
+  "use strict";
+  var TOKENS = JSON.parse(document.getElementById("eventTokens").textContent);
+  var FIELD_MAP = JSON.parse(document.getElementById("fieldMap").textContent);
+  var OP_LABELS = JSON.parse(document.getElementById("opLabels").textContent);
+  var TOKEN_URL = "{% url 'accounts:esign_trigger_event_tokens' %}";
+  var FIELDS_URL = "{% url 'accounts:esign_trigger_form_fields' 0 %}";
+  var TARGET = [];
+
+  function esc(v){ return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+  // ── the questions on the chosen form ──────────────────────────────────
+  function loadTarget(){
+    var id = document.getElementById("targetForm").value;
+    if (!id) { TARGET = []; paintTargets(); return Promise.resolve(); }
+    return fetch(FIELDS_URL.replace(/0\/$/, id + "/"), {credentials:"same-origin"})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ TARGET = d.fields || []; paintTargets(); });
+  }
+  function targetOptions(selected){
+    return '<option value="">Choose a question…</option>' + TARGET
+      .filter(function(f){ return f.type !== "table"; })
+      .map(function(f){ return '<option value="'+esc(f.key)+'"'+(f.key===selected?" selected":"")+">"+
+        esc(f.label)+" ("+esc(f.key)+")</option>"; }).join("");
+  }
+  function paintTargets(){
+    document.querySelectorAll('select[name="map_target"]').forEach(function(select){
+      var keep = select.dataset.value || select.value;
+      select.innerHTML = targetOptions(keep);
+    });
+  }
+
+  // ── what the event hands over ─────────────────────────────────────────
+  function paintTokens(){
+    document.getElementById("tokenChips").innerHTML = TOKENS.map(function(t){
+      return '<span class="tg-token" data-token="['+esc(t.key)+']" title="'+esc(t.key)+'">'+esc(t.label)+"</span>";
+    }).join("") || '<span class="small text-muted">Choose a moment above first.</span>';
+
+    document.querySelectorAll('select[name="cond_token"]').forEach(function(select){
+      var keep = select.dataset.value || select.value;
+      select.innerHTML = TOKENS.map(function(t){
+        return '<option value="'+esc(t.key)+'"'+(t.key===keep?" selected":"")+">"+esc(t.label)+"</option>";
+      }).join("");
+    });
+  }
+
+  document.getElementById("eventCode").addEventListener("change", function(){
+    if (!this.value) { TOKENS = []; paintTokens(); return; }
+    fetch(TOKEN_URL + "?event=" + encodeURIComponent(this.value), {credentials:"same-origin"})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        TOKENS = d.tokens || [];
+        document.getElementById("eventNote").textContent = d.description || "";
+        paintTokens();
+      });
+  });
+
+  // ── mapping rows ──────────────────────────────────────────────────────
+  function addMapRow(target, expr){
+    var row = document.createElement("div");
+    row.className = "tg-row";
+    row.innerHTML =
+      '<select class="form-select form-select-sm" name="map_target" data-value="'+esc(target||"")+'">'+
+        targetOptions(target||"")+"</select>"+
+      '<div class="d-flex gap-1 flex-wrap">'+
+        '<input class="form-control form-control-sm tg-expr" name="map_expr" value="'+esc(expr||"")+
+          '" spellcheck="false" placeholder="[asset_name] or CONCAT(…)" style="flex:1">'+
+        '<button type="button" class="fx-open map-fx"><i class="bi bi-calculator"></i> \u0192x</button>'+
+        '<div class="form-text w-100 map-note"></div>'+
+      "</div>"+
+      '<button type="button" class="btn btn-sm btn-outline-secondary map-del"><i class="bi bi-x"></i></button>';
+    document.getElementById("mapRows").appendChild(row);
+    return row;
+  }
+
+  function checkExpr(input){
+    var note = input.parentElement.querySelector(".map-note");
+    if (!window.StudioFormula || !input.value.trim()) { if (note) note.textContent = ""; return; }
+    var report = StudioFormula.check(input.value);
+    input.classList.toggle("is-invalid", !report.ok);
+    if (note){ note.textContent = report.ok ? "" : report.error; note.className = "form-text w-100 map-note text-danger"; }
+  }
+
+  function openBuilder(input){
+    var row = input.closest(".tg-row");
+    var select = row.querySelector('select[name="map_target"]');
+    var label = select && select.selectedOptions[0] ? select.selectedOptions[0].textContent.trim() : "this question";
+    // The record's values are the "questions" the builder offers.
+    var fields = TOKENS.map(function(t){ return {key:t.key, label:t.label, type:t.type || "text"}; });
+    window.StudioFormulaBuilder
+      ? StudioFormulaBuilder.open({
+          title: label, expr: input.value, scope: "field", fields: fields,
+          context: [{token:"@today", label:"Today's date"}],
+          onSave: function(e){ input.value = e; checkExpr(input); }
+        })
+      : (function(){
+          var typed = prompt("Formula for “"+label+"”", input.value || "");
+          if (typed !== null){ input.value = typed; checkExpr(input); }
+        })();
+  }
+
+  document.getElementById("addMap").addEventListener("click", function(){ addMapRow("",""); });
+  document.getElementById("mapRows").addEventListener("click", function(e){
+    var del = e.target.closest(".map-del");
+    if (del){ del.closest(".tg-row").remove(); return; }
+    var fx = e.target.closest(".map-fx");
+    if (fx) openBuilder(fx.closest(".tg-row").querySelector('input[name="map_expr"]'));
+  });
+  document.getElementById("mapRows").addEventListener("input", function(e){
+    if (e.target.name === "map_expr") checkExpr(e.target);
+  });
+
+  var lastExpr = null;
+  document.addEventListener("focusin", function(e){ if (e.target.name === "map_expr") lastExpr = e.target; });
+  document.getElementById("tokenChips").addEventListener("click", function(e){
+    var chip = e.target.closest("[data-token]");
+    if (!chip) return;
+    var box = lastExpr || document.querySelector('input[name="map_expr"]');
+    if (!box) box = addMapRow("","").querySelector("input");
+    var at = box.selectionStart == null ? box.value.length : box.selectionStart;
+    box.value = box.value.slice(0, at) + chip.dataset.token + box.value.slice(at);
+    box.focus(); checkExpr(box);
+  });
+
+  // ── conditions ────────────────────────────────────────────────────────
+  document.getElementById("addCond").addEventListener("click", function(){
+    var row = document.createElement("div");
+    row.className = "tg-cond";
+    row.innerHTML =
+      '<select class="form-select form-select-sm" name="cond_token"></select>'+
+      '<select class="form-select form-select-sm" name="cond_op">'+
+        OP_LABELS.map(function(o){ return '<option value="'+esc(o[0])+'">'+esc(o[1])+"</option>"; }).join("")+
+      "</select>"+
+      '<input class="form-control form-control-sm" name="cond_value">'+
+      '<button type="button" class="btn btn-sm btn-outline-secondary cond-del"><i class="bi bi-x"></i></button>';
+    document.getElementById("condRows").appendChild(row);
+    paintTokens();
+  });
+  document.getElementById("condRows").addEventListener("click", function(e){
+    var del = e.target.closest(".cond-del");
+    if (del) del.closest(".tg-cond").remove();
+  });
+
+  // ── who ───────────────────────────────────────────────────────────────
+  var assignTo = document.getElementById("assignTo"), wrap = document.getElementById("assigneeWrap");
+  var syncWho = function(){ wrap.style.display = assignTo.value === "fixed" ? "" : "none"; };
+  assignTo.addEventListener("change", syncWho); syncWho();
+
+  document.getElementById("targetForm").addEventListener("change", loadTarget);
+
+  // ── try it ────────────────────────────────────────────────────────────
+  var previewBtn = document.getElementById("previewBtn");
+  if (previewBtn) previewBtn.addEventListener("click", function(){
+    var box = document.getElementById("previewBox");
+    box.innerHTML = '<div class="text-muted small">Working it out…</div>';
+    fetch("{% if trigger.pk %}{% url 'accounts:esign_trigger_preview' trigger.pk %}{% endif %}", {
+      method:"POST", credentials:"same-origin",
+      headers:{"X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value}
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (!d.ok){ box.innerHTML = '<div class="alert alert-warning">'+esc(d.error)+"</div>"; return; }
+      box.innerHTML = '<div class="card"><div class="card-header bg-white fw-bold">Using '+esc(d.record)+"</div>"+
+        (d.problems && d.problems.length ? '<div class="card-body pb-0"><div class="alert alert-warning small mb-2"><ul class="mb-0">'+
+          d.problems.map(function(p){ return "<li>"+esc(p)+"</li>"; }).join("")+"</ul></div></div>" : "")+
+        '<div class="table-responsive"><table class="table table-sm mb-0"><tbody>'+
+        d.rows.map(function(r){ return "<tr"+(r.mapped?"":' class="text-muted"')+"><td>"+esc(r.label)+
+          "</td><td>"+(r.value?esc(r.value):"<em>empty</em>")+"</td></tr>"; }).join("")+
+        "</tbody></table></div></div>";
+    });
+  });
+
+  // ── first paint ───────────────────────────────────────────────────────
+  paintTokens();
+  loadTarget().then(function(){
+    FIELD_MAP.forEach(function(m){ addMapRow(m.target, m.expr); });
+    document.querySelectorAll('input[name="map_expr"]').forEach(checkExpr);
+  });
+  document.getElementById("triggerForm").addEventListener("submit", function(){
+    document.querySelectorAll('select[name="map_target"]').forEach(function(s){ s.dataset.value = s.value; });
+  });
+})();
+</script>
+{% endblock %}
