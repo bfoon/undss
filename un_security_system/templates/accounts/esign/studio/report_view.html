@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ report.name }} | Reports | UN PASS{% endblock %}
+{% block extra_css %}
+{% include "accounts/esign/studio/_styles.html" %}
+<link rel="stylesheet" href="{% static 'accounts/esign/report_builder.css' %}">
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3 rb-view-head">
+  <div>
+    <div class="small text-muted">{{ report.source_name }} · {{ report.source_type|title }} report</div>
+    <h4 class="mb-1 text-un-primary fw-bold">{{ report.name }}</h4>
+    {% if report.description %}<div class="text-muted">{{ report.description }}</div>{% endif %}
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-primary" id="rbRefresh"><i class="bi bi-arrow-repeat me-1"></i>Refresh</button>
+    <button class="btn btn-sm btn-outline-secondary" id="rbFullscreen"><i class="bi bi-arrows-fullscreen me-1"></i>Full screen</button>
+    <button class="btn btn-sm btn-outline-secondary" id="rbPrint"><i class="bi bi-printer me-1"></i>Print / PDF</button>
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download me-1"></i>Export data</button>
+      <ul class="dropdown-menu dropdown-menu-end" id="rbExportMenu"></ul>
+    </div>
+    {% if can_edit %}
+    <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_report_designer' report.id %}"><i class="bi bi-pencil me-1"></i>Design</a>
+    {% endif %}
+  </div>
+</div>
+
+<div id="rbRoot" class="rb-view-root" data-mode="view"
+     data-query-url="{{ query_url }}" data-export-url="{{ export_url }}">
+  <div class="rb-view-filterbar">
+    <div class="d-flex align-items-center flex-wrap gap-2">
+      <span class="small fw-semibold"><i class="bi bi-funnel me-1"></i>Filters</span>
+      <div id="rbViewFilters" class="d-flex flex-wrap gap-2"></div>
+      <div class="rb-cross d-none" id="rbCross">
+        <span id="rbCrossText"></span>
+        <button class="btn btn-sm btn-link py-0" id="rbCrossClear">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div class="rb-view-canvas-wrap">
+    <div class="rb-canvas rb-view-canvas" id="rbCanvas"></div>
+  </div>
+</div>
+
+<form class="d-none">{% csrf_token %}</form>
+{{ catalog|json_script:"rbCatalogJson" }}
+{{ report_config|json_script:"rbConfigJson" }}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'accounts/esign/report_builder.js' %}"></script>
+<script>
+UNPASSReportBuilder.mount({
+  root: document.getElementById("rbRoot"),
+  catalog: JSON.parse(document.getElementById("rbCatalogJson").textContent),
+  config: JSON.parse(document.getElementById("rbConfigJson").textContent),
+  name: "{{ report.name|escapejs }}",
+  description: "{{ report.description|escapejs }}",
+  shareScope: "{{ report.share_scope }}",
+  csrf: document.querySelector("[name=csrfmiddlewaretoken]").value
+});
+</script>
+{% endblock %}

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Reports | eSign | UN PASS{% endblock %}
+{% block extra_css %}
+{% include "accounts/esign/studio/_styles.html" %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'accounts/esign/report_builder.css' %}">
+<style>
+  .rb-source-card{border:1px solid var(--st-line);border-radius:.7rem;background:#fff;height:100%}
+  .rb-source-icon{width:42px;height:42px;border-radius:.65rem;display:flex;align-items:center;justify-content:center;background:#EAF7FC;color:#005A8B;font-size:1.15rem}
+  .rb-report-card{border:1px solid var(--st-line);border-radius:.7rem;background:#fff;height:100%;overflow:hidden}
+  .rb-report-card .topline{height:5px;background:linear-gradient(90deg,#009EDB,#005A8B)}
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="card es-hero mb-4">
+  <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+      <h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-bar-chart-line me-2"></i>Reports</h4>
+      <div class="text-muted">Build live, interactive dashboards from Forms or Workflows — cards, charts, tables, matrices, gauges, funnels, slicers and more.</div>
+    </div>
+    <button class="btn btn-un-primary" data-bs-toggle="modal" data-bs-target="#newReport">
+      <i class="bi bi-plus-circle me-1"></i> New report
+    </button>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <div class="st-group-label">My reports & reports shared with me</div>
+  <div class="small text-muted">{{ reports|length }} report{{ reports|length|pluralize }}</div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for r in reports %}
+  <div class="col-md-6 col-xl-4">
+    <div class="rb-report-card d-flex flex-column">
+      <div class="topline"></div>
+      <div class="p-3 d-flex flex-column flex-grow-1">
+        <div class="d-flex justify-content-between gap-2">
+          <div class="fw-semibold text-truncate">{{ r.name }}</div>
+          {% if r.source_type == 'form' %}
+            <span class="badge bg-light text-dark border"><i class="bi bi-ui-checks-grid me-1"></i>Form</span>
+          {% else %}
+            <span class="badge bg-light text-dark border"><i class="bi bi-diagram-3 me-1"></i>Flow</span>
+          {% endif %}
+        </div>
+        <div class="small text-muted mt-1">{{ r.source_name }}</div>
+        {% if r.description %}<div class="small mt-2">{{ r.description|truncatechars:120 }}</div>{% endif %}
+        <div class="small text-muted mt-2">
+          {% if r.share_scope == 'agency' %}<i class="bi bi-globe2"></i> Agency
+          {% elif r.share_scope == 'office' %}<i class="bi bi-building"></i> Office
+          {% else %}<i class="bi bi-lock"></i> Private{% endif %}
+          · updated {{ r.updated_at|date:"d M Y H:i" }}
+        </div>
+        <div class="mt-auto pt-3 d-flex flex-wrap gap-1">
+          <a class="btn btn-sm btn-un-primary" href="{% url 'accounts:esign_report_view' r.id %}">
+            <i class="bi bi-eye me-1"></i>Open
+          </a>
+          {% if r.is_owner %}
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_report_designer' r.id %}">
+            <i class="bi bi-pencil me-1"></i>Design
+          </a>
+          <form method="post" action="{% url 'accounts:esign_report_duplicate' r.id %}" class="d-inline">
+            {% csrf_token %}
+            <button class="btn btn-sm btn-outline-secondary" title="Duplicate"><i class="bi bi-copy"></i></button>
+          </form>
+          <form method="post" action="{% url 'accounts:esign_report_delete' r.id %}" class="d-inline ms-auto"
+                onsubmit="return confirm('Remove this report? The Form/Workflow data is not deleted.')">
+            {% csrf_token %}
+            <button class="btn btn-sm btn-outline-danger" title="Remove"><i class="bi bi-trash"></i></button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="col-12">
+    <div class="st-empty"><i class="bi bi-bar-chart-line"></i>No reports yet. Create one from a Form or Workflow.</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="modal fade" id="newReport" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <form class="modal-content" method="post" action="{% url 'accounts:esign_report_new' %}" id="newReportForm">
+      {% csrf_token %}
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title text-un-primary"><i class="bi bi-bar-chart-line me-2"></i>New report</h5>
+          <div class="small text-muted">Choose what supplies the live data.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 mb-3">
+          <div class="col-md-7">
+            <label class="form-label small fw-semibold">Report name</label>
+            <input class="form-control" name="name" maxlength="160" placeholder="Leave empty to use the source name">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small fw-semibold">Source type</label>
+            <select class="form-select" name="source_type" id="rbSourceType">
+              <option value="form">Form</option>
+              <option value="flow">Workflow</option>
+            </select>
+          </div>
+        </div>
+
+        <input type="hidden" name="source_id" id="rbSourceId" value="">
+
+        <div id="rbFormSources">
+          <div class="st-group-label mb-2">Forms</div>
+          <div class="row g-2">
+            {% for f in forms %}
+            <div class="col-md-6 col-lg-4">
+              <button type="button" class="rb-source-card p-3 text-start w-100 rb-source-pick" data-kind="form" data-id="{{ f.pk }}">
+                <div class="d-flex gap-2">
+                  <span class="rb-source-icon"><i class="bi bi-ui-checks-grid"></i></span>
+                  <div class="min-w-0">
+                    <div class="fw-semibold text-truncate">{{ f.name }}</div>
+                    <div class="small text-muted">{{ f.submission_total }} submission{{ f.submission_total|pluralize }}</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+            {% empty %}
+            <div class="col-12 small text-muted">No Forms are available to you.</div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div id="rbFlowSources" class="d-none">
+          <div class="st-group-label mb-2">Workflows</div>
+          <div class="row g-2">
+            {% for wf in flows %}
+            <div class="col-md-6 col-lg-4">
+              <button type="button" class="rb-source-card p-3 text-start w-100 rb-source-pick" data-kind="flow" data-id="{{ wf.pk }}">
+                <div class="d-flex gap-2">
+                  <span class="rb-source-icon"><i class="bi bi-diagram-3"></i></span>
+                  <div class="min-w-0">
+                    <div class="fw-semibold text-truncate">{{ wf.name }}</div>
+                    <div class="small text-muted">{{ wf.run_total }} run{{ wf.run_total|pluralize }}{% if wf.form %} · {{ wf.form.name }}{% endif %}</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+            {% empty %}
+            <div class="col-12 small text-muted">No Workflows are available to you.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-un-primary" id="rbCreate" disabled><i class="bi bi-magic me-1"></i>Build report</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const type = document.getElementById("rbSourceType");
+  const sourceId = document.getElementById("rbSourceId");
+  const create = document.getElementById("rbCreate");
+  const forms = document.getElementById("rbFormSources");
+  const flows = document.getElementById("rbFlowSources");
+
+  function syncType(){
+    const isForm = type.value === "form";
+    forms.classList.toggle("d-none", !isForm);
+    flows.classList.toggle("d-none", isForm);
+    sourceId.value = "";
+    create.disabled = true;
+    document.querySelectorAll(".rb-source-pick").forEach(b => b.classList.remove("rb-source-selected"));
+  }
+  type.addEventListener("change", syncType);
+
+  document.querySelectorAll(".rb-source-pick").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.kind !== type.value) return;
+      document.querySelectorAll(".rb-source-pick").forEach(b => b.classList.remove("rb-source-selected"));
+      btn.classList.add("rb-source-selected");
+      sourceId.value = btn.dataset.id;
+      create.disabled = false;
+    });
+  });
+})();
+</script>
+{% endblock %}

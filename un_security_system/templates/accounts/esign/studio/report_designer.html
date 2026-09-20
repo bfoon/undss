@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Design {{ report.name }} | Reports | UN PASS{% endblock %}
+{% block extra_css %}
+{% include "accounts/esign/studio/_styles.html" %}
+<link rel="stylesheet" href="{% static 'accounts/esign/report_builder.css' %}">
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="rb-topbar">
+  <div class="d-flex align-items-center gap-2 min-w-0">
+    <a class="btn btn-sm btn-link px-1 text-decoration-none" href="{% url 'accounts:esign_reports' %}" title="Back to reports"><i class="bi bi-arrow-left"></i></a>
+    <div class="min-w-0">
+      <div class="small text-muted">{{ report.source_name }} · {{ report.source_type|title }} report</div>
+      <input id="rbReportName" class="rb-name-input" value="{{ report.name }}" maxlength="160" aria-label="Report name">
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-secondary" id="rbUndo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
+    <button class="btn btn-sm btn-outline-secondary" id="rbRedo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+    <button class="btn btn-sm btn-outline-primary" id="rbRefresh"><i class="bi bi-arrow-repeat me-1"></i>Refresh</button>
+    <a class="btn btn-sm btn-outline-primary" href="{{ view_url }}" target="_blank"><i class="bi bi-eye me-1"></i>View</a>
+    <button class="btn btn-sm btn-un-primary px-3" id="rbSave"><i class="bi bi-save me-1"></i>Save</button>
+  </div>
+</div>
+
+<div class="rb-builder" id="rbRoot" data-mode="design"
+     data-save-url="{{ save_url }}" data-query-url="{{ query_url }}"
+     data-view-url="{{ view_url }}" data-export-url="{{ export_url }}">
+  <aside class="rb-left">
+    <div class="rb-pane-head">
+      <div class="fw-semibold"><i class="bi bi-database me-1"></i>Data</div>
+      <div class="small text-muted">Drag fields into a visual.</div>
+    </div>
+    <div class="p-2 border-bottom">
+      <label class="small fw-semibold mb-1">Dataset</label>
+      <select class="form-select form-select-sm" id="rbDataset"></select>
+    </div>
+    <div id="rbFields" class="rb-fields"></div>
+
+    <div class="rb-pane-head border-top">
+      <div class="d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-funnel me-1"></i>Report filters</span>
+        <button class="btn btn-sm btn-link p-0" id="rbAddFilter">Add</button>
+      </div>
+    </div>
+    <div id="rbFilters" class="p-2"></div>
+  </aside>
+
+  <main class="rb-main">
+    <div class="rb-canvas-tools">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+          <i class="bi bi-plus-lg me-1"></i>Add visual
+        </button>
+        <ul class="dropdown-menu rb-add-menu" id="rbAddVisual"></ul>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" id="rbTheme"><i class="bi bi-palette me-1"></i>Theme</button>
+      <span class="small text-muted ms-auto" id="rbSaveState">Saved</span>
+    </div>
+    <div class="rb-cross d-none" id="rbCross">
+      <i class="bi bi-filter-circle me-1"></i>
+      <span id="rbCrossText"></span>
+      <button class="btn btn-sm btn-link py-0" id="rbCrossClear">Clear</button>
+    </div>
+    <div class="rb-canvas-wrap">
+      <div class="rb-canvas" id="rbCanvas"></div>
+    </div>
+  </main>
+
+  <aside class="rb-right">
+    <div class="rb-pane-head">
+      <div class="fw-semibold"><i class="bi bi-sliders me-1"></i>Visual</div>
+      <div class="small text-muted">Select a visual to configure it.</div>
+    </div>
+    <div id="rbInspector" class="p-2"></div>
+  </aside>
+</div>
+
+<div class="modal fade" id="rbThemeModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Report theme</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <label class="form-label small fw-semibold">Accent</label>
+        <input type="color" class="form-control form-control-color mb-3" id="rbThemeAccent">
+        <label class="form-label small fw-semibold">Page background</label>
+        <input type="color" class="form-control form-control-color mb-3" id="rbThemeBg">
+        <label class="form-label small fw-semibold">Card background</label>
+        <input type="color" class="form-control form-control-color" id="rbThemeCard">
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-un-primary" data-bs-dismiss="modal">Done</button></div>
+    </div>
+  </div>
+</div>
+
+<form class="d-none">{% csrf_token %}</form>
+{{ catalog|json_script:"rbCatalogJson" }}
+{{ report_config|json_script:"rbConfigJson" }}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'accounts/esign/report_builder.js' %}"></script>
+<script>
+UNPASSReportBuilder.mount({
+  root: document.getElementById("rbRoot"),
+  catalog: JSON.parse(document.getElementById("rbCatalogJson").textContent),
+  config: JSON.parse(document.getElementById("rbConfigJson").textContent),
+  name: "{{ report.name|escapejs }}",
+  description: "{{ report.description|escapejs }}",
+  shareScope: "{{ report.share_scope }}",
+  csrf: document.querySelector("[name=csrfmiddlewaretoken]").value
+});
+</script>
+{% endblock %}

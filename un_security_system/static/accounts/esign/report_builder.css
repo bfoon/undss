@@ -1,0 +1,104 @@
+/* UN PASS eSign Report Builder */
+.rb-source-pick{border:1px solid #E2E8F0!important;transition:.12s;background:#fff}
+.rb-source-pick:hover{border-color:#009EDB!important;background:rgba(0,158,219,.04)}
+.rb-source-selected{border-color:#009EDB!important;box-shadow:0 0 0 2px rgba(0,158,219,.18)!important;background:rgba(0,158,219,.05)!important}
+
+.rb-topbar{position:sticky;top:0;z-index:1010;background:#fff;border:1px solid #E2E8F0;border-radius:.65rem;padding:.55rem .75rem;margin-bottom:.6rem;display:flex;justify-content:space-between;align-items:center;gap:.75rem;box-shadow:0 2px 10px rgba(15,23,42,.04)}
+.rb-name-input{border:0;background:transparent;font-size:1.05rem;font-weight:700;color:#005A8B;min-width:240px;max-width:520px;padding:.05rem 0;outline:0}
+.rb-builder{display:grid;grid-template-columns:230px minmax(0,1fr) 285px;border:1px solid #E2E8F0;border-radius:.65rem;overflow:hidden;min-height:720px;background:#fff}
+.rb-left,.rb-right{background:#fff;min-width:0}
+.rb-left{border-right:1px solid #E2E8F0}
+.rb-right{border-left:1px solid #E2E8F0}
+.rb-pane-head{padding:.65rem .75rem;border-bottom:1px solid #E2E8F0;background:#F8FAFC}
+.rb-fields{padding:.5rem;max-height:390px;overflow:auto}
+.rb-dataset-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin:.45rem .25rem}
+.rb-field{display:flex;align-items:center;gap:.45rem;border:1px solid transparent;border-radius:.45rem;padding:.35rem .4rem;margin:.12rem 0;cursor:grab;font-size:.82rem;user-select:none}
+.rb-field:hover{background:#F0F9FF;border-color:#BAE6FD}
+.rb-field .kind{margin-left:auto;font-size:.65rem;color:#64748B;text-transform:uppercase}
+.rb-field .bi{color:#005A8B}
+
+.rb-main{background:#F5F7FA;min-width:0;display:flex;flex-direction:column}
+.rb-canvas-tools{height:48px;background:#fff;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:.45rem;padding:.4rem .65rem}
+.rb-canvas-wrap,.rb-view-canvas-wrap{overflow:auto;padding:12px;flex:1}
+.rb-canvas{position:relative;min-height:660px;border-radius:.45rem;background-color:#F5F7FA;background-image:linear-gradient(#E7EDF3 1px,transparent 1px),linear-gradient(90deg,#E7EDF3 1px,transparent 1px);background-size:calc(100% / 12) 82px}
+.rb-widget{position:absolute;background:#fff;border:1px solid #DCE4EC;border-radius:.55rem;overflow:hidden;box-shadow:0 1px 4px rgba(15,23,42,.05);transition:box-shadow .12s,border-color .12s;min-width:70px}
+.rb-widget:hover{box-shadow:0 5px 18px rgba(15,23,42,.08)}
+.rb-widget.selected{border-color:#009EDB;box-shadow:0 0 0 2px rgba(0,158,219,.18)}
+.rb-widget-head{height:36px;padding:.4rem .55rem;display:flex;align-items:center;gap:.4rem;border-bottom:1px solid #EEF2F6;background:#fff;cursor:move}
+.rb-widget-head .title{font-size:.78rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.rb-widget-body{height:calc(100% - 36px);padding:.5rem;overflow:hidden;position:relative}
+.rb-widget-loading{display:flex;align-items:center;justify-content:center;height:100%;color:#64748B;font-size:.8rem}
+.rb-widget-error{font-size:.75rem;color:#B91C1C;background:#FEF2F2;padding:.5rem;border-radius:.4rem}
+.rb-resize{position:absolute;right:1px;bottom:1px;width:17px;height:17px;cursor:nwse-resize;z-index:10}
+.rb-resize::after{content:"";position:absolute;right:4px;bottom:4px;width:8px;height:8px;border-right:2px solid #94A3B8;border-bottom:2px solid #94A3B8}
+.rb-empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#94A3B8;font-size:.8rem;padding:1rem}
+.rb-visual-menu{min-width:240px}
+.rb-visual-menu .dropdown-item{display:flex;gap:.55rem;align-items:center;font-size:.84rem}
+.rb-visual-menu .dropdown-item i{color:#005A8B;width:18px;text-align:center}
+
+.rb-role{border:1px dashed #94A3B8;border-radius:.5rem;padding:.45rem .55rem;min-height:42px;background:#F8FAFC;margin-bottom:.45rem}
+.rb-role.over{border-color:#009EDB;background:#EAF7FC}
+.rb-role-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;color:#64748B}
+.rb-role-value{font-size:.82rem;font-weight:600;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rb-inspector-section{border-bottom:1px solid #E2E8F0;padding-bottom:.65rem;margin-bottom:.65rem}
+.rb-inspector-section:last-child{border:0}
+.rb-filter-row{border:1px solid #E2E8F0;border-radius:.45rem;padding:.45rem;margin-bottom:.4rem;background:#fff}
+.rb-filter-row .form-select,.rb-filter-row .form-control{font-size:.75rem;padding:.25rem .4rem}
+.rb-cross{background:#EAF7FC;color:#075985;border:1px solid #BAE6FD;border-radius:.5rem;margin:.45rem .65rem 0;padding:.35rem .55rem;font-size:.8rem;display:flex;align-items:center;gap:.35rem}
+
+.rb-kpi{height:100%;display:flex;flex-direction:column;justify-content:center;padding:.2rem .45rem}
+.rb-kpi-value{font-weight:800;color:#0F172A;font-size:clamp(1.4rem,3vw,2.5rem);line-height:1}
+.rb-kpi-sub{font-size:.72rem;color:#64748B;margin-top:.35rem}
+.rb-svg{width:100%;height:100%;display:block}
+.rb-chart-label{font-size:10px;fill:#64748B}
+.rb-chart-grid{stroke:#E2E8F0;stroke-width:1}
+.rb-chart-axis{stroke:#CBD5E1;stroke-width:1}
+.rb-chart-bar{fill:#009EDB;cursor:pointer}
+.rb-chart-bar:hover{opacity:.78}
+.rb-chart-line{fill:none;stroke:#009EDB;stroke-width:2.5}
+.rb-chart-area{fill:rgba(0,158,219,.16);stroke:#009EDB;stroke-width:2}
+.rb-chart-point{fill:#005A8B}
+.rb-chart-pie-slice{cursor:pointer;stroke:#fff;stroke-width:1.5}
+.rb-legend{display:flex;gap:.6rem;flex-wrap:wrap;font-size:.7rem;color:#475569;padding:.15rem .2rem}
+.rb-legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:.25rem}
+.rb-tooltip{position:fixed;z-index:5000;background:#0F172A;color:#fff;font-size:.72rem;padding:.35rem .45rem;border-radius:.35rem;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+.rb-table{font-size:.76rem;margin:0}
+.rb-table th{position:sticky;top:0;background:#F8FAFC;z-index:1;white-space:nowrap}
+.rb-table td{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rb-table-wrap{height:100%;overflow:auto}
+.rb-matrix td,.rb-matrix th{font-size:.72rem;white-space:nowrap}
+.rb-gauge-wrap{height:100%;display:flex;align-items:center;justify-content:center;position:relative}
+.rb-gauge-value{position:absolute;text-align:center;font-weight:800;color:#0F172A;font-size:1.35rem}
+.rb-funnel-row{display:flex;align-items:center;gap:.45rem;margin:.22rem 0;font-size:.72rem}
+.rb-funnel-bar{height:23px;background:#009EDB;border-radius:.25rem;min-width:3px;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600}
+.rb-slicer{height:100%;overflow:auto}
+.rb-slicer button{width:100%;text-align:left;border:1px solid #E2E8F0;background:#fff;border-radius:.35rem;padding:.3rem .45rem;margin-bottom:.25rem;font-size:.76rem}
+.rb-slicer button:hover{background:#EAF7FC;border-color:#7DD3FC}
+.rb-text-block{height:100%;overflow:auto;white-space:pre-wrap;font-size:.86rem}
+.rb-warning{position:absolute;right:.4rem;bottom:.3rem;font-size:.65rem;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:999px;padding:.08rem .35rem}
+
+.rb-view-root{background:#F5F7FA;border:1px solid #E2E8F0;border-radius:.65rem;overflow:hidden}
+.rb-view-filterbar{background:#fff;border-bottom:1px solid #E2E8F0;padding:.45rem .65rem}
+.rb-view-canvas{background-image:none}
+.rb-filter-pill{display:inline-flex;align-items:center;gap:.35rem;border:1px solid #DCE4EC;border-radius:999px;background:#fff;padding:.2rem .55rem;font-size:.74rem}
+
+@media(max-width:1100px){
+  .rb-builder{grid-template-columns:190px minmax(0,1fr) 250px}
+}
+@media(max-width:820px){
+  .rb-builder{display:block}
+  .rb-left,.rb-right{border:0;border-bottom:1px solid #E2E8F0}
+  .rb-fields{max-height:220px}
+  .rb-canvas-wrap{min-height:700px}
+  .rb-right{min-height:250px}
+}
+
+@media print{
+  .st-nav,.rb-view-head,.rb-view-filterbar,header,nav,.navbar,.footer,footer{display:none!important}
+  body{background:#fff!important}
+  .container,.container-fluid{max-width:none!important;width:100%!important;padding:0!important;margin:0!important}
+  .rb-view-root{border:0!important}
+  .rb-view-canvas-wrap{padding:0!important;overflow:visible!important}
+  .rb-canvas{background:#fff!important}
+  .rb-widget{box-shadow:none!important;break-inside:avoid}
+}

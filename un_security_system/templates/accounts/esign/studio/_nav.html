@@ -6,5 +6,47 @@
     <li class="nav-item"><a class="nav-link {% if studio_section == 'pdf' %}active{% endif %}" href="{% url 'accounts:esign_studio' %}"><i class="bi bi-tools me-1"></i>PDF tools</a></li>
     <li class="nav-item"><a class="nav-link {% if studio_section == 'flows' %}active{% endif %}" href="{% url 'accounts:esign_workflows' %}"><i class="bi bi-diagram-3 me-1"></i>Workflows{% if st_nav.task_count %} <span class="badge rounded-pill bg-warning text-dark">{{ st_nav.task_count }}</span>{% endif %}</a></li>
     <li class="nav-item"><a class="nav-link {% if studio_section == 'forms' %}active{% endif %}" href="{% url 'accounts:esign_forms' %}"><i class="bi bi-ui-checks-grid me-1"></i>Forms</a></li>
+    <li class="nav-item"><a class="nav-link {% if studio_section == 'reports' %}active{% endif %}" href="{% url 'accounts:esign_reports' %}"><i class="bi bi-bar-chart-line me-1"></i>Reports</a></li>
   </ul>
 </div>
+
+<script>
+/* Add a Report action beside Design on the Forms and Workflows cards without
+   duplicating those large templates. This runs only where such Design links
+   exist and posts through the normal CSRF-protected report creation view. */
+document.addEventListener("DOMContentLoaded", function () {
+  const token = document.querySelector('input[name="csrfmiddlewaretoken"]');
+  if (!token) return;
+
+  const action = "{% url 'accounts:esign_report_new' %}";
+  const rules = [
+    { re: /\/esign\/forms\/(\d+)\/design\/?$/, type: "form" },
+    { re: /\/esign\/workflows\/(\d+)\/design\/?$/, type: "flow" }
+  ];
+
+  document.querySelectorAll('a[href]').forEach(function (link) {
+    if (link.dataset.reportHooked === "1") return;
+    const href = new URL(link.href, window.location.origin).pathname;
+    let hit = null, sourceType = "";
+    for (const rule of rules) {
+      const match = href.match(rule.re);
+      if (match) { hit = match; sourceType = rule.type; break; }
+    }
+    if (!hit) return;
+
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = action;
+    form.className = "d-inline";
+    form.innerHTML =
+      '<input type="hidden" name="csrfmiddlewaretoken" value="' + token.value.replace(/"/g, "&quot;") + '">' +
+      '<input type="hidden" name="source_type" value="' + sourceType + '">' +
+      '<input type="hidden" name="source_id" value="' + hit[1] + '">' +
+      '<button class="btn btn-sm btn-outline-primary" title="Create a report from this ' + sourceType + '">' +
+      '<i class="bi bi-bar-chart-line"></i> Report</button>';
+
+    link.dataset.reportHooked = "1";
+    link.insertAdjacentElement("afterend", form);
+  });
+});
+</script>
