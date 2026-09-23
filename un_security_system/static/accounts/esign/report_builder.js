@@ -246,9 +246,137 @@
         if (design) {
           wireMove(el, widget);
           wireResize(el, widget);
+          wireVisualFieldDrop(el, widget);
         }
       });
       paintResults();
+    }
+
+
+    function hasFieldDragType(event) {
+      const dt = event && event.dataTransfer;
+      if (!dt || !dt.types) return false;
+      const types = Array.from(dt.types || []);
+      return types.includes("application/x-unpass-field") ||
+             types.includes("application/json") ||
+             types.includes("text/plain");
+    }
+
+    function readFieldDragPayload(event) {
+      const dt = event && event.dataTransfer;
+      if (!dt) return null;
+
+      const types = [
+        "application/x-unpass-field",
+        "application/json",
+        "text/plain"
+      ];
+
+      for (const type of types) {
+        let raw = "";
+        try { raw = dt.getData(type) || ""; } catch (_) { raw = ""; }
+        if (!raw) continue;
+
+        try {
+          const payload = JSON.parse(raw);
+          if (payload && payload.field) return payload;
+        } catch (_) {
+          if (type === "text/plain") {
+            const fieldId = String(raw || "").trim();
+            if (fieldId) {
+              return {
+                dataset: state.currentDataset || "",
+                field: fieldId
+              };
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function automaticRoleForField(widget, fieldId) {
+      const f = field(widget.dataset, fieldId);
+      const kind = f ? f.kind : "";
+      const type = widget.type || "card";
+
+      if (type === "text") return null;
+      if (type === "table") return "columns";
+      if (type === "scatter") return kind === "number" ? "y" : null;
+      if (type === "card" || type === "gauge") return "measure";
+      if (type === "slicer") return "dimension";
+      if (type === "matrix") return kind === "number" ? "measure" : "matrix_row";
+
+      return kind === "number" ? "measure" : "dimension";
+    }
+
+    function applyDroppedField(widget, payload, forcedRole) {
+      if (!payload || !payload.field) return false;
+
+      const targetDataset = payload.dataset || widget.dataset || state.currentDataset;
+      if (!targetDataset || !field(targetDataset, payload.field)) return false;
+
+      const role = forcedRole || automaticRoleForField(
+        {...widget, dataset: targetDataset},
+        payload.field
+      );
+      if (!role) return false;
+
+      beforeChange();
+
+      if (targetDataset !== widget.dataset) {
+        widget.dataset = targetDataset;
+        resetRoles(widget);
+      }
+
+      assignRole(widget, role, payload.field);
+
+      if (role === "measure") {
+        const dropped = field(widget.dataset, payload.field);
+        widget.measure = widget.measure || {};
+        if (dropped && dropped.kind !== "number") {
+          widget.measure.agg = "count_distinct";
+        } else if (!widget.measure.agg || widget.measure.agg === "count_distinct") {
+          widget.measure.agg = "sum";
+        }
+      }
+
+      state.selected = widget.id;
+      state.currentDataset = widget.dataset;
+      changed();
+      renderAll();
+      return true;
+    }
+
+    function wireVisualFieldDrop(el, widget) {
+      el.addEventListener("dragenter", e => {
+        if (!hasFieldDragType(e)) return;
+        e.preventDefault();
+        el.classList.add("rb-field-drop-target");
+      });
+
+      el.addEventListener("dragover", e => {
+        if (!hasFieldDragType(e)) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+        el.classList.add("rb-field-drop-target");
+      });
+
+      el.addEventListener("dragleave", e => {
+        if (!el.contains(e.relatedTarget)) {
+          el.classList.remove("rb-field-drop-target");
+        }
+      });
+
+      el.addEventListener("drop", e => {
+        if (!hasFieldDragType(e)) return;
+        const payload = readFieldDragPayload(e);
+        if (!payload) return;
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.remove("rb-field-drop-target");
+        applyDroppedField(widget, payload);
+      });
     }
 
     function wireMove(el, widget) {
@@ -342,11 +470,23 @@
 
       fieldsHost.querySelectorAll(".rb-field").forEach(node => {
         node.addEventListener("dragstart", e => {
-          e.dataTransfer.setData("application/json", JSON.stringify({
+          const payload = JSON.stringify({
             dataset: node.dataset.dataset,
             field: node.dataset.field
-          }));
+          });
+
+          e.dataTransfer.setData("application/x-unpass-field", payload);
+          e.dataTransfer.setData("application/json", payload);
+          e.dataTransfer.setData("text/plain", payload);
           e.dataTransfer.effectAllowed = "copy";
+          node.classList.add("dragging");
+        });
+
+        node.addEventListener("dragend", () => {
+          node.classList.remove("dragging");
+          document.querySelectorAll(".rb-field-drop-target, .rb-role.over").forEach(el => {
+            el.classList.remove("rb-field-drop-target", "over");
+          });
         });
       });
     }
@@ -639,23 +779,23 @@
       });
 
       inspector.querySelectorAll(".rb-role").forEach(zone => {
-        zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("over"); });
-        zone.addEventListener("dragleave", () => zone.classList.remove("over"));
-        zone.addEventListener("drop", e => {
+        zone.addEventListener("dragover", e => {
+          if (!hasFieldDragType(e)) return;
           e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+          zone.classList.add("over");
+        });
+
+        zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+
+        zone.addEventListener("drop", e => {
+          if (!hasFieldDragType(e)) return;
+          const payload = readFieldDragPayload(e);
+          if (!payload) return;
+          e.preventDefault();
+          e.stopPropagation();
           zone.classList.remove("over");
-          let payload;
-          try { payload = JSON.parse(e.dataTransfer.getData("application/json")); } catch (_) { return; }
-          if (!payload || !payload.field) return;
-          beforeChange();
-          if (payload.dataset && payload.dataset !== widget.dataset) {
-            widget.dataset = payload.dataset;
-            resetRoles(widget);
-          }
-          assignRole(widget, zone.dataset.role, payload.field);
-          changed();
-          state.currentDataset = widget.dataset;
-          renderAll();
+          applyDroppedField(widget, payload, zone.dataset.role);
         });
       });
 
