@@ -13,6 +13,7 @@ wrapped, and a failure is written to ModuleTriggerLog rather than raised.
 from __future__ import annotations
 
 import logging
+import re
 
 from django.db import transaction
 from django.urls import reverse
@@ -126,6 +127,120 @@ def _reference(form):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Automatic workflow-role resolution
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _slot_key(value):
+    """Normalise a human role/slot label for safe alias matching."""
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+
+def _person_for_role(event, record, role):
+    try:
+        return module_events.person_for(event, record, role)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _auto_slots(event, record, workflow, recipient=None, actor=None):
+    """
+    Build values for workflow roles that are normally chosen when a human starts
+    a form.
+
+    A module trigger has no browser step where someone can choose those people,
+    so common module roles are resolved from the event itself. This is especially
+    important for Asset handover automation:
+
+      Staff / requester / recipient -> event requester
+      ICT / issuer / custodian      -> event issuer
+      Manager / supervisor          -> event manager
+      Actor / completed by          -> event actor
+
+    If there is only one otherwise-unrecognised slot, the trigger's "Hand it to"
+    recipient is a safe fallback. With several ambiguous roles we refuse to guess
+    and return a clear error for the automation log.
+    """
+    from . import workflow_engine_esign as E
+
+    graph = E.clean_graph(workflow.graph)
+    needed = E.chosen_slots(graph)
+    if not needed:
+        return {}, ""
+
+    requester = _person_for_role(event, record, "requester")
+    issuer = _person_for_role(event, record, "issuer")
+    manager = _person_for_role(event, record, "manager")
+
+    aliases = {
+        "requester": {
+            "requester", "requestor", "staff", "staffmember", "employee",
+            "holder", "recipient", "submitter", "user", "assetrecipient",
+            "receivedby",
+        },
+        "issuer": {
+            "issuer", "ict", "ictfocalpoint", "ictfocal", "custodian",
+            "assetcustodian", "issuedby", "issuingofficer",
+        },
+        "manager": {
+            "manager", "supervisor", "approver", "unithead",
+            "headofoffice", "line manager", "linemanager",
+        },
+        "actor": {
+            "actor", "completedby", "handledby", "verifiedby",
+        },
+    }
+
+    def matches_slot(key, names):
+        normalised = {_slot_key(name) for name in names}
+        return key in normalised or any(
+            len(alias) >= 3 and (key.startswith(alias) or key.endswith(alias) or alias in key)
+            for alias in normalised
+        )
+
+    resolved = {}
+    unresolved = []
+
+    for slot in needed:
+        label = slot.get("label") or slot.get("key") or ""
+        key = _slot_key(label)
+        user = None
+
+        if matches_slot(key, aliases["requester"]):
+            user = requester or recipient
+        elif matches_slot(key, aliases["issuer"]):
+            user = issuer
+        elif matches_slot(key, aliases["manager"]):
+            user = manager
+        elif matches_slot(key, aliases["actor"]):
+            user = actor
+
+        if user is None:
+            unresolved.append(slot)
+            continue
+
+        resolved[slot["key"]] = [E.person_from_user(user)]
+
+    # A single generic slot such as "Approver" can sensibly use the person
+    # selected in the trigger's "Hand it to" field. Do not do this when several
+    # different roles are unresolved because that would silently assign one
+    # person to unrelated steps.
+    if len(unresolved) == 1 and recipient is not None:
+        slot = unresolved.pop()
+        resolved[slot["key"]] = [E.person_from_user(recipient)]
+
+    if unresolved:
+        labels = ", ".join(s.get("label") or s.get("key") or "Unnamed role" for s in unresolved)
+        return {}, (
+            "The workflow needs people chosen for: "
+            f"{labels}. A module trigger has no manual chooser for these roles. "
+            "Use role names such as Requester/Staff, ICT/Issuer, Manager/Supervisor, "
+            "or configure those workflow steps from a form email field/fixed person."
+        )
+
+    return resolved, ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Doing it
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -195,35 +310,107 @@ def run_one(trigger, event, record, context, actor=None, request=None):
         )
 
     run = None
+    flow_problem = ""
+
     if trigger.action in (trigger.ACTION_SUBMIT, trigger.ACTION_FLOW):
-        run = _start_flow(trigger, form, submission, recipient or actor, request)
+        run, flow_problem = _start_flow(
+            trigger,
+            event,
+            record,
+            form,
+            submission,
+            recipient=recipient,
+            actor=actor,
+            request=request,
+        )
+
+    notes = []
+    if flow_problem:
+        notes.append(flow_problem)
+    elif run:
+        notes.append(f"Workflow started: {run.reference}.")
+    elif trigger.action == trigger.ACTION_SUBMIT:
+        notes.append("Form submitted. No workflow is configured for this form/trigger.")
+
+    if problems:
+        notes.extend(problems)
+    elif not notes:
+        notes.append(f"{len(values)} answer(s) carried over.")
+
+    status = "failed" if flow_problem else "started"
 
     log = _log(
-        trigger, event, record, status="started", submission=submission, run=run,
+        trigger, event, record, status=status, submission=submission, run=run,
         assigned_to=recipient,
-        note=("; ".join(problems))[:300] if problems else f"{len(values)} answer(s) carried over.",
+        note=("; ".join(notes))[:300],
     )
 
     if trigger.notify and recipient and trigger.action == trigger.ACTION_DRAFT:
         _invite(trigger, submission, recipient, context, request)
+
     return log
 
 
-def _start_flow(trigger, form, submission, actor, request):
+def _start_flow(trigger, event, record, form, submission, *, recipient, actor, request):
+    """
+    Start the selected workflow and return (run, problem).
+
+    The old implementation always sent slots={}, so any workflow containing a
+    "chosen when the flow starts" role failed. It also swallowed the exception,
+    leaving a Submitted form with no WorkflowRun while the trigger log still
+    looked successful.
+    """
     from . import workflow_engine_esign as E
 
     workflow = trigger.target_workflow or (form.workflow if form.workflow_id else None)
-    if workflow is None or not workflow.is_active:
-        return None
-    try:
-        return E.start_run(
-            workflow, actor, agency=submission.agency,
-            subject=f"{form.name} — {submission.reference}",
-            submission=submission, slots={}, request=request,
+
+    if workflow is None:
+        if trigger.action == trigger.ACTION_FLOW:
+            return None, "This trigger is set to start a workflow, but no workflow is configured."
+        return None, ""
+
+    if not workflow.is_active:
+        return None, f"Workflow “{workflow.name}” is paused/inactive."
+
+    slots, slot_problem = _auto_slots(
+        event,
+        record,
+        workflow,
+        recipient=recipient,
+        actor=actor,
+    )
+    if slot_problem:
+        logger.warning(
+            "Trigger %s: %s could not start workflow %s: %s",
+            trigger.pk, submission.reference, workflow.pk, slot_problem,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception("Trigger %s: the flow would not start for %s", trigger.pk, submission.reference)
-        return None
+        return None, slot_problem
+
+    initiator = recipient or actor or form.created_by
+
+    try:
+        run = E.start_run(
+            workflow,
+            initiator,
+            agency=submission.agency,
+            subject=f"{form.name} — {submission.reference}",
+            submission=submission,
+            slots=slots,
+            request=request,
+        )
+        return run, ""
+    except E.WorkflowError as exc:
+        logger.warning(
+            "Trigger %s: workflow %s would not start for %s: %s",
+            trigger.pk, workflow.pk, submission.reference, exc,
+        )
+        return None, str(exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "Trigger %s: the flow would not start for %s",
+            trigger.pk, submission.reference,
+        )
+        return None, f"Workflow start failed: {str(exc)[:180]}"
 
 
 def _invite(trigger, submission, recipient, context, request):
