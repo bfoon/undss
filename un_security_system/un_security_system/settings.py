@@ -426,3 +426,9 @@ ESIGN_PDF_FONT_REGULAR = (
 ESIGN_PDF_FONT_BOLD = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 )
+
+# Canonical public URL used when links are generated outside a browser request
+# (for example Asset-triggered workflows, reminders and background emails).
+SITE_URL = os.getenv("SITE_URL", "https://unpass.gm").strip().rstrip("/")
+if SITE_URL and not SITE_URL.lower().startswith(("http://", "https://")):
+    SITE_URL = "https://" + SITE_URL
