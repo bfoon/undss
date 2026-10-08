@@ -22,18 +22,13 @@
             </div>
           </div>
 
-          {# Embedded copy is only a fallback. The modal fetches fresh data every time it opens. #}
-          {% if available_assets_json %}
-            {{ available_assets_json|safe }}
-          {% else %}
-            {{ available_assets|json_script:"availableAssetsData" }}
-          {% endif %}
+          {{ available_assets|json_script:"availableAssetsData" }}
 
           <label class="form-label fw-semibold" for="assignAssetSelect">Select an available asset</label>
 
-          <div id="assignAssetLoading" class="border rounded py-3 px-3 text-muted small d-none mb-2">
+          <div id="assignAssetLoading" class="border rounded py-2 px-3 text-muted small d-none mb-2">
             <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Loading current available assets…
+            Refreshing current available assets…
           </div>
 
           <select class="form-select" name="asset_id" id="assignAssetSelect" required>
@@ -41,22 +36,19 @@
           </select>
 
           <div class="form-text mt-1" id="assignAssetHint">
-            The list is refreshed from UNPASS each time this window opens.
-            Only <b>available</b> assets matching the request category are shown.
+            Available assets are shown immediately and refreshed from UNPASS when this window opens.
           </div>
 
           <div class="alert alert-warning d-none mt-2 py-2 small" id="assignNoMatchWarn">
             <i class="bi bi-exclamation-triangle me-1"></i>
-            <span id="assignNoMatchText">
-              No available assets found for this category.
-            </span>
+            <span id="assignNoMatchText">No available assets found for this category.</span>
           </div>
 
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary" id="assignSubmitBtn">
+          <button class="btn btn-primary" id="assignSubmitBtn" disabled>
             <i class="bi bi-check2-square me-1"></i> Assign
           </button>
         </div>
@@ -84,6 +76,7 @@
   let pendingCtx = null;
   let activeFetch = null;
   let openSequence = 0;
+  const FETCH_TIMEOUT_MS = 8000;
 
   function toInt(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -91,18 +84,18 @@
     return Number.isNaN(n) ? null : n;
   }
 
-  function makeOption(a) {
+  function makeOption(asset) {
     const opt = document.createElement("option");
-    opt.value = a.id;
+    opt.value = asset.id;
 
-    const sn = a.serial_number ? "SN: " + a.serial_number : "";
-    const tag = a.asset_tag ? "Tag: " + a.asset_tag : "";
+    const sn = asset.serial_number ? "SN: " + asset.serial_number : "";
+    const tag = asset.asset_tag ? "Tag: " + asset.asset_tag : "";
     const meta = [sn, tag].filter(Boolean).join(" | ");
 
     opt.textContent =
-      (a.name || "Asset #" + a.id) +
+      (asset.name || "Asset #" + asset.id) +
       (meta ? " — " + meta : "") +
-      (a.unit_name ? " [" + a.unit_name + "]" : "");
+      (asset.unit_name ? " [" + asset.unit_name + "]" : "");
 
     return opt;
   }
@@ -123,13 +116,10 @@
 
   function showLoading() {
     loadingEl.classList.remove("d-none");
-    selEl.classList.add("d-none");
-    submitEl.disabled = true;
   }
 
   function hideLoading() {
     loadingEl.classList.add("d-none");
-    selEl.classList.remove("d-none");
   }
 
   function reset() {
@@ -140,15 +130,13 @@
 
     clearSelect();
     hideWarning();
-    loadingEl.classList.add("d-none");
-    selEl.classList.remove("d-none");
+    hideLoading();
     cardEl.classList.add("d-none");
     submitEl.disabled = true;
     reqIdEl.value = "";
 
     hintEl.innerHTML =
-      'The list is refreshed from UNPASS each time this window opens. ' +
-      'Only <b>available</b> assets matching the request category are shown.';
+      "Available assets are shown immediately and refreshed from UNPASS when this window opens.";
   }
 
   function setContext(ctx) {
@@ -157,14 +145,10 @@
     const reqId = ctx.req_id || ctx.id || "";
     reqIdEl.value = reqId;
 
-    document.getElementById("ctx_req_id").textContent =
-      reqId || "—";
-    document.getElementById("ctx_category").textContent =
-      ctx.category_name || "—";
-    document.getElementById("ctx_unit").textContent =
-      ctx.unit_name || "Unallocated/Core";
-    document.getElementById("ctx_requester").textContent =
-      ctx.requester || "—";
+    document.getElementById("ctx_req_id").textContent = reqId || "—";
+    document.getElementById("ctx_category").textContent = ctx.category_name || "—";
+    document.getElementById("ctx_unit").textContent = ctx.unit_name || "Unallocated/Core";
+    document.getElementById("ctx_requester").textContent = ctx.requester || "—";
 
     cardEl.classList.remove("d-none");
   }
@@ -184,7 +168,7 @@
         return toInt(asset.category_id) === categoryId;
       });
     } catch (err) {
-      console.error("[assignAsset] Could not parse fallback asset payload:", err);
+      console.error("[assignAsset] Could not parse embedded asset payload:", err);
       return [];
     }
   }
@@ -208,17 +192,16 @@
     const unitId = toInt(ctx.unit_id);
     const unitAssets = unitId === null
       ? []
-      : assets.filter(function (a) { return toInt(a.unit_id) === unitId; });
+      : assets.filter(function (asset) { return toInt(asset.unit_id) === unitId; });
 
     const otherAssets = unitId === null
       ? assets
-      : assets.filter(function (a) { return toInt(a.unit_id) !== unitId; });
+      : assets.filter(function (asset) { return toInt(asset.unit_id) !== unitId; });
 
     if (unitAssets.length && otherAssets.length) {
       const unitGroup = document.createElement("optgroup");
       unitGroup.label =
-        "\uD83D\uDCCC " +
-        (ctx.unit_name || "Request Unit") +
+        "📌 " + (ctx.unit_name || "Request Unit") +
         " — " + unitAssets.length + " asset(s)";
 
       unitAssets.forEach(function (asset) {
@@ -227,8 +210,7 @@
       selEl.appendChild(unitGroup);
 
       const otherGroup = document.createElement("optgroup");
-      otherGroup.label =
-        "Other Available — " + otherAssets.length + " asset(s)";
+      otherGroup.label = "Other Available — " + otherAssets.length + " asset(s)";
 
       otherAssets.forEach(function (asset) {
         otherGroup.appendChild(makeOption(asset));
@@ -241,6 +223,15 @@
     }
 
     submitEl.disabled = false;
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   async function loadFreshAssets(ctx, sequence) {
@@ -257,11 +248,15 @@
     }
 
     if (activeFetch) activeFetch.abort();
-    activeFetch = new AbortController();
 
-    const url = new URL(window.location.href);
-    url.hash = "";
-    url.search = "";
+    const controller = new AbortController();
+    activeFetch = controller;
+
+    const timeoutId = window.setTimeout(function () {
+      controller.abort();
+    }, FETCH_TIMEOUT_MS);
+
+    const url = new URL(window.location.pathname, window.location.origin);
     url.searchParams.set("assignment_options", "1");
     url.searchParams.set("request_id", reqId);
     url.searchParams.set("_ts", Date.now().toString());
@@ -277,7 +272,7 @@
           "Accept": "application/json",
           "X-Requested-With": "XMLHttpRequest"
         },
-        signal: activeFetch.signal
+        signal: controller.signal
       });
 
       let data = null;
@@ -295,14 +290,13 @@
             ? data.error
             : "UNPASS could not refresh the available asset list.";
 
-        const fallback = embeddedAssetsFor(ctx);
-
         hideLoading();
+        const fallback = embeddedAssetsFor(ctx);
 
         if (fallback.length) {
           renderAssets(fallback, ctx);
           hintEl.innerHTML =
-            '<span class="text-warning">Live refresh failed; showing the copy already on this page.</span>';
+            '<span class="text-warning">Live refresh failed; showing the available assets already loaded on this page.</span>';
         } else {
           showWarning(message);
           submitEl.disabled = true;
@@ -322,18 +316,17 @@
       };
 
       setContext(ctx);
-      hideLoading();
       renderAssets(data.assets || [], ctx);
+      hideLoading();
 
       hintEl.innerHTML =
-        'Showing the current <b>available</b> assets for ' +
-        (ctx.category_name ? '<b>' + escapeHtml(ctx.category_name) + '</b>. ' : "this category. ") +
-        'The list refreshes every time this window opens.';
+        "Showing the current <b>available</b> assets for " +
+        (ctx.category_name
+          ? "<b>" + escapeHtml(ctx.category_name) + "</b>. "
+          : "this category. ") +
+        "The list was refreshed from UNPASS.";
     } catch (err) {
-      if (err && err.name === "AbortError") return;
       if (sequence !== openSequence) return;
-
-      console.error("[assignAsset] Live asset refresh failed:", err);
 
       const fallback = embeddedAssetsFor(ctx);
       hideLoading();
@@ -341,8 +334,12 @@
       if (fallback.length) {
         renderAssets(fallback, ctx);
         hintEl.innerHTML =
-          '<span class="text-warning">Could not reach the live asset list; showing the copy already on this page.</span>';
+          '<span class="text-warning">Live refresh was interrupted; showing the available assets already loaded on this page.</span>';
       } else {
+        if (!(err && err.name === "AbortError")) {
+          console.error("[assignAsset] Live asset refresh failed:", err);
+        }
+
         showWarning(
           "Could not load available assets from UNPASS. " +
           "Please close this window and try again."
@@ -350,17 +347,12 @@
         submitEl.disabled = true;
       }
     } finally {
-      activeFetch = null;
-    }
-  }
+      window.clearTimeout(timeoutId);
 
-  function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+      if (activeFetch === controller) {
+        activeFetch = null;
+      }
+    }
   }
 
   function contextFromButton(btn) {
@@ -384,7 +376,20 @@
 
     clearSelect();
     hideWarning();
+    hideLoading();
     setContext(ctx);
+
+    const fallback = embeddedAssetsFor(ctx);
+
+    if (fallback.length) {
+      renderAssets(fallback, ctx);
+      hintEl.innerHTML =
+        "Showing available assets already loaded on this page. Checking UNPASS for the latest list…";
+    } else {
+      submitEl.disabled = true;
+      hintEl.innerHTML = "Checking UNPASS for available assets…";
+    }
+
     loadFreshAssets(ctx, openSequence);
   });
 
@@ -398,8 +403,6 @@
     reset();
   });
 
-  // Browser Back/Forward Cache can restore an old DOM exactly as it was.
-  // Clear any stale modal state so the next open always performs a fresh fetch.
   window.addEventListener("pageshow", function () {
     if (!modalEl.classList.contains("show")) {
       reset();
