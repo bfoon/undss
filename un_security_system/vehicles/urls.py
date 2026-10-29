@@ -1,8 +1,8 @@
 from django.urls import path
 
-from vehicles import package_esign
-from vehicles import views
-from un_security_system.vehicles import views_mailflow
+from . import package_esign
+from . import views
+from . import views_mailflow
 
 app_name = 'vehicles'
 

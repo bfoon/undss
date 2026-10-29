@@ -1,0 +1,230 @@
+{# Section 1 of both log pages: classic templates, Flow Studio flows, or mail rules. #}
+<style>
+  .mf-badge{font-size:.66rem;background:#ccfbf1;color:#0F766E;border:1px solid #99f6e4}
+  .mf-auto .flow-card-inner{background:linear-gradient(135deg,#f0fdfa,#ecfeff)}
+  .mf-slot{border:1px dashed #cbd5e1;border-radius:10px;padding:.75rem 1rem;background:#f8fafc}
+  .mf-slot.auto{border-style:solid;border-color:#99f6e4;background:#f0fdfa}
+  .mf-steps .badge{font-weight:500}
+  #mfPlan .mf-match{font-size:.85rem}
+</style>
+
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header pkg-band {% if direction == 'outgoing' %}pkg-band-out{% endif %} py-3 d-flex align-items-center">
+    <h5 class="mb-0 text-white flex-grow-1">
+      <i class="bi bi-diagram-3 me-2"></i>1 · {% if direction == 'outgoing' %}Select Outgoing Workflow{% else %}Select Workflow{% endif %}
+    </h5>
+    {% if can_manage_mailflows %}
+      <a href="{% url 'vehicles:package_mailflow_home' %}" class="btn btn-sm btn-light"><i class="bi bi-sliders me-1"></i>Mail flows</a>
+    {% endif %}
+  </div>
+  <div class="card-body p-4">
+
+    {% if flow_error %}
+      <div class="alert alert-danger small"><i class="bi bi-exclamation-triangle me-2"></i>{{ flow_error }}</div>
+    {% endif %}
+
+    <p class="text-muted small mb-3">
+      Choose how this {% if direction == 'outgoing' %}item{% else %}package{% endif %} travels.
+      {% if studio_on %}Flow Studio flows can branch, ask for approvals and collect signatures on the mail docket.{% endif %}
+    </p>
+
+    {% if not flow_templates and not studio_cards and not mail_routes %}
+      <div class="alert alert-warning small mb-0">
+        <i class="bi bi-exclamation-triangle me-2"></i>No workflows are set up for {{ direction }} items yet.
+        {% if user.is_superuser or user.role == 'ict_focal' %}
+          <a href="{% url 'vehicles:package_flow_config' %}">Classic workflows →</a>
+          {% if studio_on %}&nbsp;·&nbsp;<a href="{% url 'vehicles:package_mailflow_home' %}">Flow Studio mail flows →</a>{% endif %}
+        {% endif %}
+      </div>
+    {% else %}
+    <div class="row g-3">
+
+      {% if mail_routes %}
+      <div class="col-12 mf-auto">
+        <label class="flow-card d-block" for="choice_auto">
+          <input type="radio" name="flow_choice" id="choice_auto" value="auto" class="d-none flow-radio mf-choice"
+                 {% if choice == 'auto' %}checked{% endif %}>
+          <div class="card border h-100 p-3 flow-card-inner {% if choice == 'auto' %}selected{% endif %}">
+            <div class="d-flex align-items-start gap-3">
+              <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                   style="width:40px;height:40px;background:#0F766E;color:#fff;"><i class="bi bi-magic"></i></div>
+              <div class="flex-grow-1">
+                <div class="fw-semibold">Let the mail rules decide <span class="badge mf-badge ms-1">Flow Studio</span></div>
+                <div class="text-muted small">{{ mail_routes|length }} rule{{ mail_routes|length|pluralize }} — the first that matches this item picks the flow.</div>
+              </div>
+            </div>
+          </div>
+        </label>
+      </div>
+      {% endif %}
+
+      {% for card in studio_cards %}
+      <div class="col-sm-6">
+        <label class="flow-card d-block h-100" for="choice_s{{ card.wf.pk }}">
+          <input type="radio" name="flow_choice" id="choice_s{{ card.wf.pk }}" value="studio:{{ card.wf.pk }}"
+                 class="d-none flow-radio mf-choice"
+                 data-selected="{% if choice|slice:':7' == 'studio:' and choice|slice:'7:' == card.wf.pk|stringformat:'s' %}1{% endif %}">
+          <div class="card border h-100 p-3 flow-card-inner">
+            <div class="d-flex align-items-start gap-3">
+              <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                   style="width:40px;height:40px;background:#ccfbf1;color:#0F766E;"><i class="bi bi-bezier2"></i></div>
+              <div>
+                <div class="fw-semibold">{{ card.wf.name }} <span class="badge mf-badge ms-1">Flow Studio</span></div>
+                {% if card.wf.description %}<div class="text-muted small">{{ card.wf.description|truncatechars:110 }}</div>{% endif %}
+                <div class="d-flex flex-wrap gap-1 mt-2 mf-steps">
+                  {% for s in card.steps %}<span class="badge bg-light text-dark border small">{{ forloop.counter }}. {{ s }}</span>{% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </label>
+      </div>
+      {% endfor %}
+
+      {% for tmpl in flow_templates %}
+      <div class="col-sm-6">
+        <label class="flow-card d-block h-100" for="tmpl_{{ tmpl.pk }}">
+          <input type="radio" name="flow_choice" id="tmpl_{{ tmpl.pk }}" value="classic:{{ tmpl.pk }}"
+                 class="d-none flow-radio mf-choice" data-selected="{% if choice|slice:'8:' == tmpl.pk|stringformat:'s' and choice|slice:':8' == 'classic:' %}1{% endif %}">
+          <div class="card border h-100 p-3 flow-card-inner">
+            <div class="d-flex align-items-start gap-3">
+              <div class="rounded-circle {% if direction == 'outgoing' %}bg-success text-success{% else %}bg-primary text-primary{% endif %} bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+                   style="width:40px;height:40px;">
+                <i class="bi {% if direction == 'outgoing' %}bi-send{% else %}bi-diagram-3{% endif %}"></i>
+              </div>
+              <div>
+                <div class="fw-semibold">{{ tmpl.name }} <span class="badge bg-light text-muted border ms-1" style="font-size:.66rem;">Classic</span></div>
+                {% if tmpl.description %}<div class="text-muted small">{{ tmpl.description }}</div>{% endif %}
+                <div class="d-flex flex-wrap gap-1 mt-2">
+                  {% for step in tmpl.steps_ordered %}
+                    <span class="badge bg-light text-dark border small">{{ step.order }}. {{ step.name }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if studio_on %}
+    <div id="mfPlan" class="mt-4 d-none">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-signpost-split text-success"></i>
+        <h6 class="mb-0 fw-semibold">Where it will go</h6>
+        <span class="spinner-border spinner-border-sm text-secondary d-none" id="mfSpin"></span>
+      </div>
+      <div class="mf-match mb-3" id="mfMatch"></div>
+      <div class="row g-2" id="mfSlots"></div>
+
+      <div class="mt-3">
+        <label class="form-label fw-semibold small mb-1">
+          <i class="bi bi-camera me-1"></i>Scan or photo of the item <span class="text-muted fw-normal">(optional — PDF or image, 15 MB)</span>
+        </label>
+        <input type="file" name="mail_scan" class="form-control form-control-sm" accept=".pdf,image/png,image/jpeg,image/webp">
+      </div>
+    </div>
+    <datalist id="mfDirectory">
+      {% for p in directory %}<option value="{{ p.email }}">{{ p.name }}</option>{% endfor %}
+    </datalist>
+    {{ posted_slots|json_script:"mfPosted" }}
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('logForm');
+  if (!form) return;
+  // Pre-select the server's choice (works with or without Flow Studio).
+  form.querySelectorAll('.mf-choice[data-selected="1"]').forEach(r => { r.checked = true; });
+  form.querySelectorAll('.mf-choice').forEach(r => {
+    if (r.checked) r.nextElementSibling.classList.add('selected');
+  });
+});
+</script>
+{% if studio_on %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const planUrl = "{{ plan_url|escapejs }}";
+  const direction = "{{ direction|escapejs }}";
+  const form = document.getElementById('logForm');
+  const box = document.getElementById('mfPlan');
+  if (!form || !box) return;
+  const matchEl = document.getElementById('mfMatch');
+  const slotsEl = document.getElementById('mfSlots');
+  const spin = document.getElementById('mfSpin');
+  const posted = JSON.parse(document.getElementById('mfPosted').textContent || '{}');
+  const typed = Object.assign({}, posted);
+  const FACTS = ['item_type','sender_type','sender_name','sender_org','sender_email','description',
+                 'destination_agency','dest_focal_email','for_recipient','recipient_org','recipient_email','notes'];
+
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const current = () => (form.querySelector('.mf-choice:checked') || {}).value || '';
+
+  function remember() {
+    slotsEl.querySelectorAll('input[name^="slot__"]').forEach(i => { typed[i.name.slice(6)] = i.value; });
+  }
+
+  function render(data) {
+    if (!data.flow) {
+      matchEl.innerHTML = '<span class="text-muted"><i class="bi bi-info-circle me-1"></i>' + esc(data.message || '') + '</span>';
+      slotsEl.innerHTML = '';
+      return;
+    }
+    let html = '<div><span class="fw-semibold">' + esc(data.flow.name) + '</span>';
+    if (data.rule) {
+      html += ' <span class="text-muted">— ' + (data.rule.picked === 'fallback'
+        ? 'no rule matched, so the fallback flow'
+        : 'matched “' + esc(data.rule.name) + '”') + '</span>';
+    }
+    html += '</div><div class="d-flex flex-wrap gap-1 mt-1">';
+    (data.flow.steps || []).forEach((s, i) => { html += '<span class="badge bg-light text-dark border">' + (i + 1) + '. ' + esc(s) + '</span>'; });
+    matchEl.innerHTML = html + '</div>';
+
+    slotsEl.innerHTML = (data.slots || []).map(s => {
+      const steps = (s.steps || []).join(', ');
+      if (s.auto) {
+        return '<div class="col-md-6"><div class="mf-slot auto h-100"><div class="small fw-semibold">'
+          + '<i class="bi bi-check-circle-fill text-success me-1"></i>' + esc(s.label) + '</div>'
+          + '<div class="small">' + esc(s.people.join(', ')) + (s.more ? ' +' + s.more : '') + '</div>'
+          + '<div class="text-muted" style="font-size:.72rem;">' + esc(s.how) + (steps ? ' · ' + esc(steps) : '') + '</div></div></div>';
+      }
+      return '<div class="col-md-6"><div class="mf-slot h-100"><label class="small fw-semibold mb-1">'
+        + '<i class="bi bi-person-plus me-1"></i>' + esc(s.label) + (s.signs ? ' <span class="badge bg-info-subtle text-info-emphasis">signs</span>' : '')
+        + '</label><input type="text" class="form-control form-control-sm" list="mfDirectory" name="slot__' + esc(s.key)
+        + '" placeholder="email@un.org — separate several with commas" value="' + esc(typed[s.key] || '') + '" required>'
+        + '<div class="text-muted" style="font-size:.72rem;">' + (steps ? 'Handles: ' + esc(steps) : '') + '</div></div></div>';
+    }).join('');
+  }
+
+  let timer = null, seq = 0;
+  function refresh() {
+    const choice = current();
+    const studio = choice === 'auto' || choice.startsWith('studio:');
+    box.classList.toggle('d-none', !studio);
+    if (!studio) return;
+    remember();
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const params = new URLSearchParams({direction: direction, choice: choice});
+      FACTS.forEach(name => { const el = form.elements[name]; if (el && el.value) params.set(name, el.value); });
+      const mine = ++seq;
+      spin.classList.remove('d-none');
+      fetch(planUrl + '?' + params.toString(), {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+        .then(r => r.json())
+        .then(data => { if (mine === seq) render(data); })
+        .catch(() => { if (mine === seq) matchEl.innerHTML = '<span class="text-danger small">Couldn’t work out the route just now.</span>'; })
+        .finally(() => { if (mine === seq) spin.classList.add('d-none'); });
+    }, 350);
+  }
+
+  form.addEventListener('change', e => { if (e.target.classList.contains('mf-choice') || FACTS.includes(e.target.name)) refresh(); });
+  form.addEventListener('input', e => { if (FACTS.includes(e.target.name)) refresh(); });
+  slotsEl.addEventListener('input', remember);
+  refresh();
+});
+</script>
+{% endif %}

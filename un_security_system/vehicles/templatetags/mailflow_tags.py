@@ -7,7 +7,7 @@ register = template.Library()
 @register.inclusion_tag("vehicles/packages/_studio_panel.html", takes_context=True)
 def mail_studio_panel(context, package):
     """The Flow Studio panel on the package page. Renders nothing for classic packages."""
-    from vehicles import panel_context
+    from vehicles.package_studio import panel_context
 
     request = context.get("request")
     user = getattr(request, "user", None)

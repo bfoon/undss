@@ -1,0 +1,132 @@
+{% if panel %}{% with link=panel.link run=panel.run %}
+<style>
+  .mf-panel{border-radius:14px;overflow:hidden}
+  .mf-head{background:linear-gradient(135deg,#0F766E,#0B4F6C);color:#fff}
+  .mf-chip{display:flex;flex-direction:column;align-items:center;min-width:108px;max-width:150px;text-align:center;position:relative}
+  .mf-dot{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #dee2e6;background:#fff;color:#94a3b8;z-index:1}
+  .mf-chip.done .mf-dot{background:#16A34A;border-color:#16A34A;color:#fff}
+  .mf-chip.current .mf-dot{border-color:var(--mf-c);color:var(--mf-c);box-shadow:0 0 0 5px color-mix(in srgb,var(--mf-c) 18%,transparent);animation:mfPulse 1.8s ease-in-out infinite}
+  .mf-chip.stopped .mf-dot{background:#DC2626;border-color:#DC2626;color:#fff}
+  .mf-chip .mf-lbl{font-size:.74rem;font-weight:600;margin-top:.4rem;color:#334155}
+  .mf-chip.todo .mf-lbl{color:#94a3b8}
+  .mf-chip .mf-who{font-size:.68rem;color:#64748b}
+  .mf-track{display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding:.25rem 0 .5rem}
+  .mf-line{flex:1 1 24px;min-width:24px;height:2px;background:#e2e8f0;margin-top:19px}
+  .mf-line.done{background:#16A34A}
+  .mf-ev{font-size:.8rem}
+  .mf-ev i{width:1.3rem;display:inline-block;color:#0F766E}
+  @keyframes mfPulse{50%{box-shadow:0 0 0 9px color-mix(in srgb,var(--mf-c) 6%,transparent)}}
+</style>
+
+<div class="card border-0 shadow-sm mb-4 mf-panel">
+  <div class="mf-head p-3 px-4 d-flex flex-wrap align-items-center gap-3">
+    <i class="bi bi-diagram-3-fill fs-3"></i>
+    <div class="flex-grow-1">
+      <div class="small text-uppercase opacity-75 fw-semibold" style="letter-spacing:.06em;">Flow Studio mail flow</div>
+      <div class="fw-bold fs-5">{{ link.workflow.name|default:run.workflow_name|default:"Flow Studio" }}</div>
+      <div class="small opacity-75">
+        {% if run %}Run {{ run.reference }}{% endif %}
+        {% if link.route %} · picked by the rule “{{ link.route.name }}”{% elif link.picked_by == 'manual' %} · chosen at logging{% endif %}
+      </div>
+    </div>
+    {% if run %}
+      <span class="badge bg-light text-dark px-3 py-2">
+        {% if run.status == 'running' %}<i class="bi bi-hourglass-split me-1"></i>{{ link.stage|default:"In progress" }}
+        {% elif run.status == 'completed' %}<i class="bi bi-check2-circle text-success me-1"></i>{{ link.stage|default:"Completed" }}
+        {% elif run.status == 'blocked' %}<i class="bi bi-exclamation-triangle text-danger me-1"></i>Needs attention
+        {% elif run.status == 'returned' %}<i class="bi bi-arrow-return-left text-warning me-1"></i>Returned for changes
+        {% else %}{{ run.get_status_display }}{% endif %}
+      </span>
+    {% endif %}
+  </div>
+
+  {% if run %}
+  <div class="card-body p-4">
+
+    {% for item in panel.my_tasks %}
+    <div class="alert border-0 d-flex align-items-center gap-3 mb-3" style="background:#ecfdf5;color:#065f46;">
+      <i class="bi {{ item.task.icon }} fs-4"></i>
+      <div class="flex-grow-1">
+        <div class="fw-bold">Your turn: {{ item.task.node_label }}</div>
+        <div class="small">{{ item.task.get_kind_display }}{% if item.task.due_at %} · due {{ item.task.due_at|date:"M d, H:i" }}{% endif %}</div>
+      </div>
+      <a href="{{ item.url }}" class="btn btn-success fw-semibold px-4"><i class="bi bi-arrow-right-circle me-1"></i>Act now</a>
+    </div>
+    {% endfor %}
+
+    {% if run.status == 'blocked' %}
+    <div class="alert alert-danger border-0 small mb-3">
+      <i class="bi bi-exclamation-octagon me-2"></i><strong>The flow stopped:</strong> {{ run.block_reason }}
+      {% if panel.can_manage_run %}<a href="{{ panel.run_url }}" class="alert-link ms-1">Open the run to retry →</a>{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="fw-semibold text-muted text-uppercase small mb-0">Steps</h6>
+      <span class="small text-muted">{{ panel.progress.done }} of {{ panel.progress.total }} done</span>
+    </div>
+    <div class="progress mb-3" style="height:6px;">
+      <div class="progress-bar" style="width:{{ panel.progress.percent }}%;background:#0F766E;"></div>
+    </div>
+
+    {% if panel.chips %}
+    <div class="mf-track mb-3">
+      {% for c in panel.chips %}
+        {% if not forloop.first %}<div class="mf-line {% if c.state == 'done' or c.state == 'current' %}done{% endif %}"></div>{% endif %}
+        <div class="mf-chip {{ c.state }}" style="--mf-c:{{ c.color }};">
+          <div class="mf-dot">
+            {% if c.state == 'done' %}<i class="bi bi-check-lg"></i>
+            {% elif c.state == 'stopped' %}<i class="bi bi-x-lg"></i>
+            {% else %}<i class="bi {{ c.icon }}"></i>{% endif %}
+          </div>
+          <div class="mf-lbl">{{ c.label }}</div>
+          {% if c.who %}<div class="mf-who">{{ c.who }}</div>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+      <div class="col-md-7">
+        <h6 class="fw-semibold text-muted text-uppercase small mb-2">Latest activity</h6>
+        {% for ev in panel.events %}
+          <div class="mf-ev mb-2">
+            <i class="bi {{ ev.icon }}"></i>
+            <span class="text-muted">{{ ev.at|date:"M d, H:i" }}</span>
+            — {{ ev.note|default:ev.get_event_display }}
+            {% if ev.actor_name %}<span class="text-muted">· {{ ev.actor_name }}</span>{% endif %}
+          </div>
+        {% empty %}
+          <div class="text-muted small">Nothing yet.</div>
+        {% endfor %}
+      </div>
+      <div class="col-md-5">
+        <h6 class="fw-semibold text-muted text-uppercase small mb-2">Documents</h6>
+        <div class="d-grid gap-2">
+          <a href="{{ panel.docket_url }}" target="_blank" class="btn btn-outline-secondary btn-sm text-start">
+            <i class="bi bi-file-earmark-text me-2"></i>{% if run.final_pdf %}Final docket with full record{% else %}Mail docket (live){% endif %}
+          </a>
+          {% if panel.scan_url %}
+          <a href="{{ panel.scan_url }}" target="_blank" class="btn btn-outline-secondary btn-sm text-start">
+            <i class="bi bi-camera me-2"></i>Scan / photo from logging
+          </a>
+          {% endif %}
+          {% if panel.can_open_run %}
+          <a href="{{ panel.run_url }}" class="btn btn-outline-primary btn-sm text-start">
+            <i class="bi bi-diagram-3 me-2"></i>Open the run in Flow Studio
+          </a>
+          {% endif %}
+          {% if panel.designer_url %}
+          <a href="{{ panel.designer_url }}" class="btn btn-outline-primary btn-sm text-start">
+            <i class="bi bi-bezier2 me-2"></i>Edit this flow (applies to new packages)
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card-body small text-muted">The Flow Studio run for this package is no longer available.</div>
+  {% endif %}
+</div>
+{% endwith %}{% endif %}
