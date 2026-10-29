@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}My access{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:1100px;">
+  {% include "access/_header.html" %}
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-person-badge me-2"></i>My roles</h6>
+        {% for h in held %}
+          <div class="d-flex gap-3 py-2 border-top">
+            <span class="ax-icon" style="background:{{ h.role.color }};"><i class="bi {{ h.role.icon }}"></i></span>
+            <div><div class="fw-semibold">{{ h.role.name }}</div>{% for v in h.via %}<span class="ax-pill">{{ v }}</span>{% endfor %}</div>
+          </div>
+        {% empty %}<div class="small text-muted">No roles.</div>{% endfor %}
+        <div class="small text-muted mt-2">Counts as: {% for l in legacy %}<span class="ax-pill legacy">{{ l }}</span>{% endfor %}</div>
+      </div>
+      <div class="ax-card p-3">
+        <h6 class="fw-bold mb-3"><i class="bi bi-key me-2"></i>What I can do ({{ caps|length }})</h6>
+        {% for c in caps %}<span class="ax-pill {% if c.is_legacy %}legacy{% endif %}"><i class="bi {{ c.icon }}"></i>{{ c.label }}</span>{% empty %}<div class="small text-muted">Standard staff access.</div>{% endfor %}
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      {% if can_delegate %}
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-1"><i class="bi bi-airplane me-2 text-success"></i>Going away? Hand over your roles</h6>
+        <div class="small text-muted mb-3">Your colleague holds them until the date you pick — then it ends on its own. You keep yours too.</div>
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="delegate">
+          <label class="form-label small fw-semibold">{{ dform.to_user.label }}</label>{{ dform.to_user }}
+          <label class="form-label small fw-semibold mt-2">{{ dform.roles.label }}</label>
+          <div class="small">{% for cb in dform.roles %}<div class="form-check">{{ cb.tag }} <label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label></div>{% endfor %}</div>
+          {% for e in dform.roles.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          <label class="form-label small fw-semibold mt-2">{{ dform.until.label }}</label>{{ dform.until }}
+          {% for e in dform.until.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          <div class="mt-2">{{ dform.reason }}</div>
+          <button class="btn btn-success btn-sm w-100 mt-3 fw-semibold"><i class="bi bi-arrow-left-right me-1"></i>Hand over</button>
+        </form>
+      </div>
+      {% endif %}
+
+      {% if given or received %}
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-2"><i class="bi bi-arrow-left-right me-2"></i>Cover in place</h6>
+        {% for a in given %}
+          <div class="d-flex align-items-center small py-1 border-top"><div class="flex-grow-1"><strong>{{ a.user.get_full_name }}</strong> covers your {{ a.role.name }} until {{ a.ends_at|date:"d M" }}</div>
+            <form method="post" action="{% url 'access:revoke' a.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn btn-sm btn-link text-danger p-0">End now</button></form></div>
+        {% endfor %}
+        {% for a in received %}<div class="small py-1 border-top">You cover <strong>{{ a.role.name }}</strong> for {{ a.delegated_by.get_full_name }} until {{ a.ends_at|date:"d M" }}</div>{% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="ax-card p-3">
+        <h6 class="fw-bold mb-1"><i class="bi bi-hand-index me-2 text-primary"></i>Ask for a role</h6>
+        {% if rform.fields.role.queryset.exists %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="request">
+          {{ rform.role }}
+          <div class="row g-2 mt-1"><div class="col-5">{{ rform.days }}</div><div class="col-7 small text-muted pt-1">days (empty = ongoing)</div></div>
+          <div class="mt-2">{{ rform.reason }}</div>
+          <button class="btn btn-outline-primary btn-sm w-100 mt-2">Send request</button>
+        </form>
+        {% else %}<div class="small text-muted">No roles are open for requests in your agency yet.</div>{% endif %}
+        {% for r in requests %}
+          <div class="small py-1 border-top mt-2">{{ r.role.name }} — <span class="badge {% if r.status == 'approved' %}bg-success{% elif r.status == 'rejected' %}bg-danger{% else %}bg-secondary{% endif %}">{{ r.get_status_display }}</span>{% if r.decision_note %} <span class="text-muted">“{{ r.decision_note }}”</span>{% endif %}</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

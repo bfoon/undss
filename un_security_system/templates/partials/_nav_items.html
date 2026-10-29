@@ -9,6 +9,13 @@
       <i class="bi bi-speedometer2" aria-hidden="true"></i><span>Dashboard</span>
     </a>
 
+    {% if user.is_authenticated %}
+      {% url 'access:me' as u %}
+      <a class="appnav-link {% if request.path == u %}is-active{% endif %}" href="{{ u }}" data-appnav-label="My access">
+        <i class="bi bi-person-check" aria-hidden="true"></i><span>My access</span>
+      </a>
+    {% endif %}
+
     {% if user.is_authenticated and request.available_menu_modules %}
       <button class="appnav-link appnav-toggle collapsed" type="button"
               data-bs-toggle="collapse" data-bs-target="#{{ navscope }}navGrpModules"
@@ -418,9 +425,17 @@
   {% endif %}
 
   {% security_console_access as security_access %}
-  {% if user.is_superuser or user.role == 'ict_focal' or security_access.can_view %}
+  {% if user.is_superuser or user.role == 'ict_focal' or security_access.can_view or access_can_view %}
   <div class="appnav-section">
     <div class="appnav-heading">Administration</div>
+
+    {% if access_can_view %}
+      {% url 'access:hub' as u %}
+      <a class="appnav-link {% if '/access/' in request.path and '/access/me/' not in request.path %}is-active{% endif %}" href="{{ u }}" data-appnav-label="Access Studio">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i><span>Access Studio</span>
+        {% if access_pending_requests %}<span class="appnav-count">{{ access_pending_requests }}</span>{% endif %}
+      </a>
+    {% endif %}
 
     {% if request.tenancy_features.ict_console %}
       {% url 'accounts:ict_user_list' as u %}

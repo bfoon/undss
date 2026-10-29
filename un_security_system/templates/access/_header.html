@@ -1,0 +1,41 @@
+<style>
+  .ax-hero{background:linear-gradient(135deg,#1e1b4b 0%,#312e81 55%,#0F766E 100%);color:#fff;border-radius:16px}
+  .ax-tabs .nav-link{color:#475569;font-weight:600;border-radius:10px}
+  .ax-tabs .nav-link.active{background:#312e81;color:#fff}
+  .ax-pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;border-radius:999px;padding:.15rem .6rem;border:1px solid #e2e8f0;background:#f8fafc;color:#334155;margin:.1rem .15rem .1rem 0}
+  .ax-pill.legacy{background:#eef2ff;border-color:#c7d2fe;color:#3730a3}
+  .ax-pill.warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+  .ax-pill.ok{background:#ecfdf5;border-color:#a7f3d0;color:#065f46}
+  .ax-icon{width:42px;height:42px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;font-size:1.15rem}
+  .ax-card{border-radius:14px;border:1px solid #e2e8f0;background:#fff;transition:transform .12s, box-shadow .12s}
+  .ax-card:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(30,27,75,.08)}
+  .risk-high{color:#b91c1c}.risk-medium{color:#b45309}.risk-low{color:#15803d}
+</style>
+<div class="ax-hero p-4 mb-3 shadow-sm">
+  <div class="d-flex flex-wrap align-items-center gap-3">
+    <i class="bi bi-shield-lock fs-1"></i>
+    <div class="flex-grow-1">
+      <h2 class="fw-bold mb-0">Access Studio</h2>
+      <div class="opacity-75">Your roles, your teams, your rules — design who can do what, and see exactly why.</div>
+    </div>
+    {% if access_can_view %}
+    <div class="d-flex gap-2">
+      {% if user|can:"access.manage_roles" %}
+      <a href="{% url 'access:role_create' %}" class="btn btn-light btn-sm fw-semibold"><i class="bi bi-plus-lg me-1"></i>New role</a>
+      <a href="{% url 'access:group_create' %}" class="btn btn-outline-light btn-sm fw-semibold"><i class="bi bi-people me-1"></i>New group</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+<ul class="nav ax-tabs gap-1 mb-4">
+  {% if access_can_view %}
+  <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'hub' %}active{% endif %}" href="{% url 'access:hub' %}"><i class="bi bi-grid me-1"></i>Overview</a></li>
+  <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'matrix' %}active{% endif %}" href="{% url 'access:matrix' %}"><i class="bi bi-table me-1"></i>Matrix</a></li>
+  <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'who_can' %}active{% endif %}" href="{% url 'access:who_can' %}"><i class="bi bi-search me-1"></i>Who can…?</a></li>
+  {% endif %}
+  <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'me' %}active{% endif %}" href="{% url 'access:me' %}"><i class="bi bi-person-check me-1"></i>My access</a></li>
+  {% if user|can:"access.audit" %}
+  <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'audit' %}active{% endif %}" href="{% url 'access:audit' %}"><i class="bi bi-clock-history me-1"></i>Audit log</a></li>
+  {% endif %}
+</ul>

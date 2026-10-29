@@ -6,6 +6,8 @@ from datetime import timedelta, datetime
 from django.db.models import F, Q
 import uuid
 
+from access.compat import AccessUserManager, RoleField
+
 class Agency(models.Model):
     name = models.CharField(max_length=120, unique=True)
     code = models.CharField(max_length=20, unique=True, help_text="Short code e.g. UNDP, UNICEF")
@@ -33,8 +35,12 @@ class User(AbstractUser):
         ('agency_hr', 'Agency HR'),
     ]
 
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='requester')
+    # Base role. Comparisons go through Access Studio, so custom roles that
+    # "act as" an old role pass every existing role check (access/compat.py).
+    role = RoleField(max_length=20, choices=ROLE_CHOICES, default='requester')
     phone = models.CharField(max_length=20, blank=True)
+
+    objects = AccessUserManager()
 
     employee_id = models.CharField(
         max_length=20,

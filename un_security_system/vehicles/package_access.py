@@ -47,8 +47,11 @@ def is_mailroom_staff(user) -> bool:
     if not user or not getattr(user, "is_authenticated", False):
         return False
 
-    role = (getattr(user, "role", "") or "").strip().lower()
-    if role in MAILROOM_ROLES:
+    from access.services import acts_as, can
+
+    # "See all of the office's mail" (Reception and Registry by default), or a
+    # custom role that acts as one of them.
+    if can(user, "packages.see_office") or acts_as(user, *MAILROOM_ROLES):
         return True
 
     try:
@@ -68,7 +71,9 @@ def can_log_incoming_package(user) -> bool:
         return False
     if getattr(user, "is_superuser", False):
         return True
-    return is_mailroom_staff(user)
+    from access.services import can
+
+    return can(user, "packages.log_incoming")
 
 
 def _office_scope_q(user):

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Who can…? · Access Studio{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:1100px;">
+  {% include "access/_header.html" %}
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="ax-card p-3">
+        <h6 class="fw-bold"><i class="bi bi-search me-2"></i>Who can…</h6>
+        <form method="get" class="d-flex gap-2 mb-3">
+          <select name="cap" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Pick a power…</option>
+            {% for module, caps in groups %}<optgroup label="{{ module }}">{% for c in caps %}<option value="{{ c.code }}" {% if c.code == code %}selected{% endif %}>{{ c.label }}</option>{% endfor %}</optgroup>{% endfor %}
+          </select>
+        </form>
+        {% if cap %}
+          <div class="small text-muted mb-2">{{ cap.description }}</div>
+          {% for h in holders %}
+            <div class="py-2 border-top"><div class="fw-semibold small">{{ h.user.get_full_name|default:h.user.username }}</div>
+              {% for p in h.paths %}<span class="ax-pill">{% if p.role %}{{ p.role.name }} · {% endif %}{{ p.via }} · {{ p.scope }}</span>{% endfor %}</div>
+          {% empty %}<div class="small text-muted">Nobody in your office holds it.</div>{% endfor %}
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="ax-card p-3">
+        <h6 class="fw-bold"><i class="bi bi-person-gear me-2"></i>Why can… this person</h6>
+        <form method="get" class="mb-3">
+          {% if code %}<input type="hidden" name="cap" value="{{ code }}">{% endif %}
+          <select name="person" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Pick a person…</option>
+            {% for u in people %}<option value="{{ u.pk }}" {% if person and person.pk == u.pk %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+          </select>
+        </form>
+        {% if person %}
+          <div class="small mb-2">Counts as: {% for l in person_legacy %}<span class="ax-pill legacy">{{ l }}</span>{% endfor %}</div>
+          {% for pc in person_caps %}
+            <div class="py-2 border-top small"><i class="bi {{ pc.cap.icon }} me-1 text-secondary"></i><strong>{{ pc.cap.label }}</strong><br>
+              {% for p in pc.paths %}<span class="ax-pill">{% if p.role %}{{ p.role.name }} · {% endif %}{{ p.via }}</span>{% endfor %}</div>
+          {% empty %}<div class="small text-muted">Standard staff access only.</div>{% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

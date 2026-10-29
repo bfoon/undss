@@ -213,8 +213,10 @@ def _guard_team_emails():
 # ── Permission helpers ─────────────────────────────────────────────────────────
 
 def _is_ict_focal(user) -> bool:
-    """Only ICT focal points (or superusers) may configure flows."""
-    return user.is_superuser or getattr(user, 'role', None) == 'ict_focal'
+    """Who may configure package workflows and mail flows — Access Studio decides."""
+    from access.services import can
+
+    return user.is_superuser or can(user, "packages.manage_flows")
 
 
 def _user_agency(user):

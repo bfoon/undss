@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Access Studio{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:1240px;">
+  {% include "access/_header.html" %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg"><div class="ax-card p-3"><div class="fs-3 fw-bold" style="color:#312e81;">{{ stats.roles }}</div><div class="small text-muted">roles · {{ stats.custom }} of your own</div></div></div>
+    <div class="col-6 col-lg"><div class="ax-card p-3"><div class="fs-3 fw-bold text-primary">{{ stats.groups }}</div><div class="small text-muted">groups</div></div></div>
+    <div class="col-6 col-lg"><div class="ax-card p-3"><div class="fs-3 fw-bold text-success">{{ stats.assignments }}</div><div class="small text-muted">active assignments</div></div></div>
+    <div class="col-6 col-lg"><div class="ax-card p-3"><div class="fs-3 fw-bold {% if stats.pending %}text-warning{% else %}text-muted{% endif %}">{{ stats.pending }}</div><div class="small text-muted">requests waiting</div></div></div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="d-flex align-items-center mb-2">
+        <h5 class="fw-bold mb-0 flex-grow-1">Roles</h5>
+        <span class="small text-muted">Click a role to see who holds it and give it to people</span>
+      </div>
+      <div class="row g-3 mb-4">
+        {% for c in cards %}
+        <div class="col-md-6">
+          <a href="{% url 'access:role_detail' c.role.pk %}" class="text-decoration-none text-reset">
+          <div class="ax-card p-3 h-100">
+            <div class="d-flex gap-3">
+              <span class="ax-icon" style="background:{{ c.role.color }};"><i class="bi {{ c.role.icon }}"></i></span>
+              <div class="flex-grow-1 min-w-0">
+                <div class="fw-semibold">{{ c.role.name }}
+                  {% if c.role.is_system %}<span class="badge bg-light text-muted border ms-1" style="font-size:.62rem;">SYSTEM</span>{% endif %}
+                  {% if c.role.requestable %}<span class="badge bg-info-subtle text-info-emphasis ms-1" style="font-size:.62rem;">REQUESTABLE</span>{% endif %}
+                </div>
+                <div class="small text-muted">{{ c.caps }} power{{ c.caps|pluralize }} · {{ c.holders }} holder{{ c.holders|pluralize }} · {{ c.role.scope_label }}</div>
+                <div class="mt-1">
+                  {% for l in c.legacy|slice:":2" %}<span class="ax-pill legacy">{{ l }}</span>{% endfor %}
+                  {% for r in c.role.inherits.all|slice:":2" %}<span class="ax-pill"><i class="bi bi-diagram-2"></i>{{ r.name }}</span>{% endfor %}
+                  {% if c.role.max_days %}<span class="ax-pill"><i class="bi bi-hourglass-split"></i>{{ c.role.max_days }} days max</span>{% endif %}
+                  {% if c.conflicts %}<span class="ax-pill warn"><i class="bi bi-exclamation-triangle"></i>duty conflict</span>{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="d-flex align-items-center mb-2">
+        <h5 class="fw-bold mb-0 flex-grow-1">Groups</h5>
+        {% if can_manage %}<a href="{% url 'access:group_create' %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>New group</a>{% endif %}
+      </div>
+      <div class="row g-3">
+        {% for g in groups %}
+        <div class="col-md-6">
+          <a href="{% url 'access:group_edit' g.pk %}" class="text-decoration-none text-reset">
+          <div class="ax-card p-3 h-100 d-flex gap-3">
+            <span class="ax-icon" style="background:{{ g.color }};"><i class="bi {{ g.icon }}"></i></span>
+            <div>
+              <div class="fw-semibold">{{ g.name }} {% if g.is_smart %}<span class="ax-pill ok"><i class="bi bi-magic"></i>smart</span>{% endif %}</div>
+              <div class="small text-muted">{{ g.n_members }} hand-picked{% if g.is_smart %} + rule{% endif %}</div>
+              <div>{% for r in g.roles.all %}<span class="ax-pill">{{ r.name }}</span>{% endfor %}</div>
+            </div>
+          </div>
+          </a>
+        </div>
+        {% empty %}
+        <div class="col-12"><div class="ax-card p-4 text-center text-muted small">No groups yet. A group is a team — give it roles once and every member holds them, including people who join later.</div></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      {% if pending %}
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-inbox text-warning me-2"></i>Requests waiting for you</h6>
+        {% for r in pending %}
+        <div class="border-top pt-2 mt-2">
+          <div class="small"><strong>{{ r.user.get_full_name|default:r.user.username }}</strong> asks for <strong>{{ r.role.name }}</strong>{% if r.days %} for {{ r.days }} days{% endif %}</div>
+          <div class="small text-muted fst-italic mb-1">“{{ r.reason|truncatechars:120 }}”</div>
+          <form method="post" action="{% url 'access:request_decide' r.pk %}" class="d-flex gap-1">
+            {% csrf_token %}
+            <input name="note" class="form-control form-control-sm" placeholder="Note (optional)">
+            <button name="decision" value="approve" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
+            <button name="decision" value="reject" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-2"><i class="bi bi-hourglass-split text-primary me-2"></i>Ending within 7 days</h6>
+        {% for a in expiring %}
+          <div class="small py-1 border-top"><strong>{% if a.user %}{{ a.user.get_full_name|default:a.user.username }}{% else %}{{ a.group.name }}{% endif %}</strong> — {{ a.role.name }}<br><span class="text-muted">ends {{ a.ends_at|date:"D d M, H:i" }}</span></div>
+        {% empty %}<div class="small text-muted">Nothing ending soon.</div>{% endfor %}
+      </div>
+
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-2"><i class="bi bi-arrow-left-right text-success me-2"></i>Covering for someone</h6>
+        {% for a in delegations %}
+          <div class="small py-1 border-top"><strong>{{ a.user.get_full_name }}</strong> covers {{ a.role.name }} for {{ a.delegated_by.get_full_name }}{% if a.ends_at %} until {{ a.ends_at|date:"d M" }}{% endif %}</div>
+        {% empty %}<div class="small text-muted">No one is covering right now.</div>{% endfor %}
+      </div>
+
+      {% if audit %}
+      <div class="ax-card p-3">
+        <h6 class="fw-bold mb-2"><i class="bi bi-clock-history me-2"></i>Latest changes</h6>
+        {% for e in audit %}<div class="small py-1 border-top"><span class="text-muted">{{ e.at|date:"d M H:i" }}</span> · {{ e.summary }}</div>{% endfor %}
+        <a href="{% url 'access:audit' %}" class="small">Full audit log →</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

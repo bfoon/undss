@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'incidents',
     'comms',
     'dashboard',
+    'access',
 ]
 
 
@@ -143,7 +144,10 @@ TEMPLATES = [
                 'accounts.context_processors.agency_service_flags',
                 'tenancy.context_processors.tenancy',
                 'accounts.context_processors_esign.esign_badge',
+                'access.context_processors.access',
             ],
+            # {% if user|can:"…" %} and {% if user|acts_as:"lsa,soc" %} in every template
+            'builtins': ['access.templatetags.access_tags'],
         },
     },
 ]

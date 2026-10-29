@@ -190,7 +190,7 @@ def _people_with_role(role, actor):
     from accounts.workflow_engine_esign import person_from_user
 
     User = get_user_model()
-    qs = User.objects.filter(is_active=True, role=role)
+    qs = User.objects.filter(is_active=True, role=role)  # includes custom roles that act as it
     office_id = getattr(actor, "country_office_id", None)
     agency = actor_agency(actor)
     if office_id:
@@ -246,7 +246,33 @@ def bind_slot(slot_label, facts, actor):
         people = _people_with_role(role, actor)
         if people:
             return people, f"Everyone with the {slot_label} role in your office ({len(people)})"
+
+    # Any role designed in Access Studio: "Procurement Committee", "Gate Supervisor" …
+    dynamic = _access_role_named(slot_label, actor)
+    if dynamic is not None:
+        from access.services import users_with_role
+
+        office = getattr(actor, "country_office", None)
+        holders = users_with_role(dynamic, office=office) if office else users_with_role(dynamic)
+        people = [person_from_user(u) for u in holders.order_by("first_name", "last_name")[:25] if u.email]
+        if people:
+            return people, f"Everyone holding “{dynamic.name}” ({len(people)})"
     return [], ""
+
+
+def _access_role_named(label, actor):
+    """The Access Studio role whose name matches a Flow Studio slot, if any."""
+    try:
+        from access.models import AccessRole
+    except Exception:  # noqa: BLE001 - access app not installed
+        return None
+    agency_id = getattr(actor_agency(actor), "pk", None)
+    wanted = _norm(label)
+    for role in AccessRole.objects.filter(is_active=True).filter(
+            Q(agency__isnull=True) | Q(agency_id=agency_id)).order_by("agency_id"):
+        if _norm(role.name) == wanted:
+            return role
+    return None
 
 
 def slot_source(slot_label):

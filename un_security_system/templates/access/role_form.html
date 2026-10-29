@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}{% if role %}Edit {{ role.name }}{% else %}New role{% endif %}{% endblock %}
+{% block extra_css %}
+<style>
+  .ax-swatch{width:28px;height:28px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #cbd5e1;cursor:pointer}
+  .ax-swatch.sel{box-shadow:0 0 0 2px #312e81}
+  .ax-ico{width:38px;height:38px;border-radius:10px;border:1px solid #e2e8f0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;background:#fff}
+  .ax-ico.sel{background:#312e81;color:#fff;border-color:#312e81}
+  .cap-row{border-radius:10px;padding:.6rem .75rem;border:1px solid transparent}
+  .cap-row:hover{background:#f8fafc;border-color:#e2e8f0}
+  .cap-row.dim{opacity:.55}
+  .ax-preview{position:sticky;top:1rem}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:1240px;">
+  {% include "access/_header.html" %}
+  <form method="post" novalidate id="roleForm">
+    {% csrf_token %}
+    {{ form.icon }}{{ form.color }}
+    {% if form.non_field_errors %}<div class="alert alert-danger small">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+    <div class="row g-4">
+      <div class="col-lg-8">
+        <div class="ax-card p-4 mb-3">
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label class="form-label fw-semibold">Role name</label>{{ form.name }}
+              {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Colour</label>
+              <div class="d-flex flex-wrap gap-2" id="swatches">
+                {% for c in colors %}<span class="ax-swatch" data-color="{{ c }}" style="background:{{ c }};"></span>{% endfor %}
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">What is this person trusted to do?</label>{{ form.description }}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Icon</label>
+              <div class="d-flex flex-wrap gap-2" id="icons">
+                {% for i in icons %}<span class="ax-ico" data-icon="{{ i }}"><i class="bi {{ i }}"></i></span>{% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% for module, caps in groups %}
+        <div class="ax-card p-3 mb-3">
+          <div class="d-flex align-items-center mb-2">
+            <h6 class="fw-bold mb-0 flex-grow-1">
+              {% if module == "Legacy powers" %}<i class="bi bi-arrow-repeat me-1 text-primary"></i>{% endif %}{{ module }}
+            </h6>
+            {% if module == "Legacy powers" %}
+              <span class="small text-muted">Counts as the old fixed role everywhere UN PASS still checks it</span>
+            {% endif %}
+          </div>
+          {% for item in caps %}
+          <label class="cap-row d-flex align-items-start gap-3 {% if not item.mine and not item.on %}dim{% endif %}" for="cap_{{ item.cap.code }}">
+            <div class="form-check form-switch m-0 pt-1">
+              <input class="form-check-input cap-box" type="checkbox" role="switch" name="cap" value="{{ item.cap.code }}"
+                     id="cap_{{ item.cap.code }}" data-label="{{ item.cap.label }}"
+                     {% if item.on %}checked{% endif %} {% if item.locked or not item.mine and not item.on %}disabled{% endif %}>
+              {% if item.locked %}<input type="hidden" name="cap" value="{{ item.cap.code }}">{% endif %}
+            </div>
+            <i class="bi {{ item.cap.icon }} fs-5 text-secondary"></i>
+            <div class="flex-grow-1">
+              <div class="fw-semibold small">{{ item.cap.label }}
+                <span class="ms-1 small risk-{{ item.cap.risk }}"><i class="bi bi-circle-fill" style="font-size:.45rem;vertical-align:middle;"></i> {{ item.cap.risk }}</span>
+                {% if item.locked %}<span class="ax-pill"><i class="bi bi-lock"></i>always on for this system role</span>{% endif %}
+                {% if not item.mine and not item.on %}<span class="ax-pill warn">you don't hold this</span>{% endif %}
+              </div>
+              <div class="small text-muted">{{ item.cap.description }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="col-lg-4">
+        <div class="ax-preview">
+          <div class="ax-card p-3 mb-3">
+            <div class="d-flex gap-3 align-items-center mb-2">
+              <span class="ax-icon" id="pvIcon"><i class="bi"></i></span>
+              <div><div class="fw-bold" id="pvName">New role</div><div class="small text-muted"><span id="pvCount">0</span> powers</div></div>
+            </div>
+            <div id="pvCaps" class="mb-2"></div>
+            <div id="pvConflicts"></div>
+          </div>
+          <div class="ax-card p-3 mb-3">
+            <div class="mb-3">
+              <label class="form-label fw-semibold small">{{ form.inherits.label }}</label>{{ form.inherits }}
+              <div class="form-text">Holders also get everything those roles carry. Ctrl/⌘-click for several.</div>
+            </div>
+            <div class="form-check mb-2">{{ form.requestable }} <label class="form-check-label small" for="{{ form.requestable.id_for_label }}">{{ form.requestable.label }}</label></div>
+            {% if form.only_my_office %}<div class="form-check mb-2">{{ form.only_my_office }} <label class="form-check-label small" for="{{ form.only_my_office.id_for_label }}">{{ form.only_my_office.label }}</label></div>{% endif %}
+            {% if form.shared %}<div class="form-check mb-2">{{ form.shared }} <label class="form-check-label small" for="{{ form.shared.id_for_label }}">{{ form.shared.label }}</label></div>{% endif %}
+            <div class="form-check mb-3">{{ form.is_active }} <label class="form-check-label small" for="{{ form.is_active.id_for_label }}">Active</label></div>
+            <label class="form-label fw-semibold small">{{ form.max_days.label }}</label>{{ form.max_days }}
+            <div class="form-text">Every assignment of a time-boxed role ends on its own.</div>
+          </div>
+          <div class="d-grid gap-2">
+            <button class="btn btn-primary fw-semibold" style="background:#312e81;border-color:#312e81;"><i class="bi bi-check-lg me-1"></i>Save role</button>
+            {% if role and not role.is_system %}
+              <button type="submit" form="archiveForm" class="btn btn-outline-danger btn-sm"
+                      onclick="return confirm('Archive “{{ role.name|escapejs }}”? Everyone holding it loses these powers.');">
+                <i class="bi bi-archive me-1"></i>Archive role
+              </button>
+            {% endif %}
+            <a href="{% if role %}{% url 'access:role_detail' role.pk %}{% else %}{% url 'access:hub' %}{% endif %}" class="btn btn-link btn-sm">Cancel</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+  {% if role and not role.is_system %}
+  <form id="archiveForm" method="post" action="{% url 'access:role_archive' role.pk %}">{% csrf_token %}</form>
+  {% endif %}
+</div>
+{{ conflicts|json_script:"axConflicts" }}
+{% endblock %}
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const f = document.getElementById('roleForm');
+  const iconIn = f.querySelector('[name=icon]'), colorIn = f.querySelector('[name=color]');
+  const conflicts = JSON.parse(document.getElementById('axConflicts').textContent);
+  const pvIcon = document.getElementById('pvIcon');
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function paint() {
+    document.querySelectorAll('.ax-swatch').forEach(s => s.classList.toggle('sel', s.dataset.color === colorIn.value));
+    document.querySelectorAll('.ax-ico').forEach(s => s.classList.toggle('sel', s.dataset.icon === iconIn.value));
+    pvIcon.style.background = colorIn.value || '#0F766E';
+    pvIcon.querySelector('i').className = 'bi ' + (iconIn.value || 'bi-person-badge');
+    document.getElementById('pvName').textContent = f.querySelector('[name=name]').value || 'New role';
+    const on = [...f.querySelectorAll('.cap-box:checked')];
+    const codes = new Set(on.map(b => b.value));
+    document.getElementById('pvCount').textContent = on.length;
+    document.getElementById('pvCaps').innerHTML = on.map(b =>
+      '<span class="ax-pill ' + (b.value.startsWith('legacy.') ? 'legacy' : '') + '">' + esc(b.dataset.label) + '</span>').join('')
+      || '<span class="small text-muted">Switch on the powers this role should carry.</span>';
+    document.getElementById('pvConflicts').innerHTML = conflicts.filter(c => codes.has(c[0]) && codes.has(c[1]))
+      .map(c => '<div class="alert alert-warning small py-2 mb-2"><i class="bi bi-exclamation-triangle me-1"></i><strong>Separation of duties:</strong> ' + esc(c[2]) + '</div>').join('');
+  }
+  document.getElementById('swatches').addEventListener('click', e => { if (e.target.dataset.color) { colorIn.value = e.target.dataset.color; paint(); } });
+  document.getElementById('icons').addEventListener('click', e => { const t = e.target.closest('.ax-ico'); if (t) { iconIn.value = t.dataset.icon; paint(); } });
+  f.addEventListener('input', paint); f.addEventListener('change', paint);
+  paint();
+});
+</script>
+{% endblock %}
