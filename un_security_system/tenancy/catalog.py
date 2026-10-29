@@ -231,6 +231,16 @@ FEATURES: Tuple[FeatureDef, ...] = (
         delegable=True,
         url_rules=("vehicles:document_*", "vehicles:signature_*"),
     ),
+    FeatureDef(
+        code="mailroom_studio",
+        name="Mailroom on Flow Studio",
+        category="facilities",
+        description="Run packages through eSign Flow Studio flows: mail docket, mail rules, "
+                    "starter flows, slot auto-binding and live run tracking on each package.",
+        requires=("mailroom", "esign"),
+        delegable=True,
+        url_rules=("vehicles:package_mailflow_*",),
+    ),
 
     # ── ICT & Assets ───────────────────────────────────────────────────────
     FeatureDef(

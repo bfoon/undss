@@ -1,7 +1,8 @@
 from django.urls import path
 
-from . import package_esign
-from . import views
+from vehicles import package_esign
+from vehicles import views
+from un_security_system.vehicles import views_mailflow
 
 app_name = 'vehicles'
 
@@ -103,8 +104,29 @@ urlpatterns = [
     # Packages & Mailroom
     # ── Package list & logging ────────────────────────────────────────────────
     path('packages/', views.package_list, name='package_list'),
-    path('packages/new/', views.package_log_new, name='package_log_new'),
-    path('packages/outgoing/new/', views.package_log_outgoing, name='package_log_outgoing'),
+    # Logging now offers classic templates, Flow Studio flows and mail rules.
+    path('packages/new/', views_mailflow.package_log_new, name='package_log_new'),
+    path('packages/outgoing/new/', views_mailflow.package_log_outgoing, name='package_log_outgoing'),
+
+    # ── Packages on Flow Studio ───────────────────────────────────────────────
+    path('packages/<int:pk>/docket.pdf', views_mailflow.package_mail_docket, name='package_mail_docket'),
+    path('packages/<int:pk>/scan/', views_mailflow.package_mail_scan, name='package_mail_scan'),
+    path('packages/mail-flows/', views_mailflow.package_mailflow_home, name='package_mailflow_home'),
+    path('packages/mail-flows/plan/', views_mailflow.package_mailflow_plan, name='package_mailflow_plan'),
+    path('packages/mail-flows/docket/<str:direction>/', views_mailflow.package_mailflow_docket,
+         name='package_mailflow_docket'),
+    path('packages/mail-flows/starter/<str:direction>/', views_mailflow.package_mailflow_starter,
+         name='package_mailflow_starter'),
+    path('packages/mail-flows/adopt/<int:pk>/', views_mailflow.package_mailflow_adopt,
+         name='package_mailflow_adopt'),
+    path('packages/mail-flows/rules/new/', views_mailflow.package_mailflow_route_new,
+         name='package_mailflow_route_new'),
+    path('packages/mail-flows/rules/<int:pk>/edit/', views_mailflow.package_mailflow_route_edit,
+         name='package_mailflow_route_edit'),
+    path('packages/mail-flows/rules/<int:pk>/toggle/', views_mailflow.package_mailflow_route_toggle,
+         name='package_mailflow_route_toggle'),
+    path('packages/mail-flows/rules/<int:pk>/delete/', views_mailflow.package_mailflow_route_delete,
+         name='package_mailflow_route_delete'),
 
     # ── Package detail & step advancement ────────────────────────────────────
     path('packages/<int:pk>/', views.package_detail, name='package_detail'),

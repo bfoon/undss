@@ -386,7 +386,7 @@ Run this once after installing to see which URL names the gate does not cover:
 # python manage.py shell
 from django.urls import get_resolver
 from fnmatch import fnmatch
-from tenancy.catalog import url_rule_index
+from un_security_system.tenancy.catalog import url_rule_index
 
 rules = url_rule_index()
 for key in get_resolver().reverse_dict.keys():

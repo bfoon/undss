@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load mailflow_tags %}
 {% block title %}Packages & Mailroom{% endblock %}
 
 {% block content %}
@@ -28,6 +29,11 @@
         <a class="btn btn-outline-secondary" href="{% url 'vehicles:package_flow_config' %}">
           <i class="bi bi-diagram-3 me-1"></i> Workflows
         </a>
+        {% if request.tenancy_features.mailroom_studio %}
+        <a class="btn btn-outline-success" href="{% url 'vehicles:package_mailflow_home' %}">
+          <i class="bi bi-bezier2 me-1"></i> Mail flows
+        </a>
+        {% endif %}
       {% endif %}
     </div>
   </div>
@@ -168,7 +174,14 @@
                   <div class="fw-semibold small">{{ package.current_step.name }}</div>
                   <div class="small text-muted">{{ package.status|title }}</div>
                 {% else %}
-                  <span class="badge text-bg-secondary">{{ package.status|title }}</span>
+                  {% with stage=package|mail_stage %}
+                    {% if stage %}
+                      <div class="fw-semibold small"><i class="bi bi-bezier2 text-success me-1"></i>{{ stage }}</div>
+                      <div class="small text-muted">Flow Studio</div>
+                    {% else %}
+                      <span class="badge text-bg-secondary">{{ package.status|title }}</span>
+                    {% endif %}
+                  {% endwith %}
                 {% endif %}
               </td>
 

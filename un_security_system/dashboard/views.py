@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from visitors.models import Visitor, VisitorLog
-from vehicles.models import VehicleMovement, Vehicle, PackageEvent, AssetExit
+from vehicles import VehicleMovement, Vehicle, PackageEvent, AssetExit
 from accounts.models import SecurityIncident
 from incidents.models import IncidentReport
 

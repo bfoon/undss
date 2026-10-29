@@ -23,7 +23,7 @@ modules are actually in use and turns exactly those on.
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from tenancy.catalog import FEATURES
+from un_security_system.tenancy.catalog import FEATURES
 from tenancy.models import CountryOffice, FeatureGrant
 from tenancy.services import bump_cache
 

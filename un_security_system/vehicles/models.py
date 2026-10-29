@@ -847,3 +847,7 @@ class SignatureRecord(models.Model):
             self.signed_at.isoformat(),
         )
         return expected == self.audit_hash
+
+
+# --- Packages on Flow Studio (mail docket, mail rules, package <-> run link) ---
+from .models_mailflow import *  # noqa: E402,F401,F403

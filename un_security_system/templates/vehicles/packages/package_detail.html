@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load mailflow_tags %}
 {% block title %}Package {{ package.tracking_code }}{% endblock %}
 
 {% block content %}
@@ -28,6 +29,8 @@
         by {{ package.logged_by.get_full_name|default:package.logged_by.username }}
         {% if package.flow_template %}
           &nbsp;·&nbsp;<i class="bi bi-diagram-3 me-1"></i>{{ package.flow_template.name }}
+        {% elif package|mail_stage %}
+          &nbsp;·&nbsp;<i class="bi bi-bezier2 me-1"></i>Flow Studio — {{ package|mail_stage }}
         {% endif %}
       </p>
     </div>
@@ -136,6 +139,9 @@
     {% endif %}
   </div>
   {% endif %}
+
+  <!-- ── Flow Studio mail flow (packages started on a Studio flow) ──────── -->
+  {% mail_studio_panel package %}
 
   <!-- ══════════════════════════════════════════════════════════════════════
        ROW 1 — Package Details (left) | Full History (right)
