@@ -36,6 +36,7 @@ urlpatterns = [
         template_name="registration/password_change_done.html"
     ), name="password_change_done"),
     path("platform/", include("tenancy.urls", namespace="tenancy")),
+    path("access/", include("access.urls")),
 
 ]
 

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ role.name }} · Access Studio{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:1240px;">
+  {% include "access/_header.html" %}
+
+  <div class="ax-card p-4 mb-4 d-flex flex-wrap gap-3 align-items-center">
+    <span class="ax-icon" style="background:{{ role.color }};width:56px;height:56px;font-size:1.5rem;"><i class="bi {{ role.icon }}"></i></span>
+    <div class="flex-grow-1">
+      <h3 class="fw-bold mb-0">{{ role.name }}
+        {% if role.is_system %}<span class="badge bg-light text-muted border align-middle" style="font-size:.65rem;">SYSTEM · {{ role.legacy_code }}</span>{% endif %}
+        {% if not role.is_active %}<span class="badge bg-danger align-middle" style="font-size:.65rem;">ARCHIVED</span>{% endif %}
+      </h3>
+      <div class="text-muted">{{ role.description|default:"No description yet." }}</div>
+      <div class="small text-muted mt-1">{{ role.scope_label }}{% if role.max_days %} · time-boxed to {{ role.max_days }} days{% endif %}{% if role.requestable %} · staff can request it{% endif %}</div>
+    </div>
+    <div class="d-flex gap-2">
+      {% if editable %}<a href="{% url 'access:role_edit' role.pk %}" class="btn btn-outline-primary"><i class="bi bi-pencil me-1"></i>Edit powers</a>{% endif %}
+      {% if user|can:"access.manage_roles" %}<a href="{% url 'access:role_create' %}?from={{ role.pk }}" class="btn btn-outline-secondary"><i class="bi bi-copy me-1"></i>Clone</a>{% endif %}
+    </div>
+  </div>
+
+  {% for a, b, why in conflicts %}<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle me-1"></i><strong>Separation of duties:</strong> {{ why }}</div>{% endfor %}
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-people me-2"></i>Who holds it <span class="text-muted fw-normal">({{ holders|length }})</span></h6>
+        {% for h in holders %}
+          <div class="d-flex align-items-start gap-2 py-2 border-top">
+            <i class="bi bi-person-circle fs-5 text-secondary"></i>
+            <div class="flex-grow-1">
+              <div class="fw-semibold small">{{ h.user.get_full_name|default:h.user.username }} <span class="text-muted fw-normal">{{ h.user.email }}</span></div>
+              {% for via, scope in h.paths %}<span class="ax-pill">{{ via }} · {{ scope }}</span>{% endfor %}
+            </div>
+          </div>
+        {% empty %}
+          <div class="small text-muted">Nobody yet.</div>
+        {% endfor %}
+      </div>
+
+      <div class="ax-card p-3">
+        <h6 class="fw-bold mb-3"><i class="bi bi-list-check me-2"></i>Assignments</h6>
+        {% for a in assignments %}
+          <div class="d-flex align-items-center gap-2 py-2 border-top small">
+            <div class="flex-grow-1">
+              <strong>{% if a.user %}{{ a.user.get_full_name|default:a.user.username }}{% else %}<i class="bi bi-people"></i> {{ a.group.name }}{% endif %}</strong>
+              · {{ a.scope_label }}
+              {% if a.ends_at %}· until {{ a.ends_at|date:"d M Y" }}{% endif %}
+              {% if a.delegated_by %}<span class="ax-pill ok">covering for {{ a.delegated_by.get_full_name }}</span>{% endif %}
+              <div class="text-muted">{{ a.reason|default:"" }}{% if a.granted_by %} — by {{ a.granted_by.get_full_name|default:a.granted_by.username }}, {{ a.created_at|date:"d M Y" }}{% endif %}</div>
+            </div>
+            {% if can_assign %}
+            <form method="post" action="{% url 'access:revoke' a.pk %}" onsubmit="return confirm('Remove this assignment?');">
+              {% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button>
+            </form>
+            {% endif %}
+          </div>
+        {% empty %}
+          <div class="small text-muted">No direct or group assignments.{% if role.is_system %} People whose base role is “{{ role.name }}” hold it automatically.{% endif %}</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      {% if can_assign and role.is_active %}
+      <div class="ax-card p-3 mb-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-person-plus me-2 text-success"></i>Give this role</h6>
+        {% if not grant_ok %}
+          <div class="alert alert-warning small mb-0"><i class="bi bi-lock me-1"></i>You can't hand out powers you don't hold yourself: {{ grant_missing|join:", " }}.</div>
+        {% else %}
+        <form method="post" action="{% url 'access:assign' role.pk %}" id="assignForm">
+          {% csrf_token %}
+          <div class="btn-group w-100 mb-3" role="group">
+            <input type="radio" class="btn-check" name="target" id="tUser" value="user" checked>
+            <label class="btn btn-outline-secondary btn-sm" for="tUser"><i class="bi bi-person me-1"></i>A person</label>
+            <input type="radio" class="btn-check" name="target" id="tGroup" value="group">
+            <label class="btn btn-outline-secondary btn-sm" for="tGroup"><i class="bi bi-people me-1"></i>A group</label>
+          </div>
+          <div class="mb-2" id="pickUser"><input class="form-control form-control-sm mb-1" placeholder="Filter people…" id="userFilter">{{ form.user }}</div>
+          <div class="mb-2 d-none" id="pickGroup">{{ form.group }}</div>
+          <label class="form-label small fw-semibold mt-2">Where it applies</label>{{ form.scope }}
+          <label class="form-label small fw-semibold mt-2">{{ form.ends_on.label }} <span class="text-muted fw-normal">(optional)</span></label>{{ form.ends_on }}
+          {% if form.ends_on.help_text %}<div class="form-text">{{ form.ends_on.help_text }}</div>{% endif %}
+          <div class="mt-2">{{ form.reason }}</div>
+          <button class="btn btn-success w-100 mt-3 fw-semibold"><i class="bi bi-check2-circle me-1"></i>Give “{{ role.name }}”</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="ax-card p-3">
+        <h6 class="fw-bold mb-2"><i class="bi bi-key me-2"></i>Powers ({{ caps|length }})</h6>
+        {% for c in caps %}
+          <div class="d-flex gap-2 py-1 small border-top">
+            <i class="bi {{ c.icon }} text-secondary"></i>
+            <div class="flex-grow-1">{{ c.label }} <span class="text-muted">· {{ c.module }}</span></div>
+            <span class="risk-{{ c.risk }}">{{ c.risk }}</span>
+          </div>
+        {% empty %}<div class="small text-muted">No powers yet.</div>{% endfor %}
+        {% if role.inherits.exists %}
+          <div class="small text-muted mt-2">Includes: {% for r in role.inherits.all %}<a href="{% url 'access:role_detail' r.pk %}">{{ r.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const f = document.getElementById('assignForm'); if (!f) return;
+  const sync = () => { const g = f.querySelector('#tGroup').checked;
+    document.getElementById('pickUser').classList.toggle('d-none', g);
+    document.getElementById('pickGroup').classList.toggle('d-none', !g); };
+  f.addEventListener('change', sync); sync();
+  const sel = f.querySelector('[name=user]'), flt = document.getElementById('userFilter');
+  flt.addEventListener('input', () => { const q = flt.value.toLowerCase();
+    [...sel.options].forEach(o => { o.hidden = q && !o.text.toLowerCase().includes(q); }); });
+});
+</script>
+{% endblock %}

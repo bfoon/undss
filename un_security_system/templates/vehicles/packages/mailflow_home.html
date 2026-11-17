@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Mail flows{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mf-hero{background:linear-gradient(135deg,#0F766E 0%,#0B4F6C 100%);color:#fff;border-radius:16px}
+  .mf-stat{border-radius:14px;background:#fff}
+  .mf-stat .num{font-size:1.9rem;font-weight:800;line-height:1}
+  .mf-how{display:flex;gap:.75rem;flex-wrap:wrap}
+  .mf-how .step{flex:1 1 200px;background:rgba(255,255,255,.1);border-radius:12px;padding:.75rem 1rem}
+  .mf-chip{font-size:.72rem;border-radius:999px;padding:.15rem .55rem;border:1px solid #e2e8f0;background:#f8fafc;display:inline-block;margin:.1rem .15rem .1rem 0}
+  .mf-chip.package{background:#ecfdf5;border-color:#a7f3d0;color:#065f46}
+  .mf-chip.role{background:#eff6ff;border-color:#bfdbfe;color:#1e40af}
+  .mf-chip.ask{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+  .mf-rule-off{opacity:.5}
+  .mf-docket{border-radius:14px;border:1px solid #e2e8f0}
+  .nav-pills .nav-link.active{background:#0F766E}
+  .nav-pills .nav-link{color:#0F766E}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:1200px;">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-0">
+        <li class="breadcrumb-item"><a href="{% url 'vehicles:package_list' %}">Packages</a></li>
+        <li class="breadcrumb-item active">Mail flows</li>
+      </ol>
+    </nav>
+    <div class="d-flex gap-2">
+      <a href="{% url 'accounts:esign_workflows' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bezier2 me-1"></i>Open Flow Studio</a>
+      <a href="{% url 'vehicles:package_mailflow_route_new' %}" class="btn btn-success btn-sm"><i class="bi bi-plus-lg me-1"></i>New mail rule</a>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="mf-hero p-4 mb-4 shadow-sm">
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <i class="bi bi-mailbox2 fs-1"></i>
+      <div>
+        <h2 class="fw-bold mb-0">Mail flows for {{ agency.name }}</h2>
+        <div class="opacity-75">Run packages through any flow you draw in Flow Studio — approvals, branches, signatures and all.</div>
+      </div>
+    </div>
+    <div class="mf-how small">
+      <div class="step"><div class="fw-bold mb-1"><i class="bi bi-1-circle me-1"></i>The docket</div>Every package becomes a filled-in Mail docket form. Flows read it like any form.</div>
+      <div class="step"><div class="fw-bold mb-1"><i class="bi bi-2-circle me-1"></i>The flow</div>Draw it in Flow Studio, or start from a ready-made mail flow and change it.</div>
+      <div class="step"><div class="fw-bold mb-1"><i class="bi bi-3-circle me-1"></i>The rules</div>Rules pick the flow for each item — by type, sender, destination or words it mentions.</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3"><div class="mf-stat shadow-sm p-3"><div class="num text-success">{{ stats.started }}</div><div class="small text-muted">started on Flow Studio · 30 days</div></div></div>
+    <div class="col-6 col-lg-3"><div class="mf-stat shadow-sm p-3"><div class="num" style="color:#0B4F6C;">{{ stats.open }}</div><div class="small text-muted">moving right now</div></div></div>
+    <div class="col-6 col-lg-3"><div class="mf-stat shadow-sm p-3"><div class="num" style="color:#7C3AED;">{{ stats.by_rule }}</div><div class="small text-muted">routed by a rule · 30 days</div></div></div>
+    <div class="col-6 col-lg-3"><div class="mf-stat shadow-sm p-3"><div class="num {% if stats.attention %}text-danger{% else %}text-muted{% endif %}">{{ stats.attention }}</div><div class="small text-muted">need attention</div></div></div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+
+      <ul class="nav nav-pills mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tabIncoming" type="button"><i class="bi bi-box-arrow-in-down me-1"></i>Incoming</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tabOutgoing" type="button"><i class="bi bi-box-arrow-up-right me-1"></i>Outgoing</button></li>
+      </ul>
+
+      <div class="tab-content">
+      {% include "vehicles/packages/_mailflow_direction.html" with direction="incoming" label="Incoming" d=dockets.incoming rules=routes.incoming active=True %}
+      {% include "vehicles/packages/_mailflow_direction.html" with direction="outgoing" label="Outgoing" d=dockets.outgoing rules=routes.outgoing active=False %}
+      </div>
+
+      <!-- Adopt my flows -->
+      <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header bg-white py-3">
+          <h6 class="mb-0 fw-semibold"><i class="bi bi-bezier2 text-success me-2"></i>Use one of your Flow Studio flows</h6>
+        </div>
+        <div class="card-body">
+          <p class="small text-muted">Binding a flow to the mail docket lets its conditions, routes and fill-in steps read package details
+            (<code>item_type</code>, <code>sender_type</code>, <code>destination_agency</code>, <code>dest_focal_email</code> …) and shares it with the mailroom.</p>
+          {% for f in my_flows %}
+            <div class="d-flex flex-wrap align-items-center gap-2 py-2 border-top">
+              <div class="flex-grow-1">
+                <a href="{% url 'accounts:esign_workflow_designer' f.wf.pk %}" class="fw-semibold text-decoration-none">{{ f.wf.name }}</a>
+                <span class="text-muted small">· {{ f.wf.step_count }} step{{ f.wf.step_count|pluralize }}</span>
+                {% if f.on_docket %}<span class="badge bg-success-subtle text-success-emphasis ms-1">On the docket</span>{% endif %}
+                {% if f.rules %}<span class="badge bg-light text-dark border ms-1">{{ f.rules }} rule{{ f.rules|pluralize }}</span>{% endif %}
+              </div>
+              {% if f.on_docket %}
+                <a href="{% url 'vehicles:package_mailflow_route_new' %}?workflow={{ f.wf.pk }}" class="btn btn-sm btn-outline-success"><i class="bi bi-plus-lg me-1"></i>Add a rule</a>
+              {% else %}
+              <form method="post" action="{% url 'vehicles:package_mailflow_adopt' f.wf.pk %}" class="d-flex gap-1">
+                {% csrf_token %}
+                <select name="direction" class="form-select form-select-sm" style="width:auto;">
+                  <option value="incoming">Incoming</option><option value="outgoing">Outgoing</option>
+                </select>
+                <button class="btn btn-sm btn-success"><i class="bi bi-link-45deg me-1"></i>Use as mail flow</button>
+              </form>
+              {% endif %}
+            </div>
+          {% empty %}
+            <div class="text-muted small">You haven't drawn any flows yet. Start from a ready-made mail flow above, or
+              <a href="{% url 'accounts:esign_workflow_new' %}">draw one in Flow Studio</a>.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="col-lg-4">
+
+      <!-- Test bench -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3"><h6 class="mb-0 fw-semibold"><i class="bi bi-flask text-primary me-2"></i>Test bench</h6></div>
+        <div class="card-body" id="bench">
+          <p class="small text-muted mb-2">Describe an item and see which flow it would take — and who it would reach.</p>
+          <div class="row g-2">
+            <div class="col-6"><select class="form-select form-select-sm" name="direction"><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select></div>
+            <div class="col-6"><input class="form-control form-control-sm" name="item_type" placeholder="Item type"></div>
+            <div class="col-6"><select class="form-select form-select-sm" name="sender_type"><option value="">Sender type…</option>{% for code, label in sender_types %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></div>
+            <div class="col-6"><input class="form-control form-control-sm" name="sender_name" placeholder="Sender"></div>
+            <div class="col-6"><input class="form-control form-control-sm" name="destination_agency" placeholder="For (agency)"></div>
+            <div class="col-6"><input class="form-control form-control-sm" name="dest_focal_email" placeholder="Focal email"></div>
+            <div class="col-12"><input class="form-control form-control-sm" name="description" placeholder="Description / keywords"></div>
+          </div>
+          <div class="mt-3 small" id="benchOut"><span class="text-muted">Start typing…</span></div>
+        </div>
+      </div>
+
+      <!-- Pulse -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3"><h6 class="mb-0 fw-semibold"><i class="bi bi-activity text-success me-2"></i>Mail pulse — where items are waiting</h6></div>
+        <div class="card-body">
+          {% for row in pulse %}
+            <div class="d-flex justify-content-between small py-1 border-bottom">
+              <span>{{ row.stage|default:"Moving" }}</span><span class="badge bg-light text-dark border">{{ row.n }}</span>
+            </div>
+          {% empty %}
+            <div class="text-muted small">Nothing is waiting. 🎉</div>
+          {% endfor %}
+          {% if attention %}
+            <div class="mt-3 small fw-semibold text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Needs attention</div>
+            {% for l in attention %}
+              <a class="d-block small text-decoration-none" href="{% url 'vehicles:package_detail' l.package.pk %}">{{ l.package.tracking_code }} — {{ l.run.block_reason|truncatechars:60 }}</a>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm">
+        <div class="card-body small">
+          <div class="fw-semibold mb-2"><i class="bi bi-people me-1"></i>Roles filled for you</div>
+          <div class="mb-1"><span class="mf-chip package">From the package</span> Focal point · Recipient · Sender · Mailroom</div>
+          <div class="mb-1"><span class="mf-chip role">From the office</span> Registry · Reception · ICT Focal Point · LSA · SOC</div>
+          <div><span class="mf-chip ask">Asked at logging</span> any other role name</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const bench = document.getElementById('bench');
+  const out = document.getElementById('benchOut');
+  const url = "{{ plan_url|escapejs }}";
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let t = null;
+  function run() {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      const p = new URLSearchParams({choice: 'auto'});
+      bench.querySelectorAll('[name]').forEach(el => { if (el.value) p.set(el.name, el.value); });
+      fetch(url + '?' + p.toString(), {credentials: 'same-origin'}).then(r => r.json()).then(d => {
+        if (!d.flow) { out.innerHTML = '<span class="text-muted">' + esc(d.message) + '</span>'; return; }
+        let h = '<div class="fw-semibold"><i class="bi bi-arrow-right-circle text-success me-1"></i>' + esc(d.flow.name) + '</div>';
+        if (d.rule) h += '<div class="text-muted">' + (d.rule.picked === 'fallback' ? 'Fallback — no rule matched' : 'Rule: ' + esc(d.rule.name)) + '</div>';
+        h += '<div class="mt-1">' + (d.flow.steps || []).map((s, i) => '<span class="mf-chip">' + (i + 1) + '. ' + esc(s) + '</span>').join('') + '</div>';
+        (d.slots || []).forEach(s => {
+          h += '<div class="mt-1"><span class="mf-chip ' + (s.auto ? 'package' : 'ask') + '">' + esc(s.label) + '</span> '
+             + (s.auto ? esc(s.people.join(', ')) + (s.more ? ' +' + s.more : '') : '<em>asked at logging</em>') + '</div>';
+        });
+        out.innerHTML = h;
+      }).catch(() => { out.innerHTML = '<span class="text-danger">Couldn’t check right now.</span>'; });
+    }, 300);
+  }
+  bench.addEventListener('input', run);
+  bench.addEventListener('change', run);
+});
+</script>
+{% endblock %}

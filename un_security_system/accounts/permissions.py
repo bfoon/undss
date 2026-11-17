@@ -54,12 +54,14 @@ def can_manage_user(request_user, target_user):
     Returns:
         bool: True if management is allowed
     """
-    # Superuser and LSA can manage anyone
-    if request_user.is_superuser or is_lsa(request_user):
+    from access.services import can
+
+    # Superuser, or anyone holding "Manage staff in every agency" (LSA by default)
+    if request_user.is_superuser or can(request_user, "users.manage_all"):
         return True
 
-    # ICT focal can manage users in their agency (but not themselves)
-    if is_ict_focal(request_user):
+    # "Manage staff in my agency" (ICT focal by default) — not themselves
+    if can(request_user, "users.manage_agency", agency=target_user.agency_id):
         return (
                 request_user.agency_id and
                 target_user.agency_id == request_user.agency_id and
@@ -85,16 +87,19 @@ def can_view_user(request_user, target_user):
     Returns:
         bool: True if viewing is allowed
     """
-    # Superuser and LSA can view anyone
-    if request_user.is_superuser or is_lsa(request_user):
+    from access.services import can
+
+    # Superuser, or anyone who may manage every agency's staff
+    if request_user.is_superuser or can(request_user, "users.manage_all"):
         return True
 
     # Users can view themselves
     if request_user.id == target_user.id:
         return True
 
-    # ICT focal can view users in their agency
-    if is_ict_focal(request_user):
+    # "View staff in my agency" or "Manage staff in my agency"
+    if (can(request_user, "users.view_agency", agency=target_user.agency_id)
+            or can(request_user, "users.manage_agency", agency=target_user.agency_id)):
         return (
                 request_user.agency_id and
                 target_user.agency_id == request_user.agency_id

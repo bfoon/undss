@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Access matrix{% endblock %}
+{% block extra_css %}
+<style>
+  .ax-matrix{font-size:.8rem}
+  .ax-matrix th.rot{height:150px;white-space:nowrap;vertical-align:bottom;padding:0 0 .5rem}
+  .ax-matrix th.rot > div{transform:rotate(-55deg);width:34px;transform-origin:16px 0}
+  .ax-matrix td.cell{text-align:center;width:38px;cursor:default}
+  .ax-matrix td.cell.edit{cursor:pointer}
+  .ax-matrix td.cell.edit:hover{background:#eef2ff}
+  .ax-dot{display:inline-block;width:18px;height:18px;border-radius:6px;border:1.5px solid #cbd5e1}
+  .ax-dot.on{background:var(--c);border-color:var(--c)}
+  .ax-dot.locked{outline:2px dashed #94a3b8;outline-offset:1px}
+  .ax-matrix .mod td{background:#f1f5f9;font-weight:700;color:#334155}
+  .ax-matrix tbody tr:hover td.lbl{background:#f8fafc}
+  .sticky-col{position:sticky;left:0;background:#fff;z-index:1;min-width:270px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid py-4" style="max-width:1500px;">
+  {% include "access/_header.html" %}
+  <div class="ax-card p-3">
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2 small text-muted">
+      <span><span class="ax-dot on" style="--c:#312e81;vertical-align:middle;"></span> holds it</span>
+      <span><span class="ax-dot on locked" style="--c:#312e81;vertical-align:middle;"></span> locked (system role's own power)</span>
+      <span>Click a square in a role you can edit to switch a power on or off — it takes effect at once.</span>
+    </div>
+    <div id="mxMsg"></div>
+    <div class="table-responsive">
+      <table class="table table-sm ax-matrix mb-0">
+        <thead><tr><th class="sticky-col"></th>
+          {% for r in roles %}<th class="rot"><div><a href="{% url 'access:role_detail' r.pk %}" class="text-decoration-none" style="color:{{ r.color }};"><i class="bi {{ r.icon }}"></i> {{ r.name|truncatechars:26 }}</a></div></th>{% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for row in rows %}
+          <tr class="mod"><td class="sticky-col">{{ row.module }}</td>{% for r in roles %}<td></td>{% endfor %}</tr>
+          {% for c in row.caps %}
+          <tr>
+            <td class="lbl sticky-col"><i class="bi {{ c.cap.icon }} text-secondary me-1"></i>{{ c.cap.label }} <span class="risk-{{ c.cap.risk }}">●</span></td>
+            {% for cell in c.cells %}
+              <td class="cell {% if cell.role.pk in editable and not cell.locked %}edit{% endif %}" data-role="{{ cell.role.pk }}" data-cap="{{ c.cap.code }}" title="{{ cell.role.name }} — {{ c.cap.label }}">
+                <span class="ax-dot {% if cell.on %}on{% endif %} {% if cell.locked %}locked{% endif %}" style="--c:{{ cell.role.color }};"></span>
+              </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const url = "{% url 'access:matrix_toggle' %}";
+  const csrf = "{{ csrf_token }}";
+  const msg = document.getElementById('mxMsg');
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  document.querySelectorAll('td.cell.edit').forEach(td => td.addEventListener('click', () => {
+    const body = new URLSearchParams({role: td.dataset.role, cap: td.dataset.cap});
+    fetch(url, {method: 'POST', body, headers: {'X-CSRFToken': csrf}, credentials: 'same-origin'})
+      .then(r => r.json()).then(d => {
+        if (!d.ok) { msg.innerHTML = '<div class="alert alert-danger small py-2">' + esc(d.error) + '</div>'; return; }
+        td.querySelector('.ax-dot').classList.toggle('on', d.on);
+        msg.innerHTML = (d.warnings || []).map(w => '<div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle me-1"></i>' + esc(w) + '</div>').join('');
+      });
+  }));
+});
+</script>
+{% endblock %}

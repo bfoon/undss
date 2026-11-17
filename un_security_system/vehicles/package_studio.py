@@ -1,6 +1,6 @@
 # vehicles/package_studio.py
 """
-Bridge between Packages & Mailroom and NES Flow Studio.
+Bridge between Packages & Mailroom and eSign Flow Studio.
 
 Nothing here re-implements workflow logic. A package that uses a Studio flow:
 

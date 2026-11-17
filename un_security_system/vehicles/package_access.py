@@ -12,8 +12,9 @@ Who can see a package.
                            moved. They cannot see another office's mail.
 
     Everybody else         only packages they are part of — theirs, addressed
-                           to them, handled by them, waiting on their step, or
-                           carrying a document they are signing.
+                           to them, handled by them, waiting on their step,
+                           carrying a document they are signing, or running
+                           on a Flow Studio flow where they have a task.
 
 Sharing an agency or a job title with someone does not let you read their mail.
 Running the mailroom does, for your own office only.
@@ -46,8 +47,11 @@ def is_mailroom_staff(user) -> bool:
     if not user or not getattr(user, "is_authenticated", False):
         return False
 
-    role = (getattr(user, "role", "") or "").strip().lower()
-    if role in MAILROOM_ROLES:
+    from access.services import acts_as, can
+
+    # "See all of the office's mail" (Reception and Registry by default), or a
+    # custom role that acts as one of them.
+    if can(user, "packages.see_office") or acts_as(user, *MAILROOM_ROLES):
         return True
 
     try:
@@ -67,7 +71,9 @@ def can_log_incoming_package(user) -> bool:
         return False
     if getattr(user, "is_superuser", False):
         return True
-    return is_mailroom_staff(user)
+    from access.services import can
+
+    return can(user, "packages.log_incoming")
 
 
 def _office_scope_q(user):
@@ -164,6 +170,13 @@ def visible_packages_for(user, queryset=None):
         step_logs__documents__esign_envelope__recipients__role__in=SIGNING_ROLES,
     )
 
+    # A participant in the package's Flow Studio run — someone with a task on
+    # it now or earlier (approver, reviewer, filler, signer's preparer), or the
+    # owner of the flow when they monitor its runs.
+    visibility |= Q(studio_link__run__tasks__user=user)
+    visibility |= Q(studio_link__run__workflow__created_by=user,
+                    studio_link__run__workflow__monitor_runs=True)
+
     # Addressed to them, or a signing participant matched by email.
     email = (getattr(user, "email", "") or "").strip()
     if email:
@@ -173,6 +186,11 @@ def visible_packages_for(user, queryset=None):
         visibility |= Q(
             step_logs__documents__esign_envelope__recipients__email__iexact=email,
             step_logs__documents__esign_envelope__recipients__role__in=SIGNING_ROLES,
+        )
+        visibility |= Q(studio_link__run__tasks__email__iexact=email)
+        visibility |= Q(
+            studio_link__run__tasks__envelope__recipients__email__iexact=email,
+            studio_link__run__tasks__envelope__recipients__role__in=SIGNING_ROLES,
         )
 
     # Their turn to act. Without this, a step assigned to a role other than
