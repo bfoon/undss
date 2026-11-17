@@ -19,3 +19,7 @@ icalendar
 openpyxl
 python-docx
 cryptography>=41
+
+# NES PAdES digital seal (ETSI EN 319 142). Optional at runtime: if this is
+# missing, envelopes still complete and the seal is recorded as skipped.
+pyHanko>=0.20

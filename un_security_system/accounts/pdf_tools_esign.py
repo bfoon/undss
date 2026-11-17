@@ -1,6 +1,6 @@
 # accounts/pdf_tools_esign.py
 """
-UN PASS — eSign Studio PDF operations.
+UN PASS — NES Studio PDF operations.
 
 Every function here takes bytes and returns bytes (or a list of named bytes).
 Nothing touches the database or the request, which keeps the tools easy to test
@@ -11,7 +11,7 @@ Requires pypdf >= 4, reportlab, Pillow — already used by utils_esign.py.
 Rotation, once, properly
 ------------------------
 `page.rotate(90)` only sets the /Rotate flag. Anything later drawn on that page
-with ReportLab — a watermark, a page number, an edit, an eSign field — is
+with ReportLab — a watermark, a page number, an edit, an NES field — is
 placed in the *unrotated* coordinate space and lands in the wrong corner.
 `normalise_rotation` bakes the flag into the page content, so what you see is
 what every later stamp measures. Every operation here normalises its output.
@@ -89,7 +89,7 @@ def normalise_rotation(page):
         if int(page.get("/Rotate", 0) or 0) % 360:
             page.transfer_rotation_to_content()
     except Exception:  # noqa: BLE001
-        logger.warning("eSign Studio: could not normalise page rotation", exc_info=True)
+        logger.warning("NES Studio: could not normalise page rotation", exc_info=True)
     return page
 
 

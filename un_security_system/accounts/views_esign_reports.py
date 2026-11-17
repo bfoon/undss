@@ -1,5 +1,5 @@
 # accounts/views_esign_reports.py
-"""Views for the UN PASS eSign BI-style Report Builder."""
+"""Views for the UN PASS NES BI-style Report Builder."""
 
 from __future__ import annotations
 
@@ -150,7 +150,7 @@ def report_designer(request, pk):
 def report_save(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
-        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+        return JsonResponse({"ok": False, "error": "NES is not enabled."}, status=403)
 
     report = _report_or_404(request, pk, edit=True)
     body, problem = json_body(request, "flow")
@@ -212,7 +212,7 @@ def report_view(request, pk):
 def report_query(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
-        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+        return JsonResponse({"ok": False, "error": "NES is not enabled."}, status=403)
 
     report = _report_or_404(request, pk, edit=False)
     body, problem = json_body(request, "flow")

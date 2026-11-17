@@ -422,7 +422,7 @@ class _Brand extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         const Text(
-          'Secure access • eSign • assets',
+          'Secure access • NES • assets',
           style: TextStyle(
             color: Color(0xFFCFE6F5),
             fontSize: 15,

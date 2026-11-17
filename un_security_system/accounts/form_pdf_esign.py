@@ -1,15 +1,15 @@
 # accounts/form_pdf_esign.py
 """
-UN PASS — eSign Studio forms: schema, validation and PDF rendering.
+UN PASS — NES Studio forms: schema, validation and PDF rendering.
 
 A form is a flat list of elements laid out on a 12-column grid. Each element
 has a width (3, 4, 6, 8, 9 or 12); elements flow left to right and wrap to a
 new row, the same way on screen and on paper. That is what makes the designer
 honest: what you arrange is what prints.
 
-Signature elements are the bridge to eSign. When a form is rendered, the exact
+Signature elements are the bridge to NES. When a form is rendered, the exact
 position of every signature box is returned alongside the PDF, so a signature
-step can place real eSign fields precisely where the form designer drew them.
+step can place real NES fields precisely where the form designer drew them.
 
 Unicode
 -------
@@ -591,7 +591,7 @@ def _font_names(family):
                 pdfmetrics.registerFont(TTFont("EsignSans-Bold", bold_path or reg_path))
                 _fonts_ready["unicode"] = True
             except Exception:  # noqa: BLE001
-                logger.warning("eSign Studio: could not register ESIGN_PDF_FONT_* — using Helvetica")
+                logger.warning("NES Studio: could not register ESIGN_PDF_FONT_* — using Helvetica")
                 _fonts_ready["unicode"] = False
         if _fonts_ready.get("unicode"):
             return "EsignSans", "EsignSans-Bold"

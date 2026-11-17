@@ -12,7 +12,7 @@ one:
 Why this is cached
 ------------------
 A context processor runs on **every** page render, including pages that have
-nothing to do with eSign. An uncached count is one extra query on every request
+nothing to do with NES. An uncached count is one extra query on every request
 in the platform, forever, to render a number that changes a few times a day.
 
 So the count is cached per user for a minute, and invalidated the moment it
@@ -67,7 +67,7 @@ def bump_envelope_badges(envelope):
 
 def esign_action_count(user) -> int:
     """
-    Things this person can act on right now: envelopes to sign, plus eSign
+    Things this person can act on right now: envelopes to sign, plus NES
     Studio workflow steps (approve, review, fill in, resubmit) waiting on them.
 
     Counts the same rows the dashboard's "Needs your signature" and "Workflow

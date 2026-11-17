@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>eSign Analytics Report</title>
+<title>NES Analytics Report</title>
 <style>
 body{font-family:Arial,sans-serif;margin:24px;color:#0F172A}
 h1,h2,h3{margin:0 0 10px 0}
@@ -18,13 +18,13 @@ ul{padding-left:18px}
 </style>
 </head>
 <body>
-  <h1>eSign · Forms · Flow Analytics Report</h1>
+  <h1>NES · Forms · Flow Analytics Report</h1>
   <div class="muted">
     Scope: {{ access.label }} · {{ access.level_label }} · {{ period_label }} · Generated {{ generated_at|date:"d M Y H:i" }}
   </div>
 
   <div class="grid">
-    <div class="card"><div class="muted">eSign envelopes</div><div class="metric">{{ metrics.envelope_total }}</div></div>
+    <div class="card"><div class="muted">NES envelopes</div><div class="metric">{{ metrics.envelope_total }}</div></div>
     <div class="card"><div class="muted">Form submissions</div><div class="metric">{{ metrics.submissions_total }}</div></div>
     <div class="card"><div class="muted">Flow runs</div><div class="metric">{{ metrics.runs_total }}</div></div>
     <div class="card"><div class="muted">Active users</div><div class="metric">{{ metrics.active_users }}</div></div>
@@ -34,10 +34,10 @@ ul{padding-left:18px}
     <h2>Operational KPIs</h2>
     <table>
       <tbody>
-        <tr><th>eSign completion rate</th><td>{{ metrics.envelope_completion_rate }}%</td></tr>
+        <tr><th>NES completion rate</th><td>{{ metrics.envelope_completion_rate }}%</td></tr>
         <tr><th>Form completion rate</th><td>{{ metrics.form_completion_rate }}%</td></tr>
         <tr><th>Flow completion rate</th><td>{{ metrics.run_completion_rate }}%</td></tr>
-        <tr><th>Average eSign completion</th><td>{{ metrics.avg_envelope_completion }}</td></tr>
+        <tr><th>Average NES completion</th><td>{{ metrics.avg_envelope_completion }}</td></tr>
         <tr><th>Average flow completion</th><td>{{ metrics.avg_run_completion }}</td></tr>
         <tr><th>Open tasks</th><td>{{ metrics.open_tasks }}</td></tr>
         <tr><th>Overdue tasks</th><td>{{ metrics.overdue_tasks }}</td></tr>

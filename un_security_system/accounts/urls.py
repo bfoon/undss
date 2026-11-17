@@ -266,7 +266,7 @@ urlpatterns = [
     path("batch/upload/<str:kind>/", views_batch.batch_upload_csv, name="batch_upload"),
 
     # ------------------------------------------------------------------
-    # eSign — DocuSign-style electronic signature (ICT & Assets)
+    # NES — DocuSign-style electronic signature (ICT & Assets)
     # ------------------------------------------------------------------
 
     # Sender side (login required)
@@ -319,7 +319,7 @@ urlpatterns = [
     path("esign/signatures/<int:pk>/default/", views_esign.esign_signature_default, name="esign_signature_default"),
 
     # ------------------------------------------------------------------
-    # eSign Studio — PDF workbench
+    # NES Studio — PDF workbench
     # ------------------------------------------------------------------
     path("esign/studio/", views_esign_studio.esign_studio, name="esign_studio"),
     path("esign/studio/upload/", views_esign_studio.esign_studio_upload, name="esign_studio_upload"),
@@ -337,7 +337,7 @@ urlpatterns = [
     path("esign/studio/files/<int:pk>/edit/save/", views_esign_studio.esign_studio_edit_save, name="esign_studio_edit_save"),
     path("esign/studio/files/<int:pk>/sign/", views_esign_studio.esign_studio_to_sign, name="esign_studio_to_sign"),
 
-    # eSign Studio — workflows
+    # NES Studio — workflows
     path("esign/workflows/", views_esign_workflow.esign_workflows, name="esign_workflows"),
     path("esign/workflows/new/", views_esign_workflow.esign_workflow_new, name="esign_workflow_new"),
     path("esign/workflows/import/", views_esign_workflow.esign_workflow_import, name="esign_workflow_import"),
@@ -357,7 +357,7 @@ urlpatterns = [
     path("esign/wf/t/<str:token>/", views_esign_workflow.esign_wf_task, name="esign_wf_task"),
     path("esign/wf/t/<str:token>/pdf/", views_esign_workflow.esign_wf_task_pdf, name="esign_wf_task_pdf"),
 
-    # eSign Studio — forms
+    # NES Studio — forms
     path("esign/forms/", views_esign_forms.esign_forms, name="esign_forms"),
     path("esign/forms/new/", views_esign_forms.esign_form_new, name="esign_form_new"),
     path("esign/forms/import-word/", views_esign_forms.esign_form_import_word, name="esign_form_import_word"),
@@ -560,6 +560,12 @@ urlpatterns = [
     path("", include("accounts.urls_asset_health")),
     path("", include("accounts.urls_esign_docgen")),
     path("", include("accounts.urls_esign_triggers")),
+
+    # NES PAdES seal verification (ETSI EN 319 142)
+    path("", include("accounts.urls_esign_pades")),
+
+    # NES cross-office witnessing
+    path("", include("accounts.urls_esign_witness")),
 
 
 ]

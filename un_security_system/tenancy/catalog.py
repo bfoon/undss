@@ -225,11 +225,21 @@ FEATURES: Tuple[FeatureDef, ...] = (
         code="mailroom_signing",
         name="Mailroom document signing",
         category="facilities",
-        description="Prepare package-step documents in the shared eSign engine, including "
+        description="Prepare package-step documents in the shared NES engine, including "
                     "recipients, field placement, signing, audit trail and certificate.",
         requires=("mailroom", "esign"),
         delegable=True,
         url_rules=("vehicles:document_*", "vehicles:signature_*"),
+    ),
+    FeatureDef(
+        code="mailroom_studio",
+        name="Mailroom on Flow Studio",
+        category="facilities",
+        description="Run packages through NES Flow Studio flows: mail docket, mail rules, "
+                    "starter flows, slot auto-binding and live run tracking on each package.",
+        requires=("mailroom", "esign"),
+        delegable=True,
+        url_rules=("vehicles:package_mailflow_*",),
     ),
 
     # ── ICT & Assets ───────────────────────────────────────────────────────
@@ -279,7 +289,7 @@ FEATURES: Tuple[FeatureDef, ...] = (
     ),
     FeatureDef(
         code="esign",
-        name="eSign",
+        name="NES",
         category="ict",
         description="Electronic signature envelopes, recipients and audit trail.",
         default_enabled=True,
@@ -288,7 +298,7 @@ FEATURES: Tuple[FeatureDef, ...] = (
     ),
     FeatureDef(
         code="esign_markup",
-        name="eSign document markup",
+        name="NES document markup",
         category="ict",
         description="Highlight, freehand and area-select comments on envelopes.",
         requires=("esign",),

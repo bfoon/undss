@@ -35,7 +35,7 @@ SCOPE_CHOICES = (
 
 class DashboardAccessGrant(models.Model):
     """
-    Explicit dashboard access for eSign / Forms / Flow analytics.
+    Explicit dashboard access for NES / Forms / Flow analytics.
 
     The table is intentionally managed outside Django migrations because this
     UNPASS deployment currently has migration-history inconsistencies.

@@ -1,6 +1,6 @@
 # accounts/docgen_esign.py
 """
-UN PASS — eSign Studio: building the follow-on document.
+UN PASS — NES Studio: building the follow-on document.
 
 A rule says "take this submission, write these answers into that form, number
 it, render it and send it". The values are written with the same formula
@@ -266,7 +266,7 @@ def generate(rule, submission, *, run=None, actor=None, request=None, force=Fals
                     status=FormSubmission.STATUS_SUBMITTED,
                 )
             except IntegrityError:
-                logger.warning("eSign Studio: reference clash writing %s for %s", number, submission.reference)
+                logger.warning("NES Studio: reference clash writing %s for %s", number, submission.reference)
 
             pdf, _boxes = render_form_pdf(
                 schema, values,
@@ -286,7 +286,7 @@ def generate(rule, submission, *, run=None, actor=None, request=None, force=Fals
             _start_child_flow(rule, child, request=request, actor=actor or submission.submitted_by)
 
     except Exception as exc:  # noqa: BLE001
-        logger.exception("eSign Studio: could not generate “%s” for %s", rule.name, submission.reference)
+        logger.exception("NES Studio: could not generate “%s” for %s", rule.name, submission.reference)
         document.status = GeneratedDocument.STATUS_FAILED
         document.error = str(exc)[:300]
         document.save()
@@ -317,7 +317,7 @@ def _start_child_flow(rule, child, *, request=None, actor=None):
             subject=f"{child.title} — {child.reference}", submission=child, slots={}, request=request,
         )
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: the follow-on flow for %s could not start", child.reference)
+        logger.exception("NES Studio: the follow-on flow for %s could not start", child.reference)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -340,7 +340,7 @@ def run_rules(submission, trigger, *, run=None, node_id="", request=None, actor=
                 continue
             made.append(generate(rule, submission, run=run, request=request, actor=actor))
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: rule %s failed for %s", rule.pk, submission.reference)
+            logger.exception("NES Studio: rule %s failed for %s", rule.pk, submission.reference)
     return made
 
 
@@ -409,7 +409,7 @@ def deliver(document, request=None):
         data = document.pdf.read()
         document.pdf.close()
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: could not read %s for delivery", document.number)
+        logger.exception("NES Studio: could not read %s for delivery", document.number)
         return 0
 
     subject = (rule.email_subject or f"{rule.name}: {document.number}")[:200]
@@ -421,7 +421,7 @@ def deliver(document, request=None):
                 to_emails=[person["email"]],
                 html_template="accounts/esign/email/workflow_update.html",
                 context={
-                    "brand": getattr(settings, "ESIGN_BRAND", "UNDP eSign"),
+                    "brand": getattr(settings, "ESIGN_BRAND", "NES"),
                     "now": timezone.now(),
                     "subject": subject,
                     "subject_line": document.title,
@@ -438,7 +438,7 @@ def deliver(document, request=None):
             )
             sent += 1
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: could not email %s to %s", document.number, person["email"])
+            logger.exception("NES Studio: could not email %s to %s", document.number, person["email"])
 
     if sent:
         document.status = GeneratedDocument.STATUS_SENT

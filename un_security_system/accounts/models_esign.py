@@ -1,6 +1,6 @@
 # accounts/models_esign.py
 """
-UN PASS — eSign module (DocuSign-style envelopes)
+UN PASS — NES module (DocuSign-style envelopes)
 
 Drop this file into your `accounts` app next to models.py, then add ONE line at
 the very bottom of accounts/models.py:
@@ -598,6 +598,9 @@ class EnvelopeEvent(models.Model):
         ("downloaded", "Downloaded"),
         ("voided", "Voided"),
         ("resent", "Resent"),
+        # PAdES (ETSI EN 319 142) sealing of the completed PDF.
+        ("sealed", "Sealed with a digital certificate"),
+        ("seal_failed", "Digital seal could not be applied"),
     ]
 
     envelope = models.ForeignKey(Envelope, on_delete=models.CASCADE, related_name="events")
@@ -619,11 +622,30 @@ class EnvelopeEvent(models.Model):
     meta = models.JSONField(default=dict, blank=True)
     at = models.DateTimeField(default=timezone.now, db_index=True)
 
+    # -- tamper-evident chain -------------------------------------------
+    #: SHA-256 of the previous entry in this envelope's chain; empty on the
+    #: first entry. Together with `entry_hash` this makes the trail
+    #: tamper-EVIDENT: editing, deleting or inserting a row breaks the link
+    #: at that point and `audit_chain_esign.verify_chain()` reports where.
+    #:
+    #: Truncating the chain from the end cannot be caught by the links alone,
+    #: which is why EnvelopeSeal records the head hash and the entry count and
+    #: signs them. See accounts/audit_chain_esign.py.
+    prev_hash = models.CharField(max_length=64, blank=True, default="")
+    entry_hash = models.CharField(
+        max_length=64, blank=True, default="", db_index=True
+    )
+
     class Meta:
         ordering = ["at", "id"]
 
     def __str__(self):
         return f"{self.at:%Y-%m-%d %H:%M} — {self.get_event_display()}"
+
+    @property
+    def is_chained(self) -> bool:
+        """False for entries written before the chain existed."""
+        return bool(self.entry_hash)
 
     @property
     def icon(self) -> str:
@@ -649,4 +671,6 @@ class EnvelopeEvent(models.Model):
             "downloaded": "bi-download",
             "voided": "bi-slash-circle",
             "resent": "bi-arrow-repeat",
+            "sealed": "bi-shield-lock",
+            "seal_failed": "bi-shield-exclamation",
         }.get(self.event, "bi-dot")

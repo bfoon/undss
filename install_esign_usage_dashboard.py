@@ -69,7 +69,7 @@ def patch_navigation():
 
     if (
         "esign_dashboard_tags" in text
-        and "eSign Usage Dashboard" in text
+        and "NES Usage Dashboard" in text
     ):
         print("Navigation already contains the dashboard button.")
         return
@@ -87,9 +87,9 @@ def patch_navigation():
     {% url 'esign_analytics:dashboard' as u %}
     <a class="appnav-link {% if '/insights/esign/' in request.path %}is-active{% endif %}"
        href="{{ u }}?scope={{ esign_usage_access.preferred_scope }}"
-       data-appnav-label="eSign Usage Dashboard">
+       data-appnav-label="NES Usage Dashboard">
       <i class="bi bi-bar-chart-line-fill" aria-hidden="true"></i>
-      <span>eSign Usage Dashboard</span>
+      <span>NES Usage Dashboard</span>
       <span class="appnav-count">L{{ esign_usage_access.max_level }}</span>
     </a>
   </div>
@@ -115,4 +115,4 @@ def patch_navigation():
 
 patch_project_urls()
 patch_navigation()
-print("eSign / Forms / Flow dashboard wiring complete.")
+print("NES / Forms / Flow dashboard wiring complete.")

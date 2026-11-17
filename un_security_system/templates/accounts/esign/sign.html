@@ -334,7 +334,7 @@ const DOCS   = {{ documents_json|safe }};
 const FIELDS = {{ fields_json|safe }};
 const OTHERS = {{ others_json|safe }};
 const ENVELOPE_ID = "{{ envelope.envelope_id }}";
-const BRAND = "{{ esign_brand|default:'UNDP eSign' }}";
+const BRAND = "{{ esign_brand|default:'NES' }}";
 
 const values = {};          // field id -> what is DISPLAYED in the field
 const refs   = {};          // field id -> what is SENT to the server
@@ -593,7 +593,7 @@ document.getElementById('esStart').onclick = nextField;
 function openPad(opts) {
   if (!window.EsignPad || typeof EsignPad.open !== 'function') {
     alert('The signature tool failed to load. Please refresh the page.');
-    console.error('[eSign] EsignPad is not available — check for a script error above.');
+    console.error('[NES] EsignPad is not available — check for a script error above.');
     return;
   }
   EsignPad.open(opts);

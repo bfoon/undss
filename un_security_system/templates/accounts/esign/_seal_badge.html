@@ -1,0 +1,27 @@
+{% comment %}
+accounts/esign/_seal_badge.html — PAdES seal state for one envelope.
+
+Include with the envelope in context:
+    {% include "accounts/esign/_seal_badge.html" %}
+
+envelope.seal is a OneToOne. Where no seal row exists Django raises
+RelatedObjectDoesNotExist, which is a silent failure in templates, so the
+condition below is safe on envelopes completed before sealing existed.
+{% endcomment %}
+{% if envelope.status == 'completed' %}
+  {% with s=envelope.seal %}
+    {% if s and s.is_sealed %}
+      <a class="badge bg-{{ s.status_color }}-subtle text-{{ s.status_color }}-emphasis border border-{{ s.status_color }}-subtle text-decoration-none"
+         href="{% url 'accounts:esign_seal_verify' envelope.pk %}"
+         title="{{ s.get_level_achieved_display }}{% if s.timestamped %} · trusted timestamp{% endif %} · sealed by {{ s.signer_common_name|default:'the office seal' }}. Click to verify.">
+        <i class="bi bi-shield-lock me-1"></i>{{ s.short_level }}{% if not s.met_target %} *{% endif %}
+      </a>
+    {% elif s and s.status == 'failed' %}
+      <a class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle text-decoration-none"
+         href="{% url 'accounts:esign_seal_verify' envelope.pk %}"
+         title="The document is complete and the audit trail is intact, but no digital seal could be embedded. Click for detail.">
+        <i class="bi bi-shield-exclamation me-1"></i>Not sealed
+      </a>
+    {% endif %}
+  {% endwith %}
+{% endif %}

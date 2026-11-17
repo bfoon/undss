@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'incidents',
     'comms',
     'dashboard',
+    'access',
 ]
 
 
@@ -143,7 +144,10 @@ TEMPLATES = [
                 'accounts.context_processors.agency_service_flags',
                 'tenancy.context_processors.tenancy',
                 'accounts.context_processors_esign.esign_badge',
+                'access.context_processors.access',
             ],
+            # {% if user|can:"…" %} and {% if user|acts_as:"lsa,soc" %} in every template
+            'builtins': ['access.templatetags.access_tags'],
         },
     },
 ]
@@ -385,7 +389,150 @@ ESIGN_ATTACH_MAX_BYTES = 10 * 1024 * 1024
 # ESIGN — BRANDING
 # ---------------------------------------------------------------------
 
-ESIGN_BRAND = "UNDP eSign"
+ESIGN_BRAND = "NES"
+
+# Expanded once, wherever there is room to say what the wordmark stands for
+# (portal header, public signing footer). Keep ESIGN_BRAND itself short — it is
+# printed down the border of every stamped page.
+ESIGN_BRAND_FULL = "NES — Not eSign"
+
+
+# ---------------------------------------------------------------------
+# NES — PAdES DIGITAL SEAL  (ETSI EN 319 142)
+# ---------------------------------------------------------------------
+# Embeds a cryptographic signature inside every completed PDF, so Adobe
+# Acrobat and any ETSI-conformant validator can confirm the document is
+# authentic and unmodified without access to UN PASS.
+#
+# Off until a signing certificate exists. While off, envelopes complete
+# exactly as before — the visible signatures, the envelope token and the
+# Certificate of Completion are unchanged.
+#
+# Check the configuration with:   python manage.py esign_pades --check
+# Generate a test certificate:    python manage.py esign_pades --make-dev-cert
+ESIGN_PADES_ENABLED = False
+
+# Option A — a PKCS#12 / PFX bundle holding the key, certificate and chain.
+ESIGN_PADES_PKCS12 = ""
+ESIGN_PADES_PKCS12_PASSPHRASE = ""
+
+# Option B — separate PEM files. Used only when PKCS12 above is empty.
+ESIGN_PADES_CERT = ""
+ESIGN_PADES_KEY = ""
+ESIGN_PADES_KEY_PASSPHRASE = ""
+ESIGN_PADES_CHAIN = []          # intermediate/issuing CA certificates, PEM
+
+# Baseline conformance target: b-b | b-t | b-lt | b-lta
+#   b-b    signature + certificate                     (no TSA needed)
+#   b-t    + RFC 3161 trusted timestamp                (needs a TSA)
+#   b-lt   + embedded revocation data, long-term        (recommended)
+#   b-lta  + archival document timestamp
+# The run steps down automatically if a TSA or OCSP responder is unreachable,
+# and records the level it actually reached.
+ESIGN_PADES_LEVEL = "b-lt"
+
+# RFC 3161 timestamp authority. Required for b-t and above. A UN-operated or
+# commercial TSA both work; without one the seal is capped at b-b.
+ESIGN_PADES_TSA_URL = ""
+ESIGN_PADES_TSA_USERNAME = ""
+ESIGN_PADES_TSA_PASSWORD = ""
+
+# Root CAs trusted when UN PASS validates a seal itself (the verify page).
+# Readers use their own trust store; this only affects the in-app check.
+ESIGN_PADES_TRUST_ROOTS = []
+
+ESIGN_PADES_FIELD_NAME = "NESDocumentSeal"
+ESIGN_PADES_DIGEST = "sha256"
+ESIGN_PADES_REASON = ""          # blank -> "Completed in NES ..."
+ESIGN_PADES_LOCATION = ""        # e.g. "Banjul, The Gambia"
+
+# Seal the Certificate of Completion as well as the document. On by default:
+# the certificate is the record of WHO signed, so leaving it unsealed would
+# protect the contract and leave the evidence about it editable.
+ESIGN_PADES_SEAL_CERTIFICATE = True
+
+# ---------------------------------------------------------------------
+# NES — DECLARED SIGNATURE POLICY  (ETSI EN 319 122-1 signed attributes)
+# ---------------------------------------------------------------------
+# What the seal asserts. `proof_of_origin` is correct here: the organisation
+# attests this is the authentic completed record. It is deliberately NOT
+# proof_of_approval — the approvals belong to the people who signed inside
+# the document, not to the server that sealed it.
+# One of: proof_of_origin | proof_of_approval | proof_of_receipt |
+#         proof_of_delivery | proof_of_sender | proof_of_creation
+ESIGN_PADES_COMMITMENT = "proof_of_origin"
+
+# The published rules the seal is issued under, asserted by OID and bound to
+# a hash of the policy document so the text cannot be swapped afterwards.
+# Both the OID and a readable document are required, or the attribute is
+# omitted — an OID with a fabricated digest is worse than no attribute.
+# Register an OID under your organisation's arc; do not invent one in a
+# namespace you do not control.
+ESIGN_PADES_POLICY_OID = ""
+ESIGN_PADES_POLICY_URI = ""      # where that policy is published
+ESIGN_PADES_POLICY_DOC = ""      # local path to the exact policy file
+
+# ---------------------------------------------------------------------
+# NES — LONG-TERM VALIDITY
+# ---------------------------------------------------------------------
+# A signature is not verifiable forever by default. Document timestamps
+# extend the window, and each refresh adds one before the previous goes
+# stale. Run this on a schedule:
+#
+#   docker compose exec web python manage.py esign_pades --refresh-ltv
+#
+# 180 days is a safe cadence for commercial TSA certificates, which
+# typically run a few years. Shorter is harmless; much longer risks the
+# chain lapsing, after which it cannot be repaired.
+ESIGN_PADES_REFRESH_DAYS = 180
+
+# ---------------------------------------------------------------------
+# NES — TAMPER-EVIDENT AUDIT TRAIL
+# ---------------------------------------------------------------------
+# Hash-links every audit entry to the one before it, so editing, deleting,
+# inserting or reordering an entry becomes visible. Completion additionally
+# signs the chain head and entry count, which is what makes entries removed
+# from the END of the trail detectable.
+#
+# Leave this on. Turning it off stops new entries being linked; entries
+# already written keep their hashes and still verify.
+ESIGN_AUDIT_CHAIN = True
+
+# ---------------------------------------------------------------------
+# NES — CROSS-OFFICE WITNESSING
+# ---------------------------------------------------------------------
+# Participating country offices each receive a signed fingerprint of every
+# document sealed here: the document hash, the audit-chain head, the time.
+# Forging a document then means altering every office's copy at once, in
+# databases you do not control.
+#
+# Only fingerprints travel — never the document, the signature images, the
+# field values or recipient addresses. A SHA-256 proves tampering and reveals
+# nothing about content. So witnessing DETECTS and PROVES alteration; it does
+# not restore the file. Restoration comes from backups and from evidence
+# packages archived at completion.
+#
+#   manage.py esign_witness --new-token        a token to give a peer
+#   manage.py esign_witness --export-cert P    our certificate, for a peer
+#   manage.py esign_witness --add-peer CODE    register an office
+#   manage.py esign_witness --ping             check the link
+#   manage.py esign_witness --send-pending     cron, every 15 minutes
+#   manage.py esign_witness --audit            cron, nightly
+ESIGN_WITNESS_ENABLED = False
+
+# This office's code, as it appears in every statement we issue. Required.
+# Keep it stable — it is written into signed statements that outlive the
+# deployment. e.g. "UNDP-GM".
+ESIGN_WITNESS_OFFICE_CODE = ""
+
+# Where integrity alerts are emailed. Falls back to ADMINS when unset; if
+# both are empty, alerts are recorded but nobody is told, which defeats the
+# point.
+ESIGN_WITNESS_ALERT_EMAILS = []
+
+# Seconds to wait on a peer. Kept short: distribution is queued and retried,
+# so a slow office should never hold up a run.
+ESIGN_WITNESS_TIMEOUT = 15
 
 
 # ---------------------------------------------------------------------
@@ -426,3 +573,9 @@ ESIGN_PDF_FONT_REGULAR = (
 ESIGN_PDF_FONT_BOLD = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 )
+
+# Canonical public URL used when links are generated outside a browser request
+# (for example Asset-triggered workflows, reminders and background emails).
+SITE_URL = os.getenv("SITE_URL", "https://unpass.gm").strip().rstrip("/")
+if SITE_URL and not SITE_URL.lower().startswith(("http://", "https://")):
+    SITE_URL = "https://" + SITE_URL

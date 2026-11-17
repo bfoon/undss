@@ -1,6 +1,6 @@
 # accounts/admin_esign_studio.py
 """
-Optional. Add to the bottom of accounts/admin.py, after the eSign admin:
+Optional. Add to the bottom of accounts/admin.py, after the NES admin:
 
     from .admin_esign_studio import *  # noqa: F401,F403
 

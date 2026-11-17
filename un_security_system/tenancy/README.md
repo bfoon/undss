@@ -2,7 +2,7 @@
 
 Adds a tenancy and entitlements layer to UN PASS so you, as superuser, can turn
 any module on or off for one agency or one country office without touching the
-others. An office that only wants the ICT console and eSign gets exactly that;
+others. An office that only wants the ICT console and NES gets exactly that;
 an office that only wants room booking gets exactly that.
 
 Everything below was written against your uploaded `accounts`, `incidents`,
@@ -160,7 +160,7 @@ The context processor gives you a `features` dict everywhere:
 
 ```django
 {% if features.esign %}
-  <li><a href="{% url 'accounts:esign_dashboard' %}">eSign</a></li>
+  <li><a href="{% url 'accounts:esign_dashboard' %}">NES</a></li>
 {% endif %}
 
 {% if features.room_booking and features.room_attendance %} ... {% endif %}
@@ -241,7 +241,7 @@ from tenancy.services import visible_users_for
 recipients = visible_users_for(request.user, "esign")
 ```
 
-Use that anywhere you currently build a user dropdown: eSign recipients, asset
+Use that anywhere you currently build a user dropdown: NES recipients, asset
 assignees, CSR fulfillers. Only modules marked `shareable=True` in the catalogue
 can be linked — currently `esign` and `asset_mgmt`. Add the flag to any other
 module you want linkable.
@@ -386,7 +386,7 @@ Run this once after installing to see which URL names the gate does not cover:
 # python manage.py shell
 from django.urls import get_resolver
 from fnmatch import fnmatch
-from tenancy.catalog import url_rule_index
+from un_security_system.tenancy.catalog import url_rule_index
 
 rules = url_rule_index()
 for key in get_resolver().reverse_dict.keys():

@@ -8,7 +8,7 @@ class AccountsConfig(AppConfig):
     def ready(self):
         from . import signals_invites  # noqa: F401
 
-        # eSign formulas, automatic serial numbers and PDF table totals.
+        # NES formulas, automatic serial numbers and PDF table totals.
         # No migration is required.
         from . import esign_formula_runtime  # noqa: F401
 

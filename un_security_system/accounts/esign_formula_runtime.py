@@ -1,6 +1,6 @@
 # accounts/esign_formula_runtime.py
 """
-UN PASS eSign — formula/serial runtime integration.
+UN PASS NES — formula/serial runtime integration.
 
 This module deliberately requires no database migration.
 

@@ -1,6 +1,6 @@
 # accounts/form_formula_esign.py
 """
-UN PASS — eSign Studio: calculations on forms.
+UN PASS — NES Studio: calculations on forms.
 
 A field, or a column inside a table, can carry a formula. The formula is
 written the way people write them in a spreadsheet, but it refers to questions

@@ -1,6 +1,6 @@
 # accounts/management/commands/check_esign.py
 """
-Diagnoses an eSign install in one command:
+Diagnoses an NES install in one command:
 
     python manage.py check_esign
 
@@ -30,13 +30,13 @@ def _warn(label, detail=""):
 
 
 class Command(BaseCommand):
-    help = "Check that the eSign module is correctly installed."
+    help = "Check that the NES module is correctly installed."
 
     def handle(self, *args, **options):
         out = self.stdout.write
         failures = 0
 
-        out("\neSign installation check\n" + "=" * 60)
+        out("\nNES installation check\n" + "=" * 60)
 
         # ---- 1. models importable -------------------------------------
         out("\nModels")
@@ -125,7 +125,7 @@ class Command(BaseCommand):
 
             buf = io.BytesIO()
             c = rl.Canvas(buf, pagesize=A4)
-            c.drawString(80, 700, "eSign check")
+            c.drawString(80, 700, "NES check")
             c.showPage()
             c.save()
             pages = len(PdfReader(io.BytesIO(buf.getvalue())).pages)
@@ -141,13 +141,13 @@ class Command(BaseCommand):
             from django.urls import reverse
             reverse("accounts:esign_dashboard")
             reverse("accounts:esign_new")
-            out(_ok("eSign routes registered"))
+            out(_ok("NES routes registered"))
         except Exception as exc:
             failures += 1
-            out(_bad("eSign routes", f"{exc} — check the import in accounts/urls.py"))
+            out(_bad("NES routes", f"{exc} — check the import in accounts/urls.py"))
 
         out("\n" + "=" * 60)
         if failures:
             out(self.style.ERROR(f"{failures} problem(s) found.\n"))
         else:
-            out(self.style.SUCCESS("eSign is correctly installed.\n"))
+            out(self.style.SUCCESS("NES is correctly installed.\n"))

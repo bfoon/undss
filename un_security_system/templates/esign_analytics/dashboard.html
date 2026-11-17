@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}eSign Usage Dashboard{% endblock %}
+{% block title %}NES Usage Dashboard{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4 px-xl-4">
@@ -9,7 +9,7 @@
         <div class="d-flex align-items-center gap-2 flex-wrap">
           <h2 class="mb-0">
             <i class="bi bi-bar-chart-line-fill me-2 text-primary"></i>
-            eSign · Forms · Flow Analytics
+            NES · Forms · Flow Analytics
           </h2>
           <span class="badge bg-primary">Level {{ access.level }}</span>
         </div>
@@ -89,15 +89,15 @@
   {% if office_attribution_note %}
     <div class="alert alert-light border small mb-4">
       <i class="bi bi-info-circle text-primary me-1"></i>
-      Forms and Flows carry a Country Office snapshot. Existing eSign envelopes do not currently
-      store one, so CO eSign activity is attributed using the sender's current Country Office.
+      Forms and Flows carry a Country Office snapshot. Existing NES envelopes do not currently
+      store one, so CO NES activity is attributed using the sender's current Country Office.
     </div>
   {% endif %}
 
   <div class="row g-3 mb-4">
     <div class="col-6 col-xl-3">
       <div class="metric-card shadow-sm h-100">
-        <div class="metric-label">eSign envelopes</div>
+        <div class="metric-label">NES envelopes</div>
         <div class="metric-value">{{ metrics.envelope_total }}</div>
         <div class="metric-sub">{{ metrics.comparison_label }}</div>
         <div class="metric-delta">{{ metrics.delta_envelopes }}</div>
@@ -135,7 +135,7 @@
   <div class="row g-3 mb-4">
     <div class="col-md-4 col-xl-2">
       <div class="mini-card shadow-sm h-100">
-        <div class="mini-title">eSign completion</div>
+        <div class="mini-title">NES completion</div>
         <div class="mini-value">{{ metrics.envelope_completion_rate }}%</div>
       </div>
     </div>
@@ -156,7 +156,7 @@
 
     <div class="col-md-4 col-xl-2">
       <div class="mini-card shadow-sm h-100">
-        <div class="mini-title">Avg eSign turnaround</div>
+        <div class="mini-title">Avg NES turnaround</div>
         <div class="mini-value mini-small">{{ metrics.avg_envelope_completion }}</div>
       </div>
     </div>
@@ -182,7 +182,7 @@
       <div class="chart-card shadow-sm h-100">
         <div class="chart-header">
           <h5 class="mb-0">Usage trend</h5>
-          <span class="text-muted small">eSign, Forms and Flow activity over time</span>
+          <span class="text-muted small">NES, Forms and Flow activity over time</span>
         </div>
         <div class="chart-body">
           <canvas id="usageTrend" height="110"></canvas>
@@ -219,7 +219,7 @@
     <div class="col-xl-4">
       <div class="chart-card shadow-sm h-100">
         <div class="chart-header">
-          <h5 class="mb-0">eSign status</h5>
+          <h5 class="mb-0">NES status</h5>
           <span class="text-muted small">Current envelope status mix</span>
         </div>
         <div class="chart-body">
@@ -310,7 +310,7 @@
   <div class="row g-4 mb-4">
     <div class="col-xl-4">
       <div class="card shadow-sm h-100">
-        <div class="card-header bg-white"><h5 class="mb-0">Recent eSign</h5></div>
+        <div class="card-header bg-white"><h5 class="mb-0">Recent NES</h5></div>
         <div class="list-group list-group-flush">
           {% for item in level3.recent_envelopes %}
             <div class="list-group-item">
@@ -361,7 +361,7 @@
     <div class="col-md-4 col-xl-2">
       <a class="btn btn-outline-primary w-100"
          href="{% url 'esign_analytics:drilldown' 'envelopes' %}?scope={{ access.key }}&period={{ period_value }}">
-        eSign Envelopes
+        NES Envelopes
       </a>
     </div>
     <div class="col-md-4 col-xl-2">
@@ -433,7 +433,7 @@ document.addEventListener("DOMContentLoaded", function () {
       labels: trend.labels,
       datasets: [
         {
-          label: "eSign envelopes",
+          label: "NES envelopes",
           data: trend.envelopes,
           borderColor: "#009EDB",
           backgroundColor: "rgba(0,158,219,.14)",

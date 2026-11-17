@@ -103,7 +103,7 @@ class OfficeScopedQuerysetMixin:
 
 class SharedDirectoryMixin:
     """
-    For views that pick people — eSign recipients, asset assignees.
+    For views that pick people — NES recipients, asset assignees.
 
     Set ``directory_feature`` and call ``self.get_directory()`` to obtain the
     user queryset including any linked offices or agencies.

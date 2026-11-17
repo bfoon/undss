@@ -96,7 +96,7 @@ class EnvelopeEventAdmin(admin.ModelAdmin):
 
 
 # ---------------------------------------------------------------------------
-# Per-agency service switches (Asset Management / eSign)
+# Per-agency service switches (Asset Management / NES)
 # admin.py registers this model plainly, so replace that registration.
 # ---------------------------------------------------------------------------
 
@@ -123,8 +123,8 @@ class AgencyServiceConfigAdmin(admin.ModelAdmin):
                 "asset_mgmt_cost_currency",
             ),
         }),
-        ("eSign", {
-            "description": "eSign is independent — it can be on with Asset Management off.",
+        ("NES", {
+            "description": "NES is independent — it can be on with Asset Management off.",
             "fields": (
                 "esign_enabled",
                 "esign_is_paid",

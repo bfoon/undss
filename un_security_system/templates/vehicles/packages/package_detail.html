@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load mailflow_tags %}
 {% block title %}Package {{ package.tracking_code }}{% endblock %}
 
 {% block content %}
@@ -28,6 +29,8 @@
         by {{ package.logged_by.get_full_name|default:package.logged_by.username }}
         {% if package.flow_template %}
           &nbsp;·&nbsp;<i class="bi bi-diagram-3 me-1"></i>{{ package.flow_template.name }}
+        {% elif package|mail_stage %}
+          &nbsp;·&nbsp;<i class="bi bi-bezier2 me-1"></i>Flow Studio — {{ package|mail_stage }}
         {% endif %}
       </p>
     </div>
@@ -136,6 +139,9 @@
     {% endif %}
   </div>
   {% endif %}
+
+  <!-- ── Flow Studio mail flow (packages started on a Studio flow) ──────── -->
+  {% mail_studio_panel package %}
 
   <!-- ══════════════════════════════════════════════════════════════════════
        ROW 1 — Package Details (left) | Full History (right)
@@ -356,17 +362,17 @@
   </div><!-- /row 1 -->
 
   <!-- ══════════════════════════════════════════════════════════════════════
-       ROW 2 — Package documents backed by the shared eSign engine
+       ROW 2 — Package documents backed by the shared NES engine
   ══════════════════════════════════════════════════════════════════════ -->
   <div class="card shadow-sm border-0">
     <div class="card-header py-3 d-flex justify-content-between align-items-center"
          style="background:linear-gradient(135deg,#2d3748,#4a5568);">
       <h5 class="mb-0 text-white">
-        <i class="bi bi-file-earmark-text me-2"></i>Documents & eSign
+        <i class="bi bi-file-earmark-text me-2"></i>Documents & NES
       </h5>
       {% if features.mailroom_signing %}
       <a href="{% url 'accounts:esign_signatures' %}" class="btn btn-sm btn-outline-light">
-        <i class="bi bi-pen me-1"></i>My eSign Signature
+        <i class="bi bi-pen me-1"></i>My NES Signature
       </a>
       {% endif %}
     </div>
@@ -375,7 +381,7 @@
     <div class="alert alert-warning rounded-0 border-0 border-bottom mb-0 px-4 py-3">
       <i class="bi bi-lock-fill me-2"></i>
       Package document signing is not enabled for this office. The tenancy setting
-      <strong>Mailroom document signing</strong> requires both Mailroom and eSign.
+      <strong>Mailroom document signing</strong> requires both Mailroom and NES.
     </div>
     {% endif %}
 
@@ -403,7 +409,7 @@
                 <span class="fw-semibold">{{ doc.filename }}</span>
                 {% if env %}
                   <span class="badge bg-{{ env.status_color }}">{{ env.get_status_display }}</span>
-                  <span class="badge bg-light text-dark border" title="eSign envelope ID">
+                  <span class="badge bg-light text-dark border" title="NES envelope ID">
                     {{ env.short_id }}
                   </span>
                 {% elif doc.signature_fields.exists %}
@@ -411,7 +417,7 @@
                     Legacy package signing · {{ doc.get_status_display }}
                   </span>
                 {% else %}
-                  <span class="badge bg-secondary">Not prepared in eSign</span>
+                  <span class="badge bg-secondary">Not prepared in NES</span>
                 {% endif %}
               </div>
 
@@ -436,7 +442,7 @@
               </div>
               {% else %}
               <div class="small text-muted">
-                The original package file is retained here. eSign will create its own signing copy,
+                The original package file is retained here. NES will create its own signing copy,
                 audit trail and Certificate of Completion.
               </div>
               {% endif %}
@@ -469,17 +475,17 @@
                 {% elif not env %}
                 <a href="{% url 'vehicles:document_annotate' doc.pk %}"
                    class="btn btn-sm btn-primary w-100">
-                  <i class="bi bi-pen me-1"></i>Prepare in eSign
+                  <i class="bi bi-pen me-1"></i>Prepare in NES
                 </a>
                 {% elif env.status == 'draft' or env.status == 'returned' %}
                 <a href="{% url 'accounts:esign_prepare' env.pk %}"
                    class="btn btn-sm btn-primary w-100">
-                  <i class="bi bi-layout-text-window-reverse me-1"></i>Prepare in eSign
+                  <i class="bi bi-layout-text-window-reverse me-1"></i>Prepare in NES
                 </a>
                 {% elif env.status != 'completed' %}
                 <a href="{% url 'vehicles:document_sign' doc.pk %}"
                    class="btn btn-sm btn-outline-primary w-100">
-                  <i class="bi bi-box-arrow-up-right me-1"></i>Open eSign
+                  <i class="bi bi-box-arrow-up-right me-1"></i>Open NES
                 </a>
                 {% endif %}
 
@@ -525,7 +531,7 @@
             <i class="bi bi-upload me-2"></i>Upload Document for Current Step
           </a>
           {% if features.mailroom_signing %}
-          <span class="text-muted small ms-2">The document will be prepared by the shared eSign engine.</span>
+          <span class="text-muted small ms-2">The document will be prepared by the shared NES engine.</span>
           {% endif %}
         </div>
         {% endif %}

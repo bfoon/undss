@@ -353,7 +353,7 @@ def _overflow_pages(writer, leftovers, page_size, envelope, brand, heading):
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
-def render_markup_pdf(envelope, marks, page_iter, brand="UNDP eSign"):
+def render_markup_pdf(envelope, marks, page_iter, brand="NES"):
     """
     Core renderer, kept free of Django so it can be exercised directly.
 
@@ -455,7 +455,7 @@ def build_markup_pdf(envelope, annotations, brand=None, revision=None):
 
     from .utils_esign import document_pdf_bytes
 
-    brand = brand or getattr(settings, "ESIGN_BRAND", "UNDP eSign")
+    brand = brand or getattr(settings, "ESIGN_BRAND", "NES")
 
     rows = list(annotations)
     if revision not in (None, "", "all"):

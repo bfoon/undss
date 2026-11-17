@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load esign_studio_tags esign_dashboard_tags %}
-{% block title %}eSign | UN PASS {% endblock %}
+{% block title %}NES | UN PASS {% endblock %}
 {% block extra_js %}
 <script>
 const DEL_URL = "{% url 'accounts:esign_envelope_delete' 0 %}";
@@ -71,7 +71,9 @@ document.querySelectorAll('.es-del').forEach(btn => {
       <div class="card-body p-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
           <div>
-            <h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-pen-fill me-2"></i>eSign</h4>
+            <h4 class="mb-1 text-un-primary fw-bold"><i class="bi bi-pen-fill me-2"></i>NES
+              <span class="fs-6 fw-normal text-muted ms-1">{{ esign_brand_full|default:"NES — Not eSign" }}</span>
+            </h4>
             <div class="text-muted">
               Send a document for legally-binding electronic signature — with routing, CC/BCC,
               viewers, reminders and a full audit trail on every envelope. Or sign
@@ -105,7 +107,7 @@ document.querySelectorAll('.es-del').forEach(btn => {
     </div>
   </div>
 
-  <!-- eSign Studio -->
+  <!-- NES Studio -->
   {% esign_studio_summary as studio %}
   <div class="col-md-4">
     <a class="es-studio" href="{% url 'accounts:esign_studio' %}">

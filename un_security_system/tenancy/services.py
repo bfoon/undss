@@ -117,7 +117,7 @@ def scope_of(user) -> Tuple[Optional[int], Optional[int]]:
 
     # Legacy users created before country-office tenancy may only have agency.
     # Honour the agency's designated default office so office-level grants such
-    # as eSign are visible without manually editing every historic user first.
+    # as NES are visible without manually editing every historic user first.
     if agency_id:
         from django.apps import apps
         CountryOffice = apps.get_model("tenancy", "CountryOffice")

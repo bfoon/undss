@@ -100,7 +100,7 @@ def _user_json(user):
 #: shows only the tiles a person's office has switched on, so nobody is offered
 #: a module they cannot open.
 APP_MODULES = (
-    {"key": "esign", "title": "eSign", "subtitle": "Review and approve documents",
+    {"key": "esign", "title": "NES", "subtitle": "Review and approve documents",
      "icon": "draw", "feature": "esign"},
     {"key": "forms", "title": "Forms", "subtitle": "Fill in and send a request",
      "icon": "edit_note", "feature": "esign"},
@@ -453,7 +453,7 @@ def me(request):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# eSign — waiting on me
+# NES — waiting on me
 # ─────────────────────────────────────────────────────────────────────────────
 
 @api

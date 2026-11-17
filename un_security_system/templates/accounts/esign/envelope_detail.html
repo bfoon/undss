@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ envelope.subject }} | eSign{% endblock %}
+{% block title %}{{ envelope.subject }} | NES{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -56,6 +56,7 @@
         <span class="badge bg-light text-muted">Revision {{ envelope.revision }}</span>
       {% endif %}
       <span class="ed-token">Envelope ID: {{ envelope.envelope_id }}</span>
+      {% include "accounts/esign/_seal_badge.html" %}
       {% if envelope.reference %}<span class="small text-muted">Ref {{ envelope.reference }}</span>{% endif %}
       {% if envelope.asset %}
         <a class="small" href="{% url 'accounts:asset_detail' envelope.asset.id %}">
@@ -74,6 +75,11 @@
         <i class="bi bi-download me-1"></i> Signed document</a>
       <a class="btn btn-outline-primary" href="{% url 'accounts:esign_download' envelope.pk 'certificate' %}">
         <i class="bi bi-patch-check me-1"></i> Certificate</a>
+      <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_seal_verify' envelope.pk %}">
+        <i class="bi bi-shield-lock me-1"></i> Verify seal</a>
+      <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_evidence' envelope.pk %}"
+         title="ASiC-E container that verifies offline, with no access to UN PASS">
+        <i class="bi bi-archive me-1"></i> Evidence</a>
     {% else %}
       <a class="btn btn-outline-secondary" href="{% url 'accounts:esign_preview' envelope.pk %}" target="_blank">
         <i class="bi bi-eye me-1"></i> Preview</a>

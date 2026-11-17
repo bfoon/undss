@@ -1,6 +1,6 @@
 # accounts/utils_esign.py
 """
-UN PASS — eSign helpers: signature image handling, PDF stamping (with the
+UN PASS — NES helpers: signature image handling, PDF stamping (with the
 DocuSign-style envelope token on every page) and the Certificate of Completion.
 
 Requires: reportlab, pypdf, Pillow  (all already used elsewhere in the project)
@@ -40,7 +40,7 @@ from .models_esign import Envelope, EnvelopeEvent, EnvelopeRecipient, SignatureF
 def esign_brand() -> str:
     """Wordmark printed down the page border and in the certificate header.
     Override with ESIGN_BRAND in settings.py (e.g. "UNDP SoftSign")."""
-    return getattr(settings, "ESIGN_BRAND", "UNDP eSign")
+    return getattr(settings, "ESIGN_BRAND", "NES")
 
 
 UN_BLUE = colors.HexColor("#009EDB")
@@ -71,7 +71,7 @@ def user_agent(request):
 def log_event(envelope, event, request=None, recipient=None, actor=None, note="", meta=None):
     """Never let audit logging break a flow."""
     try:
-        return EnvelopeEvent.objects.create(
+        row = EnvelopeEvent.objects.create(
             envelope=envelope,
             recipient=recipient,
             actor=actor if (actor and getattr(actor, "is_authenticated", False)) else None,
@@ -83,6 +83,24 @@ def log_event(envelope, event, request=None, recipient=None, actor=None, note=""
         )
     except Exception:
         return None
+
+    # Link the entry into this envelope's tamper-evident chain. Done after the
+    # insert because the hash binds the row id, which only exists once the row
+    # does. `chain_event` swallows its own failures: an unchained entry is a
+    # visible gap in the trail, which is honest, where a lost entry would not
+    # be. See accounts/audit_chain_esign.py.
+    try:
+        from .audit_chain_esign import chain_event
+
+        chain_event(row)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "NES audit chain: chaining unavailable for event %s",
+            getattr(row, "pk", "?"),
+            exc_info=True,
+        )
+
+    return row
 
 
 def sign_url(request, recipient) -> str:
@@ -291,7 +309,7 @@ def document_pdf_bytes(doc, force: bool = False) -> bytes:
             doc.converted_pdf.save(f"{stem}.pdf", ContentFile(raw), save=True)
         except Exception:
             logging.getLogger(__name__).warning(
-                "eSign: could not cache converted PDF for document %s", getattr(doc, "pk", "?")
+                "NES: could not cache converted PDF for document %s", getattr(doc, "pk", "?")
             )
 
     return raw
@@ -330,7 +348,7 @@ def _normalise_rotation(page):
             page.transfer_rotation_to_content()
     except Exception:
         logging.getLogger(__name__).warning(
-            "eSign: could not normalise page rotation", exc_info=True
+            "NES: could not normalise page rotation", exc_info=True
         )
     return page
 
@@ -580,7 +598,7 @@ def _draw_field(c, field, width, height, envelope):
 
             except Exception:
                 logging.getLogger(__name__).warning(
-                    "eSign: could not draw signature field %s",
+                    "NES: could not draw signature field %s",
                     getattr(field, "pk", "?"),
                     exc_info=True,
                 )
@@ -1321,6 +1339,23 @@ def finalize_envelope(envelope: Envelope, request=None) -> Envelope:
     """Stamp the PDF, build the certificate, mark complete. Idempotent-ish."""
     pdf_bytes = build_final_pdf(envelope)
 
+    # PAdES seal (ETSI EN 319 142) over the flattened document, so the file
+    # proves its own integrity and origin once it leaves UN PASS. Deliberately
+    # best-effort: `seal_pdf` never raises and returns the original bytes when
+    # sealing is off, unconfigured or impossible, so completion cannot be
+    # blocked by a certificate or a timestamp authority. The outcome is
+    # recorded against the envelope either way.
+    seal_info = None
+    try:
+        from .pades_esign import record_seal, seal_pdf
+
+        pdf_bytes, seal_info = seal_pdf(pdf_bytes, envelope)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "NES PAdES: sealing raised for envelope %s — completing unsealed",
+            getattr(envelope, "pk", "?"),
+        )
+
     envelope.completed_at = (
         envelope.completed_at
         or timezone.now()
@@ -1352,6 +1387,27 @@ def finalize_envelope(envelope: Envelope, request=None) -> Envelope:
         envelope
     )
 
+    # Seal the Certificate of Completion as well. It is the human-readable
+    # record of who signed and when, so sealing the document but not the
+    # certificate would protect the contract and leave the evidence about it
+    # editable. Same key, same best-effort contract.
+    if seal_info is not None and seal_info.get("status") == "sealed":
+        try:
+            from .pades_esign import seal_pdf as _seal_pdf, sha256_of
+
+            sealed_cert, cert_info = _seal_pdf(cert, envelope)
+            if cert_info.get("status") == "sealed":
+                cert = sealed_cert
+                seal_info["certificate_sealed"] = True
+                seal_info["certificate_sha256"] = sha256_of(cert)
+            else:
+                seal_info["certificate_sealed"] = False
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "NES PAdES: could not seal the certificate for envelope %s",
+                getattr(envelope, "pk", "?"),
+            )
+
     envelope.certificate_pdf.save(
         (
             f"{envelope.envelope_id}"
@@ -1376,6 +1432,80 @@ def finalize_envelope(envelope: Envelope, request=None) -> Envelope:
         request=request,
         note="All signatures collected.",
     )
+
+    # Put the seal in the audit trail, then anchor the trail, then record
+    # everything. The order is deliberate: the anchor must cover the finished
+    # trail, so it is taken after the last event is written. All of it is
+    # best-effort — the envelope is already completed and saved by this point,
+    # and a bookkeeping failure must not undo that.
+    if seal_info is not None:
+        try:
+            status = seal_info.get("status")
+            if status == "sealed":
+                level = (seal_info.get("level_achieved") or "").upper()
+                note = f"Sealed with PAdES {level}"
+                if seal_info.get("signer_common_name"):
+                    note += f" by {seal_info['signer_common_name']}"
+                if seal_info.get("timestamped"):
+                    note += ", trusted timestamp applied"
+            elif status == "failed":
+                note = (
+                    "PAdES seal failed — the document is complete and the "
+                    "audit trail is intact, but the file carries no embedded "
+                    "signature."
+                )
+            else:
+                note = ""
+
+            if note:
+                log_event(
+                    envelope,
+                    "sealed" if status == "sealed" else "seal_failed",
+                    request=request,
+                    note=note[:255],
+                    meta={
+                        "level": seal_info.get("level_achieved") or "",
+                        "sha256": seal_info.get("document_sha256") or "",
+                        "detail": (seal_info.get("detail") or "")[:500],
+                    },
+                )
+
+            # Anchor the audit trail: sign its head hash and entry count, so
+            # entries removed from the END of the trail become detectable.
+            # The hash links alone cannot catch that — a shorter chain is
+            # still internally consistent.
+            try:
+                from .audit_chain_esign import anchor_chain
+
+                seal_info["audit"] = anchor_chain(envelope)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "NES audit chain: could not anchor envelope %s",
+                    getattr(envelope, "pk", "?"),
+                )
+
+            record_seal(envelope, seal_info)
+
+            # Distribute the fingerprint to participating country offices, so
+            # a later change here can be proved against copies held elsewhere.
+            # Database work only — the actual HTTP push is queued and sent by
+            # `manage.py esign_witness --send-pending`, so sealing never waits
+            # on another office's server.
+            if status == "sealed":
+                try:
+                    from .witness_esign import issue_witness
+
+                    issue_witness(envelope, kind="seal")
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "NES witness: could not queue envelope %s",
+                        getattr(envelope, "pk", "?"),
+                    )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "NES PAdES: could not record the seal for envelope %s",
+                getattr(envelope, "pk", "?"),
+            )
 
     return envelope
 

@@ -1,0 +1,148 @@
+UPDATED FILES — NES rename, sealing, tamper-evidence, cross-office witnessing
+For bfoon/undss. These paths mirror your project exactly.
+
+Copy them in with:
+    cp -r undss/. /path/to/your/undss/
+
+The trailing /. copies what is INSIDE undss/, not the folder itself.
+Delete this file afterwards; it is not part of the project.
+
+----------------------------------------------------------------------
+NEW FILES (19)
+----------------------------------------------------------------------
+  docs/nes-signature-policy-v1.md
+  docs/nes-standards-un-undp.md
+  docs/nes-tsa-and-oid-setup.md
+  un_security_system/accounts/admin_esign_pades.py
+  un_security_system/accounts/audit_chain_esign.py
+  un_security_system/accounts/evidence_esign.py
+  un_security_system/accounts/management/commands/esign_pades.py
+  un_security_system/accounts/management/commands/esign_witness.py
+  un_security_system/accounts/models_esign_pades.py
+  un_security_system/accounts/models_esign_witness.py
+  un_security_system/accounts/pades_esign.py
+  un_security_system/accounts/urls_esign_pades.py
+  un_security_system/accounts/urls_esign_witness.py
+  un_security_system/accounts/views_esign_pades.py
+  un_security_system/accounts/views_esign_witness.py
+  un_security_system/accounts/witness_esign.py
+  un_security_system/templates/accounts/esign/_seal_badge.html
+  un_security_system/templates/accounts/esign/seal_verify.html
+  un_security_system/templates/accounts/esign/witness_status.html
+
+----------------------------------------------------------------------
+MODIFIED FILES (113)
+----------------------------------------------------------------------
+  install_esign_usage_dashboard.py
+  requirements.txt
+  un_security_system/accounts/admin.py
+  un_security_system/accounts/admin_esign.py
+  un_security_system/accounts/admin_esign_studio.py
+  un_security_system/accounts/api_mobile.py
+  un_security_system/accounts/api_mobile_booking.py
+  un_security_system/accounts/apps.py
+  un_security_system/accounts/context_processors.py
+  un_security_system/accounts/context_processors_esign.py
+  un_security_system/accounts/converters_esign.py
+  un_security_system/accounts/dashboard_esign_access.py
+  un_security_system/accounts/dashboard_esign_views.py
+  un_security_system/accounts/docgen_esign.py
+  un_security_system/accounts/docx_form_import_esign.py
+  un_security_system/accounts/esign_access.py
+  un_security_system/accounts/esign_condition_engine.py
+  un_security_system/accounts/esign_delivery.py
+  un_security_system/accounts/esign_formula_runtime.py
+  un_security_system/accounts/esign_notify.py
+  un_security_system/accounts/form_formula_esign.py
+  un_security_system/accounts/form_pdf_esign.py
+  un_security_system/accounts/management/commands/check_esign.py
+  un_security_system/accounts/management/commands/ensure_esign_dashboard.py
+  un_security_system/accounts/management/commands/ensure_esign_reports.py
+  un_security_system/accounts/management/commands/esign_studio_maintenance.py
+  un_security_system/accounts/middleware.py
+  un_security_system/accounts/models.py
+  un_security_system/accounts/models_esign.py
+  un_security_system/accounts/models_esign_docgen.py
+  un_security_system/accounts/models_esign_markup.py
+  un_security_system/accounts/models_esign_studio.py
+  un_security_system/accounts/pdf_delivery.py
+  un_security_system/accounts/pdf_tools_esign.py
+  un_security_system/accounts/report_bi_esign.py
+  un_security_system/accounts/services.py
+  un_security_system/accounts/studio_common_esign.py
+  un_security_system/accounts/studio_library_esign.py
+  un_security_system/accounts/templatetags/esign_studio_tags.py
+  un_security_system/accounts/trigger_engine_esign.py
+  un_security_system/accounts/urls.py
+  un_security_system/accounts/urls_esign_docgen.py
+  un_security_system/accounts/utils_esign.py
+  un_security_system/accounts/utils_esign_markup_pdf.py
+  un_security_system/accounts/views_esign.py
+  un_security_system/accounts/views_esign_docgen.py
+  un_security_system/accounts/views_esign_forms.py
+  un_security_system/accounts/views_esign_markup.py
+  un_security_system/accounts/views_esign_reports.py
+  un_security_system/accounts/views_esign_self.py
+  un_security_system/accounts/views_esign_studio.py
+  un_security_system/accounts/views_esign_workflow.py
+  un_security_system/accounts/workflow_engine_esign.py
+  un_security_system/accounts/workflow_notify_esign.py
+  un_security_system/accounts/workflow_portability_esign.py
+  un_security_system/static/accounts/esign/formula-builder.js
+  un_security_system/static/accounts/esign/formula.js
+  un_security_system/static/accounts/esign/report_builder.css
+  un_security_system/static/accounts/esign/report_builder.js
+  un_security_system/static/accounts/esign/vendor/THIRD-PARTY-NOTICES.txt
+  un_security_system/templates/accounts/assets/asset_management.html
+  un_security_system/templates/accounts/esign/_markup.html
+  un_security_system/templates/accounts/esign/_pdf_loader.html
+  un_security_system/templates/accounts/esign/base_public.html
+  un_security_system/templates/accounts/esign/dashboard.html
+  un_security_system/templates/accounts/esign/envelope_detail.html
+  un_security_system/templates/accounts/esign/envelope_new.html
+  un_security_system/templates/accounts/esign/envelope_prepare.html
+  un_security_system/templates/accounts/esign/markup_review.html
+  un_security_system/templates/accounts/esign/review.html
+  un_security_system/templates/accounts/esign/self_sign_new.html
+  un_security_system/templates/accounts/esign/sign.html
+  un_security_system/templates/accounts/esign/signature_studio.html
+  un_security_system/templates/accounts/esign/studio/_nav.html
+  un_security_system/templates/accounts/esign/studio/_pdf_viewer.html
+  un_security_system/templates/accounts/esign/studio/_report_builder_css.html
+  un_security_system/templates/accounts/esign/studio/_report_builder_js.html
+  un_security_system/templates/accounts/esign/studio/_styles.html
+  un_security_system/templates/accounts/esign/studio/editor.html
+  un_security_system/templates/accounts/esign/studio/forms.html
+  un_security_system/templates/accounts/esign/studio/home.html
+  un_security_system/templates/accounts/esign/studio/import_flow.html
+  un_security_system/templates/accounts/esign/studio/public_base.html
+  un_security_system/templates/accounts/esign/studio/reports.html
+  un_security_system/templates/accounts/esign/studio/task.html
+  un_security_system/templates/accounts/esign/studio/tool.html
+  un_security_system/templates/accounts/esign/studio/workflows.html
+  un_security_system/templates/esign_analytics/dashboard.html
+  un_security_system/templates/esign_analytics/dashboard_report.html
+  un_security_system/templates/partials/_nav.html
+  un_security_system/templates/partials/_nav_items.html
+  un_security_system/templates/tenancy/sharing.html
+  un_security_system/templates/vehicles/packages/esig/document_upload.html
+  un_security_system/templates/vehicles/packages/esig/envelope_prepare.html
+  un_security_system/templates/vehicles/packages/package_detail.html
+  un_security_system/templates/vehicles/packages/package_step_action.html
+  un_security_system/tenancy/README.md
+  un_security_system/tenancy/catalog.py
+  un_security_system/tenancy/context_processors.py
+  un_security_system/tenancy/middleware.py
+  un_security_system/tenancy/mixins.py
+  un_security_system/tenancy/services.py
+  un_security_system/un_security_system/settings.py
+  un_security_system/vehicles/apps.py
+  un_security_system/vehicles/forms.py
+  un_security_system/vehicles/models.py
+  un_security_system/vehicles/models_mailflow.py
+  un_security_system/vehicles/package_esign.py
+  un_security_system/vehicles/package_studio.py
+  un_security_system/vehicles/signals.py
+  un_security_system/vehicles/views.py
+  unpass_mobile/lib/core/api.dart
+  unpass_mobile/lib/main.dart

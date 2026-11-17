@@ -44,7 +44,7 @@ certificate. An override that leaves a trace is defensible; a silent one is not.
 Cross-agency envelopes
 ----------------------
 Access is decided by participation, not by agency. That is deliberate: when you
-link two offices for eSign under Platform → Directory links, a UNICEF signer on
+link two offices for NES under Platform → Directory links, a UNICEF signer on
 a UNDP envelope has to be able to open it. The old `agency=request.user.agency`
 filter made that a 404.
 
@@ -110,7 +110,7 @@ def log_override_access(envelope, user, action="viewed"):
             },
         )
     except Exception:
-        logger.exception("eSign: could not record override access on envelope %s",
+        logger.exception("NES: could not record override access on envelope %s",
                          getattr(envelope, "pk", "?"))
 
 

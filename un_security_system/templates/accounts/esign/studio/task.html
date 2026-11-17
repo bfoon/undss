@@ -67,7 +67,7 @@
             {% if request.user.is_authenticated %}<a class="btn btn-un-primary w-100" href="{{ prepare_url }}"><i class="bi bi-bounding-box me-1"></i>Place fields and send</a>
             {% else %}<div class="alert alert-warning small mb-0">Sign in to UN PASS to place the fields.</div>{% endif %}
           {% elif task.kind == 'signature' %}
-            <p class="small mb-0">Signing happens in eSign. Look for the signature request in your email or on the Envelopes page.</p>
+            <p class="small mb-0">Signing happens in NES. Look for the signature request in your email or on the Envelopes page.</p>
           {% else %}
             {% if task.kind == 'resubmit' and not sub %}
               <label class="form-label small fw-semibold">Replace the document <span class="text-muted fw-normal">(optional)</span></label>

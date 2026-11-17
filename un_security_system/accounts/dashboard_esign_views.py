@@ -53,7 +53,7 @@ PERIOD_CHOICES = (
 
 
 DRILL_DATASETS = {
-    "envelopes": "eSign Envelopes",
+    "envelopes": "NES Envelopes",
     "forms": "Form Templates",
     "submissions": "Form Submissions",
     "workflows": "Flows",
@@ -379,12 +379,12 @@ def _build_dashboard_context(access, request):
     labels = sorted(set(env_trend) | set(form_trend) | set(run_trend))
 
     activity_mix = {
-        "labels": ["eSign envelopes", "Form submissions", "Flow runs"],
+        "labels": ["NES envelopes", "Form submissions", "Flow runs"],
         "values": [envelope_total, submission_total, run_total],
     }
 
     completion_rates = {
-        "labels": ["eSign", "Forms", "Flows"],
+        "labels": ["NES", "Forms", "Flows"],
         "values": [
             _rate(envelope_completed, sent_population),
             _rate(submission_completed, submission_total),
@@ -404,7 +404,7 @@ def _build_dashboard_context(access, request):
         )
     if envelope_total and _rate(envelope_completed, sent_population) < 60:
         insights.append(
-            "eSign completion rate is below 60%; review reminder cadence and routing."
+            "NES completion rate is below 60%; review reminder cadence and routing."
         )
     if top_forms:
         insights.append(
@@ -515,7 +515,7 @@ def dashboard_export_csv(request):
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
     writer = csv.writer(response)
-    writer.writerow(["eSign / Forms / Flow Dashboard"])
+    writer.writerow(["NES / Forms / Flow Dashboard"])
     writer.writerow(["Scope", access.label])
     writer.writerow(["Level", access.level_label])
     writer.writerow(["Period", context["period_label"]])
@@ -524,14 +524,14 @@ def dashboard_export_csv(request):
 
     writer.writerow(["Metric", "Value", "Comparison"])
     metric_rows = [
-        ("eSign envelopes", context["metrics"]["envelope_total"], context["metrics"]["delta_envelopes"]),
+        ("NES envelopes", context["metrics"]["envelope_total"], context["metrics"]["delta_envelopes"]),
         ("Form submissions", context["metrics"]["submissions_total"], context["metrics"]["delta_submissions"]),
         ("Flow runs", context["metrics"]["runs_total"], context["metrics"]["delta_runs"]),
         ("Active users", context["metrics"]["active_users"], context["metrics"]["delta_active_users"]),
-        ("eSign completion rate", f"{context['metrics']['envelope_completion_rate']}%", ""),
+        ("NES completion rate", f"{context['metrics']['envelope_completion_rate']}%", ""),
         ("Form completion rate", f"{context['metrics']['form_completion_rate']}%", ""),
         ("Flow completion rate", f"{context['metrics']['run_completion_rate']}%", ""),
-        ("Average eSign completion", context["metrics"]["avg_envelope_completion"], ""),
+        ("Average NES completion", context["metrics"]["avg_envelope_completion"], ""),
         ("Average flow completion", context["metrics"]["avg_run_completion"], ""),
         ("Open flow tasks", context["metrics"]["open_tasks"], ""),
         ("Overdue flow tasks", context["metrics"]["overdue_tasks"], ""),
@@ -541,7 +541,7 @@ def dashboard_export_csv(request):
 
     writer.writerow([])
     writer.writerow(["Trend"])
-    writer.writerow(["Bucket", "eSign envelopes", "Form submissions", "Flow runs"])
+    writer.writerow(["Bucket", "NES envelopes", "Form submissions", "Flow runs"])
     trend = context["level2"]["trend"]
     for idx, bucket in enumerate(trend["labels"]):
         writer.writerow([

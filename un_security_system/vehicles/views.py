@@ -213,8 +213,10 @@ def _guard_team_emails():
 # ── Permission helpers ─────────────────────────────────────────────────────────
 
 def _is_ict_focal(user) -> bool:
-    """Only ICT focal points (or superusers) may configure flows."""
-    return user.is_superuser or getattr(user, 'role', None) == 'ict_focal'
+    """Who may configure package workflows and mail flows — Access Studio decides."""
+    from access.services import can
+
+    return user.is_superuser or can(user, "packages.manage_flows")
 
 
 def _user_agency(user):
@@ -2015,8 +2017,8 @@ def package_detail(request, pk):
     all_steps = list(package.flow_template.steps_ordered) if package.flow_template else []
 
     # A signature-required step is not complete merely because the scan was
-    # submitted.  It becomes complete only when its linked eSign envelope has
-    # produced the final signed PDF.  Legacy/non-eSign logs keep the old rule.
+    # submitted.  It becomes complete only when its linked NES envelope has
+    # produced the final signed PDF.  Legacy/non-NES logs keep the old rule.
     completed_orders = set()
     pending_esign_doc = None
     for log in step_logs:
@@ -2085,7 +2087,7 @@ def package_advance_step(request, pk):
     )
     if existing_pending:
         env = existing_pending.esign_envelope
-        messages.info(request, 'This package step is waiting for its eSign signature.')
+        messages.info(request, 'This package step is waiting for its NES signature.')
         if env and env.is_editable:
             return redirect('accounts:esign_prepare', pk=env.pk)
         if env:
@@ -2162,7 +2164,7 @@ def package_advance_step(request, pk):
             )
             return redirect('vehicles:package_detail', pk=pk)
 
-        # Normal package step: no eSign wait state, so complete it immediately.
+        # Normal package step: no NES wait state, so complete it immediately.
         PackageEvent.objects.create(
             package=package,
             status=current_step.status_code[:20],

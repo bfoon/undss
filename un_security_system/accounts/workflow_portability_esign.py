@@ -1,4 +1,4 @@
-"""Portable import/export packages for UNPASS eSign Studio workflows."""
+"""Portable import/export packages for UNPASS NES Studio workflows."""
 
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def loads_package(raw: bytes | str) -> Dict[str, Any]:
         raise FlowPackageError("This is not a valid UNPASS flow package.") from exc
 
     if not isinstance(data, dict) or data.get("kind") != PACKAGE_KIND:
-        raise FlowPackageError("This file is not a UNPASS eSign flow package.")
+        raise FlowPackageError("This file is not a UNPASS NES flow package.")
     if int(data.get("package_version") or 0) != PACKAGE_VERSION:
         raise FlowPackageError(
             f"Unsupported flow package version {data.get('package_version')!r}."

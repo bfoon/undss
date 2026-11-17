@@ -1,13 +1,13 @@
 # accounts/studio_common_esign.py
 """
-UN PASS — eSign Studio shared helpers for the three view modules.
+UN PASS — NES Studio shared helpers for the three view modules.
 
 Keeps the rules in one place:
-  * who may use the studio          (same gate as eSign: agency + tenancy flag)
+  * who may use the studio          (same gate as NES: agency + tenancy flag)
   * who can see a flow or a form    (owner, or shared with office / agency)
   * who can see a run / submission  (participation, like esign_access.py)
-  * turning any upload into a PDF   (same converter and limits as eSign)
-  * turning a PDF into an envelope  (same models and helpers as eSign)
+  * turning any upload into a PDF   (same converter and limits as NES)
+  * turning a PDF into an envelope  (same models and helpers as NES)
 """
 
 import json
@@ -52,7 +52,7 @@ def asset_urls():
 def inline_pdf(raw):
     """
     The PDF as base64 for embedding in the page, or "" when it is missing or
-    above ESIGN_INLINE_MAX_BYTES (the same limit eSign's own viewers use).
+    above ESIGN_INLINE_MAX_BYTES (the same limit NES's own viewers use).
 
     Embedding removes the separate request for the document, which is the
     step most likely to fail in the field: CSP connect-src, proxies, browser
@@ -81,7 +81,7 @@ def studio_context(request, section, **extra):
 def studio_gate(request):
     """
     -> (agency, None) when the person may use the studio,
-       (None, redirect_response) otherwise. Same rule as the eSign dashboard.
+       (None, redirect_response) otherwise. Same rule as the NES dashboard.
     """
     from .views_esign import _agency_or_redirect, _service_enabled
 
@@ -89,7 +89,7 @@ def studio_gate(request):
     if not agency:
         return None, redirect("accounts:profile")
     if not _service_enabled(agency, request.user):
-        messages.warning(request, "eSign is not enabled for your agency or country office.")
+        messages.warning(request, "NES is not enabled for your agency or country office.")
         return None, redirect("accounts:profile")
     return agency, None
 
@@ -243,13 +243,13 @@ def can_view_submission(user, sub) -> bool:
 
 
 def directory(user, limit=600):
-    """[{id, name, email, title}] from the same tenancy directory eSign uses."""
+    """[{id, name, email, title}] from the same tenancy directory NES uses."""
     try:
         from .views_esign import _recipient_directory
 
         qs = _recipient_directory(user).order_by("first_name", "last_name", "username")[:limit]
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: directory unavailable")
+        logger.exception("NES Studio: directory unavailable")
         return []
     return [
         {"id": u.pk, "name": u.get_full_name() or u.username, "email": u.email or "",
@@ -338,7 +338,7 @@ def upload_to_pdf(upload, allow=("pdf", "image", "office")):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PDF → eSign envelope
+# PDF → NES envelope
 # ─────────────────────────────────────────────────────────────────────────────
 
 def envelope_from_pdf(request, agency, raw, *, name, subject, self_sign=False, reference="",
@@ -372,7 +372,7 @@ def envelope_from_pdf(request, agency, raw, *, name, subject, self_sign=False, r
             file=ContentFile(raw, name=(name or "document.pdf")),
         )
         prepare_document(doc)
-        log_event(envelope, "document_added", request=request, actor=user, note=f"{doc.name} (from eSign Studio)")
+        log_event(envelope, "document_added", request=request, actor=user, note=f"{doc.name} (from NES Studio)")
 
         if self_sign:
             email = (user.email or "").strip()
@@ -397,8 +397,8 @@ def envelope_from_pdf(request, agency, raw, *, name, subject, self_sign=False, r
                                                   label="Date signed", required=False)
             else:
                 _place_quick_fields(envelope, rec)
-            note = "Self-signed document created from eSign Studio."
+            note = "Self-signed document created from NES Studio."
         else:
-            note = "Draft envelope created from eSign Studio."
+            note = "Draft envelope created from NES Studio."
         log_event(envelope, "created", request=request, actor=user, note=note)
     return envelope

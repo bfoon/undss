@@ -1,4 +1,4 @@
-/* accounts/esign/formula-builder.js — UN PASS eSign Studio
+/* accounts/esign/formula-builder.js — UN PASS NES Studio
  *
  * A formula editor for people who do not write formulas. The expression is
  * still the plain text that accounts/form_formula_esign.py understands; this

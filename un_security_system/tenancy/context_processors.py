@@ -106,7 +106,7 @@ def _available_modules(flags, user):
     Build one card/menu row per enabled root module.
 
     Enabled child features are shown under their first parent as included
-    capabilities.  This prevents items such as eSign markup or room attendance
+    capabilities.  This prevents items such as NES markup or room attendance
     from disappearing while also avoiding duplicate top-level modules.
     """
     children_by_parent = {}
@@ -165,7 +165,7 @@ def tenancy(request):
     agency_id, office_id = scope_of(user)
     modules = _available_modules(flags, user)
 
-    # eSign already has its own top-level menu, so do not duplicate it in the
+    # NES already has its own top-level menu, so do not duplicate it in the
     # compact My Modules dropdown.  It still appears on the My Modules dashboard.
     menu_modules = [m for m in modules if m["code"] != "esign"]
 

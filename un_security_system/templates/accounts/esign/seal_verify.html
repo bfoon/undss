@@ -1,0 +1,492 @@
+{# Signed-in parties get the normal chrome; a tokenized recipient link gets the public signing chrome, which needs no account. #}
+{% extends base_template|default:"base.html" %}
+{% block title %}Verify seal — {{ envelope.subject }} | NES{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0 px-md-2">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div>
+      <h4 class="text-un-primary fw-bold mb-1">
+        <i class="bi bi-shield-lock me-2"></i>Document seal
+      </h4>
+      <div class="text-muted">{{ envelope.subject }}</div>
+      <div class="small text-muted mt-1">Envelope ID: {{ envelope.envelope_id }}</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if public %}
+        <a class="btn btn-outline-primary" href="{% url 'accounts:esign_token_evidence' recipient.token %}">
+          <i class="bi bi-archive me-1"></i>Evidence package
+        </a>
+      {% else %}
+        <a class="btn btn-outline-primary" href="{% url 'accounts:esign_evidence' envelope.pk %}">
+          <i class="bi bi-archive me-1"></i>Evidence package
+        </a>
+        <a class="btn btn-light" href="{% url 'accounts:esign_envelope_detail' envelope.pk %}">
+          <i class="bi bi-arrow-left me-1"></i>Back to the envelope
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── headline verdict: document AND trail, not just the document ── #}
+  {% if all_ok %}
+    <div class="alert alert-success d-flex gap-3">
+      <i class="bi bi-patch-check-fill fs-3"></i>
+      <div>
+        <div class="fw-semibold">This document and its audit trail are intact.</div>
+        <div class="small">
+          The embedded signature covers the whole file, the file has not been
+          altered since NES completed it, and no entry in the audit trail has
+          been changed, removed or inserted.
+        </div>
+      </div>
+    </div>
+  {% elif result.ok and not hash_mismatch %}
+    <div class="alert alert-warning d-flex gap-3">
+      <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+      <div>
+        <div class="fw-semibold">The document is intact, but its audit trail is not.</div>
+        <div class="small">
+          The file itself has not been altered. The record of who acted on it
+          has — see the audit trail below. Treat the document as authentic and
+          the trail as unreliable, and raise it with ICT.
+        </div>
+      </div>
+    </div>
+  {% elif hash_mismatch %}
+    <div class="alert alert-danger d-flex gap-3">
+      <i class="bi bi-exclamation-octagon-fill fs-3"></i>
+      <div>
+        <div class="fw-semibold">The stored file does not match what was sealed.</div>
+        <div class="small">
+          Its SHA-256 differs from the value recorded at completion. Treat this
+          copy as unreliable and raise it with ICT.
+        </div>
+      </div>
+    </div>
+  {% elif result.signatures %}
+    <div class="alert alert-danger d-flex gap-3">
+      <i class="bi bi-exclamation-octagon-fill fs-3"></i>
+      <div>
+        <div class="fw-semibold">The signature did not validate.</div>
+        <div class="small">The file may have been modified after completion.</div>
+      </div>
+    </div>
+  {% else %}
+    <div class="alert alert-secondary d-flex gap-3">
+      <i class="bi bi-shield-slash fs-3"></i>
+      <div>
+        <div class="fw-semibold">This document carries no embedded seal.</div>
+        <div class="small">
+          {{ result.error|default:"Nothing to validate." }}
+          The visible signatures, the envelope token and the Certificate of
+          Completion are unaffected — they remain the record of who signed.
+          {% if not pades_configured and not public %}
+            Digital sealing is not configured on this server yet.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="row g-3">
+
+    {# ── what the validator found ──────────────────────────────────── #}
+    <div class="col-12 col-lg-7">
+      <div class="card h-100">
+        <div class="card-header bg-white">
+          <h6 class="mb-0">Signature check</h6>
+        </div>
+        <div class="card-body">
+          {% if result.signatures %}
+            {% for sig in result.signatures %}
+              <div class="{% if not forloop.first %}border-top pt-3 mt-3{% endif %}">
+                <table class="table table-sm mb-0">
+                  <tbody>
+                    <tr>
+                      <th class="text-muted fw-normal" style="width:42%">Unaltered since signing</th>
+                      <td>
+                        {% if sig.intact %}
+                          <span class="text-success fw-semibold">Yes</span>
+                        {% else %}
+                          <span class="text-danger fw-semibold">No</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted fw-normal">Covers the whole file</th>
+                      <td>
+                        {% if 'ENTIRE_FILE' in sig.coverage %}
+                          <span class="text-success fw-semibold">Yes</span>
+                        {% else %}
+                          <span class="text-warning fw-semibold">Partial — {{ sig.coverage }}</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted fw-normal">Issuer trusted by this server</th>
+                      <td>
+                        {% if sig.trusted %}
+                          <span class="text-success fw-semibold">Yes</span>
+                        {% else %}
+                          <span class="text-muted">Not verified here</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th class="text-muted fw-normal">Sealed by</th>
+                      <td class="small">{{ sig.signer|default:"—" }}</td>
+                    </tr>
+                    {% if sig.signed_at %}
+                      <tr>
+                        <th class="text-muted fw-normal">Signing time claimed</th>
+                        <td class="small">{{ sig.signed_at }}</td>
+                      </tr>
+                    {% endif %}
+                    <tr>
+                      <th class="text-muted fw-normal">Validator summary</th>
+                      <td><code class="small">{{ sig.summary|default:"—" }}</code></td>
+                    </tr>
+                    {% if sig.error %}
+                      <tr>
+                        <th class="text-muted fw-normal">Note</th>
+                        <td class="small text-warning-emphasis">{{ sig.error }}</td>
+                      </tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+            {% endfor %}
+
+            {% if not result.ok %}
+              <div class="small text-muted mt-3">
+                A reader such as Adobe Acrobat performs the same check against
+                its own trust store, so it may reach a different conclusion
+                about trust — but never about whether the bytes changed.
+              </div>
+            {% endif %}
+          {% else %}
+            <div class="text-muted small mb-0">
+              No embedded signature to check.
+              {% if not public %}
+                An administrator can seal this envelope with
+                <code>manage.py esign_pades --seal-envelope {{ envelope.envelope_id }}</code>
+                once a certificate is installed.
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# ── the record, and how to check a copy by hand ───────────────── #}
+    <div class="col-12 col-lg-5">
+      <div class="card h-100">
+        <div class="card-header bg-white">
+          <h6 class="mb-0">Seal record</h6>
+        </div>
+        <div class="card-body">
+          {% if seal %}
+            <table class="table table-sm">
+              <tbody>
+                <tr>
+                  <th class="text-muted fw-normal" style="width:45%">Conformance</th>
+                  <td>
+                    {% if seal.level_achieved %}
+                      <span class="badge bg-{{ seal.status_color }}">{{ seal.short_level }}</span>
+                    {% else %}
+                      <span class="badge bg-secondary">{{ seal.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% if seal.level_achieved %}
+                  <tr>
+                    <th class="text-muted fw-normal">Standard</th>
+                    <td class="small">{{ seal.get_level_achieved_display }}</td>
+                  </tr>
+                {% endif %}
+                {% if not seal.met_target and seal.level_requested %}
+                  <tr>
+                    <th class="text-muted fw-normal">Target</th>
+                    <td class="small text-warning-emphasis">
+                      {{ seal.get_level_requested_display }} — not reached
+                    </td>
+                  </tr>
+                {% endif %}
+                {% if seal.applied_at %}
+                  <tr>
+                    <th class="text-muted fw-normal">Sealed at</th>
+                    <td class="small">{{ seal.applied_at }}</td>
+                  </tr>
+                {% endif %}
+                <tr>
+                  <th class="text-muted fw-normal">Trusted timestamp</th>
+                  <td class="small">
+                    {% if seal.timestamped %}
+                      Yes{% if seal.timestamp_authority %} — {{ seal.timestamp_authority }}{% endif %}
+                    {% else %}
+                      No — signing time is as claimed by the server
+                    {% endif %}
+                  </td>
+                </tr>
+                {% if seal.signer_organization or seal.signer_common_name %}
+                  <tr>
+                    <th class="text-muted fw-normal">Certificate</th>
+                    <td class="small">
+                      {{ seal.signer_common_name }}
+                      {% if seal.signer_organization %}<br>{{ seal.signer_organization }}{% endif %}
+                      {% if seal.signer_serial %}<br><span class="text-muted">serial {{ seal.signer_serial }}</span>{% endif %}
+                    </td>
+                  </tr>
+                {% endif %}
+                {% if seal.certificate_expires_at %}
+                  <tr>
+                    <th class="text-muted fw-normal">Certificate expires</th>
+                    <td class="small {% if seal.certificate_expired %}text-danger-emphasis{% endif %}">
+                      {{ seal.certificate_expires_at }}
+                      {% if seal.certificate_expired %}(expired){% endif %}
+                    </td>
+                  </tr>
+                {% endif %}
+                {% if seal.detail %}
+                  <tr>
+                    <th class="text-muted fw-normal">Detail</th>
+                    <td class="small text-muted">{{ seal.detail }}</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="text-muted small">
+              No seal was recorded for this envelope.
+            </p>
+          {% endif %}
+
+          <hr>
+
+          <h6 class="small text-uppercase text-muted">Check a downloaded copy</h6>
+          <p class="small text-muted mb-2">
+            Run this against your copy; the hash must match exactly.
+          </p>
+          <pre class="small bg-light border rounded p-2 mb-2"><code>sha256sum {{ envelope.envelope_id }}-signed.pdf</code></pre>
+          <div class="small">
+            <div class="text-muted">Stored file now</div>
+            <code class="small text-break">{{ stored_sha256|default:"—" }}</code>
+          </div>
+          {% if recorded_sha256 %}
+            <div class="small mt-2">
+              <div class="text-muted">Recorded at completion</div>
+              <code class="small text-break {% if hash_mismatch %}text-danger{% endif %}">{{ recorded_sha256 }}</code>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── audit trail: the other half of tamper-evidence ──────────────── #}
+  <div class="card mt-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <h6 class="mb-0">Audit trail</h6>
+      {% if chain.ok %}
+        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+          <i class="bi bi-link-45deg me-1"></i>{{ chain.chained }} linked
+        </span>
+      {% else %}
+        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
+          <i class="bi bi-exclamation-triangle me-1"></i>Altered
+        </span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <p class="small text-muted">
+        Every entry is hash-linked to the one before it, so editing, deleting,
+        inserting or reordering an entry breaks the link at that point.
+      </p>
+
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <th class="text-muted fw-normal" style="width:52%">Entries recorded</th>
+                <td>{{ chain.total }}</td>
+              </tr>
+              <tr>
+                <th class="text-muted fw-normal">Hash-linked</th>
+                <td>{{ chain.chained }}</td>
+              </tr>
+              {% if chain.unchained %}
+                <tr>
+                  <th class="text-muted fw-normal">Predating the chain</th>
+                  <td>
+                    {{ chain.unchained }}
+                    <span class="text-muted small">— cannot be checked; not a sign of tampering</span>
+                  </td>
+                </tr>
+              {% endif %}
+              <tr>
+                <th class="text-muted fw-normal">Links verify</th>
+                <td>
+                  {% if chain.ok %}
+                    <span class="text-success fw-semibold">Yes</span>
+                  {% else %}
+                    <span class="text-danger fw-semibold">No</span>
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <th class="text-muted fw-normal" style="width:52%">Signed anchor</th>
+                <td>
+                  {% if anchor.present %}
+                    {% if anchor.signature_intact %}
+                      <span class="text-success fw-semibold">Present and valid</span>
+                    {% else %}
+                      <span class="text-danger fw-semibold">Present, did not validate</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted">None</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% if anchor.present %}
+                <tr>
+                  <th class="text-muted fw-normal">Nothing removed from the end</th>
+                  <td>
+                    {% if anchor.truncated %}
+                      <span class="text-danger fw-semibold">Entries are missing</span>
+                    {% else %}
+                      <span class="text-success fw-semibold">Confirmed</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% if seal.audit_anchor_timestamped %}
+                  <tr>
+                    <th class="text-muted fw-normal">Anchor timestamped</th>
+                    <td class="small">Yes — the anchor time is independently proven</td>
+                  </tr>
+                {% endif %}
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {% if anchor.detail %}
+        <div class="small {% if anchor.truncated %}text-danger-emphasis{% else %}text-muted{% endif %} mt-2">
+          {{ anchor.detail }}
+        </div>
+      {% endif %}
+
+      {% if chain.problems %}
+        <div class="alert alert-danger small mt-3 mb-0">
+          <div class="fw-semibold mb-2">Where the trail breaks</div>
+          <ul class="mb-0 ps-3">
+            {% for p in chain.problems %}
+              <li>
+                Entry {{ p.event_id }}{% if p.event %} ({{ p.event }}){% endif %}{% if p.at %}, {{ p.at }}{% endif %} —
+                {{ p.detail }}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      {% if not anchor.present and chain.chained %}
+        <div class="small text-muted mt-2">
+          Without a signed anchor, entries removed from the <em>end</em> of the
+          trail cannot be detected — a shorter chain is still internally
+          consistent. Envelopes completed from now on record one automatically.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── how long this stays verifiable ──────────────────────────────── #}
+  {% if seal and seal.is_sealed %}
+    <div class="card mt-3">
+      <div class="card-header bg-white">
+        <h6 class="mb-0">Long-term validity</h6>
+      </div>
+      <div class="card-body">
+        <p class="small mb-2">{{ seal.long_term_outlook }}</p>
+        <div class="small text-muted">
+          {% if seal.refresh_count %}
+            Refreshed {{ seal.refresh_count }} time{{ seal.refresh_count|pluralize }}{% if seal.last_refreshed_at %}, most recently {{ seal.last_refreshed_at|date:"j M Y" }}{% endif %}.
+          {% endif %}
+          {% if seal.next_refresh_due %}
+            {% if seal.refresh_overdue %}
+              <span class="text-warning-emphasis fw-semibold">
+                An archival refresh was due {{ seal.next_refresh_due|date:"j M Y" }}.
+              </span>
+            {% else %}
+              Next archival refresh due {{ seal.next_refresh_due|date:"j M Y" }}.
+            {% endif %}
+          {% endif %}
+        </div>
+        {% if seal.policy_oid %}
+          <div class="small text-muted mt-2">
+            Issued under signature policy <code>{{ seal.policy_oid }}</code>{% if seal.policy_uri %} — <a href="{{ seal.policy_uri }}" rel="noopener">published policy</a>{% endif %}.
+          </div>
+        {% endif %}
+        {% if seal.commitment_type %}
+          <div class="small text-muted">
+            Asserts <strong>{{ seal.commitment_type|cut:"_"|title }}</strong>: the
+            organisation attests this is the authentic completed record. The
+            approvals themselves belong to the signatories inside the document.
+          </div>
+        {% endif %}
+        {% if seal.certificate_sealed %}
+          <div class="small text-muted mt-2">
+            <i class="bi bi-check2 me-1"></i>The Certificate of Completion is
+            sealed too, so the record of who signed is protected alongside the
+            document.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {# ── offline evidence ────────────────────────────────────────────── #}
+  <div class="card mt-3">
+    <div class="card-header bg-white">
+      <h6 class="mb-0">Verifying without UN PASS</h6>
+    </div>
+    <div class="card-body">
+      <p class="small mb-2">
+        The evidence package is a single ASiC-E container holding the sealed
+        document, the sealed Certificate of Completion, the full certificate
+        chain, the revocation data, the hash-linked audit trail with its signed
+        anchor, and a manifest of SHA-256 digests. It verifies with
+        <code>sha256sum</code> and <code>openssl</code> alone — no network, no
+        account, no this system. <code>VERIFY.txt</code> inside walks through it.
+      </p>
+      {% if public %}
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_token_evidence' recipient.token %}">
+          <i class="bi bi-archive me-1"></i>Download evidence package
+        </a>
+      {% else %}
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:esign_evidence' envelope.pk %}">
+          <i class="bi bi-archive me-1"></i>Download evidence package
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="small text-muted mt-3 mb-0">
+    Sealing follows the PAdES baseline profile of ETSI EN 319 142 (also
+    published as ISO 14533-3), so the signature is verifiable by Adobe Acrobat
+    and any conformant validator without access to UN PASS. The audit trail is
+    hash-linked and its head signed; the evidence package follows the ASiC-E
+    container conventions of ETSI EN 319 162.
+  </p>
+</div>
+{% endblock %}

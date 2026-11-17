@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Cross-office witnessing | NES{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0 px-md-2">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div>
+      <h4 class="text-un-primary fw-bold mb-1">
+        <i class="bi bi-people-fill me-2"></i>Cross-office witnessing
+      </h4>
+      <div class="text-muted">
+        Participating country offices each hold a signed fingerprint of every
+        document sealed here. Altering a document would mean altering every
+        office's copy at once.
+      </div>
+    </div>
+    {% if office_code %}
+      <span class="badge bg-un-primary fs-6">{{ office_code }}</span>
+    {% endif %}
+  </div>
+
+  {% if not enabled %}
+    <div class="alert alert-secondary d-flex gap-3">
+      <i class="bi bi-pause-circle fs-3"></i>
+      <div>
+        <div class="fw-semibold">Witnessing is off.</div>
+        <div class="small">
+          Set <code>ESIGN_WITNESS_ENABLED = True</code> and
+          <code>ESIGN_WITNESS_OFFICE_CODE</code>, then register at least one
+          peer office. Nothing is being distributed until then.
+        </div>
+      </div>
+    </div>
+  {% elif not office_code %}
+    <div class="alert alert-danger d-flex gap-3">
+      <i class="bi bi-exclamation-octagon-fill fs-3"></i>
+      <div>
+        <div class="fw-semibold">This office has no code.</div>
+        <div class="small">
+          <code>ESIGN_WITNESS_OFFICE_CODE</code> is unset, so a statement
+          could not say who issued it. Nothing will be distributed.
+        </div>
+      </div>
+    </div>
+  {% elif not peers %}
+    <div class="alert alert-warning d-flex gap-3">
+      <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+      <div>
+        <div class="fw-semibold">No peer offices registered.</div>
+        <div class="small">
+          Fingerprints are being recorded here but held nowhere else, so they
+          protect against a mistake and not against someone with access to
+          this server. Witnessing only earns its keep once another office
+          holds copies.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if alert_count %}
+    <div class="alert alert-danger d-flex gap-3">
+      <i class="bi bi-shield-exclamation fs-3"></i>
+      <div>
+        <div class="fw-semibold">
+          {{ alert_count }} unresolved integrity alert{{ alert_count|pluralize }}.
+        </div>
+        <div class="small">
+          A critical alert means a sealed document or its audit trail no longer
+          matches what was witnessed. Do not delete anything — the divergence
+          is itself evidence.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-4">
+      <div class="card h-100">
+        <div class="card-header bg-white"><h6 class="mb-0">This office</h6></div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <th class="text-muted fw-normal" style="width:58%">Attestations issued</th>
+                <td>{{ records_ours }}</td>
+              </tr>
+              <tr>
+                <th class="text-muted fw-normal">Held for other offices</th>
+                <td>{{ records_held }}</td>
+              </tr>
+              <tr>
+                <th class="text-muted fw-normal">Queued to send</th>
+                <td>
+                  {{ pending }}
+                  {% if pending %}
+                    <span class="text-muted small">— sent by the scheduled job</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% if failed %}
+                <tr>
+                  <th class="text-muted fw-normal">Gave up</th>
+                  <td class="text-warning-emphasis fw-semibold">{{ failed }}</td>
+                </tr>
+              {% endif %}
+              <tr>
+                <th class="text-muted fw-normal">Alerts go to</th>
+                <td class="small">
+                  {% if alert_recipients %}
+                    {{ alert_recipients|join:", " }}
+                  {% else %}
+                    <span class="text-warning-emphasis">nobody configured</span>
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-8">
+      <div class="card h-100">
+        <div class="card-header bg-white"><h6 class="mb-0">Participating offices</h6></div>
+        <div class="card-body p-0">
+          {% if peers %}
+            <div class="table-responsive">
+              <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>Office</th>
+                    <th>Ready</th>
+                    <th class="text-end">Held</th>
+                    <th class="text-end">Queued</th>
+                    <th>Last contact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for peer in peers %}
+                    <tr>
+                      <td>
+                        <div class="fw-semibold">{{ peer.code }}</div>
+                        <div class="small text-muted">{{ peer.name }}</div>
+                        {% if not peer.active %}
+                          <span class="badge bg-secondary">inactive</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if peer.is_configured %}
+                          <span class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+                        {% else %}
+                          <span class="text-warning" title="Missing URL or certificate">
+                            <i class="bi bi-exclamation-circle-fill"></i>
+                          </span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ peer.held_count }}</td>
+                      <td class="text-end">
+                        {{ peer.pending_count }}
+                        {% if peer.failed_count %}
+                          <span class="badge bg-warning-subtle text-warning-emphasis">
+                            {{ peer.failed_count }} failed
+                          </span>
+                        {% endif %}
+                      </td>
+                      <td class="small">
+                        {{ peer.last_contact_at|default:"never" }}
+                        {% if peer.last_error %}
+                          <div class="text-danger-emphasis" style="max-width:22rem">
+                            {{ peer.last_error|truncatechars:90 }}
+                          </div>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="p-3 text-muted small mb-0">
+              None registered. Add one with
+              <code>manage.py esign_witness --add-peer</code>.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if alerts %}
+    <div class="card mt-3">
+      <div class="card-header bg-white"><h6 class="mb-0">Open alerts</h6></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Raised</th>
+                <th>Severity</th>
+                <th>What</th>
+                <th>Envelope</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for alert in alerts %}
+                <tr>
+                  <td class="small">{{ alert.raised_at|date:"j M H:i" }}</td>
+                  <td>
+                    <span class="badge bg-{{ alert.status_color }}">
+                      {{ alert.severity|title }}
+                    </span>
+                  </td>
+                  <td class="small">{{ alert.get_kind_display }}</td>
+                  <td class="small">
+                    {% if alert.local_envelope_id %}
+                      <a href="{% url 'accounts:esign_seal_verify' alert.local_envelope_id %}">
+                        {{ alert.envelope_uid|truncatechars:18 }}
+                      </a>
+                    {% else %}
+                      {{ alert.envelope_uid|truncatechars:18|default:"—" }}
+                    {% endif %}
+                  </td>
+                  <td class="small">{{ alert.detail }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <p class="small text-muted mt-3 mb-0">
+    Only fingerprints travel between offices — hashes, the envelope
+    identifier, timestamps. Never the document, the signature images, the
+    field values or recipient addresses. A SHA-256 is enough to prove
+    tampering and reveals nothing about content, which is why witnessing
+    detects and proves alteration rather than restoring the file.
+  </p>
+</div>
+{% endblock %}

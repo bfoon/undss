@@ -1,8 +1,8 @@
 # accounts/models_esign_studio.py
 """
-UN PASS — eSign Studio: PDF workbench, document workflows and form builder.
+UN PASS — NES Studio: PDF workbench, document workflows and form builder.
 
-Add ONE line at the very bottom of accounts/models.py, after the eSign import:
+Add ONE line at the very bottom of accounts/models.py, after the NES import:
 
     from .models_esign import *          # noqa: F401,F403  (already there)
     from .models_esign_studio import *   # noqa: F401,F403
@@ -25,7 +25,7 @@ WorkflowRun         one document travelling through a flow. It keeps its own
 
 WorkflowTask        one person's piece of work on a run: approve this, fill
                     that in, acknowledge the other. A signature step does not
-                    build its own signing screen — it creates a normal eSign
+                    build its own signing screen — it creates a normal NES
                     Envelope and waits for it, so signatures carry the same
                     stamping, certificate and audit trail as everything else.
 

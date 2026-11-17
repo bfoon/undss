@@ -334,7 +334,7 @@ class Api {
 
   Future<Map<String, dynamic>> me() => _send('GET', '/me/');
 
-  // ── eSign ─────────────────────────────────────────────────────────────────
+  // ── NES ─────────────────────────────────────────────────────────────────
 
   Future<List<dynamic>> inbox() async =>
       (await _send('GET', '/inbox/'))['items'] as List<dynamic>;

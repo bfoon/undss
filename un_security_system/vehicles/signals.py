@@ -1,4 +1,4 @@
-"""Package/eSign lifecycle synchronization."""
+"""Package/NES lifecycle synchronization."""
 
 import logging
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=Envelope)
 def sync_package_esign(sender, instance, **kwargs):
-    """Reflect eSign state back into a package document and Package Flow."""
+    """Reflect NES state back into a package document and Package Flow."""
     try:
         doc = instance.package_document_source
     except Exception:
@@ -31,4 +31,4 @@ def sync_package_esign(sender, instance, **kwargs):
             from .package_esign import complete_package_step_from_envelope
             complete_package_step_from_envelope(instance)
     except Exception:
-        logger.exception('Could not synchronize package eSign envelope %s', instance.pk)
+        logger.exception('Could not synchronize package NES envelope %s', instance.pk)

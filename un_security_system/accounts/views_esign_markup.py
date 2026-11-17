@@ -1,6 +1,6 @@
 # accounts/views_esign_markup.py
 """
-UN PASS — eSign markup API (highlight / freehand / area / strikeout / note pin
+UN PASS — NES markup API (highlight / freehand / area / strikeout / note pin
 plus a Word-style comment thread on each mark).
 
 Two access paths, one implementation:
@@ -206,7 +206,7 @@ def _stamp_author(obj, ctx: _Ctx):
 def _notify_sender(request, ctx: _Ctx, annotation, text, is_reply=False):
     """
     Tell the sender a mark was left — reusing the existing comment email so the
-    eSign flow keeps one notification style. Never let mail break the write.
+    NES flow keeps one notification style. Never let mail break the write.
     """
     if ctx.recipient is None:
         return  # the sender marking up their own envelope needs no email
@@ -222,7 +222,7 @@ def _notify_sender(request, ctx: _Ctx, annotation, text, is_reply=False):
             f"[{annotation.color_label} — {verb} {page_ref}] {text}",
         )
     except Exception:
-        logger.exception("eSign markup: could not queue notification for envelope %s",
+        logger.exception("NES markup: could not queue notification for envelope %s",
                          ctx.envelope.pk)
 
 
@@ -252,7 +252,7 @@ def _notify_reply(request, ctx: _Ctx, annotation, text):
             )
         except Exception:
             logger.exception(
-                "eSign markup: could not queue reply notification to recipient %s",
+                "NES markup: could not queue reply notification to recipient %s",
                 author.pk,
             )
 
@@ -674,7 +674,7 @@ def esign_markup_pdf(request, pk):
     try:
         pdf = build_markup_pdf(envelope, marks, revision=revision)
     except Exception:
-        logger.exception("eSign: markup PDF failed for envelope %s", envelope.pk)
+        logger.exception("NES: markup PDF failed for envelope %s", envelope.pk)
         return JsonResponse(
             {"ok": False, "error": "The markup PDF could not be generated."}, status=500
         )

@@ -1,4 +1,4 @@
-/* accounts/esign/formula.js — UN PASS eSign Studio
+/* accounts/esign/formula.js — UN PASS NES Studio
  *
  * The browser half of accounts/form_formula_esign.py. Same grammar, same
  * function names, same rounding, so a total that appears while someone types

@@ -1,6 +1,6 @@
 # accounts/workflow_engine_esign.py
 """
-UN PASS — eSign Studio workflow engine.
+UN PASS — NES Studio workflow engine.
 
 A flow is a graph. A run moves through it by *entering* nodes and *leaving* them
 through a port:
@@ -9,7 +9,7 @@ through a port:
     approval     creates a task per person; leaves by `approved` or `rejected`
     review       creates a task per person; leaves by `next` once acknowledged
     fill         someone completes their part of the form; leaves by `next`
-    signature    creates an eSign envelope; leaves by `signed` or `declined`
+    signature    creates an NES envelope; leaves by `signed` or `declined`
     condition    checks a set of rules; leaves by `yes` or `no`
     route        checks each path's rules in order; leaves by the first match
                  (or by every match), otherwise by `otherwise`
@@ -63,7 +63,7 @@ NODE_TYPES = {
     "fill": {"label": "Fill in", "icon": "bi-input-cursor-text", "color": "#2563EB",
              "ports": ["next"], "hint": "Someone completes the part of the form assigned to this step."},
     "signature": {"label": "Signature", "icon": "bi-pen", "color": "#009EDB",
-                  "ports": ["signed", "declined"], "hint": "Sends an eSign envelope and waits for it."},
+                  "ports": ["signed", "declined"], "hint": "Sends an NES envelope and waits for it."},
     "route": {"label": "Route", "icon": "bi-signpost-2", "color": "#C026D3",
               "ports": [], "hint": "Several paths, each with its own rules, plus an Otherwise path."},
     "condition": {"label": "Condition", "icon": "bi-signpost-split", "color": "#7C3AED",
@@ -424,7 +424,7 @@ def log_run(run, event, *, request=None, task=None, actor=None, actor_name="", n
             note=(note or "")[:300], ip=_client_ip(request), meta=meta or {},
         )
     except Exception:  # noqa: BLE001 - audit must never break a flow
-        logger.exception("eSign Studio: could not log %s on run %s", event, getattr(run, "pk", "?"))
+        logger.exception("NES Studio: could not log %s on run %s", event, getattr(run, "pk", "?"))
         return None
 
 
@@ -565,7 +565,7 @@ def _workflow_primary_envelope_id(run):
             return task.envelope.envelope_id
     except Exception:
         logger.exception(
-            "eSign Studio: could not resolve primary envelope for run %s",
+            "NES Studio: could not resolve primary envelope for run %s",
             run.pk,
         )
     return ""
@@ -656,7 +656,7 @@ def _stamp_workflow_form_pdf(raw, run, *, envelope_id="", status_label=""):
 
     except Exception:
         logger.exception(
-            "eSign Studio: could not stamp workflow PDF metadata for run %s",
+            "NES Studio: could not stamp workflow PDF metadata for run %s",
             run.pk,
         )
         return raw
@@ -749,7 +749,7 @@ def start_run(workflow, initiator, *, agency, subject, message="", pdf_bytes=Non
         )
         run.save(update_fields=["context"])
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: could not record the copy policy for run %s", run.pk)
+        logger.exception("NES Studio: could not record the copy policy for run %s", run.pk)
 
     if pdf_bytes:
         set_run_document(run, pdf_bytes, document_name or f"{subject}.pdf")
@@ -814,7 +814,7 @@ def _block(run, reason, node_id=""):
 
         notify.run_blocked(run)
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: could not notify blocked run %s", run.pk)
+        logger.exception("NES Studio: could not notify blocked run %s", run.pk)
 
 
 def _enter(run, node, request=None):
@@ -976,7 +976,7 @@ def evaluate_condition(run, node):
 
                 resolved["@run:pages"] = page_count(run_pdf_bytes(run) or b"")
             except Exception:  # noqa: BLE001 - an unreadable document counts as no pages
-                logger.exception("eSign Studio: could not count pages for run %s", run.pk)
+                logger.exception("NES Studio: could not count pages for run %s", run.pk)
         result = C.evaluate_tree(resolved, cfg["condition"])
         schema = run.submission.schema if run.submission_id else None
         labels = {n["id"]: n["label"] for n in (run.graph or {}).get("nodes") or []}
@@ -1175,7 +1175,7 @@ def decide(task, action, *, request=None, comment="", values=None, actor=None):
             docgen_esign.run_rules(run.submission, FormDocumentRule.TRIGGER_STEP,
                                    run=run, node_id=task.node_id, request=request, actor=actor)
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: step documents failed for run %s", run.pk)
+            logger.exception("NES Studio: step documents failed for run %s", run.pk)
 
     try:
         from . import workflow_notify_esign as notify
@@ -1185,7 +1185,7 @@ def decide(task, action, *, request=None, comment="", values=None, actor=None):
         elif action in ("approve", "reject", "acknowledge", "submit"):
             notify.decision_made(run, task)
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: could not send decision email for task %s", task.pk)
+        logger.exception("NES Studio: could not send decision email for task %s", task.pk)
 
     _settle(run)
     return run
@@ -1233,7 +1233,7 @@ def _return_for_changes(run, task, node, comment, request, actor):
 
         notify.returned(run, task, resubmit, request=request)
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: could not send return email for run %s", run.pk)
+        logger.exception("NES Studio: could not send return email for run %s", run.pk)
 
 
 def _resubmit(run, task, action, comment, values, request, actor):
@@ -1274,7 +1274,7 @@ def _resubmit(run, task, action, comment, values, request, actor):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Signature steps → eSign envelopes
+# Signature steps → NES envelopes
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _start_signature(run, node, request=None):
@@ -1537,9 +1537,9 @@ def on_envelope_status(envelope_id, status):
 
             elif status == Envelope.STATUS_RETURNED:
                 log_run(run, "step", task=task, node_id=task.node_id,
-                        note=f"A signer returned envelope {envelope.short_id} for changes; the sender reworks it in eSign.")
+                        note=f"A signer returned envelope {envelope.short_id} for changes; the sender reworks it in NES.")
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: could not advance run %s from envelope %s", run.pk, envelope_id)
+            logger.exception("NES Studio: could not advance run %s from envelope %s", run.pk, envelope_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1582,7 +1582,7 @@ def cancel_run(run, actor, reason="", request=None):
 
         notify.run_finished(run)
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: cancel email failed for run %s", run.pk)
+        logger.exception("NES Studio: cancel email failed for run %s", run.pk)
 
 
 def reassign_task(task, person, actor, request=None):
@@ -1659,7 +1659,7 @@ def finish_run(run, status, note=""):
         run.final_pdf.save(f"{run.reference}-final.pdf", ContentFile(final), save=False)
         run.save(update_fields=["final_pdf"])
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: could not build final PDF for run %s", run.pk)
+        logger.exception("NES Studio: could not build final PDF for run %s", run.pk)
 
     if run.submission_id:
         FormSubmission.objects.filter(pk=run.submission_id).update(
@@ -1673,7 +1673,7 @@ def finish_run(run, status, note=""):
 
             docgen_esign.run_rules(run.submission, FormDocumentRule.TRIGGER_COMPLETE, run=run)
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: follow-on documents failed for run %s", run.pk)
+            logger.exception("NES Studio: follow-on documents failed for run %s", run.pk)
 
     log_run(run, "completed" if status == WorkflowRun.STATUS_COMPLETED else "rejected",
             note=("Completed." if status == WorkflowRun.STATUS_COMPLETED else f"Rejected — {note}")[:300])
@@ -1683,7 +1683,7 @@ def finish_run(run, status, note=""):
 
         notify.run_finished(run)
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: finish email failed for run %s", run.pk)
+        logger.exception("NES Studio: finish email failed for run %s", run.pk)
 
 
 def build_run_record_pdf(run) -> bytes:

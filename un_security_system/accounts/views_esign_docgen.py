@@ -1,6 +1,6 @@
 # accounts/views_esign_docgen.py
 """
-UN PASS — eSign Studio: the automation page of a form.
+UN PASS — NES Studio: the automation page of a form.
 
 Two things live here, because they are the two questions people ask once a form
 works: "who gets the signed copy, and when?" and "what else should this form
@@ -272,7 +272,7 @@ def esign_document_rule_preview(request, pk, rule_id):
     try:
         result = docgen_esign.preview(rule, submission)
     except Exception as exc:  # noqa: BLE001
-        logger.exception("eSign Studio: preview failed for rule %s", rule.pk)
+        logger.exception("NES Studio: preview failed for rule %s", rule.pk)
         return JsonResponse({"ok": False, "error": str(exc)[:200]})
     return JsonResponse({"ok": True, "reference": submission.reference,
                          "rows": result["rows"], "problems": result["problems"]})

@@ -153,7 +153,7 @@ window.ESIGN_PDFJS_BASE = "{{ esign_pdfjs_base|default:'https://cdn.jsdelivr.net
         workerDisabled = true;
         pdfjsLib.GlobalWorkerOptions.workerSrc = "";
         pdfjsLib.disableWorker = true;
-        console.warn("[eSign] PDF.js worker unavailable — rendering on the main thread.");
+        console.warn("[NES] PDF.js worker unavailable — rendering on the main thread.");
         return await pdfjsLib.getDocument({ data: buf.slice(0), disableWorker: true }).promise;
       }
       if (/InvalidPDF|structure/i.test(msg)) {
@@ -187,7 +187,7 @@ window.ESIGN_PDFJS_BASE = "{{ esign_pdfjs_base|default:'https://cdn.jsdelivr.net
       try {
         return await openBuffer(b64ToBytes(entry.data));
       } catch (e) {
-        console.warn("[eSign] embedded document failed, falling back to URL:", e.message);
+        console.warn("[NES] embedded document failed, falling back to URL:", e.message);
         if (!url) throw e;
       }
     }
@@ -203,17 +203,17 @@ window.ESIGN_PDFJS_BASE = "{{ esign_pdfjs_base|default:'https://cdn.jsdelivr.net
       // A real HTTP status (403/404/415/500) is the answer — surface it.
       if (!e.isNetworkError) throw e;
       firstError = e;
-      console.warn("[eSign] fetch() failed, retrying with XHR:", e.message);
+      console.warn("[NES] fetch() failed, retrying with XHR:", e.message);
       try {
         data = await xhrBytes(url);
       } catch (e2) {
-        console.warn("[eSign] XHR failed too:", e2.message);
+        console.warn("[NES] XHR failed too:", e2.message);
       }
     }
 
     if (!data) {
       try {
-        console.warn("[eSign] falling back to PDF.js direct URL loading.");
+        console.warn("[NES] falling back to PDF.js direct URL loading.");
         return await pdfjsLib.getDocument({ url: url, withCredentials: true }).promise;
       } catch (e3) {
         throw firstError || e3;
@@ -268,7 +268,7 @@ window.ESIGN_PDFJS_BASE = "{{ esign_pdfjs_base|default:'https://cdn.jsdelivr.net
 
   function showError(container, err, url) {
     const msg = (err && err.message) ? err.message : String(err);
-    console.error("[eSign] document render failed:", err);
+    console.error("[NES] document render failed:", err);
     container.innerHTML =
       '<div class="alert alert-danger text-start mb-0">' +
         '<div class="fw-semibold mb-1">' +

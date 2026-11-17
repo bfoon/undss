@@ -1,6 +1,6 @@
 # accounts/converters_esign.py
 """
-Office → PDF conversion for eSign.
+Office → PDF conversion for NES.
 
 Two paths, picked automatically at runtime:
 
@@ -371,11 +371,11 @@ def _convert_docx_pure(raw: bytes) -> bytes:
             # A single odd element (an unknown style, a chart, a content
             # control) must not cost the whole document.
             skipped += 1
-            logger.warning("eSign: skipped an unrenderable <%s> element", tag, exc_info=True)
+            logger.warning("NES: skipped an unrenderable <%s> element", tag, exc_info=True)
             continue
 
     if skipped:
-        logger.info("eSign: DOCX rendered with %d element(s) skipped", skipped)
+        logger.info("NES: DOCX rendered with %d element(s) skipped", skipped)
 
     if not story:
         story.append(Paragraph("(This document appears to be empty.)", styles["body"]))

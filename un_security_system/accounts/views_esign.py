@@ -1,6 +1,6 @@
 # accounts/views_esign.py
 """
-UN PASS — eSign views.
+UN PASS — NES views.
 
 Internal (login required)          Public / tokenized (no login)
 ────────────────────────           ─────────────────────────────
@@ -117,7 +117,7 @@ def _recipient_directory(user, envelope=None):
 
     Package Flow is intentionally restricted to the sender's own Country
     Office. Anyone outside that office is entered by email and remains an
-    external eSign recipient. Normal eSign keeps the tenancy shareable-directory
+    external NES recipient. Normal NES keeps the tenancy shareable-directory
     behaviour.
     """
     if envelope is not None and _is_package_flow_envelope(envelope):
@@ -133,7 +133,7 @@ def _recipient_directory(user, envelope=None):
         from tenancy.services import visible_users_for
         return visible_users_for(user, 'esign').filter(is_active=True)
     except Exception:
-        logger.exception('eSign: could not resolve tenancy recipient directory')
+        logger.exception('NES: could not resolve tenancy recipient directory')
         return User.objects.none()
 
 # Keep in sync with SignatureProfile.FONT_CHOICES and the CSS in sign.html
@@ -185,11 +185,11 @@ def _document_payload(doc, url, raw=None):
             entry["data"] = base64.b64encode(raw).decode("ascii")
         elif raw:
             logger.info(
-                "eSign: document %s is %d bytes — above the inline limit, "
+                "NES: document %s is %d bytes — above the inline limit, "
                 "the viewer will fetch it by URL.", doc.pk, len(raw)
             )
     except Exception:
-        logger.exception("eSign: could not inline document %s", getattr(doc, "pk", "?"))
+        logger.exception("NES: could not inline document %s", getattr(doc, "pk", "?"))
 
     return entry
 
@@ -208,7 +208,7 @@ def _agency_or_redirect(request):
 
 
 def _service_enabled(agency, user) -> bool:
-    """Return the resolved tenancy entitlement for eSign.
+    """Return the resolved tenancy entitlement for NES.
 
     `agency` is kept in the signature for backward compatibility with the
     existing callers, but entitlement resolution now comes exclusively from
@@ -252,7 +252,7 @@ def esign_dashboard(request):
     if not agency:
         return redirect("accounts:profile")
     if not _service_enabled(agency, request.user):
-        messages.warning(request, "eSign is not enabled for your agency or country office.")
+        messages.warning(request, "NES is not enabled for your agency or country office.")
         return redirect("accounts:profile")
 
     user = request.user
@@ -312,7 +312,7 @@ def esign_new(request):
     if not agency:
         return redirect("accounts:profile")
     if not _service_enabled(agency, request.user):
-        messages.warning(request, "eSign is not enabled for your agency or country office.")
+        messages.warning(request, "NES is not enabled for your agency or country office.")
         return redirect("accounts:profile")
 
     asset = None
@@ -455,19 +455,19 @@ def esign_new(request):
         return redirect(request.get_full_path())
 
     except (ProgrammingError, OperationalError) as exc:
-        # Almost always a missing migration for the eSign tables/columns
-        logger.exception("eSign: database schema error creating envelope")
+        # Almost always a missing migration for the NES tables/columns
+        logger.exception("NES: database schema error creating envelope")
         first = str(exc).strip().splitlines()[0][:200]
         messages.error(
             request,
-            "The eSign database schema is out of date. Run "
+            "The NES database schema is out of date. Run "
             "`python manage.py makemigrations accounts && python manage.py migrate` "
             f"and try again. Database said: {first}",
         )
         return redirect(request.get_full_path())
 
     except Exception as exc:  # noqa: BLE001
-        logger.exception("eSign: envelope creation failed")
+        logger.exception("NES: envelope creation failed")
         detail = f"{type(exc).__name__}: {exc}"[:300]
         if settings.DEBUG or request.user.is_superuser or request.user.is_staff:
             messages.error(request, f"The envelope could not be created — {detail}")
@@ -898,7 +898,7 @@ def esign_document_pages(request, pk, doc_id):
         raw = document_pdf_bytes(doc)
         reader = PdfReader(io.BytesIO(raw))
     except Exception as exc:
-        logger.exception("eSign: cannot read document %s for editing", doc.pk)
+        logger.exception("NES: cannot read document %s for editing", doc.pk)
         return JsonResponse({"ok": False, "error": str(exc)}, status=500)
 
     total = len(reader.pages)
@@ -1009,7 +1009,7 @@ def esign_document_add(request, pk):
                 note=f"Added {doc.name} ({doc.page_count} page(s))",
             )
         except Exception as exc:  # noqa: BLE001
-            logger.exception("eSign: failed to add document to envelope %s", envelope.pk)
+            logger.exception("NES: failed to add document to envelope %s", envelope.pk)
             messages.error(request, f"{f.name}: {exc}")
 
     if added:
@@ -1069,7 +1069,7 @@ def esign_send(request, pk):
             if not raw or raw[:5] != b"%PDF-":
                 unreadable.append(str(d))
         except Exception as exc:  # noqa: BLE001
-            logger.warning("eSign: document %s unreadable at send time: %s", d.pk, exc)
+            logger.warning("NES: document %s unreadable at send time: %s", d.pk, exc)
             unreadable.append(f"{d} — {exc}")
 
     if unreadable:
@@ -1268,10 +1268,10 @@ def esign_envelope_delete(request, pk):
             handle.delete(save=False)
             removed += 1
         except Exception:
-            logger.warning("eSign: could not delete stored file %s", getattr(handle, "name", "?"))
+            logger.warning("NES: could not delete stored file %s", getattr(handle, "name", "?"))
 
     logger.info(
-        "eSign: %s deleted draft '%s' (%d document(s), %d file(s) removed)",
+        "NES: %s deleted draft '%s' (%d document(s), %d file(s) removed)",
         request.user, subject, doc_count, removed,
     )
     messages.success(request, f"Draft deleted: {subject}")
@@ -1537,7 +1537,7 @@ def esign_duplicate(request, pk):
                     )
                     d.file.close()
                 except Exception:
-                    logger.exception("eSign: could not copy document %s", d.pk)
+                    logger.exception("NES: could not copy document %s", d.pk)
                     continue
                 new_doc.save()
                 copied_docs += 1
@@ -1605,17 +1605,17 @@ def _pdf_response(doc, filename):
         raw = document_pdf_bytes(doc)
     except ValueError as exc:
         # Conversion refused the file (unsupported type, no converter installed)
-        logger.warning("eSign: cannot render document %s: %s", doc.pk, exc)
+        logger.warning("NES: cannot render document %s: %s", doc.pk, exc)
         return HttpResponse(str(exc), status=415, content_type="text/plain")
     except FileNotFoundError:
-        logger.error("eSign: file missing on disk for document %s (%s)", doc.pk, doc.file)
+        logger.error("NES: file missing on disk for document %s (%s)", doc.pk, doc.file)
         return HttpResponse(
             "The stored file is missing from the media volume.",
             status=404,
             content_type="text/plain",
         )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("eSign: unexpected error rendering document %s", doc.pk)
+        logger.exception("NES: unexpected error rendering document %s", doc.pk)
         return HttpResponse(
             f"The document could not be prepared: {type(exc).__name__}: {exc}",
             status=500,
@@ -1798,7 +1798,7 @@ def _saved_signature_content(ref: str, recipient, want_initials=False):
     prof = SignatureProfile.objects.filter(id=profile_id, user_id=recipient.user_id).first()
     if not prof:
         logger.warning(
-            "eSign: recipient %s referenced signature %s that isn't theirs",
+            "NES: recipient %s referenced signature %s that isn't theirs",
             recipient.pk, profile_id,
         )
         return None
@@ -1813,7 +1813,7 @@ def _saved_signature_content(ref: str, recipient, want_initials=False):
         src.close()
         return ContentFile(data) if data else None
     except Exception:
-        logger.exception("eSign: could not read saved signature %s", profile_id)
+        logger.exception("NES: could not read saved signature %s", profile_id)
         return None
 
 
@@ -1866,7 +1866,7 @@ def _handle_sign_submit(request, recipient):
                 # a generic "complete all required fields" and no way forward.
                 signature_errors.append(f.label or f.get_kind_display())
                 logger.warning(
-                    "eSign: unusable signature payload for field %s (recipient %s, ref %r)",
+                    "NES: unusable signature payload for field %s (recipient %s, ref %r)",
                     f.id, recipient.pk, (ref or "")[:40],
                 )
             continue
@@ -2008,7 +2008,7 @@ def esign_review(request, token):
                 raw = envelope.completed_pdf.read()
                 envelope.completed_pdf.close()
             except Exception:
-                logger.exception("eSign: could not read completed PDF for %s", envelope.pk)
+                logger.exception("NES: could not read completed PDF for %s", envelope.pk)
             documents = [
                 _document_payload(
                     first,

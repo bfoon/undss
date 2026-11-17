@@ -500,7 +500,7 @@ class PackageStepLog(models.Model):
     routed_to = models.CharField(max_length=200, blank=True)
     recipient_name = models.CharField(max_length=120, blank=True)
 
-    # Package-flow eSign recipient.  For internal signers we keep the user link;
+    # Package-flow NES recipient.  For internal signers we keep the user link;
     # for external signers user is NULL and the email/name are authoritative.
     signature_recipient_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -520,7 +520,7 @@ class PackageStepLog(models.Model):
 
     @property
     def package_esign_document(self):
-        """The eSign-backed document for this step, if one exists."""
+        """The NES-backed document for this step, if one exists."""
         return (
             self.documents.select_related('esign_envelope')
             .filter(esign_envelope__isnull=False)
@@ -731,15 +731,15 @@ class PackageDocument(models.Model):
     # SHA-256 of the original file — set on upload, used to detect tampering
     file_hash = models.CharField(max_length=64, blank=True)
 
-    # Canonical eSign links. The original package file/hash remain the package
-    # provenance record; signing itself is owned by accounts eSign.
+    # Canonical NES links. The original package file/hash remain the package
+    # provenance record; signing itself is owned by accounts NES.
     esign_envelope = models.OneToOneField(
         'accounts.Envelope',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='package_document_source',
-        help_text='Canonical eSign envelope used to sign this package document.',
+        help_text='Canonical NES envelope used to sign this package document.',
     )
     esign_document = models.OneToOneField(
         'accounts.EnvelopeDocument',
@@ -747,7 +747,7 @@ class PackageDocument(models.Model):
         null=True,
         blank=True,
         related_name='package_document_source',
-        help_text='Copy of this package document inside the eSign envelope.',
+        help_text='Copy of this package document inside the NES envelope.',
     )
 
     class Meta:
@@ -847,3 +847,7 @@ class SignatureRecord(models.Model):
             self.signed_at.isoformat(),
         )
         return expected == self.audit_hash
+
+
+# --- Packages on Flow Studio (mail docket, mail rules, package <-> run link) ---
+from .models_mailflow import *  # noqa: E402,F401,F403

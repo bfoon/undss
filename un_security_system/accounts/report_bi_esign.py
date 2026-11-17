@@ -1,8 +1,8 @@
 # accounts/report_bi_esign.py
 """
-UN PASS eSign Report Builder.
+UN PASS NES Report Builder.
 
-A BI-style reporting layer over the existing eSign Form and Workflow data.
+A BI-style reporting layer over the existing NES Form and Workflow data.
 
 Design goals
 ------------

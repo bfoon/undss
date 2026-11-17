@@ -1,6 +1,6 @@
 # accounts/urls_esign_docgen.py
 """
-UN PASS — eSign Studio: signed-copy settings and follow-on documents.
+UN PASS — NES Studio: signed-copy settings and follow-on documents.
 
 Included from accounts/urls.py next to the other studio URL modules:
 

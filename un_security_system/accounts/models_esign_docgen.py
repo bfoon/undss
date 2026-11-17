@@ -1,6 +1,6 @@
 # accounts/models_esign_docgen.py
 """
-UN PASS — eSign Studio: follow-on documents.
+UN PASS — NES Studio: follow-on documents.
 
 One form produces another. A purchase request produces an invoice; a payment
 form produces a receipt; a clearance form produces a certificate. The second

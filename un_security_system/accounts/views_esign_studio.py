@@ -1,6 +1,6 @@
 # accounts/views_esign_studio.py
 """
-UN PASS — eSign Studio: the PDF workbench.
+UN PASS — NES Studio: the PDF workbench.
 
 Every tool produces a file in "My files". Operations on an existing file write
 a new version, so nothing is ever lost and every change can be undone. From any
@@ -219,7 +219,7 @@ def esign_studio_tool(request, tool):
     except (T.PdfToolError, UploadError) as exc:
         messages.error(request, str(exc))
     except Exception as exc:  # noqa: BLE001
-        logger.exception("eSign Studio: tool %s failed", tool)
+        logger.exception("NES Studio: tool %s failed", tool)
         detail = f" ({type(exc).__name__}: {exc})"[:200] if request.user.is_staff else ""
         messages.error(request, "That didn't work. The error has been logged." + detail)
     url = reverse("accounts:esign_studio_tool", args=[tool])
@@ -562,7 +562,7 @@ def esign_studio_organize(request, pk):
 def esign_studio_organize_save(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
-        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+        return JsonResponse({"ok": False, "error": "NES is not enabled."}, status=403)
     sf = _own_file(request, pk)
     body, problem = json_body(request, "organize")
     if problem:
@@ -612,7 +612,7 @@ def esign_studio_edit(request, pk):
 def esign_studio_edit_save(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
-        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+        return JsonResponse({"ok": False, "error": "NES is not enabled."}, status=403)
     sf = _own_file(request, pk)
     body, problem = json_body(request, "edit")
     if problem:

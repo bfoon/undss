@@ -1,6 +1,6 @@
 # accounts/esign_notify.py
 """
-Every email in the eSign flow. Uses the existing non-blocking
+Every email in the NES flow. Uses the existing non-blocking
 `asset_email.send_email_async` so signing never waits on SMTP.
 
 Flow coverage
@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 def _brand():
-    """Wordmark used in every eSign email. Matches the page border stamp and
+    """Wordmark used in every NES email. Matches the page border stamp and
     the certificate — one setting, ESIGN_BRAND, drives all three."""
-    return getattr(settings, "ESIGN_BRAND", "UNDP eSign")
+    return getattr(settings, "ESIGN_BRAND", "NES")
 
 
 def _ctx(envelope, **extra):
@@ -64,7 +64,7 @@ def _send(subject, to_emails, template, ctx, attachments=None):
             attachments=attachments,
         )
     except Exception:
-        logger.exception("eSign: could not queue '%s' to %s", template, to_emails)
+        logger.exception("NES: could not queue '%s' to %s", template, to_emails)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ def _read_file(handle) -> bytes | None:
         handle.close()
         return data or None
     except Exception:
-        logger.exception("eSign: could not read %s for attachment", getattr(handle, "name", "?"))
+        logger.exception("NES: could not read %s for attachment", getattr(handle, "name", "?"))
         return None
 
 
@@ -124,7 +124,7 @@ def build_completed_attachments(envelope):
 
     if total > limit:
         logger.info(
-            "eSign: envelope %s attachments are %d bytes, over the %d limit — sending links only",
+            "NES: envelope %s attachments are %d bytes, over the %d limit — sending links only",
             envelope.envelope_id, total, limit,
         )
         return [], (
@@ -371,7 +371,7 @@ def notify_completed(request, envelope: Envelope):
             )
             return
     except Exception:  # noqa: BLE001
-        logger.exception("eSign: could not read the copy policy for envelope %s", envelope.pk)
+        logger.exception("NES: could not read the copy policy for envelope %s", envelope.pk)
 
     attachments, attach_note = build_completed_attachments(envelope)
     attached_names = [name for name, _, _ in attachments]

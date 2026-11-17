@@ -6,6 +6,8 @@ from datetime import timedelta, datetime
 from django.db.models import F, Q
 import uuid
 
+from access.compat import AccessUserManager, RoleField
+
 class Agency(models.Model):
     name = models.CharField(max_length=120, unique=True)
     code = models.CharField(max_length=20, unique=True, help_text="Short code e.g. UNDP, UNICEF")
@@ -33,8 +35,12 @@ class User(AbstractUser):
         ('agency_hr', 'Agency HR'),
     ]
 
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='requester')
+    # Base role. Comparisons go through Access Studio, so custom roles that
+    # "act as" an old role pass every existing role check (access/compat.py).
+    role = RoleField(max_length=20, choices=ROLE_CHOICES, default='requester')
     phone = models.CharField(max_length=20, blank=True)
+
+    objects = AccessUserManager()
 
     employee_id = models.CharField(
         max_length=20,
@@ -884,8 +890,8 @@ class AgencyServiceConfig(models.Model):
     Toggle services per agency + optional pricing.
     Superuser can enable/disable each module per agency.
 
-    Asset Management and eSign are independent switches — an agency can run
-    eSign with Asset Management off, and vice versa.
+    Asset Management and NES are independent switches — an agency can run
+    NES with Asset Management off, and vice versa.
     """
     agency = models.OneToOneField(Agency, on_delete=models.CASCADE, related_name="service_config")
 
@@ -897,13 +903,13 @@ class AgencyServiceConfig(models.Model):
     asset_mgmt_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     asset_mgmt_cost_currency = models.CharField(max_length=10, default="USD", blank=True)
 
-    # ── eSign ───────────────────────────────────────────────────────────────
+    # ── NES ───────────────────────────────────────────────────────────────
     esign_enabled = models.BooleanField(
         default=False,
-        help_text="Enable the eSign module for this agency. Independent of Asset Management.",
+        help_text="Enable the NES module for this agency. Independent of Asset Management.",
     )
 
-    # Optional billing for eSign
+    # Optional billing for NES
     esign_is_paid = models.BooleanField(default=False)
     esign_cost_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     esign_cost_currency = models.CharField(max_length=10, default="USD", blank=True)
@@ -931,7 +937,7 @@ class AgencyServiceConfig(models.Model):
         if self.asset_mgmt_enabled:
             out.append("Asset Mgmt")
         if self.esign_enabled:
-            out.append("eSign")
+            out.append("NES")
         return out
 
 
@@ -1794,3 +1800,5 @@ from .models_esign_markup import *   # noqa: F401,F403
 from .models_esign_studio import *   # noqa: F401,F403
 from .models_esign_docgen import *    # noqa: F401,F403
 from .models_esign_triggers import *  # noqa: F401,F403
+from .models_esign_pades import *     # noqa: F401,F403
+from .models_esign_witness import *   # noqa: F401,F403

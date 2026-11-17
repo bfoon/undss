@@ -166,7 +166,7 @@
     const kind = (err && err.kind) || "render";
     let reason = REASONS[kind] || REASONS.render;
     if (kind === "status" && err.message) reason += ` (${err.message}).`;
-    console.warn("eSign Studio PDF viewer:", kind, err && err.message, err && err.cause);
+    console.warn("NES Studio PDF viewer:", kind, err && err.message, err && err.cause);
 
     // A native viewer can't help when the server itself didn't send a PDF.
     const serverProblem = ["status", "login", "notpdf", "password", "damaged"].indexOf(kind) !== -1;
@@ -277,7 +277,7 @@
           if (opts.onPage) opts.onPage(i + 1, canvas, pdf);
         } catch (e){
           if (e && e.name === "RenderingCancelledException") return;
-          console.warn("eSign Studio PDF viewer: page", i + 1, "could not be drawn", e);
+          console.warn("NES Studio PDF viewer: page", i + 1, "could not be drawn", e);
           boxes[i].insertAdjacentHTML("beforeend", `<div class="st-page-error small text-muted"><i class="bi bi-exclamation-triangle me-1"></i>Page ${i + 1} couldn't be drawn.</div>`);
         } finally { state.tasks.delete(i); }
       }

@@ -2,11 +2,11 @@
 accounts/pdf_delivery.py
 ========================
 
-Safe eSign PDF delivery for UNPASS.
+Safe NES PDF delivery for UNPASS.
 
 Why this exists
 ---------------
-The existing eSign engine already knows how to build a correct final PDF from
+The existing NES engine already knows how to build a correct final PDF from
 the envelope's source documents and completed fields. The problem is that a
 completed envelope may point at a missing/corrupt `completed_pdf` media object.
 When that happens both the web download and the Android viewer fail even though
@@ -87,7 +87,7 @@ def _repair_generated_pdf(envelope: Envelope, kind: str) -> bytes:
         raise Http404("The signed document is not available until completion.")
 
     logger.warning(
-        "eSign: %s for completed envelope %s is missing or invalid; rebuilding",
+        "NES: %s for completed envelope %s is missing or invalid; rebuilding",
         field_name,
         envelope.pk,
     )
@@ -100,7 +100,7 @@ def _repair_generated_pdf(envelope: Envelope, kind: str) -> bytes:
         )
     except Exception as exc:
         logger.exception(
-            "eSign: could not rebuild %s for envelope %s",
+            "NES: could not rebuild %s for envelope %s",
             field_name,
             envelope.pk,
         )
@@ -108,7 +108,7 @@ def _repair_generated_pdf(envelope: Envelope, kind: str) -> bytes:
 
     if not _valid_pdf(rebuilt):
         logger.error(
-            "eSign: rebuilt %s for envelope %s is not a valid PDF",
+            "NES: rebuilt %s for envelope %s is not a valid PDF",
             field_name,
             envelope.pk,
         )
@@ -130,7 +130,7 @@ def _repair_generated_pdf(envelope: Envelope, kind: str) -> bytes:
     except Exception:
         # The current request can still succeed using valid in-memory bytes.
         logger.exception(
-            "eSign: rebuilt %s for envelope %s but could not save it",
+            "NES: rebuilt %s for envelope %s but could not save it",
             field_name,
             envelope.pk,
         )

@@ -65,17 +65,17 @@
   {% endif %}
   {% endwith %}
 
-  <!-- ── Shared eSign engine (scan steps) ───────────────────────────────── -->
+  <!-- ── Shared NES engine (scan steps) ───────────────────────────────── -->
   {% if step.requires_scan and features.mailroom_signing %}
   <div class="alert border-0 mb-4 py-3 px-4 d-flex align-items-start gap-3 pkg-esign-note">
     <i class="bi bi-pen-fill text-primary fs-4 flex-shrink-0 mt-1"></i>
     <div>
-      <div class="fw-semibold mb-1">eSign is connected to this package step</div>
+      <div class="fw-semibold mb-1">NES is connected to this package step</div>
       <div class="small text-muted">
         Upload the document and choose the signer below. For an internal signer, select a user
         from <strong>your Country Office</strong>. For anyone outside your office, enter their email
-        address. The signer is created automatically in the shared eSign engine. Package Flow stays
-        on this step until eSign produces the completed signed PDF; then the workflow advances
+        address. The signer is created automatically in the shared NES engine. Package Flow stays
+        on this step until NES produces the completed signed PDF; then the workflow advances
         automatically. The source file is retained internally for audit/provenance but is hidden
         from the package view once signing is complete.
       </div>

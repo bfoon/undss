@@ -1,9 +1,9 @@
 # accounts/views_esign_workflow.py
 """
-UN PASS — eSign Studio: document workflows.
+UN PASS — NES Studio: document workflows.
 
-Designing a flow needs a login and the eSign entitlement. Acting on a task does
-not: like an eSign signing link, the task link carries its own token, so an
+Designing a flow needs a login and the NES entitlement. Acting on a task does
+not: like an NES signing link, the task link carries its own token, so an
 approver outside the platform can still decide.
 """
 
@@ -228,7 +228,7 @@ def esign_workflow_designer(request, pk):
 def esign_workflow_save(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
-        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+        return JsonResponse({"ok": False, "error": "NES is not enabled."}, status=403)
     wf = get_object_or_404(DocumentWorkflow, pk=pk, created_by=request.user)
     body, problem = json_body(request, "flow")
     if problem:
@@ -473,7 +473,7 @@ def esign_run_detail(request, pk):
     try:
         shown = _read_field(run.final_pdf) if run.final_pdf else E.run_pdf_bytes(run)
     except Exception:  # noqa: BLE001 - the page still works; the viewer fetches by URL
-        logger.exception("eSign Studio: could not read run %s document for inline preview", run.pk)
+        logger.exception("NES Studio: could not read run %s document for inline preview", run.pk)
         shown = None
     return render(request, "accounts/esign/studio/run_detail.html", studio_context(
         request, "flows",
@@ -645,7 +645,7 @@ def esign_wf_task(request, token):
         try:
             pdf_inline = inline_pdf(E.run_pdf_bytes(run))
         except Exception:  # noqa: BLE001 - the viewer falls back to fetching by URL
-            logger.exception("eSign Studio: could not inline task %s document", task.pk)
+            logger.exception("NES Studio: could not inline task %s document", task.pk)
 
     if request.method == "GET" and task.is_open:
         seen_key = f"esign_wf_seen_{task.pk}"

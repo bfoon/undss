@@ -94,7 +94,7 @@
         A white-out only hides text visually — the words underneath can still be copied out of the PDF.
         Tick this to turn each edited page into an image, which removes them for good. Those pages won't be searchable afterwards.
       </div>
-      <div class="ed-hint"><i class="bi bi-info-circle me-1"></i>This editor doesn't add signatures. To sign, save and choose <em>Sign it myself</em> — that keeps the eSign audit trail.</div>
+      <div class="ed-hint"><i class="bi bi-info-circle me-1"></i>This editor doesn't add signatures. To sign, save and choose <em>Sign it myself</em> — that keeps the NES audit trail.</div>
       <hr>
       <div class="ed-hint">
         <kbd>V</kbd> select · <kbd>T</kbd> text · <kbd>W</kbd> white-out · <kbd>H</kbd> highlight · <kbd>R</kbd> rectangle · <kbd>D</kbd> draw ·
@@ -200,7 +200,7 @@
       releaseFar(n);
     } catch (e){
       drawn.delete(n);
-      console.warn("eSign Studio editor: page", n, "could not be drawn", e);
+      console.warn("NES Studio editor: page", n, "could not be drawn", e);
       if (!box.querySelector(".ed-page-error")){
         const note = document.createElement("div");
         note.className = "ed-page-error position-absolute top-50 start-50 translate-middle text-center text-muted small px-3";

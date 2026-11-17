@@ -144,13 +144,13 @@
           </div>
           <div class="alert alert-info small mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>
             This downloads a protected copy. Your workbench copy stays unlocked so you can keep working on it —
-            and a password-protected PDF can't be sent for eSign, so protect last.</div>
+            and a password-protected PDF can't be sent for NES, so protect last.</div>
         {% elif tool.key == 'unlock' %}
           <label class="form-label small fw-semibold">Password</label>
           <input type="password" name="password" class="form-control" required autocomplete="off">
           <div class="form-text">You need the password. This removes it; it doesn't break it.</div>
         {% elif tool.key == 'convert' %}
-          <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Each document becomes its own PDF, using the same converter eSign uses for envelopes.</div>
+          <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Each document becomes its own PDF, using the same converter NES uses for envelopes.</div>
         {% elif visual %}
           <div class="small text-muted"><i class="bi bi-info-circle me-1"></i>After uploading you'll work on the pages visually.</div>
         {% endif %}

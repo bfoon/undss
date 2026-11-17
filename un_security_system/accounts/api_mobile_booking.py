@@ -2,7 +2,7 @@
 Phone API for room booking.
 
 This file is intentionally separate from accounts/api_mobile.py so it is easy
-to add/remove without disturbing the existing eSign/mobile API.
+to add/remove without disturbing the existing NES/mobile API.
 
 Add the URL entries from patches/backend_routes_and_modules.diff.
 """

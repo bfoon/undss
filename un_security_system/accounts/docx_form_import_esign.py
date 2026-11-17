@@ -1,4 +1,4 @@
-"""Conservative DOCX -> editable UNPASS eSign form schema importer."""
+"""Conservative DOCX -> editable UNPASS NES form schema importer."""
 
 from __future__ import annotations
 

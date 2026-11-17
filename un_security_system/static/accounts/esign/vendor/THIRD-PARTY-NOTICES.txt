@@ -1,4 +1,4 @@
-eSign Studio bundles these unmodified front-end libraries so that no page
+NES Studio bundles these unmodified front-end libraries so that no page
 depends on a third-party CDN. Source-map comments were removed from the
 Bootstrap files so collectstatic works with ManifestStaticFilesStorage.
 

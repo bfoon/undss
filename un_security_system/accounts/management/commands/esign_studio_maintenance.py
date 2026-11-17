@@ -1,6 +1,6 @@
 # accounts/management/commands/esign_studio_maintenance.py
 """
-eSign Studio housekeeping. Run it once a day (cron, Celery beat, or a
+NES Studio housekeeping. Run it once a day (cron, Celery beat, or a
 Kubernetes CronJob):
 
     python manage.py esign_studio_maintenance
@@ -9,7 +9,7 @@ Kubernetes CronJob):
 1. Reminders — a workflow step still pending after ESIGN_WF_REMINDER_DAYS
    (default 3), or past its due date, gets a reminder email. Each task is
    reminded at most once per that interval. Signature steps are skipped: the
-   envelope's own eSign reminders already cover them.
+   envelope's own NES reminders already cover them.
 
 2. Retention — PDF workbench files nobody has changed for
    ESIGN_STUDIO_RETENTION_DAYS (default 90; 0 keeps them forever) are deleted
@@ -17,7 +17,7 @@ Kubernetes CronJob):
    records and are never touched.
 
 Email links need SITE_URL (e.g. "https://unpass.example.org"), the same
-setting eSign uses, because there is no request to build them from.
+setting NES uses, because there is no request to build them from.
 """
 
 from datetime import timedelta

@@ -738,7 +738,7 @@ class PackageStepActionForm(forms.Form):
 
         # For an outside signer, the email itself is the display name unless a
         # name was supplied.  This makes the exact entered address visible in
-        # the eSign signer picker, as expected by Package Flow.
+        # the NES signer picker, as expected by Package Flow.
         name = external_name or external_email
         cd['signature_recipient_name'] = name
         cd['recipient_name'] = name[:120]
@@ -783,7 +783,7 @@ class UserSignatureForm(forms.ModelForm):
 
 
 class PackageDocumentUploadForm(forms.ModelForm):
-    """Attach the original scanned document; new signing is delegated to accounts eSign."""
+    """Attach the original scanned document; new signing is delegated to accounts NES."""
 
     class Meta:
         model = PackageDocument
@@ -799,7 +799,7 @@ class PackageDocumentUploadForm(forms.ModelForm):
 class SignatureFieldForm(forms.ModelForm):
     """
     Legacy package-signing field form retained for pre-cutover documents only.
-    New package documents use accounts eSign fields and recipient routing.
+    New package documents use accounts NES fields and recipient routing.
 
     Created via AJAX from the annotation canvas.
     All position fields come as hidden inputs populated by the JS drag tool.

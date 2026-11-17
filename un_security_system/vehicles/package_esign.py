@@ -2,13 +2,13 @@
 vehicles/package_esign.py
 =========================
 
-Bridge between the Packages/Mailroom workflow and the canonical accounts eSign
+Bridge between the Packages/Mailroom workflow and the canonical accounts NES
 engine.  This module deliberately contains *no* signature rendering, stamping,
 certificate, audit-hash or notification implementation.  Those all remain in
 accounts.models_esign / accounts.views_esign / accounts.utils_esign.
 
 A PackageDocument keeps its original package file for package provenance and
-links to one eSign Envelope + EnvelopeDocument for the signing lifecycle.
+links to one NES Envelope + EnvelopeDocument for the signing lifecycle.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ REQUIRED_FEATURES = ("mailroom", "mailroom_signing", "esign")
 
 
 class PackageESignError(ValueError):
-    """A package document could not be handed to eSign."""
+    """A package document could not be handed to NES."""
 
 
 def _package_agency(doc: PackageDocument):
@@ -66,7 +66,7 @@ def _check_entitlement(user, agency):
     if not has_all(user, REQUIRED_FEATURES):
         raise PermissionDenied(
             "Package document signing requires Mailroom, Mailroom document signing, "
-            "and eSign to be enabled for your office."
+            "and NES to be enabled for your office."
         )
 
     if getattr(user, "is_superuser", False):
@@ -80,7 +80,7 @@ def _check_entitlement(user, agency):
 
 
 def _has_legacy_fields(doc: PackageDocument) -> bool:
-    """True when this row already belongs to the pre-eSign package signer."""
+    """True when this row already belongs to the pre-NES package signer."""
     try:
         return doc.signature_fields.exists()
     except Exception:
@@ -103,7 +103,7 @@ def _read_package_file(doc: PackageDocument) -> tuple[bytes, str]:
 
     if not filename.lower().endswith(allowed_doc_ext()):
         allowed = ", ".join(ext.lstrip(".").upper() for ext in allowed_doc_ext())
-        raise PackageESignError(f"{filename}: eSign supports {allowed} on this server.")
+        raise PackageESignError(f"{filename}: NES supports {allowed} on this server.")
 
     doc.file.open("rb")
     try:
@@ -114,7 +114,7 @@ def _read_package_file(doc: PackageDocument) -> tuple[bytes, str]:
     if not raw:
         raise PackageESignError(f"{filename} is empty.")
     if len(raw) > MAX_DOC_BYTES:
-        raise PackageESignError(f"{filename} is larger than the eSign 25 MB limit.")
+        raise PackageESignError(f"{filename} is larger than the NES 25 MB limit.")
     return raw, filename
 
 
@@ -146,7 +146,7 @@ def _ensure_package_recipient(envelope: Envelope, step_log: PackageStepLog):
 
 
 def ensure_document_envelope(doc: PackageDocument, actor, request=None) -> Envelope:
-    """Return the eSign envelope linked to ``doc``, creating it once if needed."""
+    """Return the NES envelope linked to ``doc``, creating it once if needed."""
 
     agency = _package_agency(doc)
     if agency is None:
@@ -155,7 +155,7 @@ def ensure_document_envelope(doc: PackageDocument, actor, request=None) -> Envel
         )
     _check_entitlement(actor, agency)
 
-    # Idempotent path: the document was already handed to eSign.
+    # Idempotent path: the document was already handed to NES.
     if getattr(doc, "esign_envelope_id", None):
         envelope = doc.esign_envelope
         _ensure_package_recipient(envelope, doc.step_log)
@@ -233,7 +233,7 @@ def ensure_document_envelope(doc: PackageDocument, actor, request=None) -> Envel
 
 
 def create_document_from_step_scan(step_log: PackageStepLog, actor, request=None):
-    """Copy a scan uploaded while completing a package step into PackageDocument + eSign."""
+    """Copy a scan uploaded while completing a package step into PackageDocument + NES."""
 
     if not step_log.scan_file:
         return None
@@ -268,7 +268,7 @@ def create_document_from_step_scan(step_log: PackageStepLog, actor, request=None
 
 def complete_package_step_from_envelope(envelope: Envelope) -> bool:
     """
-    Return a completed package eSign envelope to Package Flow.
+    Return a completed package NES envelope to Package Flow.
 
     Safe to call repeatedly.  The workflow advances only while the package is
     still sitting on the exact step that created this envelope.
@@ -300,7 +300,7 @@ def complete_package_step_from_envelope(envelope: Envelope) -> bool:
             package=package,
             status=step.status_code[:20],
             who=log.performed_by,
-            note=(log.note or f"{step.name} — eSign completed")[:255],
+            note=(log.note or f"{step.name} — NES completed")[:255],
         )
 
         next_step = step.next_step()
@@ -324,7 +324,7 @@ def complete_package_step_from_envelope(envelope: Envelope) -> bool:
 # Compatibility views
 # ---------------------------------------------------------------------------
 # Keep the old vehicles:* route names so bookmarks/templates do not break, but
-# hand every action to accounts eSign.
+# hand every action to accounts NES.
 
 @login_required
 def document_annotate(request, pk):
@@ -339,7 +339,7 @@ def document_annotate(request, pk):
         return redirect("vehicles:package_detail", pk=doc.step_log.package_id)
 
     if envelope.is_editable:
-        messages.info(request, "Package document opened in eSign. Add recipients and place fields here.")
+        messages.info(request, "Package document opened in NES. Add recipients and place fields here.")
         return redirect("accounts:esign_prepare", pk=envelope.pk)
     return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
@@ -347,7 +347,7 @@ def document_annotate(request, pk):
 @login_required
 @require_POST
 def document_send_for_signing(request, pk):
-    """Legacy package send route; delegate to the canonical eSign send view."""
+    """Legacy package send route; delegate to the canonical NES send view."""
     doc = get_object_or_404(PackageDocument, pk=pk)
     if not getattr(doc, "esign_envelope_id", None) and _has_legacy_fields(doc):
         return _legacy_view("document_send_for_signing")(request, pk)
@@ -364,7 +364,7 @@ def document_send_for_signing(request, pk):
 
 @login_required
 def document_sign(request, pk):
-    """Legacy package signing URL -> this user's eSign tokenized signing/review URL."""
+    """Legacy package signing URL -> this user's NES tokenized signing/review URL."""
     doc = get_object_or_404(PackageDocument, pk=pk)
     envelope = getattr(doc, "esign_envelope", None)
     if envelope is None and _has_legacy_fields(doc):
@@ -381,27 +381,27 @@ def document_sign(request, pk):
             return redirect("accounts:esign_review", token=recipient.token)
         return redirect("accounts:esign_sign", token=recipient.token)
 
-    # Sender/override users land on the internal envelope page. eSign access
+    # Sender/override users land on the internal envelope page. NES access
     # control remains authoritative there.
     return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
 
 @login_required
 def document_audit(request, pk):
-    """Legacy package audit URL -> canonical eSign envelope audit/detail page."""
+    """Legacy package audit URL -> canonical NES envelope audit/detail page."""
     doc = get_object_or_404(PackageDocument, pk=pk)
     envelope = getattr(doc, "esign_envelope", None)
     if envelope is None and _has_legacy_fields(doc):
         return _legacy_view("document_audit")(request, pk)
     if envelope is None:
-        messages.info(request, "This package document has not been prepared in eSign yet.")
+        messages.info(request, "This package document has not been prepared in NES yet.")
         return redirect("vehicles:package_detail", pk=doc.step_log.package_id)
     return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
 
 @login_required
 def signature_profile(request):
-    """Old package signature studio -> shared eSign signature studio."""
+    """Old package signature studio -> shared NES signature studio."""
     return redirect("accounts:esign_signatures")
 
 

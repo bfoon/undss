@@ -1,6 +1,6 @@
 # accounts/templatetags/esign_studio_tags.py
 """
-Template helpers for eSign Studio.
+Template helpers for NES Studio.
 
     {% load esign_studio_tags %}
 
@@ -125,7 +125,7 @@ def esign_max_post_fields():
 
 @register.simple_tag(takes_context=True)
 def esign_studio_summary(context):
-    """What the eSign dashboard shows about the studio. Two cheap counts and a short task list."""
+    """What the NES dashboard shows about the studio. Two cheap counts and a short task list."""
     request = context.get("request")
     user = getattr(request, "user", None)
     empty = {"tasks": [], "task_count": 0, "open_runs": 0, "files": 0, "forms": 0, "flows": 0}

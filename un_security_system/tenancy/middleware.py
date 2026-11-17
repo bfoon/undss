@@ -77,7 +77,7 @@ ROUTE_FEATURE_OVERRIDES = {
     "tenancy:sso_callback": "sso_microsoft",
     "tenancy:sso_metadata": "sso_microsoft",
 
-    # eSign / forms / flows use the shared eSign engine.
+    # NES / forms / flows use the shared NES engine.
     "accounts:api_m_inbox": "esign",
     "accounts:api_m_task": "esign",
     "accounts:api_m_task_decide": "esign",

@@ -1,6 +1,6 @@
 # accounts/models_esign_markup.py
 """
-UN PASS — eSign markup layer (Word-style annotations + comment threads).
+UN PASS — NES markup layer (Word-style annotations + comment threads).
 
 Sits beside models_esign.py and deliberately does NOT import from it — every
 relation is a lazy string reference, so this module can be imported from

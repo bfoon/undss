@@ -1,6 +1,6 @@
 # accounts/views_esign_forms.py
 """
-UN PASS — eSign Studio: the form builder.
+UN PASS — NES Studio: the form builder.
 
 A form can be filled by signed-in colleagues it is shared with, or by anyone
 with its link. A submission can start the form's workflow automatically, or be
@@ -105,7 +105,7 @@ def esign_form_section_step(request, pk):
     """
     agency, bounce = studio_gate(request)
     if bounce:
-        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+        return JsonResponse({"ok": False, "error": "NES is not enabled."}, status=403)
     form = get_object_or_404(FormTemplate, pk=pk, created_by=request.user)
     body, problem = json_body(request, "form")
     if problem:
@@ -279,7 +279,7 @@ def esign_form_designer(request, pk):
 def esign_form_save(request, pk):
     agency, bounce = studio_gate(request)
     if bounce:
-        return JsonResponse({"ok": False, "error": "eSign is not enabled."}, status=403)
+        return JsonResponse({"ok": False, "error": "NES is not enabled."}, status=403)
     form = get_object_or_404(FormTemplate, pk=pk, created_by=request.user)
     body, problem = json_body(request, "form")
     if problem:
@@ -444,7 +444,7 @@ def _fill(request, form, *, public):
             if not user:
                 E.log_run(run, "step", note=f"Submitted through the public link by {name} <{email}>.")
         except E.WorkflowError as exc:
-            logger.warning("eSign Studio: form %s submission %s could not start its flow: %s", form.pk, sub.pk, exc)
+            logger.warning("NES Studio: form %s submission %s could not start its flow: %s", form.pk, sub.pk, exc)
             messages.warning(request, f"Your form was saved as {sub.reference}, but its workflow couldn't start: {exc}")
 
     try:
@@ -454,7 +454,7 @@ def _fill(request, form, *, public):
         docgen_esign.run_rules(sub, FormDocumentRule.TRIGGER_SUBMIT, run=run,
                                request=request, actor=user)
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: follow-on documents failed for submission %s", sub.pk)
+        logger.exception("NES Studio: follow-on documents failed for submission %s", sub.pk)
 
     try:
         from .asset_email import send_email_async
@@ -478,7 +478,7 @@ def _fill(request, form, *, public):
                 attachments=[(f"{sub.reference}.pdf", pdf, "application/pdf")],
             )
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: receipt email failed for submission %s", sub.pk)
+        logger.exception("NES Studio: receipt email failed for submission %s", sub.pk)
 
     if user:
         messages.success(request, form.submit_message or f"Submitted — reference {sub.reference}.")
@@ -575,7 +575,7 @@ def esign_submission_detail(request, pk):
         pdf, _ = F.render_form_pdf(schema, sub.values, reference=sub.reference, submitted_at=sub.created_at,
                                    submitter=sub.submitter_name, status_label=sub.get_status_display())
     except Exception:  # noqa: BLE001 - the answers tab still works; the PDF tab fetches by URL
-        logger.exception("eSign Studio: could not render submission %s for inline preview", sub.pk)
+        logger.exception("NES Studio: could not render submission %s for inline preview", sub.pk)
         pdf = None
     return render(request, "accounts/esign/studio/submission_detail.html", studio_context(
         request, "forms", sub=sub, runs=runs, flows=flows, schema=schema,

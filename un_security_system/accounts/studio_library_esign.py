@@ -1,6 +1,6 @@
 # accounts/studio_library_esign.py
 """
-UN PASS — eSign Studio starter library.
+UN PASS — NES Studio starter library.
 
 Ready-made forms and flows people can start from instead of a blank canvas.
 Everything here is plain data run through the same cleaning as the designers,

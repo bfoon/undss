@@ -1,4 +1,4 @@
-"""Advanced, backwards-compatible conditions for UNPASS eSign workflows."""
+"""Advanced, backwards-compatible conditions for UNPASS NES workflows."""
 
 from __future__ import annotations
 

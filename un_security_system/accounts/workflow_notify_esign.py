@@ -1,6 +1,6 @@
 # accounts/workflow_notify_esign.py
 """
-UN PASS — eSign Studio workflow emails.
+UN PASS — NES Studio workflow emails.
 
 Same delivery path as esign_notify.py: `asset_email.send_email_async`, so a
 decision never waits on SMTP. Signature steps don't email from here at all —
@@ -27,7 +27,7 @@ TPL = "accounts/esign/email/{}.html"
 
 
 def _brand():
-    return getattr(settings, "ESIGN_BRAND", "UNDP eSign")
+    return getattr(settings, "ESIGN_BRAND", "NES")
 
 
 def _send(subject, to_emails, template, ctx, attachments=None):
@@ -44,7 +44,7 @@ def _send(subject, to_emails, template, ctx, attachments=None):
         )
         return len(to_emails)
     except Exception:  # noqa: BLE001
-        logger.exception("eSign Studio: could not queue '%s' to %s", template, to_emails)
+        logger.exception("NES Studio: could not queue '%s' to %s", template, to_emails)
         return 0
 
 
@@ -232,7 +232,7 @@ def run_finished(run, request=None):
         try:
             return esign_delivery.deliver_final(run, request)
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: bundled delivery failed for run %s — falling back", run.pk)
+            logger.exception("NES Studio: bundled delivery failed for run %s — falling back", run.pk)
 
     name, email = _initiator(run)
     people = set(run.tasks.exclude(email="").values_list("email", flat=True))

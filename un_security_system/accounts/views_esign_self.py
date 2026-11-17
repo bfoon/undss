@@ -55,7 +55,7 @@ from .models_esign import (
 )
 from .utils_esign import log_event, pdf_page_count, prepare_document
 
-# These all live in views_esign, which owns the eSign upload rules. Importing
+# These all live in views_esign, which owns the NES upload rules. Importing
 # them keeps one definition of "how big may a document be" rather than two that
 # can drift apart.
 from .views_esign import (
@@ -112,7 +112,7 @@ def esign_self_new(request):
     if not agency:
         return redirect("accounts:profile")
     if not _service_enabled(agency, request.user):
-        messages.warning(request, "eSign is not enabled for your agency or country office.")
+        messages.warning(request, "NES is not enabled for your agency or country office.")
         return redirect("accounts:profile")
 
     if request.method == "GET":
@@ -210,7 +210,7 @@ def esign_self_new(request):
         messages.error(request, str(exc))
         return redirect("accounts:esign_self_new")
     except Exception as exc:  # noqa: BLE001
-        logger.exception("eSign: self-sign creation failed")
+        logger.exception("NES: self-sign creation failed")
         detail = f"{type(exc).__name__}: {exc}"[:300]
         if request.user.is_superuser or request.user.is_staff:
             messages.error(request, f"Could not start the document — {detail}")
@@ -263,7 +263,7 @@ def _place_quick_fields(envelope, recipient):
         try:
             pages = pdf_page_count(doc) or 1
         except Exception:  # noqa: BLE001
-            logger.warning("eSign: could not read page count for document %s", doc.pk)
+            logger.warning("NES: could not read page count for document %s", doc.pk)
             pages = 1
 
     SignatureField.objects.create(

@@ -6,7 +6,7 @@ from accounts.dashboard_esign_access import DashboardAccessGrant
 
 class Command(BaseCommand):
     help = (
-        "Create the eSign / Forms / Flow dashboard access table without "
+        "Create the NES / Forms / Flow dashboard access table without "
         "using Django migrations."
     )
 

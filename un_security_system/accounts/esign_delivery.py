@@ -1,6 +1,6 @@
 # accounts/esign_delivery.py
 """
-UN PASS — eSign Studio: who gets the signed copy, and when.
+UN PASS — NES Studio: who gets the signed copy, and when.
 
 Two ways to hand out a signed document:
 
@@ -250,7 +250,7 @@ def bundle_attachments(run, policy=None):
             ).select_related("submission"):
                 offer(f"{_safe_name(document.title, document.number)}.pdf", _read(document.pdf))
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: could not attach generated documents for run %s", run.pk)
+            logger.exception("NES Studio: could not attach generated documents for run %s", run.pk)
 
     note = ""
     if skipped:
@@ -283,7 +283,7 @@ def deliver_final(run, request=None):
     attachments, names, note = bundle_attachments(run, policy)
     subject = f"Signed and completed: {run.subject}"
     context = {
-        "brand": getattr(settings, "ESIGN_BRAND", "UNDP eSign"),
+        "brand": getattr(settings, "ESIGN_BRAND", "NES"),
         "now": timezone.now(),
         "subject": subject,
         "run": run,
@@ -323,7 +323,7 @@ def deliver_final(run, request=None):
             )
             sent = 1
         except Exception:  # noqa: BLE001
-            logger.exception("eSign Studio: bundled completion email failed for run %s", run.pk)
+            logger.exception("NES Studio: bundled completion email failed for run %s", run.pk)
     else:
         for person in people:
             try:
@@ -336,7 +336,7 @@ def deliver_final(run, request=None):
                 )
                 sent += 1
             except Exception:  # noqa: BLE001
-                logger.exception("eSign Studio: completion email to %s failed for run %s",
+                logger.exception("NES Studio: completion email to %s failed for run %s",
                                  person["email"], run.pk)
 
     if sent:
