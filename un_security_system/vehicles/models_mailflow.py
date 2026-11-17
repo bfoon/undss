@@ -2,7 +2,7 @@
 """
 UN PASS — Packages & Mailroom on Flow Studio.
 
-The mailroom can now run a package through any flow drawn in eSign Flow Studio
+The mailroom can now run a package through any flow drawn in NES Flow Studio
 instead of (or alongside) the classic step-by-step PackageFlowTemplate.
 
 How the pieces fit

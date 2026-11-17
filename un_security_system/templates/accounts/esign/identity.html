@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}My signature | NES{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0 px-md-2" id="nes-identity">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div>
+      <h4 class="text-un-primary fw-bold mb-1">
+        <i class="bi bi-fingerprint me-2"></i>My signature
+      </h4>
+      <div class="text-muted">
+        Your signature ID is yours for life. Your signing key is yours alone —
+        nobody here can use it, and nobody can change your signature but you.
+      </div>
+    </div>
+    {% if identity %}
+      <div class="text-end">
+        <div class="small text-muted">Signature ID</div>
+        <div class="fs-5 fw-bold text-un-primary font-monospace">{{ identity.signature_id }}</div>
+        <span class="badge bg-{{ identity.status_color }}">{{ identity.get_status_display }}</span>
+      </div>
+    {% endif %}
+  </div>
+
+  <div id="nes-alert" class="d-none"></div>
+
+  {# ── no identity yet ───────────────────────────────────────────────── #}
+  {% if not identity or not current_key %}
+    <div class="card mb-3">
+      <div class="card-header bg-white">
+        <h6 class="mb-0">
+          {% if identity %}Create a new signing key{% else %}Set up your signature{% endif %}
+        </h6>
+      </div>
+      <div class="card-body">
+        <p class="small mb-3">
+          Choose a signing passphrase. Your browser will create a signing key,
+          lock it with that passphrase, and send only the locked copy here.
+          The passphrase itself never leaves this device, so
+          <strong>nobody at this office can sign as you</strong> — and nobody
+          can recover the passphrase for you either.
+        </p>
+
+        <div class="alert alert-warning small">
+          <i class="bi bi-key me-1"></i>
+          <strong>There is no reset.</strong> If you forget this passphrase you
+          can create a new key, and your signature ID stays the same — but
+          documents already signed stay signed with the old one. Write it down
+          somewhere only you can reach.
+        </div>
+
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label small fw-semibold" for="nes-pass">Signing passphrase</label>
+            <input type="password" class="form-control" id="nes-pass" autocomplete="new-password">
+            <div class="form-text" id="nes-pass-strength">
+              Four unrelated words beat a short complicated one.
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label small fw-semibold" for="nes-pass2">Repeat it</label>
+            <input type="password" class="form-control" id="nes-pass2" autocomplete="new-password">
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold" for="nes-hint">
+              Reminder for yourself <span class="text-muted">(optional, stored in clear — never put the passphrase here)</span>
+            </label>
+            <input type="text" class="form-control" id="nes-hint" maxlength="120"
+                   placeholder="e.g. the usual four words">
+          </div>
+        </div>
+
+        <button class="btn btn-un-primary mt-3" id="nes-enroll">
+          <i class="bi bi-shield-lock me-1"></i>
+          {% if identity %}Create a new key{% else %}Create my signing key{% endif %}
+        </button>
+        <div class="small text-muted mt-2">
+          Uses {{ min_iterations }}+ rounds of key stretching, so a stolen
+          backup cannot be brute-forced cheaply.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ── has an identity ───────────────────────────────────────────────── #}
+  {% if identity and current_key %}
+    <div class="row g-3">
+      <div class="col-12 col-lg-5">
+        <div class="card h-100">
+          <div class="card-header bg-white"><h6 class="mb-0">Sole control</h6></div>
+          <div class="card-body">
+            <table class="table table-sm mb-3">
+              <tbody>
+                <tr>
+                  <th class="text-muted fw-normal" style="width:46%">Signature ID</th>
+                  <td class="font-monospace">{{ identity.signature_id }}</td>
+                </tr>
+                <tr>
+                  <th class="text-muted fw-normal">Issued</th>
+                  <td class="small">{{ identity.issued_at|date:"j M Y" }}</td>
+                </tr>
+                <tr>
+                  <th class="text-muted fw-normal">Key</th>
+                  <td class="small">
+                    revision {{ current_key.revision }} · {{ current_key.algorithm }}
+                  </td>
+                </tr>
+                <tr>
+                  <th class="text-muted fw-normal">Fingerprint</th>
+                  <td class="small font-monospace">{{ current_key.short_fingerprint }}</td>
+                </tr>
+                <tr>
+                  <th class="text-muted fw-normal">Documents signed</th>
+                  <td>{{ attestation_count }}</td>
+                </tr>
+                {% if current_key.passphrase_hint %}
+                  <tr>
+                    <th class="text-muted fw-normal">Your reminder</th>
+                    <td class="small">{{ current_key.passphrase_hint }}</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+
+            <div class="alert alert-success small mb-2">
+              <i class="bi bi-check-circle me-1"></i>
+              Your private key is held only in encrypted form here. It is
+              unlocked in your browser, by your passphrase, each time you
+              sign. No administrator can sign as you.
+            </div>
+            <div class="small text-muted">
+              Your signature ID never changes. Redraw your signature as often
+              as you like, rotate your key if you forget the passphrase —
+              every document you have signed still points to the same ID.
+            </div>
+
+            <hr>
+            <button class="btn btn-sm btn-outline-secondary" id="nes-test">
+              <i class="bi bi-unlock me-1"></i>Check my passphrase
+            </button>
+            <div class="small text-muted mt-1">
+              Confirms your passphrase still unlocks the key. Nothing is sent.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-7">
+        <div class="card h-100">
+          <div class="card-header bg-white">
+            <h6 class="mb-0">My signature mark</h6>
+          </div>
+          <div class="card-body">
+            {% if current_mark %}
+              <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+                <img src="{{ current_mark.image.url }}" alt="Your signature"
+                     style="max-height:72px;max-width:260px;background:#fff;
+                            border:1px solid #e5e7eb;border-radius:.375rem;padding:.4rem">
+                <div class="small text-muted">
+                  Revision {{ current_mark.revision }} ·
+                  {{ current_mark.get_kind_display }} ·
+                  {{ current_mark.created_at|date:"j M Y" }}
+                </div>
+              </div>
+            {% else %}
+              <div class="alert alert-warning small">
+                You have a key but no signature mark yet. Draw or type one
+                below — it is what appears on the page.
+              </div>
+            {% endif %}
+
+            <ul class="nav nav-tabs" role="tablist">
+              <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab"
+                        data-bs-target="#nes-tab-draw" type="button">Draw</button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab"
+                        data-bs-target="#nes-tab-type" type="button">Type</button>
+              </li>
+            </ul>
+
+            <div class="tab-content pt-3">
+              <div class="tab-pane fade show active" id="nes-tab-draw">
+                <canvas id="nes-canvas" width="620" height="170"
+                        style="width:100%;max-width:620px;height:170px;
+                               border:1px dashed #cbd5e1;border-radius:.5rem;
+                               background:#fff;touch-action:none"></canvas>
+                <div class="mt-2">
+                  <button class="btn btn-sm btn-outline-secondary" id="nes-clear">Clear</button>
+                </div>
+              </div>
+
+              <div class="tab-pane fade" id="nes-tab-type">
+                <div class="row g-2">
+                  <div class="col-12 col-sm-7">
+                    <label class="form-label small fw-semibold" for="nes-typed">Your name</label>
+                    <input type="text" class="form-control" id="nes-typed"
+                           maxlength="120" value="{{ identity.enrolled_name }}">
+                  </div>
+                  <div class="col-12 col-sm-5">
+                    <label class="form-label small fw-semibold" for="nes-font">Style</label>
+                    <select class="form-select" id="nes-font">
+                      {% for key, label in font_choices %}
+                        <option value="{{ key }}">{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div id="nes-typed-preview" class="mt-3 p-3 bg-white border rounded"
+                     style="min-height:84px;font-size:2.4rem;line-height:1.1"></div>
+              </div>
+            </div>
+
+            <button class="btn btn-un-primary mt-3" id="nes-save-mark">
+              <i class="bi bi-pen me-1"></i>
+              {% if current_mark %}Update my signature{% else %}Save my signature{% endif %}
+            </button>
+            <div class="small text-muted mt-2">
+              Changing your mark creates a new revision. Earlier revisions are
+              kept so documents already signed still show what was applied.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if key_history|length > 1 or mark_history|length > 1 %}
+      <div class="card mt-3">
+        <div class="card-header bg-white"><h6 class="mb-0">History</h6></div>
+        <div class="card-body">
+          <div class="row g-4">
+            <div class="col-12 col-md-6">
+              <h6 class="small text-uppercase text-muted">Keys</h6>
+              <table class="table table-sm mb-0">
+                <tbody>
+                  {% for key in key_history %}
+                    <tr>
+                      <td class="small">r{{ key.revision }}</td>
+                      <td class="small font-monospace">{{ key.short_fingerprint }}</td>
+                      <td class="small">
+                        {% if key.is_current %}
+                          <span class="badge bg-success">current</span>
+                        {% else %}
+                          <span class="text-muted">retired {{ key.retired_at|date:"j M Y" }}</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="col-12 col-md-6">
+              <h6 class="small text-uppercase text-muted">Marks</h6>
+              <table class="table table-sm mb-0">
+                <tbody>
+                  {% for mark in mark_history %}
+                    <tr>
+                      <td class="small">r{{ mark.revision }}</td>
+                      <td class="small">{{ mark.get_kind_display }}</td>
+                      <td class="small">
+                        {% if mark.is_current %}
+                          <span class="badge bg-success">current</span>
+                        {% else %}
+                          <span class="text-muted">{{ mark.created_at|date:"j M Y" }}</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <p class="small text-muted mt-3 mb-0">
+    This arrangement exists because a saved picture of a signature is not a
+    signature: anyone holding the file could apply it. Your signing key is
+    held under your passphrase alone, which is what the UNDP Electronic
+    Signatures Policy means by sole control.
+  </p>
+</div>
+
+<script src="{% static 'accounts/esign/identity.js' %}"></script>
+<script>
+(function () {
+  "use strict";
+  var CSRF = "{{ csrf_token }}";
+  var MIN_ITER = {{ min_iterations }};
+  var alertBox = document.getElementById("nes-alert");
+
+  function say(kind, html) {
+    alertBox.className = "alert alert-" + kind;
+    alertBox.innerHTML = html;
+    alertBox.classList.remove("d-none");
+    alertBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (!r.ok || !d.ok) { throw new Error(d.error || "Request failed."); }
+        return d;
+      });
+    });
+  }
+
+  // ---- passphrase strength -------------------------------------------
+  var passEl = document.getElementById("nes-pass");
+  var strengthEl = document.getElementById("nes-pass-strength");
+  if (passEl && strengthEl) {
+    passEl.addEventListener("input", function () {
+      var a = window.NESIdentity.assessPassphrase(passEl.value);
+      strengthEl.textContent = a.message;
+      strengthEl.className = "form-text text-" +
+        (a.level === "strong" ? "success" : a.level === "fair" ? "muted" : "danger");
+    });
+  }
+
+  // ---- enrol / rotate -------------------------------------------------
+  var enrollBtn = document.getElementById("nes-enroll");
+  if (enrollBtn) {
+    enrollBtn.addEventListener("click", function () {
+      var p1 = document.getElementById("nes-pass").value;
+      var p2 = document.getElementById("nes-pass2").value;
+      var hint = document.getElementById("nes-hint").value;
+
+      var a = window.NESIdentity.assessPassphrase(p1);
+      if (!a.ok) { say("danger", a.message); return; }
+      if (p1 !== p2) { say("danger", "The two passphrases do not match."); return; }
+
+      enrollBtn.disabled = true;
+      enrollBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1"></span>Creating your key…';
+
+      window.NESIdentity.enroll(p1, { iterations: Math.max(MIN_ITER, 600000) })
+        .then(function (payload) {
+          payload.passphrase_hint = hint;
+          return post("{% url 'accounts:esign_identity_enroll' %}", payload);
+        })
+        .then(function (d) {
+          say("success", "<strong>" + d.message + "</strong>");
+          setTimeout(function () { window.location.reload(); }, 2200);
+        })
+        .catch(function (e) {
+          say("danger", e.message || String(e));
+          enrollBtn.disabled = false;
+          enrollBtn.innerHTML =
+            '<i class="bi bi-shield-lock me-1"></i>Create my signing key';
+        });
+    });
+  }
+
+  // ---- check passphrase ----------------------------------------------
+  var testBtn = document.getElementById("nes-test");
+  if (testBtn) {
+    testBtn.addEventListener("click", function () {
+      var pass = window.prompt("Enter your signing passphrase to check it.");
+      if (pass === null) { return; }
+      post("{% url 'accounts:esign_identity_material' %}", {})
+        .then(function (m) { return window.NESIdentity.canUnlock(m, pass); })
+        .then(function (ok) {
+          say(ok ? "success" : "danger", ok
+            ? "That passphrase unlocks your signing key."
+            : "That passphrase does not unlock your key. There is no reset — "
+              + "you can create a new key and keep your signature ID.");
+        })
+        .catch(function (e) { say("danger", e.message || String(e)); });
+    });
+  }
+
+  // ---- drawing --------------------------------------------------------
+  var canvas = document.getElementById("nes-canvas");
+  var drew = false;
+  if (canvas) {
+    var ctx = canvas.getContext("2d");
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+    var drawing = false;
+
+    function pos(e) {
+      var r = canvas.getBoundingClientRect();
+      var t = e.touches ? e.touches[0] : e;
+      return {
+        x: (t.clientX - r.left) * (canvas.width / r.width),
+        y: (t.clientY - r.top) * (canvas.height / r.height)
+      };
+    }
+    function start(e) { drawing = true; drew = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+    function move(e) { if (!drawing) return; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
+    function end() { drawing = false; }
+
+    canvas.addEventListener("mousedown", start);
+    canvas.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+    canvas.addEventListener("touchstart", start);
+    canvas.addEventListener("touchmove", move);
+    canvas.addEventListener("touchend", end);
+
+    document.getElementById("nes-clear").addEventListener("click", function () {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drew = false;
+    });
+  }
+
+  // ---- typed preview --------------------------------------------------
+  var FONTS = {
+    dancing: "'Dancing Script', cursive", greatvibes: "'Great Vibes', cursive",
+    sacramento: "'Sacramento', cursive", allura: "'Allura', cursive",
+    caveat: "'Caveat', cursive", homemade: "'Homemade Apple', cursive",
+    parisienne: "'Parisienne', cursive", cedarville: "'Cedarville Cursive', cursive"
+  };
+  var typedEl = document.getElementById("nes-typed");
+  var fontEl = document.getElementById("nes-font");
+  var previewEl = document.getElementById("nes-typed-preview");
+
+  function renderPreview() {
+    if (!previewEl) return;
+    previewEl.style.fontFamily = FONTS[fontEl.value] || "cursive";
+    previewEl.textContent = typedEl.value || "Your name";
+  }
+  if (typedEl && fontEl) {
+    typedEl.addEventListener("input", renderPreview);
+    fontEl.addEventListener("change", renderPreview);
+    renderPreview();
+  }
+
+  function typedToPng() {
+    var c = document.createElement("canvas");
+    c.width = 620; c.height = 170;
+    var g = c.getContext("2d");
+    g.fillStyle = "#111827";
+    g.textBaseline = "middle";
+    var size = 72;
+    g.font = size + "px " + (FONTS[fontEl.value] || "cursive");
+    var text = typedEl.value || "";
+    while (g.measureText(text).width > c.width - 40 && size > 20) {
+      size -= 2;
+      g.font = size + "px " + (FONTS[fontEl.value] || "cursive");
+    }
+    g.fillText(text, 20, c.height / 2);
+    return c.toDataURL("image/png");
+  }
+
+  // ---- save the mark --------------------------------------------------
+  var saveBtn = document.getElementById("nes-save-mark");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", function () {
+      var typedTabActive = document
+        .getElementById("nes-tab-type")
+        .classList.contains("active");
+
+      var body;
+      if (typedTabActive) {
+        if (!(typedEl.value || "").trim()) {
+          say("danger", "Type your name first."); return;
+        }
+        body = { kind: "typed", image_data_url: typedToPng(),
+                 typed_text: typedEl.value, font_key: fontEl.value };
+      } else {
+        if (!drew) { say("danger", "Draw your signature first."); return; }
+        body = { kind: "drawn", image_data_url: canvas.toDataURL("image/png") };
+      }
+
+      saveBtn.disabled = true;
+      post("{% url 'accounts:esign_identity_mark' %}", body)
+        .then(function (d) {
+          say("success", d.message);
+          setTimeout(function () { window.location.reload(); }, 1600);
+        })
+        .catch(function (e) {
+          say("danger", e.message || String(e));
+          saveBtn.disabled = false;
+        });
+    });
+  }
+})();
+</script>
+{% endblock %}

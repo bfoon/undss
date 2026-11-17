@@ -1817,6 +1817,94 @@ def _saved_signature_content(ref: str, recipient, want_initials=False):
         return None
 
 
+def _attestation_required(recipient) -> bool:
+    """
+    Whether this signing attempt must carry a personal signature.
+
+    Only ever required of someone who *can* produce one: a signed-in user
+    with an active signing identity. Requiring it of an external signer who
+    has no account would simply make the envelope unsignable.
+    """
+    from django.conf import settings
+
+    if not getattr(settings, "ESIGN_REQUIRE_ATTESTATION", False):
+        return False
+
+    from . import identity_esign as I
+
+    identity = I.identity_for(getattr(recipient, "user", None))
+    return bool(identity and identity.is_usable)
+
+
+def _attach_attestation(request, recipient):
+    """
+    Verify and store the signatory's personal signature, if one was supplied.
+
+    Returns `(attestation | None, detail)`. Never raises: a problem here must
+    not lose a signature that is otherwise complete, so it degrades to an
+    unattested signing with the reason recorded.
+    """
+    from . import identity_esign as I
+    from .views_esign_identity import consume_challenge, envelope_document_digest
+
+    supplied = (request.POST.get("attestation_signature") or "").strip()
+    if not supplied:
+        return None, ""
+
+    try:
+        acting = getattr(request, "user", None)
+        if not (acting and acting.is_authenticated):
+            return None, (
+                "A personal signature was supplied but nobody is signed in, "
+                "so it could not be attributed."
+            )
+
+        identity = I.identity_for(acting)
+        if identity is None or not identity.is_usable:
+            return None, "The signed-in user has no active signing identity."
+
+        if recipient.user_id and recipient.user_id != acting.pk:
+            return None, (
+                "The signed-in user is not the person this envelope was "
+                "sent to."
+            )
+
+        statement, nonce = consume_challenge(request, recipient)
+        if not statement:
+            return None, (
+                "The signing challenge had expired. Please sign again."
+            )
+
+        # The statement must still describe the documents as they are now.
+        digest = envelope_document_digest(recipient.envelope)
+        if digest and f"document_sha256={digest}\n" not in statement:
+            return None, (
+                "The documents changed after the signing challenge was "
+                "issued. Please review them again and sign."
+            )
+
+        attestation, ok, detail = I.record_attestation(
+            identity=identity,
+            key=identity.current_key,
+            envelope=recipient.envelope,
+            recipient=recipient,
+            statement=statement,
+            signature_b64=supplied,
+            nonce=nonce or "",
+            document_sha256=digest,
+            request=request,
+        )
+        if not ok:
+            return None, detail or "The personal signature did not verify."
+        return attestation, ""
+    except Exception as exc:
+        logger.exception(
+            "NES identity: attestation failed for recipient %s",
+            getattr(recipient, "pk", "?"),
+        )
+        return None, f"The personal signature could not be processed: {exc}"
+
+
 @transaction.atomic
 def _handle_sign_submit(request, recipient):
     envelope = recipient.envelope
@@ -1895,6 +1983,31 @@ def _handle_sign_submit(request, recipient):
         messages.error(request, "Please complete all required fields: " + ", ".join(missing[:6]))
         return redirect("accounts:esign_sign", token=recipient.token)
 
+    # ── the signatory's own cryptographic act ─────────────────────────────
+    # Where this person has a NES signing identity, the submission should
+    # carry a signature made in their browser with a key only they can
+    # unlock. That is what turns a drawn image into *their* signature, and
+    # what satisfies the sole-control requirement.
+    #
+    # Deliberately not a hard gate by default: an external signer with no
+    # account cannot have an identity, and blocking them would break the
+    # ordinary case of sending a document outside the office. Set
+    # ESIGN_REQUIRE_ATTESTATION to refuse unattested signing where an
+    # identity does exist. Either way the audit trail and the certificate
+    # record which it was, so nobody later assumes the stronger one.
+    attestation, attestation_detail = _attach_attestation(request, recipient)
+
+    if attestation is None and _attestation_required(recipient):
+        messages.error(
+            request,
+            attestation_detail or (
+                "This office requires documents to be signed with your "
+                "personal signing key. Open your signature settings to set "
+                "one up, then sign in and try again."
+            ),
+        )
+        return redirect("accounts:esign_sign", token=recipient.token)
+
     recipient.status = EnvelopeRecipient.STATUS_SIGNED
     recipient.signed_at = now
     recipient.consent_accepted = True
@@ -1906,6 +2019,26 @@ def _handle_sign_submit(request, recipient):
 
     log_event(envelope, "consent", request=request, recipient=recipient,
               note="Consent to use electronic records and signatures accepted.")
+
+    if attestation is not None:
+        log_event(
+            envelope, "attested", request=request, recipient=recipient,
+            note=(
+                f"Signed with personal key {attestation.signature_id} "
+                f"(revision {attestation.key.revision})"
+            )[:255],
+            meta={
+                "signature_id": attestation.signature_id,
+                "key_fingerprint": attestation.key_fingerprint,
+                "algorithm": attestation.algorithm,
+                "document_sha256": attestation.document_sha256,
+            },
+        )
+    elif attestation_detail:
+        log_event(
+            envelope, "attest_failed", request=request, recipient=recipient,
+            note=attestation_detail[:255],
+        )
     log_event(
         envelope,
         "signed" if recipient.role == EnvelopeRecipient.ROLE_SIGNER else "approved",

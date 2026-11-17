@@ -567,5 +567,8 @@ urlpatterns = [
     # NES cross-office witnessing
     path("", include("accounts.urls_esign_witness")),
 
+    # NES signing identities (sole control)
+    path("", include("accounts.urls_esign_identity")),
+
 
 ]

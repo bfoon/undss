@@ -1066,6 +1066,85 @@ def build_certificate_pdf(envelope: Envelope) -> bytes:
 
     story.append(rt)
 
+    # ── personal signatures, where the signatory held the key ────────────
+    # The recipients table above says who was asked and what the server
+    # recorded. This section says which of them proved it with a key only
+    # they can unlock, and names the lifetime signature ID that identifies
+    # them. Where a signatory has no such key the section says so plainly,
+    # so the weaker form is never mistaken for the stronger.
+    try:
+        from . import identity_esign as _identity
+
+        attestations = list(_identity.envelope_attestations(envelope))
+    except Exception:
+        attestations = []
+
+    if attestations:
+        story.append(Paragraph("Personal signatures (sole control)", h2))
+        story.append(Paragraph(
+            "Each signature below was produced in the signatory's own browser "
+            "with a private key held under their passphrase alone. This "
+            "system stores only the public key and cannot reproduce these "
+            "signatures. The signature ID identifies the signatory for the "
+            "life of their account and does not change when they alter their "
+            "signature or rotate their key.",
+            small,
+        ))
+
+        arows = [[
+            "Signature ID",
+            "Signatory",
+            "Key",
+            "Verified",
+            "Timestamp",
+        ]]
+        for a in attestations:
+            ok, _detail = _identity.verify_stored_attestation(a)
+            arows.append([
+                Paragraph(f"<b>{_esc(a.signature_id)}</b>", small),
+                Paragraph(
+                    f"{_esc(a.signer_name)}<br/>{_esc(a.signer_email)}", small
+                ),
+                Paragraph(
+                    f"r{a.key.revision if a.key_id else '—'}<br/>"
+                    f"{_esc((a.key_fingerprint or '')[:16])}",
+                    small,
+                ),
+                "Yes" if ok else "NO",
+                (
+                    timezone.localtime(a.created_at).strftime("%d %b %Y %H:%M")
+                    if a.created_at else "—"
+                ),
+            ])
+
+        at = Table(
+            arows,
+            colWidths=[44 * mm, 46 * mm, 32 * mm, 18 * mm, 34 * mm],
+            repeatRows=1,
+        )
+        at.setStyle(_table_style())
+        story.append(at)
+
+        signed_recipients = {
+            r.pk for r in envelope.recipients.all()
+            if r.status == EnvelopeRecipient.STATUS_SIGNED
+        }
+        attested_recipients = {
+            a.recipient_id for a in attestations if a.recipient_id
+        }
+        unattested = signed_recipients - attested_recipients
+        if unattested:
+            names = ", ".join(
+                r.name for r in envelope.recipients.filter(pk__in=unattested)
+            )
+            story.append(Paragraph(
+                f"<b>Signed without a personal key:</b> {_esc(names)}. "
+                "These signatures rest on the audit trail and the "
+                "organisational seal rather than on a key held by the "
+                "signatory.",
+                small,
+            ))
+
     story.append(
         Paragraph(
             "Audit trail",

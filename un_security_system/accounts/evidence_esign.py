@@ -286,7 +286,40 @@ has fewer entries than the anchor says, entries were removed from the end.
         -inform DER -in evidence/audit-anchor.p7s -noverify
 
 
-4. DOES THE REGISTER INDEPENDENTLY CONFIRM IT?
+5. WHO SIGNED IT, PROVED BY THEIR OWN KEY?
+------------------------------------------
+If evidence/personal-signatures.json is present, each entry is a signature
+made by the signatory themselves, with a key the issuing office does not hold
+and cannot use. This is the strongest identity evidence in the package.
+
+Each entry carries the public key, the exact statement that was signed, and
+the signature. Verify one with openssl:
+
+    python3 - <<'EOF'
+    import base64, json
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+    e = json.load(open('evidence/personal-signatures.json'))['signatures'][0]
+    pub = serialization.load_der_public_key(
+        base64.b64decode(e['public_key_spki_b64']))
+    raw = base64.b64decode(e['signature_b64'])
+    der = utils.encode_dss_signature(
+        int.from_bytes(raw[:32],'big'), int.from_bytes(raw[32:],'big'))
+    pub.verify(der, e['statement'].encode(), ec.ECDSA(hashes.SHA256()))
+    print('OK —', e['signature_id'], 'signed this document')
+    EOF
+
+The statement names the signature ID, the envelope and the SHA-256 of the
+documents as the signatory saw them, so the signature cannot be lifted and
+replayed against anything else.
+
+A signature ID (NES-XX-....) identifies one person for the life of their
+account. It does not change when they redraw their signature or rotate their
+key, so two documents years apart bearing the same ID were signed by the same
+person.
+
+
+6. DOES THE REGISTER INDEPENDENTLY CONFIRM IT?
 ----------------------------------------------
 If the issuing office published a seal register for the period, it contains
 this document's SHA-256. Finding the hash in a register that was sealed and
@@ -443,6 +476,61 @@ def envelope_evidence(envelope) -> tuple[bytes, dict]:
         "evidence/audit-trail.json",
         json.dumps(audit, indent=2, default=str).encode("utf-8"),
     ))
+
+    # -- personal signatures, with everything needed to re-verify offline --
+    # The public key travels with each attestation so an auditor can check it
+    # with openssl alone. The private key does not exist here to travel.
+    try:
+        from . import identity_esign as _identity
+
+        rows = []
+        for a in _identity.envelope_attestations(envelope):
+            ok, detail = _identity.verify_stored_attestation(a)
+            rows.append({
+                "signature_id": a.signature_id,
+                "signer_name": a.signer_name,
+                "signer_email": a.signer_email,
+                "algorithm": a.algorithm,
+                "key_revision": a.key.revision if a.key_id else None,
+                "key_fingerprint": a.key_fingerprint,
+                "public_key_spki_b64": (
+                    a.key.public_key_spki if a.key_id else ""
+                ),
+                "statement": a.statement,
+                "signature_b64": a.signature_b64,
+                "nonce": a.nonce,
+                "document_sha256": a.document_sha256,
+                "signed_at": a.created_at.isoformat() if a.created_at else "",
+                "ip": str(a.ip or ""),
+                "verified_at_build": ok,
+                "verify_detail": detail,
+            })
+
+        if rows:
+            payload.append((
+                "evidence/personal-signatures.json",
+                json.dumps({
+                    "format": EVIDENCE_FORMAT_VERSION,
+                    "envelope_id": base,
+                    "standard": "ECDSA P-256 over SHA-256, IEEE P1363",
+                    "note": (
+                        "Each signature was made in the signatory's browser "
+                        "with a private key held under their passphrase "
+                        "alone. The issuing office stores only the public "
+                        "key and cannot reproduce these signatures."
+                    ),
+                    "how_to_verify": (
+                        "For each entry: base64-decode public_key_spki_b64 to "
+                        "a DER SubjectPublicKeyInfo; base64-decode "
+                        "signature_b64 to 64 bytes r||s and convert to DER; "
+                        "verify over the exact UTF-8 bytes of `statement` "
+                        "with ECDSA/SHA-256. See VERIFY.txt step 5."
+                    ),
+                    "signatures": rows,
+                }, indent=2, default=str).encode("utf-8"),
+            ))
+    except Exception:
+        notes.append("Personal signatures could not be exported.")
 
     # A flat CSV too: the trail should be readable by someone with a
     # spreadsheet and no appetite for JSON.

@@ -60,10 +60,12 @@ current text before citing it.
 | Policy requirement | How NES meets it | Where |
 |---|---|---|
 | Signature not modified after placing | PAdES signature over the entire byte range; any change invalidates it | `pades_esign.seal_pdf` |
-| (i) association with a signatory | Recipient record + the hash-chained audit trail binding identity, address and device to each act | `audit_chain_esign` |
+| (i) association with a signatory | A lifetime signature ID plus an ECDSA signature made with the signatory's own key, over a statement naming the envelope and the document hash | `identity_esign`, `signature_id` |
 | (ii) date and time of signature | Event timestamps, **provable only with an RFC 3161 timestamp** — see §4 | `ESIGN_PADES_TSA_URL` |
-| Retain record + signature + associated records | ASiC-E evidence package: document, certificate of completion, certificate chain, revocation data, audit trail, anchor | `evidence_esign.envelope_evidence` |
-| Not a pasted signature image | The image is never the signature; the binding and the seal are | §7 caveat 1 |
+| **Sole control over the authentication key** | Keypair generated in the signatory's browser; private key encrypted there under their passphrase; this system holds only a public key and an opaque blob | `docs/nes-signing-identity.md` |
+| Signature is personal and cannot be shared | One identity per person (`OneToOneField`); only the owner may change the key or mark — no administrative override exists | `identity_esign.require_owner` |
+| Not a pasted signature image | The image is presentation only; the evidential weight is the key and the attestation | §7 caveat 1 |
+| Retain record + signature + associated records | ASiC-E evidence package: document, certificate of completion, certificate chain, revocation data, audit trail, anchor, and each signatory's public key and signature | `evidence_esign.envelope_evidence` |
 | Integrity of the record over time | Document timestamp chain, renewed on a schedule | `pades_esign.refresh_ltv` |
 
 ---
@@ -235,26 +237,41 @@ prove authenticity.
 
 Read this section before claiming conformance anywhere.
 
-**1. It is an organisational seal, not each signatory's personal signature.**
-UNDP's policy requires a signatory to have *sole control* over their
-authentication key and says the signature is personal and cannot be shared.
-The NES seal is held server-side and applied by the application on behalf of
-the office. It therefore asserts `proof_of_origin` — *the organisation attests
-this is the authentic completed record* — and deliberately **not**
-`proof_of_approval`. Do not describe the seal as any individual's digital
-signature; it is not, and an auditor who knows the policy will notice.
+**1. The seal is organisational; sole control is a separate mechanism — and it
+now exists.** An earlier version of this document said closing the
+sole-control gap needed a procurement and identity programme. That was too
+pessimistic, and it has since been implemented: see
+`docs/nes-signing-identity.md`.
 
-What carries the individual act is the audit trail: identity, timestamp,
-address, device, and now a hash chain that makes alteration visible. That is a
-materially stronger binding than a pasted image — which the policy excludes
-outright — but it is not sole-control cryptography.
+Two distinct things now sit on a completed envelope, and they must not be
+conflated:
 
-Closing that gap means per-signatory certificates with keys the signatory
-alone controls: smartcards or tokens, an HSM with per-user activation, or a
-QTSP offering remote signing with sole-control authentication. That is a
-procurement and identity programme, not a code change. Until then, describe
-NES accurately: a tamper-evident sealed record with a strong, verifiable audit
-trail, sealed by the organisation.
+* **The organisational seal** (PAdES) still asserts `proof_of_origin` — *the
+  office attests this is the authentic completed record*. It is applied
+  server-side and is deliberately **not** `proof_of_approval`. Never describe
+  it as any individual's signature.
+* **Each signatory's own signature** is an ECDSA P-256 signature made in their
+  browser with a private key encrypted under a passphrase this system has
+  never seen and cannot derive. That satisfies the policy's sole-control
+  requirement: no administrator, superuser or database operator can produce
+  it, and a forgotten passphrase is unrecoverable by anyone.
+
+Each person also holds one lifetime signature ID (`NES-GM-2BE9-W79Q-MTVY-TC`)
+which does not change when they redraw their mark or rotate their key, so the
+same ID across years means the same person.
+
+The residual limitation is narrower than before and worth stating precisely:
+the crypto runs in JavaScript served by this host, so a server that chose to
+serve modified JavaScript could capture a passphrase as it is typed.
+Defending against your own server needs a smartcard or an external signing
+device. What this does rule out — and previously did not — is a stolen
+database, a backup tape, a curious administrator, a host compromised after the
+fact, and an administrator applying somebody's saved signature image.
+
+Where a signatory has no UN PASS account, nothing changes for them: their
+signature rests on the audit trail and the organisational seal, and the
+certificate of completion says so by name rather than leaving it to be
+assumed.
 
 **2. Advanced, not qualified.** In eIDAS terms this is an *advanced* electronic
 seal. *Qualified* requires a qualified certificate from a QTSP on an EU trusted

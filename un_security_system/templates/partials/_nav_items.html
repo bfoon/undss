@@ -357,6 +357,14 @@
             </a>
           {% endif %}
 
+          {% url 'accounts:esign_identity_home' as u_identity %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u_identity %}is-active{% endif %}"
+             href="{{ u_identity }}"
+             data-appnav-label="My NES signature">
+            <i class="bi bi-fingerprint" aria-hidden="true"></i>
+            <span>My signature</span>
+          </a>
+
           {% url 'accounts:esign_witness_status' as u_witness %}
           <a class="appnav-link appnav-link-sub {% if request.path == u_witness %}is-active{% endif %}"
              href="{{ u_witness }}"

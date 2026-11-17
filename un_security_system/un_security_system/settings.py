@@ -534,6 +534,48 @@ ESIGN_WITNESS_ALERT_EMAILS = []
 # so a slow office should never hold up a run.
 ESIGN_WITNESS_TIMEOUT = 15
 
+# ---------------------------------------------------------------------
+# NES — SIGNING IDENTITIES AND SOLE CONTROL
+# ---------------------------------------------------------------------
+# Each person gets one signing identity, for life:
+#
+#     NES-GM-2BE9-W79Q-MTVY-TC
+#
+# The ID never changes — not when they redraw their signature, not when they
+# rotate their key. Only the owner can change either; there is deliberately
+# no administrative override, because an administrator who could change
+# someone's signature could sign as them.
+#
+# The keypair is generated in the signatory's browser and the private key is
+# encrypted there under a passphrase only they know. This server stores a
+# public key and an opaque blob, so it cannot sign as anyone — and neither
+# can whoever takes the database or a backup. A forgotten passphrase cannot
+# be recovered by anyone: the signatory rotates to a new key and keeps the
+# same signature ID.
+#
+#   manage.py esign_identity --status
+#   manage.py esign_identity --install-guard     ← do this once, on Postgres
+#   manage.py esign_identity --verify-ids
+#   manage.py esign_identity --audit
+
+# Secret the lifetime signature ID is derived under. Set this explicitly and
+# then leave it alone: rotating it does not invalidate IDs already issued
+# (they are stored), but it does stop them recomputing, which is how the
+# office proves it issued them rather than someone inventing one.
+# Falls back to SECRET_KEY when empty.
+ESIGN_SIGNATURE_ID_SECRET = ""
+
+# Refuse to accept a signature from someone who HAS an active signing
+# identity but did not use it. Leave False while people are still enrolling;
+# turn it on once they have, to close the gap where a signature could be
+# applied as an image instead.
+#
+# External signers with no account are never blocked by this — they cannot
+# have an identity. The audit trail and the certificate always record which
+# kind of signature was used, so the weaker one is never mistaken for the
+# stronger.
+ESIGN_REQUIRE_ATTESTATION = False
+
 
 # ---------------------------------------------------------------------
 # ESIGN — SIGNATURE TRANSPARENCY

@@ -298,3 +298,237 @@ class WitnessAlertAdmin(admin.ModelAdmin):
         if not obj.resolved:
             obj.resolved_at = None
         super().save_model(request, obj, form, change)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Signing identities and sole control
+# ─────────────────────────────────────────────────────────────────────────────
+
+from .models_esign_identity import (  # noqa: E402
+    SignatureAttestation, SignatureIdentity, SignatureKey, SignatureMark,
+)
+
+__all__ += [
+    "SignatureIdentityAdmin", "SignatureKeyAdmin",
+    "SignatureMarkAdmin", "SignatureAttestationAdmin",
+]
+
+
+class _ReadOnlyInline(admin.TabularInline):
+    extra = 0
+    can_delete = False
+    show_change_link = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class SignatureKeyInline(_ReadOnlyInline):
+    model = SignatureKey
+    fields = ("revision", "algorithm", "key_fingerprint", "is_current",
+              "created_at", "retired_at")
+    readonly_fields = fields
+    ordering = ("-revision",)
+    verbose_name_plural = "Keys (read-only — only the owner can rotate these)"
+
+
+class SignatureMarkInline(_ReadOnlyInline):
+    model = SignatureMark
+    fields = ("revision", "kind", "is_current", "created_at", "replaced_at")
+    readonly_fields = fields
+    ordering = ("-revision",)
+    verbose_name_plural = "Marks (read-only — only the owner can change these)"
+
+
+@admin.register(SignatureIdentity)
+class SignatureIdentityAdmin(admin.ModelAdmin):
+    """
+    Visible to administrators, changeable only in one respect: status.
+
+    Suspending an identity is a legitimate administrative act — offboarding,
+    a suspected compromise — and it stops the person signing. It does not let
+    anyone sign *as* them, which is the line that matters.
+
+    Everything else is read-only here, and no amount of Django permission
+    grants will change that: the key material is useless without a passphrase
+    this server has never held, and the identifier is additionally protected
+    by a database trigger.
+    """
+
+    list_display = (
+        "signature_id", "enrolled_name", "owner", "status_badge",
+        "key_revision", "mark_revision", "use_count", "last_used_at",
+    )
+    list_filter = ("status", "office_code")
+    search_fields = (
+        "signature_id", "enrolled_name", "enrolled_email",
+        "user__username", "user__email",
+    )
+    date_hierarchy = "issued_at"
+    ordering = ("-issued_at",)
+    list_select_related = ("user",)
+    inlines = [SignatureKeyInline, SignatureMarkInline]
+
+    readonly_fields = (
+        "signature_id", "user", "enrollment_nonce", "office_code",
+        "issued_at", "enrolled_name", "enrolled_email", "key_revision",
+        "mark_revision", "use_count", "last_used_at", "created_at",
+        "updated_at", "sole_control_note",
+    )
+    fieldsets = (
+        ("Identity", {
+            "description": (
+                "The signature ID is issued once and is immutable. It does "
+                "not change when the signatory redraws their signature or "
+                "rotates their key — that is the point of it."
+            ),
+            "fields": ("signature_id", "user", "enrolled_name",
+                       "enrolled_email", "office_code", "issued_at"),
+        }),
+        ("Sole control", {"fields": ("sole_control_note",)}),
+        ("Status", {
+            "description": (
+                "Suspending stops this person signing. It does not let anyone "
+                "else sign as them, and it does not release their key."
+            ),
+            "fields": ("status", "suspended_reason", "status_changed_at"),
+        }),
+        ("Use", {
+            "classes": ("collapse",),
+            "fields": ("key_revision", "mark_revision", "use_count",
+                       "last_used_at", "enrollment_nonce", "created_at",
+                       "updated_at"),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        from django.utils import timezone
+
+        if change and "status" in (form.changed_data or []):
+            obj.status_changed_at = timezone.now()
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description="Owner", ordering="user__username")
+    def owner(self, obj):
+        return obj.user
+
+    @admin.display(description="Status")
+    def status_badge(self, obj):
+        colour = {"active": "#198754", "suspended": "#fd7e14",
+                  "retired": "#6c757d"}.get(obj.status, "#6c757d")
+        return format_html(
+            '<span style="color:{};font-weight:600">{}</span>',
+            colour, obj.get_status_display(),
+        )
+
+    @admin.display(description="Who can use this signature")
+    def sole_control_note(self, obj):
+        key = obj.current_key
+        return format_html(
+            "<div style='max-width:46rem'>"
+            "<p><strong>Only {}.</strong> The private key for this identity "
+            "was generated in their browser and encrypted there under a "
+            "passphrase this server has never seen and cannot derive. What is "
+            "stored is a public key and an opaque blob.</p>"
+            "<p>No administrator, superuser or database operator can sign as "
+            "this person, and a forgotten passphrase cannot be recovered by "
+            "anyone — the signatory rotates to a new key and keeps the same "
+            "signature ID.</p>"
+            "<p style='color:#6c757d'>Current key: r{} &middot; {} &middot; "
+            "fingerprint {}</p></div>",
+            obj.enrolled_name or str(obj.user),
+            key.revision if key else "—",
+            key.algorithm if key else "none on file",
+            key.short_fingerprint if key else "—",
+        )
+
+
+@admin.register(SignatureKey)
+class SignatureKeyAdmin(admin.ModelAdmin):
+    """Read-only. Old keys are retained so past signatures still verify."""
+
+    list_display = ("identity", "revision", "algorithm", "is_current",
+                    "created_at", "retired_at")
+    list_filter = ("is_current", "algorithm", "kdf", "cipher")
+    search_fields = ("identity__signature_id", "key_fingerprint")
+    readonly_fields = [f.name for f in SignatureKey._meta.fields] + ["note"]
+    list_select_related = ("identity",)
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="About the stored material")
+    def note(self, obj):
+        return format_html(
+            "<div style='max-width:46rem'>The encrypted private key below is "
+            "AES-GCM ciphertext. The key that would decrypt it is derived "
+            "from the signatory's passphrase, which is not stored anywhere "
+            "in this system. Copying this field gives you nothing usable."
+            "</div>"
+        )
+
+
+@admin.register(SignatureMark)
+class SignatureMarkAdmin(admin.ModelAdmin):
+    list_display = ("identity", "revision", "kind", "is_current",
+                    "created_at", "replaced_at")
+    list_filter = ("kind", "is_current")
+    search_fields = ("identity__signature_id",)
+    readonly_fields = [f.name for f in SignatureMark._meta.fields]
+    list_select_related = ("identity",)
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SignatureAttestation)
+class SignatureAttestationAdmin(admin.ModelAdmin):
+    """
+    Each row is one person's cryptographic act of signing one envelope.
+    Evidence: read-only, never deleted.
+    """
+
+    list_display = ("created_at", "signature_id", "signer_name",
+                    "envelope_link", "verified_badge")
+    list_filter = ("verified", "algorithm")
+    search_fields = ("signature_id", "signer_name", "signer_email",
+                     "envelope__envelope_id", "nonce", "document_sha256")
+    date_hierarchy = "created_at"
+    readonly_fields = [f.name for f in SignatureAttestation._meta.fields]
+    list_select_related = ("envelope", "identity", "key")
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Envelope")
+    def envelope_link(self, obj):
+        return format_html(
+            '<a href="/accounts/esign/{}/">{}</a>',
+            obj.envelope_id, obj.envelope.short_id,
+        )
+
+    @admin.display(description="Verified")
+    def verified_badge(self, obj):
+        return format_html(
+            '<span style="color:{};font-weight:600">{}</span>',
+            "#198754" if obj.verified else "#dc3545",
+            "yes" if obj.verified else "NO",
+        )

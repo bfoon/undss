@@ -410,6 +410,72 @@
     </div>
   </div>
 
+  {# ── who signed, proved by their own key ─────────────────────────── #}
+  {% if attestations %}
+    <div class="card mt-3">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0">Personal signatures</h6>
+        {% if attestations_ok %}
+          <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+            <i class="bi bi-fingerprint me-1"></i>{{ attestations|length }} verified
+          </span>
+        {% else %}
+          <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
+            <i class="bi bi-exclamation-triangle me-1"></i>A signature did not verify
+          </span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <p class="small text-muted">
+          Each of these was produced in the signatory's own browser, with a
+          private key held under their passphrase alone. This system stores
+          only the public key, so it cannot reproduce them — which is what
+          makes the signature theirs rather than a picture on file.
+        </p>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Signature ID</th>
+                <th>Signatory</th>
+                <th>Key</th>
+                <th>Signed</th>
+                <th>Verifies</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in attestations %}
+                <tr>
+                  <td class="font-monospace small">{{ a.signature_id }}</td>
+                  <td class="small">{{ a.signer_name }}</td>
+                  <td class="small">
+                    r{{ a.key_revision|default:"—" }}
+                    <span class="text-muted font-monospace">{{ a.key_fingerprint|slice:":12" }}</span>
+                  </td>
+                  <td class="small">{{ a.signed_at|date:"j M Y H:i" }}</td>
+                  <td>
+                    {% if a.verified %}
+                      <span class="text-success fw-semibold">Yes</span>
+                    {% else %}
+                      <span class="text-danger fw-semibold">No</span>
+                      <div class="small text-danger-emphasis">{{ a.detail|truncatechars:90 }}</div>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="small text-muted mt-2">
+          A signature ID identifies one person for the life of their account.
+          It does not change when they redraw their signature or rotate their
+          key, so the same ID on two documents years apart means the same
+          person signed both.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
   {# ── how long this stays verifiable ──────────────────────────────── #}
   {% if seal and seal.is_sealed %}
     <div class="card mt-3">

@@ -6,7 +6,7 @@ class VehiclesConfig(AppConfig):
     name = 'vehicles'
 
     def ready(self):
-        # Package documents signed in eSign advance their classic package step.
+        # Package documents signed in NES advance their classic package step.
         # (package_esign.py says this moved here, but ready() was missing, so the
         # receiver in signals.py was never connected.)
         from . import signals  # noqa: F401

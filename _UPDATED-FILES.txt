@@ -1,32 +1,48 @@
-UPDATED FILES — NES rename, sealing, tamper-evidence, cross-office witnessing
-For bfoon/undss. These paths mirror your project exactly.
+UPDATED FILES — NES: rename, sealing, tamper-evidence, witnessing, sole control
+For bfoon/undss, against base commit 6df96c1. Paths mirror your project.
 
-Copy them in with:
+Copy in with:
     cp -r undss/. /path/to/your/undss/
 
-The trailing /. copies what is INSIDE undss/, not the folder itself.
+Then:
+    docker compose build web
+    docker compose exec web python manage.py makemigrations accounts
+    docker compose exec web python manage.py migrate
+    docker compose exec web python manage.py esign_identity --install-guard
+    docker compose exec web python manage.py collectstatic --noinput
+
+Read docs/nes-signing-identity.md first for the signature IDs and sole control.
 Delete this file afterwards; it is not part of the project.
 
 ----------------------------------------------------------------------
-NEW FILES (19)
+NEW FILES (28)
 ----------------------------------------------------------------------
   docs/nes-signature-policy-v1.md
+  docs/nes-signing-identity.md
   docs/nes-standards-un-undp.md
   docs/nes-tsa-and-oid-setup.md
   un_security_system/accounts/admin_esign_pades.py
   un_security_system/accounts/audit_chain_esign.py
   un_security_system/accounts/evidence_esign.py
+  un_security_system/accounts/identity_esign.py
+  un_security_system/accounts/management/commands/esign_identity.py
   un_security_system/accounts/management/commands/esign_pades.py
   un_security_system/accounts/management/commands/esign_witness.py
+  un_security_system/accounts/models_esign_identity.py
   un_security_system/accounts/models_esign_pades.py
   un_security_system/accounts/models_esign_witness.py
   un_security_system/accounts/pades_esign.py
+  un_security_system/accounts/signature_id.py
+  un_security_system/accounts/urls_esign_identity.py
   un_security_system/accounts/urls_esign_pades.py
   un_security_system/accounts/urls_esign_witness.py
+  un_security_system/accounts/views_esign_identity.py
   un_security_system/accounts/views_esign_pades.py
   un_security_system/accounts/views_esign_witness.py
   un_security_system/accounts/witness_esign.py
+  un_security_system/static/accounts/esign/identity.js
   un_security_system/templates/accounts/esign/_seal_badge.html
+  un_security_system/templates/accounts/esign/identity.html
   un_security_system/templates/accounts/esign/seal_verify.html
   un_security_system/templates/accounts/esign/witness_status.html
 

@@ -93,6 +93,28 @@ def _context(envelope) -> dict:
     chain = verify_chain(envelope)
     anchor = verify_anchor(envelope, seal)
 
+    # And the third part: which signatories proved it with their own key.
+    try:
+        from . import identity_esign as _identity
+
+        attestations = []
+        for a in _identity.envelope_attestations(envelope):
+            ok, detail = _identity.verify_stored_attestation(a)
+            attestations.append({
+                "signature_id": a.signature_id,
+                "signer_name": a.signer_name,
+                "key_revision": a.key.revision if a.key_id else None,
+                "key_fingerprint": a.key_fingerprint,
+                "algorithm": a.algorithm,
+                "signed_at": a.created_at,
+                "verified": ok,
+                "detail": detail,
+            })
+    except Exception:
+        attestations = []
+
+    attestations_ok = all(a["verified"] for a in attestations) if attestations else True
+
     return {
         "envelope": envelope,
         "seal": seal,
@@ -104,6 +126,8 @@ def _context(envelope) -> dict:
         "pades_configured": P.pades_configured()[0],
         "chain": chain,
         "anchor": anchor,
+        "attestations": attestations,
+        "attestations_ok": attestations_ok,
         # One verdict covering document, trail and anchor together. A green
         # document with a broken trail is not a pass.
         "all_ok": bool(
@@ -111,6 +135,7 @@ def _context(envelope) -> dict:
             and not bool(recorded_sha and stored_sha and not hash_matches)
             and chain["ok"]
             and (not anchor["present"] or anchor["ok"])
+            and attestations_ok
         ),
     }
 

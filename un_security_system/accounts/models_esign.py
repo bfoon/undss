@@ -601,6 +601,9 @@ class EnvelopeEvent(models.Model):
         # PAdES (ETSI EN 319 142) sealing of the completed PDF.
         ("sealed", "Sealed with a digital certificate"),
         ("seal_failed", "Digital seal could not be applied"),
+        # The signatory's own key, under their sole control.
+        ("attested", "Signed with the signatory's personal key"),
+        ("attest_failed", "Personal key signature not accepted"),
     ]
 
     envelope = models.ForeignKey(Envelope, on_delete=models.CASCADE, related_name="events")
@@ -673,4 +676,6 @@ class EnvelopeEvent(models.Model):
             "resent": "bi-arrow-repeat",
             "sealed": "bi-shield-lock",
             "seal_failed": "bi-shield-exclamation",
+            "attested": "bi-fingerprint",
+            "attest_failed": "bi-exclamation-diamond",
         }.get(self.event, "bi-dot")
