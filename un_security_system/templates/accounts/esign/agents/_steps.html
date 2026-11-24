@@ -1,0 +1,77 @@
+{# accounts/templates/accounts/esign/agents/_steps.html — what each card did; re-rendered while the run is live #}
+{% for s in steps %}
+<div class="ag-step {{ s.status }}" id="step-{{ s.pk }}">
+  <span class="ico" style="background:{{ s.card.color|default:'#64748B' }}"><i class="bi {{ s.card.icon|default:'bi-dot' }}"></i></span>
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <span class="fw-semibold">{{ s.node_label }}</span>
+    <span class="badge bg-{{ s.status_color }}{% if s.status_color == 'warning' %} text-dark{% endif %}">{% if s.status == 'running' %}<span class="ag-thinking me-1"><i></i><i></i><i></i></span>{% endif %}{{ s.get_status_display }}</span>
+    {% if s.port and s.port != 'next' %}<span class="badge bg-light text-dark border"><i class="bi bi-arrow-return-right me-1"></i>{{ s.port }}</span>{% endif %}
+    <span class="small text-muted ms-auto">{% if s.model %}<span class="me-2" title="{{ s.tokens_in }} in · {{ s.tokens_out }} out">{% if s.model == 'built-in' %}<i class="bi bi-cpu"></i>{% else %}<i class="bi bi-stars" style="color:#7C3AED"></i>{% endif %} {{ s.model }}</span>{% endif %}{{ s.duration_label }}</span>
+  </div>
+  {% if s.message %}<div class="small {% if s.status == 'failed' %}text-danger{% else %}text-muted{% endif %} mt-1">{{ s.message }}</div>{% endif %}
+
+  {% if s.policy %}
+    {% with ev=s.policy %}
+    <div class="mt-2 p-2 rounded d-flex align-items-center gap-2" style="background:{% if ev.outcome == 'breach' %}#FEF2F2{% elif ev.outcome == 'warning' %}#FFFBEB{% elif ev.outcome == 'complies' %}#F0FDF4{% else %}#F8FAFC{% endif %};border:1px solid {% if ev.outcome == 'breach' %}#FECACA{% elif ev.outcome == 'warning' %}#FDE68A{% elif ev.outcome == 'complies' %}#BBF7D0{% else %}#E2E8F0{% endif %}">
+      <i class="bi {% if ev.outcome == 'breach' %}bi-x-octagon-fill text-danger{% elif ev.outcome == 'warning' %}bi-exclamation-triangle-fill text-warning{% elif ev.outcome == 'complies' %}bi-check-circle-fill text-success{% else %}bi-dash-circle text-secondary{% endif %} fs-5"></i>
+      <div class="small"><strong>{{ ev.outcome_label }}</strong> · {{ ev.policy.title }}{% if ev.policy.version %} {{ ev.policy.version }}{% endif %}
+        {% if ev.scope_note and ev.outcome == 'na' %}<div class="text-muted">{{ ev.scope_note }}</div>{% endif %}</div>
+    </div>
+    {% if ev.results %}
+    <div class="table-responsive mt-2"><table class="table table-sm align-middle mb-1 small">
+      <thead class="text-muted"><tr><th style="width:28px"></th><th>Rule</th><th>Finding</th></tr></thead><tbody>
+      {% for x in ev.results %}
+      <tr>
+        <td>{% if x.status == 'flag' %}<i class="bi bi-x-circle-fill text-danger"></i>{% elif x.status == 'unclear' %}<i class="bi bi-question-circle-fill text-warning"></i>{% elif x.status == 'ok' %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-dash-circle text-secondary"></i>{% endif %}</td>
+        <td><span class="pol-chip {{ x.severity }}" style="font-size:.62rem;font-weight:700;border-radius:999px;padding:.05rem .45rem;{% if x.severity == 'must' %}background:#FEE2E2;color:#991B1B{% elif x.severity == 'should' %}background:#FEF3C7;color:#92400E{% else %}background:#E0F2FE;color:#075985{% endif %}">{{ x.severity }}</span>
+          <span class="fw-semibold">{{ x.title }}</span>{% if x.ref %} <span class="text-muted">· {{ x.ref }}</span>{% endif %}</td>
+        <td>{{ x.note }}{% if x.evidence %}<div class="text-muted fst-italic">“{{ x.evidence|truncatechars:220 }}”</div>{% endif %}
+          <div class="text-muted" style="font-size:.7rem">{% if x.by == 'rule' %}exact check{% elif x.by == 'ai' %}AI{% else %}built-in{% endif %}</div></td>
+      </tr>
+      {% endfor %}</tbody></table></div>
+    {% endif %}
+    {% if ev.actions %}
+      <div class="small mt-1">{% for a in ev.actions %}<div class="{% if not a.ok %}text-danger{% elif a.dry %}text-warning{% endif %}"><i class="bi {% if a.type == 'stop' %}bi-sign-stop{% elif a.type == 'workflow' %}bi-diagram-3{% elif a.type == 'agent' %}bi-stars{% elif a.type == 'signoff' %}bi-person-check{% elif a.type == 'warn' %}bi-exclamation-triangle{% else %}bi-info-circle{% endif %} me-1"></i>{% if a.url %}<a href="{{ a.url }}">{{ a.label }}</a>{% else %}{{ a.label }}{% endif %}</div>{% endfor %}</div>
+    {% endif %}
+    {% endwith %}
+  {% elif s.fields %}
+    <table class="table table-sm ag-kv mt-2 mb-1 border rounded">{% for k, v in s.fields.items %}<tr><th>{{ k }}</th><td>{% if v %}{{ v }}{% else %}<span class="text-muted">— not stated —</span>{% endif %}</td></tr>{% endfor %}</table>
+  {% elif s.issues %}
+    <ul class="list-unstyled mt-2 mb-1">{% for i in s.issues %}
+      <li class="small mb-1 p-2 rounded" style="background:{% if i.severity == 'high' %}#FEF2F2{% elif i.severity == 'low' %}#F8FAFC{% else %}#FFFBEB{% endif %}">
+        {% if i.severity %}<span class="badge {% if i.severity == 'high' %}bg-danger{% elif i.severity == 'low' %}bg-secondary{% else %}bg-warning text-dark{% endif %} me-1">{{ i.severity }}</span>{% endif %}{{ i.finding }}
+        {% if i.rule %}<div class="text-muted mt-1"><i class="bi bi-journal-text me-1"></i>{{ i.rule }}</div>{% endif %}</li>{% endfor %}</ul>
+  {% elif s.sources %}
+    <ul class="small mt-2 mb-1">{% for src in s.sources %}<li>{% if src.url %}<a href="{{ src.url }}" target="_blank" rel="noopener noreferrer">{{ src.title }}</a>{% else %}{{ src.title }}{% endif %} <span class="text-muted">· {{ src.chars }} characters</span></li>{% endfor %}</ul>
+  {% elif s.output_text and s.kind != 'start' %}
+    <details {% if forloop.revcounter <= 3 or s.status == 'waiting' %}open{% endif %} class="mt-2"><summary class="small text-muted">Result</summary>
+      <div class="ag-out mt-1">{{ s.output_text }}</div></details>
+  {% endif %}
+
+  {% if s.output_data.preview %}
+    <details class="mt-2"><summary class="small text-warning fw-semibold"><i class="bi bi-eye me-1"></i>What would have been sent</summary>
+      {% if s.output_data.subject %}<div class="small mt-1"><strong>Subject:</strong> {{ s.output_data.subject }}</div>{% endif %}
+      <div class="ag-out mt-1">{{ s.output_data.preview }}</div></details>
+  {% endif %}
+
+  {% if s.output_file %}
+    <div class="mt-2 d-flex flex-wrap gap-2">
+      <a class="btn btn-sm btn-outline-ag" href="{% url 'accounts:esign_agent_step_file' run.pk s.pk %}"><i class="bi bi-download me-1"></i>{{ s.output_file_name }}</a>
+      {% if s.output_file_name|lower|slice:"-4:" == ".pdf" %}<a class="btn btn-sm btn-outline-secondary" target="_blank" href="{% url 'accounts:esign_agent_step_file' run.pk s.pk %}?view=1"><i class="bi bi-eye me-1"></i>View</a>{% endif %}
+    </div>
+  {% endif %}
+
+  {% if s.status == 'waiting' %}
+    <div class="mt-2 p-2 rounded small" style="background:#FFFBEB;border:1px solid #FDE68A">
+      Waiting for {% for p in s.assignees %}<strong>{{ p.name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}{% if s.due_at %} · due {{ s.due_at|date:"d M H:i" }}{% endif %}.
+      {% if s.can_decide %}<a class="btn btn-sm btn-ag ms-2" href="{% url 'accounts:esign_agent_check' s.token %}"><i class="bi bi-check2-circle me-1"></i>Review now</a>{% endif %}
+    </div>
+  {% endif %}
+  {% if s.decided_at %}<div class="small text-muted mt-1"><i class="bi bi-person-check me-1"></i>{{ s.decided_name }} · {{ s.decided_at|date:"d M H:i" }}{% if s.decision_comment %} — “{{ s.decision_comment }}”{% endif %}</div>{% endif %}
+</div>
+{% empty %}
+<div class="st-empty"><span class="ag-thinking"><i></i><i></i><i></i></span><div class="mt-2">Getting started…</div></div>
+{% endfor %}
+{% if run.status == 'running' or run.status == 'queued' %}
+<div class="ag-step running"><span class="ico" style="background:#A78BFA"><i class="bi bi-stars"></i></span><div class="small text-muted pt-1">Working on the next card <span class="ag-thinking ms-1"><i></i><i></i><i></i></span></div></div>
+{% endif %}

@@ -1803,3 +1803,4 @@ from .models_esign_triggers import *  # noqa: F401,F403
 from .models_esign_pades import *     # noqa: F401,F403
 from .models_esign_witness import *   # noqa: F401,F403
 from .models_esign_identity import *  # noqa: F401,F403
+from .models_esign_agents import *    # noqa: F401,F403

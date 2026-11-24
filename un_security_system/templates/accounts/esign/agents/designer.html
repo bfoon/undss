@@ -1,0 +1,1277 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/agents/designer.html — drag-and-drop Agentic flow designer #}
+{% block title %}{{ flow.name }} — Agent designer | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/agents/_agent_styles.html" %}
+<style>
+  .ad{ display:grid; grid-template-columns:232px 1fr 350px; height:calc(100vh - 190px); min-height:600px; border:1px solid var(--st-line); border-radius:.7rem; overflow:hidden; background:#fff; }
+  @media (max-width: 1199px){ .ad{ grid-template-columns:190px 1fr 300px; } }
+  .ad-top{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-bottom:.6rem; }
+  .ad-name{ font-size:1.15rem; font-weight:700; color:#4C1D95; border:1px solid transparent; border-radius:.35rem; padding:.15rem .4rem; min-width:240px; background:transparent; }
+  .ad-name:hover{ border-color:var(--st-line); } .ad-name:focus{ outline:0; border-color:#C4B5FD; background:#fff; }
+  .ad-pal{ border-right:1px solid var(--st-line); overflow:auto; padding:10px; background:linear-gradient(#FBFAFF, #FBFCFD); }
+  .ad-pal-search{ font-size:.82rem; }
+  .ad-pal-item{ display:flex; gap:.55rem; align-items:center; padding:.42rem .5rem; border:1px solid var(--st-line); border-radius:.5rem; background:#fff; margin-bottom:.38rem;
+                cursor:grab; user-select:none; font-size:.84rem; position:relative; }
+  .ad-pal-item:hover{ border-color:#C4B5FD; box-shadow:0 2px 8px rgba(76,29,149,.08); }
+  .ad-pal-item .ico{ width:28px; height:28px; border-radius:.45rem; display:flex; align-items:center; justify-content:center; color:#fff; flex:0 0 28px; }
+  .ad-pal-item small{ display:block; color:#94A3B8; font-size:.68rem; line-height:1.2; }
+  .ad-pal-item .ai{ position:absolute; right:6px; top:5px; font-size:.6rem; font-weight:700; color:#7C3AED; }
+  .ad-stage{ position:relative; overflow:hidden; background:radial-gradient(#DCD6F0 1px, transparent 1px) 0 0/20px 20px, #F8F7FD; cursor:grab; touch-action:none; }
+  .ad-stage.panning{ cursor:grabbing; }
+  .ad-world{ position:absolute; left:0; top:0; transform-origin:0 0; }
+  .ad-edges{ position:absolute; left:0; top:0; width:1px; height:1px; overflow:visible; }
+  .ad-stage svg.ad-edges{ width:1px!important; height:1px!important; max-width:none!important; overflow:visible!important; }
+  .ad-edge{ fill:none; stroke:#A5B4FC; stroke-width:2; }
+  .ad-edge.flow{ stroke-dasharray:6 6; animation:adFlow 1.2s linear infinite; }
+  @keyframes adFlow{ to{ stroke-dashoffset:-12; } }
+  .ad-edge.bad{ stroke:#F87171; }
+  .ad-edge-hit{ fill:none; stroke:transparent; stroke-width:14; cursor:pointer; pointer-events:stroke; }
+  .ad-edge-g.sel .ad-edge{ stroke:#7C3AED; stroke-width:3; animation:none; stroke-dasharray:none; }
+  .ad-node{ position:absolute; width:230px; background:#fff; border:1.5px solid #D4D4F0; border-radius:12px; box-shadow:0 1px 3px rgba(15,23,42,.08);
+            cursor:move; user-select:none; }
+  .ad-node.sel{ border-color:#7C3AED; box-shadow:0 0 0 3px rgba(124,58,237,.22), 0 6px 18px rgba(15,23,42,.1); }
+  .ad-node.has-error{ border-color:#F87171; }
+  .ad-node.is-ai{ background:linear-gradient(180deg,#FFFFFF 60%,#FBF9FF); }
+  .ad-node .strip{ position:absolute; left:0; top:0; bottom:0; width:5px; border-radius:11px 0 0 11px; }
+  .ad-node .type{ position:absolute; left:14px; top:8px; font:700 10px "Segoe UI",Helvetica,Arial; letter-spacing:.5px; text-transform:uppercase; }
+  .ad-node .aib{ margin-left:.3rem; font-size:9px; color:#7C3AED; background:#F5F3FF; border:1px solid #DDD6FE; border-radius:4px; padding:0 3px; }
+  .ad-node .title{ position:absolute; left:14px; right:28px; top:25px; font-weight:600; font-size:.88rem; color:#0F172A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ad-node .sub{ position:absolute; left:14px; right:12px; top:47px; font-size:.72rem; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ad-node .ctx{ position:absolute; left:14px; right:12px; top:64px; font-size:.68rem; color:#7C3AED; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:italic; }
+  .ad-node.multi .title, .ad-node.multi .sub, .ad-node.multi .ctx{ right:78px; }
+  .ad-node .flag{ position:absolute; right:9px; top:7px; font-size:.8rem; }
+  .ad-node.note{ border:0; border-radius:4px; box-shadow:0 4px 10px rgba(120,80,0,.14); transform:rotate(-.6deg); }
+  .ad-node.note .ntext{ padding:10px 12px; font-size:.82rem; color:#422006; white-space:pre-wrap; overflow:hidden; height:100%; font-family:"Segoe Print","Comic Sans MS","Segoe UI",sans-serif; }
+  .ad-node.note.sel{ box-shadow:0 0 0 3px rgba(202,138,4,.4); }
+  .ad-port{ position:absolute; width:14px; height:14px; border-radius:50%; background:#fff; border:2px solid #A5B4FC; z-index:2; }
+  .ad-port.in{ left:-8px; }
+  .ad-port.out{ right:-8px; cursor:crosshair; }
+  .ad-port.out:hover, .ad-port.in.target{ background:#7C3AED; border-color:#7C3AED; transform:scale(1.25); }
+  .ad-port-label{ position:absolute; right:12px; font-size:.62rem; color:#64748B; transform:translateY(-50%); pointer-events:none; max-width:66px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; }
+  .ad-zoom{ position:absolute; right:12px; bottom:12px; display:flex; gap:4px; z-index:5; }
+  .ad-zoom button{ width:34px; height:34px; border-radius:.45rem; border:1px solid var(--st-line); background:#fff; }
+  .ad-help{ position:absolute; left:12px; bottom:12px; font-size:.72rem; color:#64748B; background:rgba(255,255,255,.88); padding:.3rem .55rem; border-radius:.35rem; z-index:5; }
+  .ad-side{ border-left:1px solid var(--st-line); overflow:auto; padding:14px; }
+  .ad-issue{ font-size:.8rem; padding:.35rem .5rem; border-radius:.35rem; margin-bottom:.3rem; cursor:pointer; }
+  .ad-issue.err{ background:#FEF2F2; color:#991B1B; } .ad-issue.warn{ background:#FFFBEB; color:#92400E; }
+  .ad-save-state{ font-size:.78rem; color:#64748B; }
+  .ad-empty{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; color:#A78BFA; }
+  .ad-ctx{ border:1.5px solid #DDD6FE; background:#FDFCFF; font-size:.85rem; }
+  .ad-ctx:focus{ border-color:#A78BFA; box-shadow:0 0 0 .2rem rgba(124,58,237,.12); }
+  .ad-ctx-label{ display:flex; align-items:center; justify-content:space-between; }
+  .ad-tile{ border:1px solid var(--st-line); border-radius:.5rem; padding:.45rem .3rem; text-align:center; font-size:.75rem; cursor:pointer; background:#fff; }
+  .ad-tile i{ display:block; font-size:1.15rem; margin-bottom:.1rem; }
+  .ad-tile.on{ border-color:#7C3AED; background:#F5F3FF; color:#4C1D95; font-weight:600; }
+  .ad-cat{ border:1px solid var(--st-line); border-radius:.45rem; padding:.45rem; margin-bottom:.4rem; background:#FCFCFE; }
+  .ad-swatch{ width:26px; height:26px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #CBD5E1; cursor:pointer; }
+  .ad-swatch.on{ box-shadow:0 0 0 2px #7C3AED; }
+  .ad-share-row{ display:flex; align-items:center; gap:.5rem; padding:.4rem .5rem; border:1px solid var(--st-line); border-radius:.45rem; margin-bottom:.35rem; }
+  .ad-scope{ border:1.5px solid var(--st-line); border-radius:.6rem; padding:.7rem; cursor:pointer; height:100%; }
+  .ad-scope.on{ border-color:#7C3AED; background:#F5F3FF; }
+  .ad-compose-ex{ cursor:pointer; }
+  .ps-rule{ border:1px solid var(--st-line); border-left:4px solid #CBD5E1; border-radius:.5rem; padding:.5rem .6rem; margin-bottom:.5rem; background:#fff; }
+  .ps-rule.must{ border-left-color:#DC2626; } .ps-rule.should{ border-left-color:#F59E0B; } .ps-rule.info{ border-left-color:#0EA5E9; }
+  .ps-rule.off{ opacity:.55; }
+  .ps-rule .ps-title{ font-weight:600; font-size:.88rem; border:1px solid transparent; }
+  .ps-rule .ps-title:hover{ border-color:var(--st-line); }
+  .ps-sev{ width:auto; font-size:.75rem; font-weight:700; }
+  .ps-src-tab{ cursor:pointer; }
+  .ps-rules{ max-height:62vh; overflow:auto; padding-right:4px; }
+  .pol-sum{ background:linear-gradient(135deg,#FFF7ED,#FFFBF5); border:1px solid #FED7AA; border-radius:.6rem; padding:.7rem; }
+  .pol-chip{ display:inline-block; font-size:.68rem; font-weight:700; border-radius:999px; padding:.05rem .5rem; margin-right:.2rem; }
+  .pol-chip.must{ background:#FEE2E2; color:#991B1B; } .pol-chip.should{ background:#FEF3C7; color:#92400E; } .pol-chip.info{ background:#E0F2FE; color:#075985; }
+  .pol-out{ border:1px solid var(--st-line); border-radius:.5rem; margin-bottom:.5rem; }
+  .pol-out > summary{ padding:.45rem .6rem; font-weight:600; font-size:.84rem; cursor:pointer; list-style:none; display:flex; align-items:center; gap:.4rem; }
+  .pol-out > summary::-webkit-details-marker{ display:none; }
+  .pol-out .body{ padding:.2rem .6rem .6rem; }
+  .pol-act{ border:1px dashed #CBD5E1; border-radius:.45rem; padding:.45rem .5rem; margin-bottom:.4rem; background:#FCFCFE; }
+  .pol-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="ad-top">
+  <a class="btn btn-sm btn-link text-decoration-none px-1" href="{% url 'accounts:esign_agents' %}" title="Back to agents"><i class="bi bi-arrow-left"></i></a>
+  <span class="ag-spark fs-5"><i class="bi bi-stars"></i></span>
+  <input class="ad-name" id="flowName" maxlength="150" aria-label="Agent name">
+  <span class="badge bg-light text-dark border" id="issueBadge"></span>
+  <span class="ag-chip" id="aiChip" title=""></span>
+  <span class="ad-save-state ms-1" id="saveState">Saved</span>
+  <div class="ms-auto d-flex flex-wrap gap-2 align-items-center">
+    <div class="form-check form-switch ag-switch mb-0 me-1 d-none" id="autoWrap" title="Run automatically when the trigger happens">
+      <input class="form-check-input" type="checkbox" role="switch" id="autoSwitch">
+      <label class="form-check-label small fw-semibold" for="autoSwitch" id="autoLabel">Off</label>
+    </div>
+    <button class="btn btn-sm btn-outline-ag" id="composeBtn" title="Describe the agent in plain words and let it be drawn for you"><i class="bi bi-magic me-1"></i>Build from a description</button>
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-grid-1x2 me-1"></i>Templates</button>
+      <ul class="dropdown-menu dropdown-menu-end shadow-sm" id="tplMenu" style="max-width:340px"></ul>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" id="shareBtn"><i class="bi bi-people me-1"></i>Share</button>
+    <div class="btn-group">
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_agent_export' flow.pk %}" title="Download a .unpassagent file someone else can import"><i class="bi bi-box-arrow-up me-1"></i>Export</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_agent_import' %}" title="Import an agent from a file"><i class="bi bi-box-arrow-in-down"></i></a>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" id="tidy" title="Arrange the cards neatly"><i class="bi bi-magic"></i></button>
+    <button class="btn btn-sm btn-outline-secondary" id="undo" title="Undo (Ctrl+Z)" disabled><i class="bi bi-arrow-90deg-left"></i></button>
+    <button class="btn btn-sm btn-outline-secondary" id="redo" title="Redo (Ctrl+Y)" disabled><i class="bi bi-arrow-90deg-right"></i></button>
+    <button class="btn btn-sm btn-outline-primary" id="saveBtn"><i class="bi bi-cloud-check me-1"></i>Save</button>
+    <button class="btn btn-sm btn-ag" id="runBtn"><i class="bi bi-play-fill me-1"></i>Test run</button>
+  </div>
+</div>
+
+<div class="ad">
+  <div class="ad-pal" id="palette" aria-label="Cards">
+    <input type="search" class="form-control form-control-sm ad-pal-search mb-2" id="palSearch" placeholder="Find a card…" aria-label="Find a card">
+    <div id="palList"></div>
+  </div>
+
+  <div class="ad-stage" id="stage" tabindex="0" aria-label="Agent canvas">
+    <div class="ad-world" id="world">
+      <svg class="ad-edges" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="adArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#A5B4FC"/></marker>
+          <marker id="adArrowSel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7C3AED"/></marker>
+        </defs>
+        <g id="edgeLayer"></g>
+        <path id="ghost" class="ad-edge" style="stroke:#7C3AED;stroke-dasharray:5 4" d=""/>
+      </svg>
+      <div id="nodeLayer"></div>
+    </div>
+    <div class="ad-empty d-none" id="emptyHint"><div class="text-center"><i class="bi bi-stars fs-1 d-block"></i>Drag a Trigger here — or click <strong>Build from a description</strong>.</div></div>
+    <div class="ad-help st-desktop-only">Drag from a dot on the right of a card to connect it · drag the background to move · Ctrl + scroll to zoom</div>
+    <div class="ad-zoom">
+      <button id="zOut" title="Zoom out"><i class="bi bi-dash-lg"></i></button>
+      <button id="zFit" title="Fit to screen"><i class="bi bi-arrows-fullscreen"></i></button>
+      <button id="zIn" title="Zoom in"><i class="bi bi-plus-lg"></i></button>
+    </div>
+  </div>
+
+  <aside class="ad-side" id="side" aria-label="Inspector"></aside>
+</div>
+
+{# ── Share ─────────────────────────────────────────────────────────── #}
+<div class="modal fade" id="shareModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" style="color:#4C1D95"><i class="bi bi-people me-2"></i>Share “<span id="shareName"></span>”</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div id="shareOwnerOnly" class="small d-none p-2 mb-3 rounded" style="background:#EFF6FF;border:1px solid #BFDBFE">Only <strong id="ownerName"></strong>, who made this agent, can change who it is shared with. You can still export it.</div>
+        <div id="shareEditor">
+          <div class="st-group-label mb-2">Who can find and use it</div>
+          <div class="row g-2 mb-3" id="scopeRow">
+            <div class="col-md-4"><div class="ad-scope" data-scope="private"><div class="fw-semibold"><i class="bi bi-person-lock me-1"></i>Me and the people below</div><div class="small text-muted">Nobody else sees it.</div></div></div>
+            <div class="col-md-4"><div class="ad-scope" data-scope="office"><div class="fw-semibold"><i class="bi bi-building me-1"></i>My whole country office</div><div class="small text-muted">Everyone in your CO can run it, or switch it on for their own documents.</div></div></div>
+            <div class="col-md-4"><div class="ad-scope" data-scope="agency"><div class="fw-semibold"><i class="bi bi-globe2 me-1"></i>My whole agency</div><div class="small text-muted">Every office of your agency.</div></div></div>
+          </div>
+          <div class="st-group-label mb-1">Specific people</div>
+          <div id="sharePick" class="mb-2"></div>
+          <div id="shareList" class="mb-2"></div>
+          <div class="form-text mb-2">Colleagues from the directory, or anyone's email — they get access when they sign in with it. <strong>Can edit</strong> lets them change the cards; only you can share or delete it.</div>
+          <label class="form-check small"><input class="form-check-input" type="checkbox" id="shareNotify" checked> Email new people to let them know</label>
+        </div>
+        <hr>
+        <div class="d-flex gap-3 align-items-start">
+          <i class="bi bi-file-earmark-arrow-down fs-3" style="color:#7C3AED"></i>
+          <div class="flex-grow-1">
+            <div class="fw-semibold">Send it to someone else as a file</div>
+            <div class="small text-muted mb-2">An <code>.unpassagent</code> file they can import in their own UN PASS — another office or agency. People and webhook addresses are left out; they choose their own when they import it.</div>
+            <a class="btn btn-sm btn-outline-ag" href="{% url 'accounts:esign_agent_export' flow.pk %}"><i class="bi bi-download me-1"></i>Download .unpassagent</a>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Close</button><button type="button" class="btn btn-ag" id="shareSave"><i class="bi bi-check2 me-1"></i>Save sharing</button></div>
+    </div>
+  </div>
+</div>
+
+{# ── Build from a description ──────────────────────────────────────── #}
+<div class="modal fade" id="composeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" style="color:#4C1D95"><i class="bi bi-magic me-2"></i>Describe your agent</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <textarea class="form-control ad-ctx mb-2" id="composeText" rows="4" maxlength="3000" placeholder="e.g. When a document comes to me for signature, summarize it in bullets, check it against our procurement policy at https://… and email me the result. If it is over 50,000 USD, ask ops@… to approve first."></textarea>
+        <div class="small text-muted mb-2">Try:
+          <span class="badge bg-light text-dark border ad-compose-ex">When a document comes to me for signature, summarize it and email me.</span>
+          <span class="badge bg-light text-dark border ad-compose-ex">Translate into French, convert to Word and email it to me.</span>
+          <span class="badge bg-light text-dark border ad-compose-ex">Extract the vendor, contract value and end date, convert to Excel, and if the value is over 100k ask a human to approve.</span>
+        </div>
+        <div id="composeOut" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-1"><div class="st-group-label">Preview</div><span class="small text-muted" id="composeHow"></span></div>
+          <div class="st-map ag-mini mb-2" id="composeMap" style="height:170px"></div>
+        </div>
+        <div class="small text-danger" id="composeErr"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-outline-ag" id="composeGo"><span class="ag-thinking d-none me-1" id="composeSpin"><i></i><i></i><i></i></span><i class="bi bi-stars me-1"></i>Draw it</button>
+        <button type="button" class="btn btn-outline-secondary d-none" id="composeAdd"><i class="bi bi-plus-lg me-1"></i>Add to the canvas</button>
+        <button type="button" class="btn btn-ag d-none" id="composeUse"><i class="bi bi-check2 me-1"></i>Replace the canvas</button>
+      </div>
+    </div>
+  </div>
+</div>
+{# ── Policy studio ─────────────────────────────────────────────────── #}
+<div class="modal fade" id="policyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:1240px">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(135deg,#FFF7ED,#F5F3FF)">
+        <h5 class="modal-title" style="color:#9A3412"><i class="bi bi-journal-check me-2"></i>Policy studio <span class="small text-muted fw-normal ms-2" id="psHeadTitle"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-4">
+          <div class="col-lg-5">
+            <div class="st-group-label mb-2">1 · Give it the policy</div>
+            <div class="btn-group btn-group-sm w-100 mb-2" role="group">
+              <input type="radio" class="btn-check" name="psSrc" id="psSrcU" value="upload" checked><label class="btn btn-outline-secondary" for="psSrcU"><i class="bi bi-upload me-1"></i>Upload</label>
+              <input type="radio" class="btn-check" name="psSrc" id="psSrcP" value="paste"><label class="btn btn-outline-secondary" for="psSrcP"><i class="bi bi-clipboard me-1"></i>Paste</label>
+              <input type="radio" class="btn-check" name="psSrc" id="psSrcL" value="link"><label class="btn btn-outline-secondary" for="psSrcL"><i class="bi bi-link-45deg me-1"></i>Link</label>
+              <input type="radio" class="btn-check" name="psSrc" id="psSrcR" value="reuse"><label class="btn btn-outline-secondary" for="psSrcR"><i class="bi bi-recycle me-1"></i>Reuse</label>
+            </div>
+            <div data-ps="upload"><label class="st-drop d-block mb-2 py-3" id="psDrop"><i class="bi bi-file-earmark-arrow-up"></i><div class="fw-semibold mt-1 small" id="psDropName">Drop the policy here — PDF, Word or text</div>
+              <input type="file" id="psFile" class="d-none" accept=".pdf,.docx,.doc,.odt,.rtf,.txt,.md,.html,.htm"></label></div>
+            <div data-ps="paste" class="d-none"><textarea class="form-control form-control-sm mb-2" id="psPaste" rows="6" placeholder="Paste the policy text"></textarea></div>
+            <div data-ps="link" class="d-none"><input class="form-control form-control-sm mb-2" id="psUrl" placeholder="https://… (a public page, PDF or Word file)"></div>
+            <div data-ps="reuse" class="d-none"><select class="form-select form-select-sm mb-2" id="psReuse"><option value="">Loading policies from your agents…</option></select>
+              <div class="form-text mb-2">Copies the rulebook from another agent you can use — yours, or one shared with you.</div></div>
+            <div data-ps-build><input class="form-control form-control-sm mb-2" id="psHint" maxlength="1000" placeholder="Optional guidance, e.g. “Only sections 4 to 7 apply to contracts.”">
+            <button class="btn btn-sm w-100 mb-1" id="psBuild" style="background:#9A3412;color:#fff"><span class="ag-thinking d-none me-1" id="psSpin"><i></i><i></i><i></i></span><i class="bi bi-stars me-1"></i>Read it and build the rules</button></div>
+            <button class="btn btn-sm btn-outline-secondary w-100 mb-1 d-none" id="psReuseGo"><i class="bi bi-recycle me-1"></i>Use this policy</button>
+            <div class="small mb-3" id="psMsg"></div>
+
+            <div class="st-group-label mb-2">2 · About the policy</div>
+            <input class="form-control form-control-sm mb-2 fw-semibold" id="psTitle" maxlength="150" placeholder="Policy title">
+            <div class="row g-2 mb-2"><div class="col-4"><input class="form-control form-control-sm" id="psVersion" maxlength="30" placeholder="Version"></div>
+              <div class="col-8"><input class="form-control form-control-sm" id="psEffective" maxlength="30" placeholder="Effective from"></div></div>
+            <label class="form-label small fw-semibold mb-1">It applies to</label>
+            <input class="form-control form-control-sm mb-1" id="psAppliesTo" maxlength="400" placeholder="e.g. Contracts and purchase orders with vendors">
+            <input class="form-control form-control-sm mb-1" id="psScope" placeholder="Scope words (optional), e.g. contract, purchase order, vendor">
+            <div class="form-text mb-2">With scope words, documents that mention none of them leave by <strong>Doesn't apply</strong>. Without them, the AI judges the scope from the line above.</div>
+            <label class="form-label small fw-semibold mb-1">Summary</label>
+            <textarea class="form-control form-control-sm mb-2" id="psSummary" rows="3" maxlength="2000"></textarea>
+            <label class="form-check small mb-1"><input class="form-check-input" type="checkbox" id="psKeep"> Keep the policy text inside the agent <span class="text-muted">— AI cards can quote it, and it is shared and exported with the agent</span></label>
+            <label class="form-check small mb-2"><input class="form-check-input" type="checkbox" id="psStrict"> Strict: an <em>unclear</em> must-rule counts as a breach</label>
+            <div class="small text-muted" id="psOrigin"></div>
+            <details class="mt-2"><summary class="small fw-semibold">Policy text inside the agent (<span id="psChars">0</span> characters)</summary>
+              <textarea class="form-control form-control-sm mt-1 font-monospace" id="psText" rows="8" style="font-size:.72rem"></textarea></details>
+          </div>
+          <div class="col-lg-7">
+            <div class="d-flex align-items-center mb-2 gap-2">
+              <div class="st-group-label">3 · The rules</div>
+              <span id="psCounts" class="small"></span>
+              <button class="btn btn-sm btn-outline-secondary ms-auto" id="psAdd"><i class="bi bi-plus-lg me-1"></i>Add a rule</button>
+            </div>
+            <div class="ps-rules" id="psRules"></div>
+            <div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i><strong>Must</strong> rules decide a <strong>Breach</strong>; <strong>Should</strong> rules a <strong>Warning</strong>; <strong>For information</strong> rules are only reported.
+              <em>Amount limit</em>, <em>Must mention</em> and <em>Must not mention</em> are checked exactly, without AI; <em>AI judgement</em> rules are read by the AI (or the built-in checker).</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer"><span class="small text-muted me-auto"><i class="bi bi-shield-lock me-1"></i>The uploaded file is read and then discarded — only the rules and text above are kept, inside this agent.</span>
+        <button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn" style="background:#9A3412;color:#fff" id="psSave"><i class="bi bi-check2 me-1"></i>Save to the card</button></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_net.html" %}
+{% include "accounts/esign/studio/_people_picker.html" %}
+{% include "accounts/esign/studio/_flow_map.html" %}
+<script>window.AGENT_CFG = {{ config_json|safe }}; window.AGENT_INIT = {{ payload|safe }};</script>
+<script>{% verbatim %}
+(function(){
+  const CFG = window.AGENT_CFG;
+  const INIT = window.AGENT_INIT;
+  const T = CFG.card_types, PL = CFG.port_labels;
+  const W = 230, H = 86, NOTE_H = 120, GRID = 20;
+  const AI = new Set(Object.keys(T).filter(k => T[k].ai));
+
+  const portsOf = n => n && n.type === "classify" ? [...((n.config || {}).categories || []).map(c => c.id), "other"] : (T[n.type] || {}).ports || [];
+  const portName = (n, p) => { if (n && n.type === "classify"){ const c = ((n.config || {}).categories || []).find(x => x.id === p); if (c) return c.label; } return PL[p] || p; };
+  const hOf = n => n.type === "note" ? NOTE_H : Math.max(H, 24 * portsOf(n).length + 22);
+
+  const stage = document.getElementById("stage"), world = document.getElementById("world");
+  const nodeLayer = document.getElementById("nodeLayer"), edgeLayer = document.getElementById("edgeLayer"), ghost = document.getElementById("ghost");
+  const side = document.getElementById("side"), nameInput = document.getElementById("flowName");
+
+  let flow = {name: INIT.name, description: INIT.description};
+  let graph = JSON.parse(JSON.stringify(INIT.graph));
+  let version = INIT.version, report = INIT.report, isEnabled = INIT.is_enabled;
+  let share = {scope: INIT.share_scope, people: INIT.shares};
+  let sel = null, view = {x: 40, y: 40, z: 1}, dirty = false, undoStack = [], redoStack = [];
+
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const uid = p => p + Math.random().toString(36).slice(2, 8);
+  const byId = id => graph.nodes.find(n => n.id === id);
+  const snap = v => Math.round(v / GRID) * GRID;
+  const trigger = () => ((graph.nodes.find(n => n.type === "start") || {}).config || {}).trigger || "manual";
+  const isAuto = () => trigger() !== "manual";
+
+  // ─── history ───────────────────────────────────────────────
+  function state(){ return JSON.stringify({graph, flow}); }
+  function change(fn, keepSide){ undoStack.push(state()); if (undoStack.length > 150) undoStack.shift(); redoStack = []; fn(); markDirty(); render(keepSide); }
+  function markDirty(){ dirty = true; document.getElementById("saveState").textContent = "Unsaved changes"; syncHistory(); }
+  function syncHistory(){ document.getElementById("undo").disabled = !undoStack.length; document.getElementById("redo").disabled = !redoStack.length; }
+  function restore(s){ const o = JSON.parse(s); graph = o.graph; flow = o.flow; if (sel && sel.kind === "node" && !byId(sel.id)) sel = null; markDirty(); render(); }
+  document.getElementById("undo").onclick = () => { if (undoStack.length){ redoStack.push(state()); restore(undoStack.pop()); } };
+  document.getElementById("redo").onclick = () => { if (redoStack.length){ undoStack.push(state()); restore(redoStack.pop()); } };
+
+  // ─── view ──────────────────────────────────────────────────
+  function applyView(){ world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`; }
+  function toWorld(cx, cy){ const r = stage.getBoundingClientRect(); return [(cx - r.left - view.x) / view.z, (cy - r.top - view.y) / view.z]; }
+  function zoomAt(z, cx, cy){
+    const r = stage.getBoundingClientRect(); cx = cx ?? r.left + r.width / 2; cy = cy ?? r.top + r.height / 2;
+    const [wx, wy] = toWorld(cx, cy); view.z = Math.max(0.3, Math.min(2, z));
+    view.x = cx - r.left - wx * view.z; view.y = cy - r.top - wy * view.z; applyView();
+  }
+  function fit(){
+    if (!graph.nodes.length){ view = {x: 40, y: 40, z: 1}; return applyView(); }
+    const r = stage.getBoundingClientRect();
+    const minX = Math.min(...graph.nodes.map(n => n.x)) - 40, minY = Math.min(...graph.nodes.map(n => n.y)) - 40;
+    const maxX = Math.max(...graph.nodes.map(n => n.x)) + W + 70, maxY = Math.max(...graph.nodes.map(n => n.y + hOf(n))) + 50;
+    view.z = Math.max(0.3, Math.min(1.1, Math.min(r.width / (maxX - minX), r.height / (maxY - minY))));
+    view.x = (r.width - (maxX - minX) * view.z) / 2 - minX * view.z; view.y = (r.height - (maxY - minY) * view.z) / 2 - minY * view.z;
+    applyView();
+  }
+  document.getElementById("zIn").onclick = () => zoomAt(view.z * 1.2);
+  document.getElementById("zOut").onclick = () => zoomAt(view.z / 1.2);
+  document.getElementById("zFit").onclick = fit;
+  stage.addEventListener("wheel", e => {
+    if (e.ctrlKey || e.metaKey){ e.preventDefault(); zoomAt(view.z * (e.deltaY < 0 ? 1.1 : 0.9), e.clientX, e.clientY); }
+    else { e.preventDefault(); view.x -= e.deltaX; view.y -= e.deltaY; applyView(); }
+  }, {passive: false});
+
+  // ─── what a card says about itself ─────────────────────────
+  function people(c){ return (c.users || []).length + (c.emails || []).length; }
+  function summary(n){
+    const c = n.config || {};
+    switch (n.type){
+      case "start": return CFG.triggers[c.trigger] || "When I run it";
+      case "link": { const k = (c.urls || []).filter(u => u && u !== "https://").length; return k ? `${k} page${k > 1 ? "s" : ""}${c.text ? " + pasted text" : ""}` : (c.text ? "Pasted reference text" : "No pages yet"); }
+      case "summarize": return `${CFG.styles[c.style] || ""} · ${CFG.lengths[c.length] || ""}`;
+      case "extract": return (c.fields || []).length ? (c.fields || []).join(", ") : "No facts listed yet";
+      case "classify": return (c.categories || []).map(x => x.label).join(" / ") || "No categories yet";
+      case "check": return c.strictness === "strict" ? "Strict check" : "Standard check";
+      case "translate": return `Into ${c.language || "…"}`;
+      case "redact": return (c.kinds || []).map(k => (CFG.redact_kinds[k] || k).split(" ")[0]).join(", ");
+      case "ask": return c.context ? "Custom instruction" : "Write the instruction";
+      case "convert": return `To ${CFG.targets[c.target] || "PDF"} · from ${c.source === "document" ? "the document" : c.source === "previous" ? "previous result" : "a card"}`;
+      case "cover": return "Summary page + document";
+      case "save": return "PDFs to your PDF tools";
+      case "condition": return c.mode === "rule" ? `${c.subject === "document" ? "Document" : "Result"} ${CFG.ops[c.op] || ""} ${["empty","not_empty"].includes(c.op) ? "" : "“" + (c.value || "…") + "”"}` : (c.context ? "Ask AI: " + c.context : "Ask AI a yes/no question");
+      case "approval": { const k = people(c) + (c.include_runner ? 1 : 0); return k ? `${k} reviewer${k > 1 ? "s" : ""}${c.due_days ? " · " + c.due_days + " day(s)" : ""}` : "Nobody chosen yet"; }
+      case "email": { const bits = []; if (people(c)) bits.push(`${people(c)} chosen`); if (c.to_runner) bits.push("me"); if (c.to_sender) bits.push("sender"); if (c.to_signers) bits.push("signers"); return bits.length ? "To " + bits.join(", ") : "Nobody chosen yet"; }
+      case "envnote": return c.visibility === "everyone" ? "Visible to everyone on it" : "Internal note";
+      case "webhook": return c.url ? (c.format === "teams" ? "Teams · " : c.format === "slack" ? "Slack · " : "") + c.url.replace(/^https?:\/\//, "").split("/")[0] : "No address yet";
+      case "end": return "End of this path";
+      case "policy": { const r = (c.rules || []).filter(x => x.enabled); return r.length ? `${c.title || "Policy"} · ${r.length} rule${r.length > 1 ? "s" : ""}` : "Upload the policy"; }
+    }
+    return "";
+  }
+  const issuesFor = id => ({err: report.errors.filter(i => i.node === id), warn: report.warnings.filter(i => i.node === id)});
+
+  // ─── rendering ─────────────────────────────────────────────
+  function portY(n, p){ const ps = portsOf(n); return hOf(n) * (ps.indexOf(p) + 1) / (ps.length + 1); }
+  function render(keepSide){
+    if (document.activeElement !== nameInput) nameInput.value = flow.name;
+    nameInput.style.width = Math.min(46, Math.max(18, flow.name.length + 2)) + "ch";
+    nodeLayer.innerHTML = "";
+    graph.nodes.forEach(n => {
+      const t = T[n.type] || {}, iss = issuesFor(n.id), ps = portsOf(n), h = hOf(n);
+      const el = document.createElement("div");
+      el.className = `ad-node ${n.type}` + (AI.has(n.type) ? " is-ai" : "") + (ps.length > 1 ? " multi" : "") + (sel && sel.kind === "node" && sel.id === n.id ? " sel" : "") + (iss.err.length ? " has-error" : "");
+      el.style.left = n.x + "px"; el.style.top = n.y + "px"; el.style.height = h + "px"; el.dataset.id = n.id; el.tabIndex = 0;
+      el.setAttribute("aria-label", `${t.label}: ${n.label}`);
+      if (n.type === "note"){
+        el.style.background = (n.config || {}).color || "#FEF3C7";
+        el.innerHTML = `<div class="ntext"><strong>${esc(n.label)}</strong>\n${esc((n.config || {}).context || "")}</div>`;
+        nodeLayer.appendChild(el); return;
+      }
+      const ctx = ((n.config || {}).context || "").trim();
+      let html = `<div class="strip" style="background:${t.color}"></div><div class="type" style="color:${t.color}"><i class="bi ${t.icon} me-1"></i>${esc(t.label)}${AI.has(n.type) ? '<span class="aib">AI</span>' : ""}</div>`
+        + `<div class="title">${esc(n.label)}</div><div class="sub">${esc(summary(n))}</div>`
+        + (ctx ? `<div class="ctx" title="${esc(ctx)}"><i class="bi bi-chat-left-quote me-1"></i>${esc(ctx)}</div>` : "");
+      if (iss.err.length) html += `<span class="flag text-danger" title="${esc(iss.err.map(i => i.text).join("\n"))}"><i class="bi bi-exclamation-circle-fill"></i></span>`;
+      else if (iss.warn.length) html += `<span class="flag text-warning" title="${esc(iss.warn.map(i => i.text).join("\n"))}"><i class="bi bi-exclamation-triangle-fill"></i></span>`;
+      if (n.type !== "start") html += `<span class="ad-port in" data-in="${n.id}" style="top:${h / 2 - 7}px"></span>`;
+      ps.forEach(p => {
+        const y = portY(n, p), label = portName(n, p);
+        html += `<span class="ad-port out" data-port="${esc(p)}" style="top:${y - 7}px" title="Drag to connect: ${esc(label)}"></span>`;
+        if (ps.length > 1 || p !== "next") html += `<span class="ad-port-label" style="top:${y}px;color:${["issues","rejected","no","other","breach"].includes(p) ? "#B91C1C" : p === "warning" ? "#B45309" : p === "complies" ? "#15803D" : "#475569"}">${esc(label)}</span>`;
+      });
+      el.innerHTML = html;
+      nodeLayer.appendChild(el);
+    });
+    renderEdges();
+    document.getElementById("emptyHint").classList.toggle("d-none", graph.nodes.length > 0);
+    const e = report.errors.length, w = report.warnings.length, badge = document.getElementById("issueBadge");
+    badge.className = "badge " + (e ? "bg-danger" : w ? "bg-warning text-dark" : "bg-success");
+    badge.innerHTML = e ? `<i class="bi bi-x-circle me-1"></i>${e} to fix` : w ? `<i class="bi bi-exclamation-triangle me-1"></i>${w} note${w === 1 ? "" : "s"}` : `<i class="bi bi-check-circle me-1"></i>Ready`;
+    syncAuto();
+    if (!keepSide) renderSide();
+  }
+  function edgeD(x1, y1, x2, y2){
+    if (x2 >= x1 - 10){ const dx = Math.max(50, (x2 - x1) * 0.5); return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`; }
+    const off = 50, ym = Math.abs(y2 - y1) > H ? (y1 + y2) / 2 : Math.max(y1, y2) + H * 0.9, mx = (x1 + x2) / 2;
+    return `M${x1},${y1} C${x1 + off},${y1} ${x1 + off},${ym} ${mx},${ym} S${x2 - off},${y2} ${x2},${y2}`;
+  }
+  function renderEdges(){
+    edgeLayer.innerHTML = "";
+    graph.edges.forEach(e => {
+      const a = byId(e.from), b = byId(e.to); if (!a || !b) return;
+      const d = edgeD(a.x + W, a.y + portY(a, e.port), b.x, b.y + hOf(b) / 2);
+      const bad = ["issues", "rejected", "no", "breach"].includes(e.port), isSel = sel && sel.kind === "edge" && sel.id === e.id;
+      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      g.setAttribute("class", "ad-edge-g" + (isSel ? " sel" : "")); g.dataset.id = e.id;
+      g.innerHTML = `<path class="ad-edge flow ${bad ? "bad" : ""}" d="${d}" marker-end="url(#${isSel ? "adArrowSel" : "adArrow"})"/><path class="ad-edge-hit" d="${d}" data-edge="${e.id}"/>`;
+      edgeLayer.appendChild(g);
+    });
+  }
+
+  // ─── palette ───────────────────────────────────────────────
+  const palList = document.getElementById("palList");
+  function buildPalette(q){
+    q = (q || "").toLowerCase().trim(); palList.innerHTML = "";
+    CFG.groups.forEach(([gk, gl]) => {
+      const items = Object.entries(T).filter(([k, t]) => t.group === gk && (!q || (t.label + " " + t.hint).toLowerCase().includes(q)));
+      if (!items.length) return;
+      const head = document.createElement("div"); head.className = "st-group-label mt-2 mb-1"; head.textContent = gl; palList.appendChild(head);
+      items.forEach(([k, t]) => {
+        const item = document.createElement("div");
+        item.className = "ad-pal-item"; item.dataset.type = k; item.title = t.hint; item.tabIndex = 0;
+        item.innerHTML = `<span class="ico" style="background:${t.color}"><i class="bi ${t.icon}"></i></span><span>${esc(t.label)}<small>${esc(t.hint)}</small></span>${t.ai ? '<span class="ai">✦ AI</span>' : ""}`;
+        item.addEventListener("pointerdown", e => paletteDrag(e, k));
+        item.addEventListener("keydown", e => { if (e.key === "Enter"){ const r = stage.getBoundingClientRect(); const [x, y] = toWorld(r.left + r.width / 2, r.top + r.height / 2); addNode(k, x - W / 2, y - H / 2); } });
+        palList.appendChild(item);
+      });
+    });
+  }
+  document.getElementById("palSearch").addEventListener("input", e => buildPalette(e.target.value));
+  buildPalette();
+
+  function defaults(type){
+    const c = {context: ""};
+    if (!["start", "note", "end"].includes(type)) c.on_error = "stop";
+    switch (type){
+      case "start": Object.assign(c, {trigger: "manual", language: "", mask_pii: false}); break;
+      case "link": Object.assign(c, {urls: [], text: ""}); break;
+      case "summarize": Object.assign(c, {length: "standard", style: "brief", source: "auto"}); break;
+      case "extract": Object.assign(c, {fields: ["Parties", "Amount", "Start date", "End date"], source: "auto"}); break;
+      case "classify": Object.assign(c, {categories: [{id: "c1", label: "Contract", hint: ""}, {id: "c2", label: "Policy", hint: ""}], source: "auto"}); break;
+      case "check": Object.assign(c, {strictness: "standard", source: "auto"}); break;
+      case "translate": Object.assign(c, {language: "French", source: "auto"}); break;
+      case "redact": Object.assign(c, {kinds: ["emails", "phones", "ids", "banking"], source: "auto"}); break;
+      case "ask": Object.assign(c, {source: "auto", max_words: 400}); break;
+      case "convert": Object.assign(c, {target: "pdf", source: "previous", filename: ""}); break;
+      case "cover": Object.assign(c, {source: "auto", title: ""}); break;
+      case "condition": Object.assign(c, {mode: "ai", subject: "previous", op: "contains", value: ""}); break;
+      case "approval": Object.assign(c, {users: [], emails: [], include_runner: true, due_days: 0, allow_edit: true, source: "auto"}); break;
+      case "email": Object.assign(c, {users: [], emails: [], to_runner: true, to_sender: false, to_signers: false, subject: "", include: "previous", attach_document: false, attach_files: true, ai_write: false}); break;
+      case "envnote": Object.assign(c, {visibility: "internal", source: "auto"}); break;
+      case "webhook": Object.assign(c, {url: "", format: "teams", source: "auto"}); break;
+      case "note": Object.assign(c, {color: CFG.note_colors[0], context: "Write a note for whoever reads this agent."}); break;
+      case "policy": Object.assign(c, {source: "document", title: "", version: "", effective: "", summary: "", applies_to: "", applies_keywords: [], rules: [], text: "", keep_text: true, strict: false, origin: {},
+        outcomes: {na: {actions: []}, complies: {actions: []}, warning: {actions: [{type: "inform", to_runner: true, users: [], emails: [], message: ""}]},
+                   breach: {actions: [{type: "warn", to_runner: true, to_sender: false, to_signers: false, users: [], emails: [], note: "internal", message: ""}]}}}); break;
+    }
+    return c;
+  }
+  function addNode(type, x, y){
+    if (type === "start" && graph.nodes.some(n => n.type === "start")){ flash("An agent has only one Trigger."); return; }
+    const n = {id: uid("n"), type, label: type === "note" ? "Note" : T[type].label, x: snap(x), y: snap(y), config: defaults(type)};
+    if (type === "policy") setTimeout(() => openPolicy(n), 150);
+    change(() => {
+      graph.nodes.push(n); sel = {kind: "node", id: n.id};
+      // Dropped just right of a selected card with a free exit? Connect them — the common case.
+      const prev = lastSelected && byId(lastSelected);
+      if (prev && type !== "note" && type !== "start" && n.x > prev.x){
+        const free = portsOf(prev).find(p => !graph.edges.some(e => e.from === prev.id && e.port === p));
+        if (free && Math.abs(n.x - prev.x) < 420) graph.edges.push({id: uid("e"), from: prev.id, port: free, to: n.id});
+      }
+    });
+    return n;
+  }
+  let lastSelected = null;
+  function paletteDrag(e, type){
+    e.preventDefault();
+    const proxy = document.createElement("div");
+    proxy.className = "ad-pal-item"; proxy.style.cssText = "position:fixed;z-index:3000;pointer-events:none;opacity:.92;width:200px;box-shadow:0 8px 20px rgba(0,0,0,.15)";
+    proxy.innerHTML = e.currentTarget.innerHTML; document.body.appendChild(proxy);
+    const moveH = ev => { proxy.style.left = ev.clientX - 20 + "px"; proxy.style.top = ev.clientY - 16 + "px"; };
+    const up = ev => {
+      window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up); proxy.remove();
+      const r = stage.getBoundingClientRect();
+      if (ev.clientX > r.left && ev.clientX < r.right && ev.clientY > r.top && ev.clientY < r.bottom){ const [x, y] = toWorld(ev.clientX, ev.clientY); addNode(type, x - W / 2, y - H / 2); }
+      else if (Math.abs(ev.clientX - e.clientX) < 4 && Math.abs(ev.clientY - e.clientY) < 4){
+        const prev = lastSelected && byId(lastSelected);
+        if (prev) addNode(type, prev.x + 280, prev.y);
+        else { const [x, y] = toWorld(r.left + r.width / 2, r.top + r.height / 2); addNode(type, x - W / 2 + (Math.random() * 60 - 30), y - H / 2); }
+      }
+    };
+    moveH(e); window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+
+  // ─── canvas interaction ────────────────────────────────────
+  stage.addEventListener("pointerdown", e => {
+    if (e.button !== 0 || e.target.closest(".ad-zoom, .ad-help")) return;
+    const out = e.target.closest(".ad-port.out"), nodeEl = e.target.closest(".ad-node"), edgeHit = e.target.closest("[data-edge]");
+    if (out && nodeEl) return connect(e, byId(nodeEl.dataset.id), out.dataset.port);
+    if (nodeEl) return dragNode(e, byId(nodeEl.dataset.id));
+    if (edgeHit){ sel = {kind: "edge", id: edgeHit.dataset.edge}; render(); return; }
+    const sx = e.clientX, sy = e.clientY, vx = view.x, vy = view.y; let moved = false;
+    stage.classList.add("panning");
+    const moveH = ev => { if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) moved = true; view.x = vx + ev.clientX - sx; view.y = vy + ev.clientY - sy; applyView(); };
+    const up = () => { window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up); stage.classList.remove("panning"); if (!moved && sel){ sel = null; lastSelected = null; render(); } };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  });
+  function dragNode(e, n){
+    const [sx, sy] = toWorld(e.clientX, e.clientY), ox = n.x, oy = n.y; let moved = false, before = null;
+    if (!sel || sel.id !== n.id){ sel = {kind: "node", id: n.id}; lastSelected = n.id; render(); }
+    const el = nodeLayer.querySelector(`[data-id="${n.id}"]`);
+    const moveH = ev => {
+      const [x, y] = toWorld(ev.clientX, ev.clientY);
+      if (!moved && Math.hypot(x - sx, y - sy) < 3) return;
+      if (!moved){ before = state(); moved = true; }
+      n.x = snap(ox + x - sx); n.y = snap(oy + y - sy); el.style.left = n.x + "px"; el.style.top = n.y + "px"; renderEdges();
+    };
+    const up = () => { window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up); if (moved && (n.x !== ox || n.y !== oy)){ undoStack.push(before); redoStack = []; markDirty(); } };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+  function connect(e, from, port){
+    e.stopPropagation(); e.preventDefault();
+    const x1 = from.x + W, y1 = from.y + portY(from, port); let target = null;
+    const moveH = ev => {
+      const [x2, y2] = toWorld(ev.clientX, ev.clientY); ghost.setAttribute("d", edgeD(x1, y1, x2, y2));
+      nodeLayer.querySelectorAll(".ad-port.in.target").forEach(p => p.classList.remove("target"));
+      const hit = document.elementFromPoint(ev.clientX, ev.clientY), node = hit && hit.closest(".ad-node");
+      const cand = node && byId(node.dataset.id);
+      target = cand && cand.id !== from.id && !["start", "note"].includes(cand.type) ? cand : null;
+      if (target) node.querySelector(".ad-port.in").classList.add("target");
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", moveH); window.removeEventListener("pointerup", up); ghost.setAttribute("d", "");
+      if (!target || graph.edges.some(x => x.from === from.id && x.port === port && x.to === target.id)) return render();
+      change(() => { const edge = {id: uid("e"), from: from.id, port, to: target.id}; graph.edges.push(edge); sel = {kind: "edge", id: edge.id}; });
+    };
+    window.addEventListener("pointermove", moveH); window.addEventListener("pointerup", up);
+  }
+  function removeSelected(){
+    if (!sel) return;
+    change(() => {
+      if (sel.kind === "node"){ graph.nodes = graph.nodes.filter(n => n.id !== sel.id); graph.edges = graph.edges.filter(e => e.from !== sel.id && e.to !== sel.id); }
+      else graph.edges = graph.edges.filter(e => e.id !== sel.id);
+      sel = null; lastSelected = null;
+    });
+  }
+  function duplicateSelected(){
+    if (!sel || sel.kind !== "node") return;
+    const n = byId(sel.id); if (n.type === "start") return flash("An agent has only one Trigger.");
+    const c = JSON.parse(JSON.stringify(n)); c.id = uid("n"); c.x += 40; c.y += 110; c.label = n.label + " (copy)";
+    change(() => { graph.nodes.push(c); sel = {kind: "node", id: c.id}; });
+  }
+  document.getElementById("tidy").onclick = () => {
+    if (!graph.nodes.length) return;
+    change(() => {
+      const level = {}, start = graph.nodes.find(n => n.type === "start");
+      const queue = start ? [[start.id, 0]] : graph.nodes.map(n => [n.id, 0]); let guard = 0;
+      while (queue.length && guard++ < 3000){
+        const [id, l] = queue.shift();
+        if (level[id] !== undefined && level[id] >= l) continue;
+        level[id] = l; graph.edges.filter(e => e.from === id).forEach(e => { if ((level[e.to] ?? -1) < l + 1 && l < graph.nodes.length) queue.push([e.to, l + 1]); });
+      }
+      const notes = graph.nodes.filter(n => n.type === "note");
+      const max = Math.max(0, ...Object.values(level));
+      graph.nodes.forEach(n => { if (level[n.id] === undefined && n.type !== "note") level[n.id] = max + 1; });
+      const cols = {};
+      const rank = e => { const a = byId(e.from); return a ? portsOf(a).indexOf(e.port) : 0; };
+      const order = n => { const inc = graph.edges.filter(e => e.to === n.id); return inc.length ? Math.min(...inc.map(e => (byId(e.from)?.y || 0) + rank(e) * 10)) : 0; };
+      Object.keys(level).sort((a, b) => level[a] - level[b]).forEach(id => { (cols[level[id]] = cols[level[id]] || []).push(byId(id)); });
+      let bottom = 0;
+      Object.entries(cols).forEach(([l, list]) => {
+        list.sort((a, b) => order(a) - order(b));
+        const total = list.reduce((t, n) => t + hOf(n) + 50, -50); let y = 240 - total / 2;
+        list.forEach(n => { n.x = snap(40 + l * 290); n.y = snap(y); y += hOf(n) + 50; bottom = Math.max(bottom, n.y + hOf(n)); });
+      });
+      notes.forEach((n, i) => { n.x = snap(40 + i * 260); n.y = snap(bottom + 60); });
+    });
+    setTimeout(fit, 0);
+  };
+
+  // ─── inspector ─────────────────────────────────────────────
+  function ancestors(id){
+    const seen = new Set(), stack = [id];
+    while (stack.length){ const cur = stack.pop(); graph.edges.filter(e => e.to === cur).forEach(e => { if (!seen.has(e.from)){ seen.add(e.from); stack.push(e.from); } }); }
+    return graph.nodes.filter(n => seen.has(n.id) && n.type !== "start");
+  }
+  function sourceOptions(n, key, allowAuto){
+    const c = n.config, cur = c[key];
+    const opts = [];
+    if (allowAuto) opts.push(["auto", "The previous result (or the document)"]);
+    opts.push(["document", "The document itself"], ["previous", "The previous card's result"]);
+    ancestors(n.id).filter(a => !["link", "convert", "cover", "save", "email", "envnote", "webhook", "end", "note"].includes(a.type))
+      .forEach(a => opts.push([a.id, `Result of “${a.label}”`]));
+    return opts.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+  }
+  const tokens = n => [["{{document}}", "Document name"], ["{{filename}}", "File name with extension"], ["{{subject}}", "Envelope subject"], ["{{sender}}", "Who sent it"], ["{{today}}", "Today's date"], ["{{reference}}", "Run reference"], ["{{flow}}", "This agent's name"], ["{{me}}", "Who it runs for"],
+    ...ancestors(n.id).filter(a => !["note"].includes(a.type)).map(a => [`{{${a.label}}}`, `Result of “${a.label}”`])];
+  function insertMenu(n, target){
+    return `<div class="dropdown"><button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" data-bs-toggle="dropdown" style="color:#7C3AED;font-size:.75rem"><i class="bi bi-braces me-1"></i>Insert</button>
+      <ul class="dropdown-menu dropdown-menu-end shadow-sm small">${tokens(n).map(([t, l]) => `<li><a class="dropdown-item small" href="#" data-insert="${esc(t)}" data-into="${target}"><code>${esc(t)}</code> <span class="text-muted">${esc(l)}</span></a></li>`).join("")}</ul></div>`;
+  }
+  const PLACE = {
+    start: "Standing instructions for every AI card, e.g. “You work for UNDP The Gambia. Use plain British English. Flag anything that commits the office to spending.”",
+    link: "What these pages are and how to use them, e.g. “Our 2026 procurement policy. The thresholds in section 4 matter most.”",
+    summarize: "What to focus on, e.g. “What I'm agreeing to by signing, the amounts and dates, and anything unusual.”",
+    extract: "Hints, e.g. “The value may be written in words — give it as a number with its currency.”",
+    classify: "How to decide, e.g. “Anything about staff goes to HR, even if it mentions money.”",
+    check: "Extra rules (as well as the Knowledge links), e.g. “Advance payments over 30% are never allowed.”",
+    translate: "Tone and terms, e.g. “Formal register. Keep ‘Resident Representative’ in English.”",
+    redact: "Anything else to know, e.g. “Names of signatories may stay.”",
+    ask: "Tell the AI exactly what to do, e.g. “List every deadline as Date — What — Who is responsible.”",
+    convert: "Optional opening paragraph for the file (when converting a card's result).",
+    cover: "Optional text above the summary on the cover page.",
+    save: "A note for people reading this agent.",
+    condition: "The yes/no question, e.g. “Is the total value above 50,000 USD?”",
+    approval: "What the reviewer should check. It goes in their email and on the check page.",
+    email: "The message. With “Let AI write it” on, say what the email should cover instead.",
+    envnote: "Text above the result, e.g. “Summary for signers:”",
+    webhook: "Text above the result in the post.",
+    end: "A note for people reading this agent.",
+    note: "Write anything — it's a note for whoever reads the agent.",
+    policy: "Extra guidance when checking, e.g. “Treat framework agreements as contracts.” The rules themselves are in the Policy studio.",
+  };
+  const CTX_LABEL = {policy: "Guidance for checking", start: "Standing instructions", condition: "Question", ask: "Instruction for the AI", note: "Note", email: "Message", approval: "Instructions for the reviewer"};
+
+  let pickers = [];
+  function renderSide(){
+    pickers = [];
+    const node = sel && sel.kind === "node" ? byId(sel.id) : null;
+    const edge = sel && sel.kind === "edge" ? graph.edges.find(e => e.id === sel.id) : null;
+    if (node) return nodeInspector(node);
+    if (edge) return edgeInspector(edge);
+    flowInspector();
+  }
+  function issuesHtml(){
+    const list = [...report.errors.map(i => ({...i, cls: "err", icon: "x-circle"})), ...report.warnings.map(i => ({...i, cls: "warn", icon: "exclamation-triangle"}))];
+    if (!list.length) return `<div class="small text-success mb-3"><i class="bi bi-check-circle me-1"></i>No problems found.</div>`;
+    return list.map(i => `<div class="ad-issue ${i.cls}" data-goto="${i.node || ""}"><i class="bi bi-${i.icon} me-1"></i>${esc(i.text)}</div>`).join("") + `<div class="small text-muted mt-1 mb-3">Checked when you save.</div>`;
+  }
+  function bindIssues(){ side.querySelectorAll("[data-goto]").forEach(el => el.onclick = () => { const n = byId(el.dataset.goto); if (n){ sel = {kind: "node", id: n.id}; render(); centreOn(n); } }); }
+  function centreOn(n){ const r = stage.getBoundingClientRect(); view.x = r.width / 2 - (n.x + W / 2) * view.z; view.y = r.height / 2 - (n.y + H / 2) * view.z; applyView(); }
+
+  function flowInspector(){
+    const ai = CFG.ai, start = graph.nodes.find(n => n.type === "start");
+    const scopeLabel = {private: "Only you" + (share.people.length ? ` and ${share.people.length} ${share.people.length === 1 ? "person" : "people"}` : ""), office: "Your whole country office", agency: "Your whole agency"}[share.scope];
+    side.innerHTML = `
+      <div class="fw-bold mb-2" style="color:#4C1D95"><i class="bi bi-sliders me-1"></i>Agent settings</div>
+      <label class="form-label small fw-semibold mb-1">What it does</label>
+      <textarea class="form-control form-control-sm mb-3" rows="3" id="fDesc" maxlength="2000" placeholder="One or two sentences — shown to people you share it with">${esc(flow.description)}</textarea>
+      <div class="st-group-label mb-1">Starts</div>
+      <div class="small mb-3"><a href="#" id="gotoStart">${esc(start ? CFG.triggers[start.config.trigger] : "No Trigger yet")}</a>${isAuto() ? ` · <span class="${isEnabled ? "text-success" : "text-muted"}">${isEnabled ? "switched on" : "switched off"}</span>` : ""}</div>
+      <div class="st-group-label mb-1">Shared with</div>
+      <div class="small mb-3">${esc(scopeLabel)} · <a href="#" id="openShare">change</a></div>
+      <div class="st-group-label mb-1">AI</div>
+      <div class="small mb-3 p-2 rounded" style="background:${ai.offline ? "#F8FAFC" : "#F5F3FF"}"><strong>${esc(ai.label)}</strong><div class="text-muted">${esc(ai.detail)}</div></div>
+      <div class="st-group-label mb-2">Check</div>
+      ${issuesHtml()}
+      <div class="small text-muted"><i class="bi bi-lightbulb me-1"></i>Select a card to write its <strong>context</strong> and settings. Select a card, then click a card in the list on the left to add it after — they connect for you. <kbd>Del</kbd> deletes, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates.</div>`;
+    side.querySelector("#fDesc").addEventListener("change", e => change(() => flow.description = e.target.value));
+    side.querySelector("#gotoStart").onclick = ev => { ev.preventDefault(); if (start){ sel = {kind: "node", id: start.id}; render(); centreOn(start); } };
+    side.querySelector("#openShare").onclick = ev => { ev.preventDefault(); openShare(); };
+    bindIssues();
+  }
+  function edgeInspector(e){
+    const a = byId(e.from), b = byId(e.to);
+    side.innerHTML = `<div class="fw-bold mb-2" style="color:#4C1D95"><i class="bi bi-arrow-right me-1"></i>Connection</div>
+      <div class="small mb-3">From <strong>${esc(a.label)}</strong> <span class="badge bg-light text-dark border">${esc(portName(a, e.port))}</span> to <strong>${esc(b.label)}</strong></div>
+      <button class="btn btn-sm btn-outline-danger w-100" id="delEdge"><i class="bi bi-trash me-1"></i>Remove connection</button>
+      <div class="small text-muted mt-3">To reroute, drag from the dot on <strong>${esc(a.label)}</strong> to another card.</div>`;
+    side.querySelector("#delEdge").onclick = removeSelected;
+  }
+
+  function nodeInspector(n){
+    const t = T[n.type], c = n.config, iss = issuesFor(n.id);
+    let h = `<div class="d-flex align-items-center gap-2 mb-2"><span class="d-inline-flex align-items-center justify-content-center rounded" style="width:30px;height:30px;background:${t.color};color:#fff"><i class="bi ${t.icon}"></i></span>
+      <div class="fw-bold" style="color:${t.color}">${esc(t.label)}${t.ai ? ' <span class="ag-chip ms-1" style="font-size:.65rem">✦ AI</span>' : ""}</div>
+      <div class="ms-auto">${n.type !== "start" ? `<button class="btn btn-sm btn-outline-secondary" id="dupNode" title="Duplicate"><i class="bi bi-copy"></i></button>` : ""}
+      <button class="btn btn-sm btn-outline-danger" id="delNode" title="Delete"><i class="bi bi-trash"></i></button></div></div>
+      <div class="small text-muted mb-2">${esc(t.hint)}</div>`;
+    h += [...iss.err.map(i => `<div class="ad-issue err">${esc(i.text)}</div>`), ...iss.warn.map(i => `<div class="ad-issue warn">${esc(i.text)}</div>`)].join("");
+    h += `<label class="form-label small fw-semibold mb-1 mt-1">Name</label><input class="form-control form-control-sm mb-3" data-f="label" value="${esc(n.label)}" maxlength="120">`;
+
+    // ── type-specific settings first for the Trigger, so "what starts it" is the first thing seen
+    if (n.type === "start"){
+      h += `<div class="st-group-label mb-1">What starts it</div>
+        ${Object.entries(CFG.triggers).map(([k, v]) => `<label class="form-check small mb-1"><input class="form-check-input" type="radio" name="trig" value="${k}" ${c.trigger === k ? "checked" : ""}> ${esc(v)}</label>`).join("")}
+        <div class="form-text mb-3">${c.trigger === "manual" ? "Run it from the Agentic flows page or with Test run." : "It runs by itself once you switch it on (top right). People you share it with can switch it on for their own documents."}</div>
+        <div class="row g-2 mb-2"><div class="col-7"><label class="form-label small fw-semibold mb-1">Answer in</label>
+          <input class="form-control form-control-sm" data-f="language" value="${esc(c.language)}" list="langList" placeholder="Same as the document"></div>
+          <div class="col-5 d-flex align-items-end"><label class="form-check small" title="Email addresses, phone numbers, ID and bank details are masked before anything is sent to the AI"><input class="form-check-input" type="checkbox" data-f="mask_pii" ${c.mask_pii ? "checked" : ""}> Mask personal data before AI</label></div></div>`;
+    }
+    // ── the context box: every card has one
+    const ctxLabel = CTX_LABEL[n.type] || "Context";
+    h += `<div class="ad-ctx-label mb-1"><label class="form-label small fw-semibold mb-0" for="ctxBox"><i class="bi bi-chat-left-quote me-1" style="color:#7C3AED"></i>${ctxLabel}</label>${n.type !== "note" ? insertMenu(n, "ctxBox") : ""}</div>
+      <textarea class="form-control ad-ctx mb-3" id="ctxBox" data-f="context" rows="${["ask", "start", "note", "email"].includes(n.type) ? 5 : 3}" maxlength="4000" placeholder="${esc(PLACE[n.type] || "")}">${esc(c.context)}</textarea>`;
+
+    switch (n.type){
+      case "link":
+        h += `<label class="form-label small fw-semibold mb-1">Web pages to read</label>
+          <textarea class="form-control form-control-sm mb-1" rows="3" id="urls" placeholder="https://intranet.undp.org/policy/travel&#10;One address per line">${esc((c.urls || []).join("\n"))}</textarea>
+          <div class="form-text mb-2">Public pages, PDFs and Word files. Internal sites need ICT to allow them.</div>
+          <label class="btn btn-sm btn-outline-secondary w-100 mb-2"><i class="bi bi-upload me-1"></i>Upload a file as reference (PDF, Word, text)<input type="file" id="linkFile" class="d-none" accept=".pdf,.docx,.doc,.odt,.rtf,.txt,.md,.html,.htm"></label>
+          <details ${c.text ? "open" : ""}><summary class="small fw-semibold mb-1">…or paste the reference text</summary>
+          <textarea class="form-control form-control-sm mt-1 mb-2" rows="4" data-f="text" maxlength="20000" placeholder="Paste a policy, a checklist, terms of reference…">${esc(c.text)}</textarea></details>`;
+        break;
+      case "summarize":
+        h += `<div class="st-group-label mb-1">Length</div><div class="btn-group btn-group-sm w-100 mb-2" role="group">${Object.entries(CFG.lengths).map(([k, v]) => `<input type="radio" class="btn-check" name="len" id="len_${k}" value="${k}" ${c.length === k ? "checked" : ""}><label class="btn btn-outline-secondary" for="len_${k}">${v}</label>`).join("")}</div>
+          <label class="form-label small fw-semibold mb-1">Style</label><select class="form-select form-select-sm mb-2" data-f="style">${Object.entries(CFG.styles).map(([k, v]) => `<option value="${k}" ${c.style === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
+          <label class="form-label small fw-semibold mb-1">Summarize</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "extract":
+        h += `<label class="form-label small fw-semibold mb-1">Facts to pull out</label>
+          <textarea class="form-control form-control-sm mb-1" rows="5" id="fields" placeholder="One per line, e.g.&#10;Vendor&#10;Contract value&#10;End date">${esc((c.fields || []).join("\n"))}</textarea>
+          <div class="form-text mb-2">Anything not in the document comes back blank — nothing is guessed. Add a Convert card to Excel to get a spreadsheet.</div>
+          <label class="form-label small fw-semibold mb-1">Read from</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "classify":
+        h += `<div class="st-group-label mb-1">Categories <span class="text-muted text-lowercase fw-normal">— each is its own path</span></div>`;
+        (c.categories || []).forEach((cat, i) => {
+          h += `<div class="ad-cat"><div class="d-flex gap-1 mb-1"><input class="form-control form-control-sm" data-cat-label="${i}" value="${esc(cat.label)}" maxlength="40" placeholder="Name">
+            <button type="button" class="btn btn-sm btn-outline-danger" data-cat-remove="${i}" title="Remove"><i class="bi bi-x"></i></button></div>
+            <input class="form-control form-control-sm" data-cat-hint="${i}" value="${esc(cat.hint)}" maxlength="200" placeholder="What belongs here (helps the AI)"></div>`;
+        });
+        h += `<button type="button" class="btn btn-sm btn-outline-ag w-100 mb-2" id="catAdd" ${(c.categories || []).length >= 8 ? "disabled" : ""}><i class="bi bi-plus me-1"></i>Add a category</button>
+          <div class="small text-muted mb-2">Anything that fits none of them leaves by <strong>Other</strong>.</div>
+          <label class="form-label small fw-semibold mb-1">Read from</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "check":
+        h += `<div class="st-group-label mb-1">How strict</div><div class="btn-group btn-group-sm w-100 mb-2" role="group">
+            <input type="radio" class="btn-check" name="strict" id="stS" value="standard" ${c.strictness !== "strict" ? "checked" : ""}><label class="btn btn-outline-secondary" for="stS">Real problems only</label>
+            <input type="radio" class="btn-check" name="strict" id="stX" value="strict" ${c.strictness === "strict" ? "checked" : ""}><label class="btn btn-outline-secondary" for="stX">Strict</label></div>
+          <div class="small text-muted mb-2">Checks against everything the <strong>Knowledge link</strong> cards before it read, plus the rules in the context box. Leaves by <strong>Passes</strong> or <strong>Issues found</strong>.</div>
+          <label class="form-label small fw-semibold mb-1">Check</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "translate":
+        h += `<label class="form-label small fw-semibold mb-1">Into</label><input class="form-control form-control-sm mb-2" data-f="language" value="${esc(c.language)}" list="langList">
+          <label class="form-label small fw-semibold mb-1">Translate</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "redact":
+        h += `<div class="st-group-label mb-1">Hide</div>${Object.entries(CFG.redact_kinds).map(([k, v]) => `<label class="form-check small mb-1"><input class="form-check-input" type="checkbox" data-kind="${k}" ${(c.kinds || []).includes(k) ? "checked" : ""}> ${esc(v)}</label>`).join("")}
+          <div class="form-text mb-2">Cards after this one work on the masked text — put it first to keep personal data away from the AI.</div>
+          <label class="form-label small fw-semibold mb-1">Mask</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "ask":
+        h += `<div class="row g-2 mb-2"><div class="col-6"><label class="form-label small fw-semibold mb-1">Up to (words)</label><input type="number" min="20" max="3000" class="form-control form-control-sm" data-f="max_words" value="${c.max_words || 400}"></div></div>
+          <label class="form-label small fw-semibold mb-1">Work on</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "convert": {
+        const icons = {pdf: "bi-filetype-pdf", docx: "bi-file-earmark-word", xlsx: "bi-file-earmark-excel", csv: "bi-filetype-csv", txt: "bi-filetype-txt", md: "bi-markdown", html: "bi-filetype-html"};
+        h += `<div class="st-group-label mb-1">Into</div><div class="row g-1 mb-2">${Object.entries(CFG.targets).map(([k, v]) => `<div class="col-3"><div class="ad-tile ${c.target === k ? "on" : ""}" data-target="${k}"><i class="bi ${icons[k]}"></i>${esc(v)}</div></div>`).join("")}</div>
+          <label class="form-label small fw-semibold mb-1">Convert</label><select class="form-select form-select-sm mb-1" data-f="source">${sourceOptions(n, "source", false)}</select>
+          <div class="form-text mb-2">${c.source === "document" ? "The original file. Word, Excel and PDF keep their layout where they can; from a PDF to Word only the text and headings carry over." : "The card's text — Extract results become a proper table in Excel or CSV."}</div>
+          <div class="d-flex justify-content-between"><label class="form-label small fw-semibold mb-1">File name</label>${insertMenu(n, "fname")}</div>
+          <input class="form-control form-control-sm mb-2" id="fname" data-f="filename" value="${esc(c.filename)}" maxlength="120" placeholder="{{document}} - summary">`;
+        break;
+      }
+      case "cover":
+        h += `<label class="form-label small fw-semibold mb-1">Summary from</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>
+          <label class="form-label small fw-semibold mb-1">Title</label><input class="form-control form-control-sm mb-2" data-f="title" value="${esc(c.title)}" maxlength="150" placeholder="Summary — {{document}}">
+          <div class="form-text mb-2">Makes a PDF: a summary sheet marked “AI-generated”, then the document. Email it or save it with the next cards.</div>`;
+        break;
+      case "save":
+        h += `<div class="small text-muted mb-2">Every PDF this run has made so far (from Convert and Summary cover page) goes into your <strong>PDF tools</strong> — or the document itself if none were made.</div>`;
+        break;
+      case "condition":
+        h += `<div class="btn-group btn-group-sm w-100 mb-2" role="group">
+            <input type="radio" class="btn-check" name="cmode" id="cmA" value="ai" ${c.mode !== "rule" ? "checked" : ""}><label class="btn btn-outline-secondary" for="cmA"><i class="bi bi-stars me-1"></i>Ask the AI</label>
+            <input type="radio" class="btn-check" name="cmode" id="cmR" value="rule" ${c.mode === "rule" ? "checked" : ""}><label class="btn btn-outline-secondary" for="cmR"><i class="bi bi-funnel me-1"></i>Rule</label></div>`;
+        if (c.mode === "rule"){
+          h += `<label class="form-label small fw-semibold mb-1">When</label><select class="form-select form-select-sm mb-1" data-f="subject">${sourceOptions(n, "subject", false).replace('value="auto"', 'value="previous"')}</select>
+            <div class="row g-1 mb-2"><div class="col-6"><select class="form-select form-select-sm" data-f="op">${Object.entries(CFG.ops).map(([k, v]) => `<option value="${k}" ${c.op === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></div>
+            <div class="col-6"><input class="form-control form-control-sm" data-f="value" value="${esc(c.value)}" maxlength="200" placeholder="Value" ${["empty","not_empty"].includes(c.op) ? "disabled" : ""}></div></div>
+            <div class="form-text mb-2">A Classify result compares by its category name — e.g. <em>is</em> “HR”.</div>`;
+        } else h += `<div class="form-text mb-2">The question goes in the box above. <strong>Yes</strong> and <strong>No</strong> are its two exits.</div>
+          <label class="form-label small fw-semibold mb-1">Look at</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "approval":
+        h += `<div class="st-group-label mb-1">Who checks it</div><div id="peoplePick" class="mb-1"></div>
+          <label class="form-check small mb-2"><input class="form-check-input" type="checkbox" data-f="include_runner" ${c.include_runner ? "checked" : ""}> The person the agent runs for</label>
+          <div class="row g-2 mb-2"><div class="col-6"><label class="form-label small fw-semibold mb-1">Due in (days)</label><input type="number" min="0" max="60" class="form-control form-control-sm" data-f="due_days" value="${c.due_days || 0}"></div>
+          <div class="col-6 d-flex align-items-end"><label class="form-check small"><input class="form-check-input" type="checkbox" data-f="allow_edit" ${c.allow_edit ? "checked" : ""}> Can edit the AI's text</label></div></div>
+          <label class="form-label small fw-semibold mb-1">They check</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>
+          <div class="small text-muted mb-2">The run waits. They get an email with a link (no sign-in needed) and choose <strong>Approved</strong> or <strong>Rejected</strong>.</div>`;
+        break;
+      case "email": {
+        const inc = Array.isArray(c.include) ? "pick" : c.include;
+        const cards = ancestors(n.id).filter(a => !["link", "convert", "cover", "save", "email", "envnote", "webhook", "end", "note"].includes(a.type));
+        h += `<div class="st-group-label mb-1">To</div><div id="peoplePick" class="mb-1"></div>
+          <div class="form-text mb-1">Pick from the directory, or type any email address and press Enter.</div>
+          <label class="form-check small mb-1"><input class="form-check-input" type="checkbox" data-f="to_runner" ${c.to_runner ? "checked" : ""}> Me — the person it runs for</label>
+          <label class="form-check small mb-1"><input class="form-check-input" type="checkbox" data-f="to_sender" ${c.to_sender ? "checked" : ""}> The document's sender <span class="text-muted">(envelope runs)</span></label>
+          <label class="form-check small mb-2"><input class="form-check-input" type="checkbox" data-f="to_signers" ${c.to_signers ? "checked" : ""}> Its signers <span class="text-muted">(envelope runs)</span></label>
+          <div class="d-flex justify-content-between"><label class="form-label small fw-semibold mb-1">Subject</label>${insertMenu(n, "subj")}</div>
+          <input class="form-control form-control-sm mb-2" id="subj" data-f="subject" value="${esc(c.subject)}" maxlength="200" placeholder="{{flow}}: {{document}}">
+          <label class="form-label small fw-semibold mb-1">Include</label>
+          <select class="form-select form-select-sm mb-1" id="incSel"><option value="previous" ${inc === "previous" ? "selected" : ""}>The previous result</option><option value="all" ${inc === "all" ? "selected" : ""}>Every result so far</option><option value="pick" ${inc === "pick" ? "selected" : ""}>Results I choose…</option><option value="none" ${inc === "none" ? "selected" : ""}>Just my message</option></select>
+          ${inc === "pick" ? `<div class="mb-2 ps-1">${cards.map(a => `<label class="form-check small"><input class="form-check-input" type="checkbox" data-inc="${a.id}" ${c.include.includes(a.id) ? "checked" : ""}> ${esc(a.label)}</label>`).join("") || '<div class="small text-muted">Connect some cards before this one.</div>'}</div>` : ""}
+          <label class="form-check small mb-1"><input class="form-check-input" type="checkbox" data-f="attach_files" ${c.attach_files ? "checked" : ""}> Attach the files this run made</label>
+          <label class="form-check small mb-1"><input class="form-check-input" type="checkbox" data-f="attach_document" ${c.attach_document ? "checked" : ""}> Attach the original document</label>
+          <label class="form-check small mb-2"><input class="form-check-input" type="checkbox" data-f="ai_write" ${c.ai_write ? "checked" : ""}> <i class="bi bi-stars" style="color:#7C3AED"></i> Let AI write the email from the results</label>`;
+        break;
+      }
+      case "envnote":
+        h += `<div class="st-group-label mb-1">Who sees the note</div>
+          <label class="form-check small mb-1"><input class="form-check-input" type="radio" name="vis" value="internal" ${c.visibility !== "everyone" ? "checked" : ""}> Internal — the sender's team only</label>
+          <label class="form-check small mb-2"><input class="form-check-input" type="radio" name="vis" value="everyone" ${c.visibility === "everyone" ? "checked" : ""}> Everyone on the envelope, signers included</label>
+          <label class="form-label small fw-semibold mb-1">Post</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>
+          <div class="small text-muted mb-2">Only on runs started by an envelope you sent. The note is labelled as written by this agent.</div>`;
+        break;
+      case "webhook":
+        h += `<label class="form-label small fw-semibold mb-1">Webhook address</label><input class="form-control form-control-sm mb-1" data-f="url" value="${esc(c.url)}" maxlength="500" placeholder="https://…">
+          <div class="form-text mb-2">In Teams: channel → Workflows → “Post to a channel when a webhook request is received”. Treat the address like a password — it's never exported.</div>
+          <label class="form-label small fw-semibold mb-1">Format</label><select class="form-select form-select-sm mb-2" data-f="format"><option value="teams" ${c.format === "teams" ? "selected" : ""}>Microsoft Teams (Adaptive Card)</option><option value="slack" ${c.format === "slack" ? "selected" : ""}>Slack</option><option value="json" ${c.format === "json" ? "selected" : ""}>Plain JSON (any system)</option></select>
+          <label class="form-label small fw-semibold mb-1">Post</label><select class="form-select form-select-sm mb-2" data-f="source">${sourceOptions(n, "source", true)}</select>`;
+        break;
+      case "policy": {
+        const rules = c.rules || [], on = rules.filter(r => r.enabled);
+        const cnt = k => on.filter(r => r.severity === k).length, o = c.origin || {};
+        h += `<div class="pol-sum mb-3">${rules.length ? `<div class="fw-bold" style="color:#9A3412">${esc(c.title || "Policy")}</div>
+            <div class="small text-muted mb-1">${esc([c.version, c.effective ? "effective " + c.effective : ""].filter(Boolean).join(" · "))}</div>
+            <div class="mb-1">${cnt("must") ? `<span class="pol-chip must">${cnt("must")} must</span>` : ""}${cnt("should") ? `<span class="pol-chip should">${cnt("should")} should</span>` : ""}${cnt("info") ? `<span class="pol-chip info">${cnt("info")} info</span>` : ""}${rules.length - on.length ? `<span class="pol-chip" style="background:#F1F5F9;color:#475569">${rules.length - on.length} off</span>` : ""}</div>
+            ${c.applies_to ? `<div class="small mb-1"><i class="bi bi-bullseye me-1"></i>${esc(c.applies_to)}</div>` : ""}
+            ${o.name ? `<div class="small text-muted"><i class="bi bi-file-earmark-text me-1"></i>${esc(o.name)} · ${(o.chars || 0).toLocaleString()} chars · ${o.how === "ai" ? "read by AI" : "built-in reader"}${o.built_at ? " · " + esc(o.built_at.slice(0, 10)) : ""}</div>` : ""}
+            <div class="small mt-1">${c.text && c.keep_text ? '<i class="bi bi-shield-check text-success me-1"></i>Built into this agent — shared and exported with it, no file needed.' : '<i class="bi bi-list-check me-1"></i>Rules only (policy text not kept).'}</div>`
+          : `<div class="small"><i class="bi bi-upload me-1"></i>No policy yet. Upload it as <strong>Word, PDF or text</strong>, paste it, link it, or reuse one from another agent — the rules are built for you.</div>`}
+          <button class="btn btn-sm w-100 mt-2" id="openStudio" style="background:#9A3412;color:#fff"><i class="bi bi-journal-check me-1"></i>${rules.length ? "Open the Policy studio" : "Upload the policy"}</button></div>
+          <label class="form-label small fw-semibold mb-1">Check</label><select class="form-select form-select-sm mb-3" data-f="source">${sourceOptions(n, "source", false)}</select>
+          <div class="st-group-label mb-1">What happens</div>
+          <div class="small text-muted mb-2">Each outcome can act first, then the run leaves by that exit (if something is connected to it).</div>`;
+        const colors = {na: "#94A3B8", complies: "#16A34A", warning: "#F59E0B", breach: "#DC2626"};
+        Object.entries(CFG.policy.outcomes).forEach(([key, lab]) => {
+          const acts = ((c.outcomes || {})[key] || {}).actions || [];
+          const linked = graph.edges.filter(e => e.from === n.id && e.port === key).map(e => (byId(e.to) || {}).label).filter(Boolean);
+          h += `<details class="pol-out" ${acts.length || key === "breach" ? "open" : ""}><summary><span class="pol-dot" style="background:${colors[key]}"></span>${esc(lab)}
+              <span class="ms-auto small text-muted fw-normal">${acts.length ? acts.length + " action" + (acts.length > 1 ? "s" : "") : "no action"}${linked.length ? " → " + esc(linked.join(", ")) : ""}</span></summary><div class="body">
+            ${acts.map((a, i) => actionEditor(key, i, a)).join("")}
+            <div class="dropdown"><button class="btn btn-sm btn-outline-secondary w-100 dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg me-1"></i>Add an action</button>
+              <ul class="dropdown-menu w-100 small">${Object.entries(CFG.policy.actions).map(([t, l]) => `<li><a class="dropdown-item small" href="#" data-addact="${key}" data-type="${t}">${esc(l)}</a></li>`).join("")}</ul></div>
+          </div></details>`;
+        });
+        h += `<label class="form-check small mt-2"><input class="form-check-input" type="checkbox" data-f="strict" ${c.strict ? "checked" : ""}> Strict: an unclear must-rule counts as a breach</label>`;
+        break;
+      }
+      case "note":
+        h += `<div class="st-group-label mb-1">Colour</div><div class="d-flex gap-2 mb-2">${CFG.note_colors.map(col => `<span class="ad-swatch ${c.color === col ? "on" : ""}" data-color="${col}" style="background:${col}"></span>`).join("")}</div>`;
+        break;
+    }
+    if (!["start", "note", "end"].includes(n.type)){
+      h += `<hr class="my-3"><label class="form-label small fw-semibold mb-1">If this card fails</label>
+        <select class="form-select form-select-sm" data-f="on_error"><option value="stop" ${c.on_error !== "continue" ? "selected" : ""}>Stop the run and tell me</option><option value="continue" ${c.on_error === "continue" ? "selected" : ""}>Skip it and carry on${["classify","check","condition","approval"].includes(n.type) ? " (down " + portName(n, {classify: "other", check: "issues", condition: "no", approval: "rejected"}[n.type]) + ")" : ""}</option></select>`;
+    }
+    side.innerHTML = h + `<datalist id="langList">${CFG.languages.map(l => `<option value="${l}">`).join("")}</datalist>`;
+
+    // — bindings —
+    side.querySelector("#delNode").onclick = removeSelected;
+    const dup = side.querySelector("#dupNode"); if (dup) dup.onclick = duplicateSelected;
+    side.querySelectorAll("[data-f]").forEach(el => el.addEventListener("change", () => {
+      const k = el.dataset.f, v = el.type === "checkbox" ? el.checked : el.type === "number" ? +el.value : el.value;
+      change(() => { if (k === "label") n.label = v.trim() || T[n.type].label; else n.config[k] = v; });
+    }));
+    // The context box updates the card as you type, without rebuilding the inspector.
+    const ctxBox = side.querySelector("#ctxBox"); let typed = false;
+    ctxBox.addEventListener("input", () => { if (!typed){ undoStack.push(state()); redoStack = []; typed = true; } n.config.context = ctxBox.value; markDirty(); render(true); });
+    side.querySelectorAll("[data-insert]").forEach(a => a.onclick = ev => {
+      ev.preventDefault(); const box = side.querySelector("#" + a.dataset.into); if (!box) return;
+      const s = box.selectionStart ?? box.value.length, e = box.selectionEnd ?? box.value.length;
+      box.value = box.value.slice(0, s) + a.dataset.insert + box.value.slice(e); box.focus();
+      box.dispatchEvent(new Event(box.id === "ctxBox" ? "input" : "change"));
+    });
+    const radio = (name, key, after) => side.querySelectorAll(`input[name="${name}"]`).forEach(el => el.addEventListener("change", () => change(() => { n.config[key] = el.value; if (after) after(el.value); })));
+    radio("trig", "trigger"); radio("len", "length"); radio("strict", "strictness"); radio("cmode", "mode"); radio("vis", "visibility");
+    const lines = (id, key) => { const el = side.querySelector("#" + id); if (el) el.addEventListener("change", () => change(() => { n.config[key] = el.value.split(/\n|,(?![^(]*\))/).map(x => x.trim()).filter(Boolean).slice(0, key === "urls" ? 10 : 30); })); };
+    lines("urls", "urls"); lines("fields", "fields");
+    side.querySelectorAll("[data-kind]").forEach(el => el.addEventListener("change", () => change(() => { n.config.kinds = [...side.querySelectorAll("[data-kind]:checked")].map(x => x.dataset.kind); })));
+    side.querySelectorAll("[data-target]").forEach(el => el.onclick = () => change(() => { n.config.target = el.dataset.target; if (n.label === "Convert" || /^Convert to /.test(n.label)) n.label = "Convert to " + CFG.targets[el.dataset.target]; }));
+    side.querySelectorAll("[data-color]").forEach(el => el.onclick = () => change(() => n.config.color = el.dataset.color));
+    side.querySelectorAll("[data-cat-label]").forEach(inp => inp.onchange = () => change(() => n.config.categories[+inp.dataset.catLabel].label = inp.value.trim() || "Category"));
+    side.querySelectorAll("[data-cat-hint]").forEach(inp => inp.onchange = () => change(() => n.config.categories[+inp.dataset.catHint].hint = inp.value));
+    side.querySelectorAll("[data-cat-remove]").forEach(btn => btn.onclick = () => change(() => {
+      const gone = n.config.categories.splice(+btn.dataset.catRemove, 1)[0];
+      graph.edges = graph.edges.filter(e => !(e.from === n.id && e.port === gone.id));
+    }));
+    const catAdd = side.querySelector("#catAdd");
+    if (catAdd) catAdd.onclick = () => change(() => { const used = new Set(n.config.categories.map(x => x.id)); let i = 1; while (used.has("c" + i)) i++; n.config.categories.push({id: "c" + i, label: `Category ${n.config.categories.length + 1}`, hint: ""}); });
+    const incSel = side.querySelector("#incSel");
+    if (incSel) incSel.onchange = () => change(() => { n.config.include = incSel.value === "pick" ? [] : incSel.value; });
+    side.querySelectorAll("[data-inc]").forEach(el => el.addEventListener("change", () => change(() => { n.config.include = [...side.querySelectorAll("[data-inc]:checked")].map(x => x.dataset.inc); })));
+    const pp = side.querySelector("#peoplePick");
+    if (pp){
+      const c2 = n.config;
+      new PeoplePicker(pp, {directory: CFG.directory, multiple: true, placeholder: "Name or email address",
+        value: [...(c2.users || []).map(id => ({user_id: id})), ...(c2.emails || []).map(e => ({email: e}))],
+        onChange: list => {
+          const users = list.filter(p => p.user_id).map(p => p.user_id), emails = list.filter(p => p.email).map(p => p.email);
+          if (JSON.stringify(users) === JSON.stringify(c2.users || []) && JSON.stringify(emails) === JSON.stringify(c2.emails || [])) return;
+          undoStack.push(state()); redoStack = []; c2.users = users; c2.emails = emails; markDirty(); render(true);
+        }});
+    }
+    if (n.type === "policy") bindPolicy(n);
+    const lf = side.querySelector("#linkFile");
+    if (lf) lf.onchange = async () => {
+      if (!lf.files[0]) return;
+      const fd = new FormData(); fd.append("file", lf.files[0]);
+      try {
+        const d = await postForm(CFG.urls.extract, fd);
+        change(() => { n.config.text = ((n.config.text ? n.config.text + "\n\n" : "") + `[${d.name}]\n` + d.text).slice(0, 20000); });
+        StudioNet.notify(`Read ${d.name} (${d.chars.toLocaleString()} characters)${d.cut ? " — the first 20,000 were kept" : ""}. The file itself isn't stored.`, "success");
+      } catch (e){ StudioNet.notify(e.message); }
+    };
+  }
+
+  // ─── Policy card: outcome actions ──────────────────────────
+  const ACT_ICON = {inform: "bi-info-circle", warn: "bi-exclamation-triangle", signoff: "bi-person-check", agent: "bi-stars", workflow: "bi-diagram-3", stop: "bi-sign-stop"};
+  function actionEditor(key, i, a){
+    const id = `${key}_${i}`;
+    let h = `<div class="pol-act"><div class="d-flex align-items-center mb-1"><i class="bi ${ACT_ICON[a.type]} me-1"></i><span class="small fw-semibold">${esc(CFG.policy.actions[a.type])}</span>
+      <button class="btn btn-sm btn-link text-danger ms-auto p-0" data-delact="${key}" data-i="${i}" title="Remove"><i class="bi bi-x-lg"></i></button></div>`;
+    if (["inform", "warn", "signoff"].includes(a.type)){
+      h += `<div class="mb-1" data-actpick="${key}" data-i="${i}"></div>
+        <label class="form-check small mb-0"><input class="form-check-input" type="checkbox" data-actf="to_runner" data-k="${key}" data-i="${i}" ${a.to_runner ? "checked" : ""}> Me — the person it runs for</label>`;
+      if (a.type !== "signoff") h += `<label class="form-check small mb-0"><input class="form-check-input" type="checkbox" data-actf="to_sender" data-k="${key}" data-i="${i}" ${a.to_sender ? "checked" : ""}> The document's sender</label>
+        <label class="form-check small mb-1"><input class="form-check-input" type="checkbox" data-actf="to_signers" data-k="${key}" data-i="${i}" ${a.to_signers ? "checked" : ""}> Its signers</label>`;
+      if (a.type === "warn") h += `<select class="form-select form-select-sm mb-1" data-actf="note" data-k="${key}" data-i="${i}"><option value="" ${!a.note ? "selected" : ""}>No note on the envelope</option><option value="internal" ${a.note === "internal" ? "selected" : ""}>Also an internal note on the envelope</option><option value="everyone" ${a.note === "everyone" ? "selected" : ""}>Also a note every signer sees</option></select>`;
+      h += `<textarea class="form-control form-control-sm" rows="2" data-actf="message" data-k="${key}" data-i="${i}" maxlength="1500" placeholder="${a.type === "signoff" ? "What they are signing off (optional)" : "Message (optional) — the findings are always included"}">${esc(a.message || "")}</textarea>`;
+    } else if (a.type === "agent"){
+      h += `<select class="form-select form-select-sm" data-actf="id" data-k="${key}" data-i="${i}"><option value="">Choose an agent…</option>${CFG.agents.map(x => `<option value="${x.id}" ${+a.id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+        <div class="form-text">It runs on the same document, for the same person.</div>`;
+    } else if (a.type === "workflow"){
+      const wf = CFG.workflows.find(x => x.id === +a.id);
+      h += `<select class="form-select form-select-sm mb-1" data-actf="id" data-k="${key}" data-i="${i}"><option value="">Choose a Flow Studio workflow…</option>${CFG.workflows.filter(x => !x.form).map(x => `<option value="${x.id}" ${+a.id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+        ${wf && wf.roles.length ? `<div class="small mb-1">People for its roles (${esc(wf.roles.join(", "))}):</div><div data-actpick="${key}" data-i="${i}"></div><div class="form-text">Leave empty to use the person the agent runs for.</div>` : `<div class="form-text">The document goes into the workflow with the findings as its message.</div>`}`;
+    } else if (a.type === "stop"){
+      h += `<div class="small text-muted">The run stops here and is marked “Stopped by a policy”. Nothing after this card runs.</div>`;
+    }
+    return h + `</div>`;
+  }
+  function bindPolicy(n){
+    const c = n.config;
+    const o = side.querySelector("#openStudio"); if (o) o.onclick = () => openPolicy(n);
+    side.querySelectorAll("[data-addact]").forEach(el => el.onclick = ev => {
+      ev.preventDefault();
+      const a = {type: el.dataset.type, message: "", users: [], emails: []};
+      if (["inform", "warn", "signoff"].includes(a.type)) a.to_runner = true;
+      if (a.type === "warn") a.note = "internal";
+      change(() => { (c.outcomes[el.dataset.addact] = c.outcomes[el.dataset.addact] || {actions: []}).actions.push(a); });
+    });
+    side.querySelectorAll("[data-delact]").forEach(el => el.onclick = () => change(() => c.outcomes[el.dataset.delact].actions.splice(+el.dataset.i, 1)));
+    side.querySelectorAll("[data-actf]").forEach(el => el.addEventListener("change", () => change(() => {
+      const a = c.outcomes[el.dataset.k].actions[+el.dataset.i];
+      a[el.dataset.actf] = el.type === "checkbox" ? el.checked : el.dataset.actf === "id" ? (el.value ? +el.value : null) : el.value;
+    })));
+    side.querySelectorAll("[data-actpick]").forEach(host => {
+      const a = c.outcomes[host.dataset.actpick].actions[+host.dataset.i];
+      new PeoplePicker(host, {directory: CFG.directory, multiple: true, placeholder: "Name or email address",
+        value: [...(a.users || []).map(id => ({user_id: id})), ...(a.emails || []).map(e => ({email: e}))],
+        onChange: list => {
+          const users = list.filter(p => p.user_id).map(p => p.user_id), emails = list.filter(p => p.email).map(p => p.email);
+          if (JSON.stringify(users) === JSON.stringify(a.users || []) && JSON.stringify(emails) === JSON.stringify(a.emails || [])) return;
+          undoStack.push(state()); redoStack = []; a.users = users; a.emails = emails; markDirty(); render(true);
+        }});
+    });
+  }
+
+  // ─── Policy studio ─────────────────────────────────────────
+  const policyModal = new bootstrap.Modal(document.getElementById("policyModal"));
+  let psNode = null, ps = null, psLib = null;
+  const $ = id => document.getElementById(id);
+  function psSrc(){ return document.querySelector('input[name="psSrc"]:checked').value; }
+  document.querySelectorAll('input[name="psSrc"]').forEach(r => r.onchange = () => {
+    document.querySelectorAll("[data-ps]").forEach(el => el.classList.toggle("d-none", el.dataset.ps !== psSrc()));
+    document.querySelector("[data-ps-build]").classList.toggle("d-none", psSrc() === "reuse");
+    $("psReuseGo").classList.toggle("d-none", psSrc() !== "reuse");
+    if (psSrc() === "reuse" && !psLib) loadLibrary();
+  });
+  async function loadLibrary(){
+    try {
+      const d = await StudioNet.getJSON(CFG.urls.policy_library); psLib = d.policies.filter(p => !(p.flow_id === INIT.id && psNode && p.key.endsWith(":" + psNode.id)));
+      $("psReuse").innerHTML = psLib.length ? psLib.map(p => `<option value="${esc(p.key)}">${esc(p.title)}${p.version ? " " + esc(p.version) : ""} — ${p.rules} rules · from “${esc(p.flow)}”${p.mine ? "" : " by " + esc(p.owner)}</option>`).join("")
+        : `<option value="">No other agent has a policy yet</option>`;
+    } catch (e){ $("psReuse").innerHTML = `<option value="">${esc(e.message)}</option>`; }
+  }
+  $("psReuseGo").onclick = async () => {
+    const key = $("psReuse").value; if (!key) return;
+    try { const d = await StudioNet.getJSON(CFG.urls.policy_library + "?key=" + encodeURIComponent(key));
+      const keepOut = ps.outcomes; ps = {...d.policy, outcomes: keepOut}; psFill(); psMsg(`Copied from “${d.from}”. Review it, then save.`, "success");
+    } catch (e){ psMsg(e.message, "danger"); }
+  };
+  function psMsg(t, kind){ $("psMsg").innerHTML = t ? `<span class="text-${kind || "muted"}">${t}</span>` : ""; }
+  function openPolicy(n){
+    psNode = n; ps = JSON.parse(JSON.stringify(n.config)); psLib = null;
+    $("psFile").value = ""; $("psDropName").textContent = "Drop the policy here — PDF, Word or text"; $("psPaste").value = ""; $("psUrl").value = ""; $("psHint").value = "";
+    psMsg(""); psFill(); policyModal.show();
+  }
+  function psFill(){
+    $("psHeadTitle").textContent = ps.title || "";
+    $("psTitle").value = ps.title || ""; $("psVersion").value = ps.version || ""; $("psEffective").value = ps.effective || "";
+    $("psAppliesTo").value = ps.applies_to || ""; $("psScope").value = (ps.applies_keywords || []).join(", "); $("psSummary").value = ps.summary || "";
+    $("psKeep").checked = ps.keep_text !== false; $("psStrict").checked = !!ps.strict; $("psText").value = ps.text || ""; $("psChars").textContent = (ps.text || "").length.toLocaleString();
+    const o = ps.origin || {};
+    $("psOrigin").innerHTML = o.name ? `<i class="bi bi-file-earmark-text me-1"></i>Built from <strong>${esc(o.name)}</strong> ${o.built_at ? "on " + esc(o.built_at.slice(0, 10)) : ""}${o.built_by ? " by " + esc(o.built_by) : ""} · ${o.how === "ai" ? "read by AI" : "built-in reader"}` : "";
+    psRules();
+  }
+  function psRules(){
+    const rules = ps.rules || [], on = rules.filter(r => r.enabled);
+    const n = k => on.filter(r => r.severity === k).length;
+    $("psCounts").innerHTML = rules.length ? `<span class="pol-chip must">${n("must")} must</span><span class="pol-chip should">${n("should")} should</span><span class="pol-chip info">${n("info")} info</span>` : "";
+    const P = CFG.policy;
+    $("psRules").innerHTML = rules.map((r, i) => `<div class="ps-rule ${r.severity} ${r.enabled ? "" : "off"}">
+      <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-switch mb-0" title="On / off"><input class="form-check-input" type="checkbox" data-r="enabled" data-i="${i}" ${r.enabled ? "checked" : ""}></div>
+        <select class="form-select form-select-sm ps-sev" data-r="severity" data-i="${i}">${Object.entries(P.severities).map(([k, v]) => `<option value="${k}" ${r.severity === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+        <input class="form-control form-control-sm ps-title" data-r="title" data-i="${i}" value="${esc(r.title)}" maxlength="160">
+        ${r.ref ? `<span class="badge bg-light text-dark border">${esc(r.ref)}</span>` : ""}
+        <button class="btn btn-sm btn-link text-danger p-0" data-rdel="${i}" title="Delete rule"><i class="bi bi-trash"></i></button>
+      </div>
+      <details class="mt-1"><summary class="small text-muted">${esc(P.kinds[r.kind])}${r.kind === "threshold" && r.value != null ? ` · flagged when the amount is ${P.ops[r.op]} ${Number(r.value).toLocaleString()} ${esc(r.unit || "")}` : ""}${["requires","forbids"].includes(r.kind) && (r.terms || []).length ? " · " + esc(r.terms.join(", ")) : ""}${(r.then || {}).type ? " · then: " + esc(P.rule_then[r.then.type]) : ""}</summary>
+        <textarea class="form-control form-control-sm mt-1 mb-1" rows="2" data-r="text" data-i="${i}" maxlength="1500" placeholder="The rule, in the policy's words">${esc(r.text)}</textarea>
+        <div class="row g-1 mb-1"><div class="col-5"><select class="form-select form-select-sm" data-r="kind" data-i="${i}">${Object.entries(P.kinds).map(([k, v]) => `<option value="${k}" ${r.kind === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+          <div class="col-3"><input class="form-control form-control-sm" data-r="ref" data-i="${i}" value="${esc(r.ref)}" maxlength="40" placeholder="Section"></div>
+          <div class="col-4"><input class="form-control form-control-sm" data-r="applies_if" data-i="${i}" value="${esc((r.applies_if || []).join(", "))}" placeholder="Only if it mentions…"></div></div>
+        ${r.kind === "threshold" ? `<div class="row g-1 mb-1 align-items-center"><div class="col-auto small">Flag when the largest amount is</div><div class="col-3"><select class="form-select form-select-sm" data-r="op" data-i="${i}">${Object.entries(P.ops).map(([k, v]) => `<option value="${k}" ${r.op === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+          <div class="col-3"><input type="number" class="form-control form-control-sm" data-r="value" data-i="${i}" value="${r.value ?? ""}"></div><div class="col-2"><input class="form-control form-control-sm" data-r="unit" data-i="${i}" value="${esc(r.unit)}" placeholder="USD" maxlength="12"></div></div>` : ""}
+        ${["requires", "forbids"].includes(r.kind) ? `<input class="form-control form-control-sm mb-1" data-r="terms" data-i="${i}" value="${esc((r.terms || []).join(", "))}" placeholder="${r.kind === "requires" ? "Words it must mention — use / for alternatives: performance guarantee/performance bond" : "Words it must not mention, e.g. advance payment/prepayment"}">` : ""}
+        <div class="row g-1"><div class="col-5"><select class="form-select form-select-sm" data-rthen="${i}">${Object.entries(P.rule_then).map(([k, v]) => `<option value="${k}" ${((r.then || {}).type || "") === k ? "selected" : ""}>When broken: ${v}</option>`).join("")}</select></div>
+          ${["agent", "workflow"].includes((r.then || {}).type) ? `<div class="col-7"><select class="form-select form-select-sm" data-rthenid="${i}"><option value="">Choose…</option>${(r.then.type === "agent" ? CFG.agents : CFG.workflows.filter(x => !x.form)).map(x => `<option value="${x.id}" ${+r.then.id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>` : ""}</div>
+      </details></div>`).join("") || `<div class="st-empty py-4"><i class="bi bi-journal-plus"></i>No rules yet. Upload the policy on the left and they are built for you — or add them by hand.</div>`;
+    const R = ps.rules;
+    $("psRules").querySelectorAll("[data-r]").forEach(el => el.addEventListener("change", () => {
+      const r = R[+el.dataset.i], k = el.dataset.r;
+      if (k === "enabled") r.enabled = el.checked;
+      else if (k === "value") r.value = el.value === "" ? null : +el.value;
+      else if (["terms", "applies_if"].includes(k)) r[k] = el.value.split(",").map(x => x.trim()).filter(Boolean);
+      else r[k] = el.value;
+      if (["enabled", "severity", "kind", "op", "value"].includes(k)) psRules();
+    }));
+    $("psRules").querySelectorAll("[data-rdel]").forEach(el => el.onclick = () => { R.splice(+el.dataset.rdel, 1); psRules(); });
+    $("psRules").querySelectorAll("[data-rthen]").forEach(el => el.onchange = () => { R[+el.dataset.rthen].then = {type: el.value, id: null}; psRules(); });
+    $("psRules").querySelectorAll("[data-rthenid]").forEach(el => el.onchange = () => { R[+el.dataset.rthenid].then.id = el.value ? +el.value : null; });
+  }
+  $("psAdd").onclick = () => {
+    const used = new Set((ps.rules || []).map(r => r.id)); let i = 1; while (used.has("r" + i)) i++;
+    (ps.rules = ps.rules || []).push({id: "r" + i, title: "New rule", text: "", ref: "", severity: "must", kind: "judgement", enabled: true, applies_if: [], terms: [], op: "gt", value: null, unit: "", then: {type: ""}});
+    psRules(); const last = $("psRules").querySelector(".ps-rule:last-child .ps-title"); if (last){ last.focus(); last.select(); }
+  };
+  const psDrop = $("psDrop"), psFile = $("psFile");
+  psFile.onchange = () => { if (psFile.files[0]) $("psDropName").textContent = psFile.files[0].name; };
+  ["dragenter", "dragover"].forEach(ev => psDrop.addEventListener(ev, e => { e.preventDefault(); psDrop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => psDrop.addEventListener(ev, e => { e.preventDefault(); psDrop.classList.remove("over"); }));
+  psDrop.addEventListener("drop", e => { if (e.dataTransfer.files[0]){ psFile.files = e.dataTransfer.files; $("psDropName").textContent = psFile.files[0].name; } });
+  async function postForm(url, fd){
+    const res = await fetch(url, {method: "POST", body: fd, credentials: "same-origin", headers: {"X-CSRFToken": StudioNet.CSRF}});
+    let d = {}; try { d = await res.json(); } catch (e){ throw new Error("The server gave an unexpected answer (HTTP " + res.status + ")."); }
+    if (!res.ok || d.ok === false) throw new Error(d.error || "It couldn't be read.");
+    return d;
+  }
+  $("psBuild").onclick = async () => {
+    const fd = new FormData(), src = psSrc();
+    if (src === "upload"){ if (!psFile.files[0]) return psMsg("Choose the policy file first.", "danger"); fd.append("file", psFile.files[0]); }
+    else if (src === "paste"){ if (!$("psPaste").value.trim()) return psMsg("Paste the policy text first.", "danger"); fd.append("text", $("psPaste").value); }
+    else if (src === "link"){ if (!$("psUrl").value.trim()) return psMsg("Paste the policy's address first.", "danger"); fd.append("url", $("psUrl").value.trim()); }
+    fd.append("hint", $("psHint").value); fd.append("current", JSON.stringify(ps.rules || []));
+    $("psBuild").disabled = true; $("psSpin").classList.remove("d-none"); psMsg("Reading the policy…");
+    try {
+      const d = await postForm(CFG.urls.policy_build, fd);
+      const keepOut = ps.outcomes;
+      ps = {...ps, ...d.policy, outcomes: keepOut};
+      psFill();
+      const df = d.diff;
+      psMsg(`<i class="bi bi-check-circle me-1"></i>${d.policy.rules.length} rules built ${d.how === "ai" ? "by AI" : "by the built-in reader"}`
+        + (df ? ` · ${df.added} new, ${df.removed} gone, ${df.kept} kept (your switches and actions on kept rules were carried over)` : "")
+        + ". Check them, then save.", "success");
+    } catch (e){ psMsg(esc(e.message), "danger"); }
+    finally { $("psBuild").disabled = false; $("psSpin").classList.add("d-none"); }
+  };
+  $("psSave").onclick = () => {
+    ps.title = $("psTitle").value.trim(); ps.version = $("psVersion").value.trim(); ps.effective = $("psEffective").value.trim();
+    ps.applies_to = $("psAppliesTo").value.trim(); ps.applies_keywords = $("psScope").value.split(",").map(x => x.trim()).filter(Boolean);
+    ps.summary = $("psSummary").value; ps.keep_text = $("psKeep").checked; ps.strict = $("psStrict").checked; ps.text = $("psText").value;
+    const n = psNode;
+    change(() => { n.config = {...n.config, ...ps}; if (ps.title && (n.label === "Policy" || n.label === T.policy.label)) n.label = ps.title.slice(0, 60); sel = {kind: "node", id: n.id}; });
+    policyModal.hide();
+    StudioNet.notify("Policy saved to the card. Press Save to keep it in the agent.", "success");
+  };
+
+  // ─── templates, name, keyboard ─────────────────────────────
+  const tplMenu = document.getElementById("tplMenu");
+  CFG.templates.forEach(t => {
+    const li = document.createElement("li");
+    li.innerHTML = `<a class="dropdown-item" href="#"><i class="bi ${t.icon} me-2" style="color:#7C3AED"></i>${esc(t.name)}<div class="small text-muted text-wrap">${esc(t.description)}</div></a>`;
+    li.querySelector("a").onclick = ev => {
+      ev.preventDefault();
+      if (graph.nodes.length > 1 && !confirm("Replace the current design with this template? You can undo.")) return;
+      change(() => { graph = JSON.parse(JSON.stringify(t.graph)); sel = null; }); setTimeout(fit, 0);
+    };
+    tplMenu.appendChild(li);
+  });
+  nameInput.addEventListener("change", () => change(() => flow.name = nameInput.value.trim() || flow.name));
+  nameInput.addEventListener("keydown", e => { if (e.key === "Enter") nameInput.blur(); });
+  document.addEventListener("keydown", e => {
+    if (/input|textarea|select/i.test(e.target.tagName) || e.target.isContentEditable || document.querySelector(".modal.show")) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === "s"){ e.preventDefault(); save(); }
+    else if (mod && e.key.toLowerCase() === "z"){ e.preventDefault(); document.getElementById(e.shiftKey ? "redo" : "undo").click(); }
+    else if (mod && e.key.toLowerCase() === "y"){ e.preventDefault(); document.getElementById("redo").click(); }
+    else if (mod && e.key.toLowerCase() === "d"){ e.preventDefault(); duplicateSelected(); }
+    else if ((e.key === "Delete" || e.key === "Backspace") && sel){ e.preventDefault(); removeSelected(); }
+    else if (e.key === "Escape" && sel){ sel = null; lastSelected = null; render(); }
+    else if (sel && sel.kind === "node" && e.key.startsWith("Arrow")){
+      e.preventDefault(); const n = byId(sel.id);
+      change(() => { if (e.key === "ArrowLeft") n.x -= GRID; if (e.key === "ArrowRight") n.x += GRID; if (e.key === "ArrowUp") n.y -= GRID; if (e.key === "ArrowDown") n.y += GRID; });
+    }
+  });
+  function flash(msg){
+    const el = document.getElementById("saveState"); el.textContent = msg; el.classList.add("text-danger");
+    setTimeout(() => { el.textContent = dirty ? "Unsaved changes" : "Saved"; el.classList.remove("text-danger"); }, 2600);
+  }
+
+  // ─── AI chip, automatic switch ─────────────────────────────
+  const chip = document.getElementById("aiChip");
+  chip.className = "ag-chip" + (CFG.ai.offline ? " off" : ""); chip.title = CFG.ai.detail;
+  chip.innerHTML = `<i class="bi ${CFG.ai.offline ? "bi-cpu" : "bi-stars"}"></i>${esc(CFG.ai.label)}`;
+  const autoWrap = document.getElementById("autoWrap"), autoSwitch = document.getElementById("autoSwitch"), autoLabel = document.getElementById("autoLabel");
+  function syncAuto(){
+    autoWrap.classList.toggle("d-none", !isAuto());
+    autoSwitch.checked = !!isEnabled;
+    autoLabel.innerHTML = isEnabled ? '<span class="ag-chip live"><span class="dot"></span>Running automatically</span>' : "Automatic: off";
+  }
+  autoSwitch.onchange = async () => {
+    const want = autoSwitch.checked;
+    if (dirty && !(await save())){ autoSwitch.checked = !want; return; }
+    try { const d = await StudioNet.postJSON(CFG.urls.toggle, {on: want}); isEnabled = d.is_enabled; StudioNet.notify(want ? "Switched on — it now runs by itself." : "Switched off.", "success"); }
+    catch (err){ StudioNet.notify(err.message); isEnabled = false; }
+    syncAuto(); if (!sel) renderSide();
+  };
+
+  // ─── save / run ────────────────────────────────────────────
+  async function save(){
+    const btn = document.getElementById("saveBtn"), st = document.getElementById("saveState");
+    btn.disabled = true; st.textContent = "Saving…";
+    try {
+      const data = await StudioNet.postJSON(CFG.urls.save, {...flow, graph, version});
+      const wasOn = isEnabled;
+      version = data.version; report = data.report; isEnabled = data.is_enabled;
+      const ids = new Set(data.graph.nodes.map(n => n.id)); graph = data.graph; if (sel && sel.kind === "node" && !ids.has(sel.id)) sel = null;
+      dirty = false; st.classList.remove("text-danger"); st.textContent = `Saved at ${data.saved_at}`;
+      if (wasOn && !isEnabled) StudioNet.notify("Automatic running was switched off because the agent has problems to fix.", "warning");
+      render(); return true;
+    } catch (err){ st.textContent = "Not saved"; st.classList.add("text-danger"); StudioNet.notify(err.message); return false; }
+    finally { btn.disabled = false; }
+  }
+  document.getElementById("saveBtn").onclick = save;
+  document.getElementById("runBtn").onclick = async () => {
+    if (dirty && !(await save())) return;
+    if (report.errors.length){
+      const first = report.errors.find(i => i.node && byId(i.node)); sel = first ? {kind: "node", id: first.node} : null; render(); if (first) centreOn(byId(first.node));
+      flash(`Fix ${report.errors.length} problem${report.errors.length === 1 ? "" : "s"} first.`); return;
+    }
+    window.onbeforeunload = null; location = CFG.urls.run;
+  };
+  window.onbeforeunload = () => dirty ? "You have unsaved changes." : undefined;
+
+  // ─── share ─────────────────────────────────────────────────
+  const shareModal = new bootstrap.Modal(document.getElementById("shareModal"));
+  let draftShare = null, sharePicker = null;
+  function renderShareList(){
+    const host = document.getElementById("shareList");
+    host.innerHTML = draftShare.people.map((p, i) => `<div class="ad-share-row"><i class="bi ${p.user_id ? "bi-person" : "bi-envelope"} text-muted"></i>
+      <div class="flex-grow-1 small"><div class="fw-semibold">${esc(p.name || p.email)}</div>${p.email && p.name !== p.email ? `<div class="text-muted">${esc(p.email)}</div>` : ""}</div>
+      <select class="form-select form-select-sm" style="width:auto" data-role="${i}" ${CFG.is_owner ? "" : "disabled"}><option value="use" ${p.role !== "edit" ? "selected" : ""}>Can use</option><option value="edit" ${p.role === "edit" ? "selected" : ""}>Can edit</option></select>
+      ${CFG.is_owner ? `<button class="btn btn-sm btn-link text-danger" data-unshare="${i}" title="Remove"><i class="bi bi-x-lg"></i></button>` : ""}</div>`).join("")
+      || `<div class="small text-muted">No one added yet.</div>`;
+    host.querySelectorAll("[data-role]").forEach(s => s.onchange = () => draftShare.people[+s.dataset.role].role = s.value);
+    host.querySelectorAll("[data-unshare]").forEach(b => b.onclick = () => { draftShare.people.splice(+b.dataset.unshare, 1); renderShareList(); });
+    document.querySelectorAll(".ad-scope").forEach(el => el.classList.toggle("on", el.dataset.scope === draftShare.scope));
+  }
+  function openShare(){
+    draftShare = JSON.parse(JSON.stringify(share));
+    document.getElementById("shareName").textContent = flow.name;
+    document.getElementById("ownerName").textContent = CFG.owner_name;
+    document.getElementById("shareOwnerOnly").classList.toggle("d-none", CFG.is_owner);
+    document.getElementById("shareEditor").classList.toggle("d-none", !CFG.is_owner);
+    document.getElementById("shareSave").classList.toggle("d-none", !CFG.is_owner);
+    if (CFG.is_owner){
+      sharePicker = new PeoplePicker(document.getElementById("sharePick"), {directory: CFG.directory, multiple: true, placeholder: "Add a colleague or an email address", value: [],
+        onChange: list => {
+          if (!list.length) return;
+          list.forEach(p => {
+            const u = p.user_id ? CFG.directory.find(d => d.id === p.user_id) : null;
+            const key = p.user_id ? "u" + p.user_id : "e" + p.email;
+            if (!draftShare.people.some(x => (x.user_id ? "u" + x.user_id : "e" + x.email) === key))
+              draftShare.people.push(u ? {user_id: u.id, name: u.name, email: u.email, role: "use"} : {email: p.email, name: p.email, role: "use"});
+          });
+          setTimeout(() => sharePicker.set([]), 0); renderShareList();
+        }});
+    }
+    renderShareList(); shareModal.show();
+  }
+  document.querySelectorAll(".ad-scope").forEach(el => el.onclick = () => { draftShare.scope = el.dataset.scope; renderShareList(); });
+  document.getElementById("shareBtn").onclick = openShare;
+  document.getElementById("shareSave").onclick = async () => {
+    const btn = document.getElementById("shareSave"); btn.disabled = true;
+    try {
+      const d = await StudioNet.postJSON(CFG.urls.share, {share_scope: draftShare.scope, notify: document.getElementById("shareNotify").checked,
+        people: draftShare.people.map(p => p.user_id ? {user_id: p.user_id, role: p.role} : {email: p.email, role: p.role})});
+      share = {scope: d.share_scope, people: d.shares}; shareModal.hide();
+      StudioNet.notify("Sharing saved" + (d.notified ? ` — ${d.notified} ${d.notified === 1 ? "person was" : "people were"} emailed.` : "."), "success");
+      if (!sel) renderSide();
+    } catch (err){ StudioNet.notify(err.message); }
+    finally { btn.disabled = false; }
+  };
+
+  // ─── build from a description ──────────────────────────────
+  const composeModal = new bootstrap.Modal(document.getElementById("composeModal"));
+  let composed = null;
+  document.getElementById("composeBtn").onclick = () => { composeModal.show(); setTimeout(() => document.getElementById("composeText").focus(), 300); };
+  document.querySelectorAll(".ad-compose-ex").forEach(b => b.onclick = () => { document.getElementById("composeText").value = b.textContent.trim(); });
+  document.getElementById("composeGo").onclick = async () => {
+    const btn = document.getElementById("composeGo"), spin = document.getElementById("composeSpin"), err = document.getElementById("composeErr");
+    btn.disabled = true; spin.classList.remove("d-none"); err.textContent = "";
+    try {
+      const d = await StudioNet.postJSON(CFG.urls.compose, {description: document.getElementById("composeText").value});
+      composed = d;
+      document.getElementById("composeOut").classList.remove("d-none");
+      document.getElementById("composeHow").innerHTML = d.how === "ai" ? '<i class="bi bi-stars" style="color:#7C3AED"></i> Drawn by AI' : '<i class="bi bi-cpu"></i> Drawn by the built-in parser — check each card';
+      const mapTypes = Object.fromEntries(Object.entries(T).map(([k, v]) => [k, {...v, ports: v.ports}]));
+      FlowMap(document.getElementById("composeMap"), {nodes: d.graph.nodes.filter(n => n.type !== "note"), edges: d.graph.edges}, {nodeTypes: mapTypes, portLabels: PL, fit: true});
+      document.getElementById("composeUse").classList.remove("d-none"); document.getElementById("composeAdd").classList.remove("d-none");
+    } catch (e){ err.textContent = e.message; }
+    finally { btn.disabled = false; spin.classList.add("d-none"); }
+  };
+  document.getElementById("composeUse").onclick = () => {
+    if (!composed) return;
+    change(() => { graph = JSON.parse(JSON.stringify(composed.graph)); sel = null; if (composed.name && /^(New agent|Blank agent)$/i.test(flow.name)) flow.name = composed.name; if (!flow.description) flow.description = document.getElementById("composeText").value.slice(0, 2000); });
+    composeModal.hide(); setTimeout(fit, 0);
+  };
+  document.getElementById("composeAdd").onclick = () => {
+    if (!composed) return;
+    const dy = graph.nodes.length ? Math.max(...graph.nodes.map(n => n.y + hOf(n))) + 80 : 0;
+    change(() => {
+      const map = {}, hasStart = graph.nodes.some(n => n.type === "start");
+      composed.graph.nodes.forEach(n => { if (n.type === "start" && hasStart) return; const c = JSON.parse(JSON.stringify(n)); map[n.id] = c.id = uid("n"); c.y += dy; graph.nodes.push(c); });
+      composed.graph.edges.forEach(e => { if (map[e.from] && map[e.to]) graph.edges.push({id: uid("e"), from: map[e.from], port: e.port, to: map[e.to]}); });
+    });
+    composeModal.hide(); setTimeout(fit, 0);
+  };
+
+  render();
+  requestAnimationFrame(fit);
+  window.addEventListener("resize", () => applyView());
+})();
+{% endverbatim %}</script>
+{% endblock %}

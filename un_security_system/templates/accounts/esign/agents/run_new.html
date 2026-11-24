@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/agents/run_new.html — give an agent something to work on #}
+{% load esign_studio_tags %}
+{% block title %}Run {{ flow.name }} | Agentic flows | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/agents/_agent_styles.html" %}
+<style>
+  .rn-src{ border:1.5px solid var(--st-line); border-radius:.6rem; padding:.7rem .8rem; cursor:pointer; height:100%; background:#fff; }
+  .rn-src.on{ border-color:#7C3AED; background:#F5F3FF; }
+  .rn-src i{ font-size:1.3rem; color:#7C3AED; }
+  .rn-pane{ display:none; } .rn-pane.on{ display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <form class="card" method="post" enctype="multipart/form-data" id="runForm">
+      {% csrf_token %}
+      <input type="hidden" name="source" id="source" value="{{ posted.source|default:'' }}">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <a class="btn btn-sm btn-link px-0" href="{% url 'accounts:esign_agents' %}"><i class="bi bi-arrow-left"></i></a>
+          <h5 class="mb-0 fw-bold" style="color:#4C1D95"><i class="bi bi-play-circle me-1"></i>Run “{{ flow.name }}”</h5>
+        </div>
+        <div class="text-muted small mb-3">{% if flow.description %}{{ flow.description }}{% else %}Give the agent a document or some text. You'll watch each card work.{% endif %}</div>
+
+        {% if report.errors %}
+        <div class="alert alert-permanent alert-danger small"><strong>This agent has problems to fix first:</strong><ul class="mb-0">{% for i in report.errors %}<li>{{ i.text }}</li>{% endfor %}</ul>
+          {% if flow.created_by_id == request.user.id %}<a href="{% url 'accounts:esign_agent_design' flow.pk %}">Open the designer</a>{% endif %}</div>
+        {% endif %}
+
+        <div class="st-group-label mb-2">What should it work on?</div>
+        <div class="row g-2 mb-3">
+          <div class="col-6 col-md-3"><div class="rn-src" data-src="upload"><i class="bi bi-upload"></i><div class="fw-semibold small mt-1">Upload a file</div><div class="small text-muted">PDF, Word, Excel, text…</div></div></div>
+          <div class="col-6 col-md-3"><div class="rn-src" data-src="paste"><i class="bi bi-clipboard"></i><div class="fw-semibold small mt-1">Paste text</div><div class="small text-muted">An email, a clause…</div></div></div>
+          <div class="col-6 col-md-3"><div class="rn-src" data-src="studio"><i class="bi bi-tools"></i><div class="fw-semibold small mt-1">From PDF tools</div><div class="small text-muted">{{ my_files|length }} file{{ my_files|length|pluralize }}</div></div></div>
+          <div class="col-6 col-md-3"><div class="rn-src" data-src="envelope"><i class="bi bi-envelope-paper"></i><div class="fw-semibold small mt-1">One of my envelopes</div><div class="small text-muted">Test an automatic agent</div></div></div>
+        </div>
+
+        <div class="rn-pane" data-pane="upload">
+          <label class="st-drop d-block mb-2" id="drop"><i class="bi bi-cloud-arrow-up"></i><div class="fw-semibold mt-1" id="dropName">Drop a file here, or click to choose</div><div class="small text-muted">Up to {{ max_mb }} MB</div>
+            <input type="file" name="document" id="file" class="d-none" accept=".pdf,.docx,.doc,.odt,.rtf,.txt,.md,.csv,.html,.htm,.xlsx,.xls,.ods,.pptx,.ppt,.png,.jpg,.jpeg"></label>
+        </div>
+        <div class="rn-pane" data-pane="paste">
+          <textarea class="form-control mb-2" name="text" rows="9" placeholder="Paste the text here">{{ posted.text }}</textarea>
+        </div>
+        <div class="rn-pane" data-pane="studio">
+          {% if my_files %}<select class="form-select mb-2" name="studio_file">{% for f in my_files %}<option value="{{ f.pk }}">{{ f.name }} · {{ f.page_count }} page{{ f.page_count|pluralize }}</option>{% endfor %}</select>
+          {% else %}<div class="st-empty py-3">Nothing in your PDF tools yet.</div>{% endif %}
+        </div>
+        <div class="rn-pane" data-pane="envelope">
+          {% if envelopes %}<select class="form-select mb-1" name="envelope">{% for e in envelopes %}<option value="{{ e.pk }}">{{ e.subject }} · {{ e.get_status_display }} · {{ e.created_at|date:"d M" }}{% if e.created_by_id == request.user.id %} · sent by me{% endif %}</option>{% endfor %}</select>
+          <div class="form-text mb-2">The agent runs as if this envelope had just {% if flow.trigger == 'envelope_received' %}come to you for signature{% elif flow.trigger == 'envelope_sent' %}been sent{% elif flow.trigger == 'envelope_completed' %}been completed{% else %}arrived{% endif %}, so sender, signers and envelope notes work.</div>
+          {% else %}<div class="st-empty py-3">You have no envelopes yet.</div>{% endif %}
+        </div>
+
+        <div class="p-3 rounded mt-2" style="background:#FFFBEB;border:1px solid #FDE68A">
+          <label class="form-check mb-0"><input class="form-check-input" type="checkbox" name="dry_run" value="1" {% if posted.dry_run or not posted %}checked{% endif %}>
+            <span class="fw-semibold">Dry run</span> — do all the thinking, but don't send any email, post any note or webhook, or save files. You'll see exactly what <em>would</em> have been sent.</label>
+        </div>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <span class="ag-chip {% if ai.offline %}off{% endif %}" title="{{ ai.detail }}"><i class="bi {% if ai.offline %}bi-cpu{% else %}bi-stars{% endif %}"></i>{{ ai.label }}</span>
+        <button class="btn btn-ag" {% if report.errors %}disabled{% endif %}><i class="bi bi-play-fill me-1"></i>Run the agent</button>
+      </div>
+    </form>
+  </div>
+  <div class="col-lg-4">
+    <div class="card"><div class="card-body">
+      <div class="st-group-label mb-2">The agent</div>
+      <div class="st-map ag-mini mb-2" id="map" style="height:200px"></div>
+      <div class="small text-muted"><i class="bi {{ flow.trigger_icon }} me-1"></i>{{ flow.trigger_label }}{% if flow.is_automatic %} — {% if flow.is_enabled %}<span class="text-success">switched on</span>{% else %}switched off{% endif %}{% endif %}</div>
+      {% if report.warnings %}<hr><div class="small">{% for w in report.warnings %}<div class="text-warning mb-1"><i class="bi bi-exclamation-triangle me-1"></i>{{ w.text }}</div>{% endfor %}</div>{% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_flow_map.html" %}
+<script>
+(function(){
+  const g = {{ graph_json|safe }}, TYPES = {{ card_types|to_json }};
+  FlowMap(document.getElementById("map"), {nodes: g.nodes.filter(n => n.type !== "note"), edges: g.edges}, {nodeTypes: TYPES, portLabels: {}, fit: true});
+  const src = document.getElementById("source");
+  function pick(k){ src.value = k; document.querySelectorAll(".rn-src").forEach(e => e.classList.toggle("on", e.dataset.src === k)); document.querySelectorAll(".rn-pane").forEach(e => e.classList.toggle("on", e.dataset.pane === k)); }
+  document.querySelectorAll(".rn-src").forEach(e => e.onclick = () => pick(e.dataset.src));
+  pick(src.value || "{% if flow.is_automatic and envelopes %}envelope{% else %}upload{% endif %}");
+  const drop = document.getElementById("drop"), file = document.getElementById("file"), name = document.getElementById("dropName");
+  file.onchange = () => { if (file.files[0]) name.textContent = file.files[0].name; };
+  ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => { if (e.dataTransfer.files[0]){ file.files = e.dataTransfer.files; name.textContent = file.files[0].name; } });
+  document.getElementById("runForm").addEventListener("submit", e => { const b = e.target.querySelector("button.btn-ag"); b.disabled = true; b.innerHTML = '<span class="ag-thinking me-2"><i></i><i></i><i></i></span>Starting…'; });
+})();
+</script>
+{% endblock %}

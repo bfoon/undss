@@ -1,164 +1,86 @@
-UPDATED FILES — NES: rename, sealing, tamper-evidence, witnessing, sole control
-For bfoon/undss, against base commit 6df96c1. Paths mirror your project.
+UPDATED FILES — NES Studio: Agentic flows + Policy card
+For bfoon/undss, against base commit df20e05. Paths mirror your project.
+This package contains everything (the first Agentic flows update included),
+so it can go onto a clean df20e05 or over the previous Agentic flows update.
+
+NEW IN THIS UPDATE
+  * Policy card: upload a policy as Word, PDF or text (or paste / link / reuse
+    another agent's). It is read into a rulebook that lives INSIDE the agent —
+    the file is not kept, and people you share or export the agent to get the
+    policy built in.
+  * Every document is checked rule by rule → Doesn't apply / Complies /
+    Warning / Breach, and each outcome can inform, warn, hold for a sign-off,
+    run another agent, start a Flow Studio workflow, or stop the run.
+    A rule can carry its own action (e.g. "over USD 50,000 → start the
+    Contracts Committee workflow").
+  * Knowledge link cards can take an uploaded file too.
+  * New ready-made agent: "Policy guard for documents I'm asked to sign".
+  * New run status "Stopped by a policy" (needs makemigrations, below).
 
 Copy in with:
     cp -r undss/. /path/to/your/undss/
+or apply the patch to a clean df20e05:
+    git apply agentic-flows.patch
 
 Then:
     docker compose build web
     docker compose exec web python manage.py makemigrations accounts
     docker compose exec web python manage.py migrate
-    docker compose exec web python manage.py esign_identity --install-guard
-    docker compose exec web python manage.py collectstatic --noinput
+    docker compose exec web python manage.py test accounts.tests_esign_agents     # 47 tests
 
-Read docs/nes-signing-identity.md first for the signature IDs and sole control.
-Delete this file afterwards; it is not part of the project.
+Everything works on the built-in offline engine. For Claude, add to
+web.environment in docker-compose.yml:
+    - AGENT_AI_PROVIDER=anthropic
+    - AGENT_AI_API_KEY=sk-ant-...
 
-----------------------------------------------------------------------
-NEW FILES (28)
-----------------------------------------------------------------------
-  docs/nes-signature-policy-v1.md
-  docs/nes-signing-identity.md
-  docs/nes-standards-un-undp.md
-  docs/nes-tsa-and-oid-setup.md
-  un_security_system/accounts/admin_esign_pades.py
-  un_security_system/accounts/audit_chain_esign.py
-  un_security_system/accounts/evidence_esign.py
-  un_security_system/accounts/identity_esign.py
-  un_security_system/accounts/management/commands/esign_identity.py
-  un_security_system/accounts/management/commands/esign_pades.py
-  un_security_system/accounts/management/commands/esign_witness.py
-  un_security_system/accounts/models_esign_identity.py
-  un_security_system/accounts/models_esign_pades.py
-  un_security_system/accounts/models_esign_witness.py
-  un_security_system/accounts/pades_esign.py
-  un_security_system/accounts/signature_id.py
-  un_security_system/accounts/urls_esign_identity.py
-  un_security_system/accounts/urls_esign_pades.py
-  un_security_system/accounts/urls_esign_witness.py
-  un_security_system/accounts/views_esign_identity.py
-  un_security_system/accounts/views_esign_pades.py
-  un_security_system/accounts/views_esign_witness.py
-  un_security_system/accounts/witness_esign.py
-  un_security_system/static/accounts/esign/identity.js
-  un_security_system/templates/accounts/esign/_seal_badge.html
-  un_security_system/templates/accounts/esign/identity.html
-  un_security_system/templates/accounts/esign/seal_verify.html
-  un_security_system/templates/accounts/esign/witness_status.html
+Read docs/agentic-flows.md (section 5 is the Policy card). Delete this file
+afterwards; it is not part of the project.
 
 ----------------------------------------------------------------------
-MODIFIED FILES (113)
+NEW FILES (22)
 ----------------------------------------------------------------------
-  install_esign_usage_dashboard.py
-  requirements.txt
-  un_security_system/accounts/admin.py
-  un_security_system/accounts/admin_esign.py
-  un_security_system/accounts/admin_esign_studio.py
-  un_security_system/accounts/api_mobile.py
-  un_security_system/accounts/api_mobile_booking.py
-  un_security_system/accounts/apps.py
-  un_security_system/accounts/context_processors.py
-  un_security_system/accounts/context_processors_esign.py
-  un_security_system/accounts/converters_esign.py
-  un_security_system/accounts/dashboard_esign_access.py
-  un_security_system/accounts/dashboard_esign_views.py
-  un_security_system/accounts/docgen_esign.py
-  un_security_system/accounts/docx_form_import_esign.py
-  un_security_system/accounts/esign_access.py
-  un_security_system/accounts/esign_condition_engine.py
-  un_security_system/accounts/esign_delivery.py
-  un_security_system/accounts/esign_formula_runtime.py
-  un_security_system/accounts/esign_notify.py
-  un_security_system/accounts/form_formula_esign.py
-  un_security_system/accounts/form_pdf_esign.py
-  un_security_system/accounts/management/commands/check_esign.py
-  un_security_system/accounts/management/commands/ensure_esign_dashboard.py
-  un_security_system/accounts/management/commands/ensure_esign_reports.py
-  un_security_system/accounts/management/commands/esign_studio_maintenance.py
-  un_security_system/accounts/middleware.py
-  un_security_system/accounts/models.py
-  un_security_system/accounts/models_esign.py
-  un_security_system/accounts/models_esign_docgen.py
-  un_security_system/accounts/models_esign_markup.py
-  un_security_system/accounts/models_esign_studio.py
-  un_security_system/accounts/pdf_delivery.py
-  un_security_system/accounts/pdf_tools_esign.py
-  un_security_system/accounts/report_bi_esign.py
-  un_security_system/accounts/services.py
-  un_security_system/accounts/studio_common_esign.py
-  un_security_system/accounts/studio_library_esign.py
+  docs/agentic-flows.md
+  un_security_system/accounts/admin_esign_agents.py
+  un_security_system/accounts/agent_ai_esign.py
+  un_security_system/accounts/agent_docs_esign.py
+  un_security_system/accounts/agent_engine_esign.py
+  un_security_system/accounts/agent_library_esign.py
+  un_security_system/accounts/agent_offline_esign.py
+  un_security_system/accounts/agent_policy_esign.py
+  un_security_system/accounts/agent_portability_esign.py
+  un_security_system/accounts/models_esign_agents.py
+  un_security_system/accounts/tests_esign_agents.py
+  un_security_system/accounts/urls_esign_agents.py
+  un_security_system/accounts/views_esign_agents.py
+  un_security_system/templates/accounts/esign/agents/_agent_styles.html
+  un_security_system/templates/accounts/esign/agents/_steps.html
+  un_security_system/templates/accounts/esign/agents/check.html
+  un_security_system/templates/accounts/esign/agents/designer.html
+  un_security_system/templates/accounts/esign/agents/home.html
+  un_security_system/templates/accounts/esign/agents/import.html
+  un_security_system/templates/accounts/esign/agents/run_detail.html
+  un_security_system/templates/accounts/esign/agents/run_new.html
+  un_security_system/templates/accounts/esign/email/agent_message.html
+
+----------------------------------------------------------------------
+MODIFIED FILES (8) — each change is a few added lines
+----------------------------------------------------------------------
+  un_security_system/accounts/models.py                 + import of models_esign_agents
+  un_security_system/accounts/admin.py                  + import of admin_esign_agents
+  un_security_system/accounts/urls.py                   + include("accounts.urls_esign_agents")
   un_security_system/accounts/templatetags/esign_studio_tags.py
-  un_security_system/accounts/trigger_engine_esign.py
-  un_security_system/accounts/urls.py
-  un_security_system/accounts/urls_esign_docgen.py
-  un_security_system/accounts/utils_esign.py
-  un_security_system/accounts/utils_esign_markup_pdf.py
-  un_security_system/accounts/views_esign.py
-  un_security_system/accounts/views_esign_docgen.py
-  un_security_system/accounts/views_esign_forms.py
-  un_security_system/accounts/views_esign_markup.py
-  un_security_system/accounts/views_esign_reports.py
-  un_security_system/accounts/views_esign_self.py
-  un_security_system/accounts/views_esign_studio.py
-  un_security_system/accounts/views_esign_workflow.py
-  un_security_system/accounts/workflow_engine_esign.py
-  un_security_system/accounts/workflow_notify_esign.py
-  un_security_system/accounts/workflow_portability_esign.py
-  un_security_system/static/accounts/esign/formula-builder.js
-  un_security_system/static/accounts/esign/formula.js
-  un_security_system/static/accounts/esign/report_builder.css
-  un_security_system/static/accounts/esign/report_builder.js
-  un_security_system/static/accounts/esign/vendor/THIRD-PARTY-NOTICES.txt
-  un_security_system/templates/accounts/assets/asset_management.html
-  un_security_system/templates/accounts/esign/_markup.html
-  un_security_system/templates/accounts/esign/_pdf_loader.html
-  un_security_system/templates/accounts/esign/base_public.html
-  un_security_system/templates/accounts/esign/dashboard.html
-  un_security_system/templates/accounts/esign/envelope_detail.html
-  un_security_system/templates/accounts/esign/envelope_new.html
-  un_security_system/templates/accounts/esign/envelope_prepare.html
-  un_security_system/templates/accounts/esign/markup_review.html
-  un_security_system/templates/accounts/esign/review.html
-  un_security_system/templates/accounts/esign/self_sign_new.html
-  un_security_system/templates/accounts/esign/sign.html
-  un_security_system/templates/accounts/esign/signature_studio.html
+                                                        + check/sign-off count for the nav badge
   un_security_system/templates/accounts/esign/studio/_nav.html
-  un_security_system/templates/accounts/esign/studio/_pdf_viewer.html
-  un_security_system/templates/accounts/esign/studio/_report_builder_css.html
-  un_security_system/templates/accounts/esign/studio/_report_builder_js.html
-  un_security_system/templates/accounts/esign/studio/_styles.html
-  un_security_system/templates/accounts/esign/studio/editor.html
-  un_security_system/templates/accounts/esign/studio/forms.html
-  un_security_system/templates/accounts/esign/studio/home.html
-  un_security_system/templates/accounts/esign/studio/import_flow.html
-  un_security_system/templates/accounts/esign/studio/public_base.html
-  un_security_system/templates/accounts/esign/studio/reports.html
-  un_security_system/templates/accounts/esign/studio/task.html
-  un_security_system/templates/accounts/esign/studio/tool.html
+                                                        + "Agentic flows" tab
   un_security_system/templates/accounts/esign/studio/workflows.html
-  un_security_system/templates/esign_analytics/dashboard.html
-  un_security_system/templates/esign_analytics/dashboard_report.html
-  un_security_system/templates/partials/_nav.html
-  un_security_system/templates/partials/_nav_items.html
-  un_security_system/templates/tenancy/sharing.html
-  un_security_system/templates/vehicles/packages/esig/document_upload.html
-  un_security_system/templates/vehicles/packages/esig/envelope_prepare.html
-  un_security_system/templates/vehicles/packages/package_detail.html
-  un_security_system/templates/vehicles/packages/package_step_action.html
-  un_security_system/tenancy/README.md
-  un_security_system/tenancy/catalog.py
-  un_security_system/tenancy/context_processors.py
-  un_security_system/tenancy/middleware.py
-  un_security_system/tenancy/mixins.py
-  un_security_system/tenancy/services.py
-  un_security_system/un_security_system/settings.py
-  un_security_system/vehicles/apps.py
-  un_security_system/vehicles/forms.py
-  un_security_system/vehicles/models.py
-  un_security_system/vehicles/models_mailflow.py
-  un_security_system/vehicles/package_esign.py
-  un_security_system/vehicles/package_studio.py
-  un_security_system/vehicles/signals.py
-  un_security_system/vehicles/views.py
-  unpass_mobile/lib/core/api.dart
-  unpass_mobile/lib/main.dart
+                                                        + "Agentic flows" button on the Workflows page
+  un_security_system/tenancy/catalog.py                 + feature "esign_agents" (NES Agentic flows)
+  un_security_system/un_security_system/settings.py     + AGENT_* settings block (env-driven)
+
+----------------------------------------------------------------------
+NOTES FROM TESTING THIS SNAPSHOT (not caused by this update)
+----------------------------------------------------------------------
+  accounts/view_asset_management.py imports view_asset_management_legacy.py,
+  and accounts/middleware.py imports accounts/catalog.py — neither file is in
+  the repo. Your server presumably has them; a fresh clone does not start
+  without them.

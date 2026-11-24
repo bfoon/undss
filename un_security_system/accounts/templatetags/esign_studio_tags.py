@@ -138,6 +138,7 @@ def esign_studio_summary(context):
 
         tasks = list(_my_open_tasks(user)[:6])
         return {
+            "agent_checks": _agent_checks(user),
             "tasks": tasks,
             "task_count": _my_open_tasks(user).count(),
             "open_runs": visible_runs(user).filter(status__in=WorkflowRun.OPEN_STATUSES).count(),
@@ -147,3 +148,17 @@ def esign_studio_summary(context):
         }
     except Exception:  # noqa: BLE001 - never break the dashboard
         return empty
+
+
+def _agent_checks(user):
+    """Agentic flows: Human checks waiting on this person. Never breaks the bar."""
+    email = (getattr(user, "email", "") or "").strip().lower()
+    if not email:
+        return 0
+    try:
+        from ..models_esign_agents import AgentRun, AgentStep
+
+        return AgentStep.objects.filter(status=AgentStep.STATUS_WAITING, run__status=AgentRun.STATUS_WAITING,
+                                        assignees__icontains=email).count()
+    except Exception:  # noqa: BLE001
+        return 0

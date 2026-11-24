@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/agents/import.html — bring in someone's .unpassagent, with a preview first #}
+{% load esign_studio_tags %}
+{% block title %}Import an agent | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/agents/_agent_styles.html" %}{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+  {% if not preview %}
+    <form class="card" method="post" enctype="multipart/form-data">{% csrf_token %}
+      <div class="card-body p-4">
+        <h5 class="fw-bold mb-1" style="color:#4C1D95"><i class="bi bi-box-arrow-in-down me-2"></i>Import an agent</h5>
+        <div class="text-muted small mb-3">Someone exported an agent as a <code>.unpassagent</code> file and sent it to you. You'll see what it does before anything is created; it arrives private and switched off.</div>
+        <label class="st-drop d-block mb-3" id="drop"><i class="bi bi-file-earmark-arrow-up"></i><div class="fw-semibold mt-1" id="dropName">Drop the .unpassagent file here, or click to choose</div>
+          <input type="file" name="package" id="file" class="d-none" accept=".unpassagent,.json,application/json"></label>
+        <details><summary class="small fw-semibold">…or paste its contents</summary>
+          <textarea class="form-control font-monospace small mt-2" name="pasted" rows="6" placeholder='{"kind": "unpass-agent-flow", …}'></textarea></details>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-between">
+        <a class="btn btn-link" href="{% url 'accounts:esign_agents' %}">Cancel</a>
+        <button class="btn btn-ag"><i class="bi bi-eye me-1"></i>Preview</button>
+      </div>
+    </form>
+  {% else %}
+    <form class="card" method="post">{% csrf_token %}
+      <input type="hidden" name="confirm" value="1">
+      <textarea name="pasted" class="d-none">{{ raw }}</textarea>
+      <div class="card-body p-4">
+        <div class="small text-muted mb-1"><i class="bi bi-box-arrow-in-down me-1"></i>Import preview{% if preview.exported_by %} · exported by {{ preview.exported_by }}{% endif %}{% if preview.exported_at %} · {{ preview.exported_at|slice:":10" }}{% endif %}</div>
+        <input class="form-control form-control-lg fw-bold mb-2" name="name" value="{{ preview.name }}" maxlength="150" style="color:#4C1D95">
+        {% if preview.description %}<div class="mb-3">{{ preview.description }}</div>{% endif %}
+        <div class="st-map mb-3" id="map" style="height:260px"></div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="st-group-label mb-1">Starts</div><div class="small mb-3">{{ trigger_label }}</div>
+            <div class="st-group-label mb-1">Cards</div>
+            <ul class="small ps-3">{% for n in preview.graph.nodes %}{% if n.type != 'start' and n.type != 'note' %}<li>{{ n.label }} <span class="text-muted">· {{ card_types|get_item:n.type|get_item:"label" }}</span></li>{% endif %}{% endfor %}</ul>
+          </div>
+          <div class="col-md-6">
+            {% if preview.needs %}<div class="alert alert-permanent alert-warning small"><strong>After importing, you'll need to:</strong><ul class="mb-0 ps-3">{% for x in preview.needs %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}
+            {% with links=preview.graph.nodes %}{% for n in links %}{% if n.type == 'link' and n.config.urls %}<div class="small mb-1"><i class="bi bi-link-45deg me-1"></i>It reads: {% for u in n.config.urls %}<code>{{ u }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}{% endfor %}{% endwith %}
+            <div class="small text-muted mt-2"><i class="bi bi-shield-check me-1"></i>It arrives private to you and switched off. Nothing runs until you start it or switch it on.</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer bg-white d-flex justify-content-between">
+        <a class="btn btn-link" href="{% url 'accounts:esign_agent_import' %}">Choose another file</a>
+        <button class="btn btn-ag"><i class="bi bi-check2 me-1"></i>Import and open the designer</button>
+      </div>
+    </form>
+  {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_flow_map.html" %}
+<script>
+(function(){
+  {% if preview %}
+  const g = {{ graph_json|safe }}, TYPES = {{ card_types|to_json }};
+  FlowMap(document.getElementById("map"), {nodes: g.nodes.filter(n => n.type !== "note"), edges: g.edges}, {nodeTypes: TYPES, portLabels: {}, fit: true});
+  {% else %}
+  const drop = document.getElementById("drop"), file = document.getElementById("file"), name = document.getElementById("dropName");
+  file.onchange = () => { if (file.files[0]) name.textContent = file.files[0].name; };
+  ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => { if (e.dataTransfer.files[0]){ file.files = e.dataTransfer.files; name.textContent = file.files[0].name; } });
+  {% endif %}
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/agents/run_detail.html — one run, live #}
+{% load esign_studio_tags %}
+{% block title %}{{ run.reference }} · {{ run.flow_name }} | Agentic flows | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/agents/_agent_styles.html" %}{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card ag-hero"><div class="card-body p-4 d-flex flex-wrap gap-3 align-items-center">
+      <div class="flex-grow-1 min-w-0">
+        <div class="small text-muted"><a href="{% url 'accounts:esign_agents' %}?tab=runs" class="text-decoration-none"><i class="bi bi-arrow-left me-1"></i>Runs</a> · <span class="es-token">{{ run.reference }}</span></div>
+        <h4 class="mb-1 fw-bold text-truncate" style="color:#4C1D95">{{ run.subject }}</h4>
+        <div class="small text-muted">
+          <i class="bi bi-stars me-1" style="color:#7C3AED"></i>{{ run.flow_name }}{% if run.flow and run.flow_version != run.flow.version %} <span class="text-muted">(v{{ run.flow_version }})</span>{% endif %}
+          · {% if run.trigger == 'manual' %}started by hand{% elif run.trigger == 'envelope_received' %}came for signature{% elif run.trigger == 'envelope_sent' %}envelope sent{% else %}envelope completed{% endif %}
+          {% if run.run_as %} · for {{ run.run_as.get_full_name|default:run.run_as.username }}{% endif %} · {{ run.created_at|date:"d M Y H:i" }}
+          {% if run.envelope %} · <a href="{% url 'accounts:esign_envelope_detail' run.envelope.pk %}"><i class="bi bi-envelope-paper"></i> {{ run.envelope.short_id }}</a>{% endif %}
+          {% if run.document %} · <a href="{% url 'accounts:esign_agent_run_document' run.pk %}"><i class="bi bi-paperclip"></i> {{ run.document_name }}</a>{% endif %}
+        </div>
+      </div>
+      <div class="text-end">
+        <span class="badge fs-6 bg-{{ run.status_color }}{% if run.status_color == 'warning' %} text-dark{% endif %}" id="runStatus">{{ run.get_status_display }}</span>
+        <div class="small text-muted mt-1" id="runMeta">{% if run.provider %}{{ run.provider }}{% endif %}{% if run.tokens_in or run.tokens_out %} · {{ run.tokens_in|add:run.tokens_out }} tokens{% endif %}{% if run.duration_seconds != None %} · {{ run.duration_seconds }} s{% endif %}</div>
+        <div class="d-flex gap-1 justify-content-end mt-2">
+          {% if can_manage and run.is_open %}<form method="post" action="{% url 'accounts:esign_agent_run_cancel' run.pk %}" onsubmit="return confirm('Cancel this run?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Cancel</button></form>{% endif %}
+          {% if can_manage and not run.is_open and run.flow %}<form method="post" action="{% url 'accounts:esign_agent_run_rerun' run.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-ag"><i class="bi bi-arrow-repeat me-1"></i>Run again</button></form>{% endif %}
+          {% if run.flow and run.flow.created_by_id == request.user.id %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_agent_design' run.flow.pk %}"><i class="bi bi-pencil me-1"></i>Designer</a>{% endif %}
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  {% if dry_run %}<div class="col-12"><div class="alert alert-permanent alert-warning mb-0 small"><i class="bi bi-eye me-1"></i><strong>Dry run.</strong> Nothing was emailed, posted or saved — open “What would have been sent” under each delivery card.</div></div>{% endif %}
+  <div class="col-12 {% if run.status != 'failed' and run.status != 'stopped' %}d-none{% endif %}" id="errBox"><div class="alert alert-permanent alert-danger mb-0 small"><i class="bi bi-exclamation-triangle me-1"></i><span id="errText">{{ run.error }}</span></div></div>
+
+  <div class="col-lg-5">
+    <div class="card"><div class="card-body">
+      <div class="st-group-label mb-2">The path it took</div>
+      <div class="st-map" id="map" style="height:340px"></div>
+      <div class="small text-muted mt-2"><span class="me-3"><i class="bi bi-square-fill" style="color:#16A34A"></i> done</span><span class="me-3"><i class="bi bi-square-fill" style="color:#F59E0B"></i> working / waiting</span><span><i class="bi bi-square-fill" style="color:#DC2626"></i> failed</span></div>
+      {% if emails %}<hr><div class="st-group-label mb-1">Emails sent</div>
+        {% for m in emails %}<div class="small mb-1"><i class="bi bi-envelope me-1"></i>{{ m.subject }} <span class="text-muted">→ {{ m.to|join:", " }}</span></div>{% endfor %}{% endif %}
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card"><div class="card-body">
+      <div class="st-group-label mb-3">What each card did</div>
+      <div id="steps">{% include "accounts/esign/agents/_steps.html" %}</div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_flow_map.html" %}
+<script>
+(function(){
+  const g = {{ graph_json|safe }}, TYPES = {{ card_types|to_json }}, PL = {{ port_labels|to_json }};
+  const graph = {nodes: (g.nodes || []).filter(n => n.type !== "note"), edges: g.edges || []};
+  const map = document.getElementById("map");
+  function draw(states){ FlowMap(map, graph, {nodeTypes: TYPES, portLabels: PL, states: states, fit: true}); }
+  draw({{ states_json|safe }});
+  let open = {% if run.is_open %}true{% else %}false{% endif %}, last = "{{ run.status }}", wait = 1200;
+  async function poll(){
+    if (!open) return;
+    try {
+      const r = await fetch("{% url 'accounts:esign_agent_run_status' run.pk %}", {headers: {"Accept": "application/json"}, credentials: "same-origin"});
+      const d = await r.json();
+      draw(d.states); document.getElementById("steps").innerHTML = d.html;
+      const b = document.getElementById("runStatus"); b.textContent = d.label; b.className = `badge fs-6 bg-${d.color}${d.color === "warning" ? " text-dark" : ""}`;
+      if (d.error){ document.getElementById("errText").textContent = d.error; document.getElementById("errBox").classList.toggle("d-none", !["failed", "stopped"].includes(d.status)); }
+      open = d.open;
+      if (d.status !== last && !d.open){ setTimeout(() => location.reload(), 600); return; }
+      last = d.status; wait = d.status === "waiting" ? 8000 : 1200;
+    } catch (e){ wait = Math.min(wait * 2, 15000); }
+    setTimeout(poll, wait);
+  }
+  if (open) setTimeout(poll, 700);
+})();
+</script>
+{% endblock %}

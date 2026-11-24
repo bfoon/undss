@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{# accounts/templates/accounts/esign/agents/home.html — my agents, shared agents, runs and the gallery #}
+{% load esign_studio_tags %}
+{% block title %}Agentic flows | NES | UN PASS{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/agents/_agent_styles.html" %}
+<style>
+  .nav-tabs .nav-link{ color:#475569; } .nav-tabs .nav-link.active{ color:#4C1D95; font-weight:600; }
+  .ag-tpl{ cursor:pointer; } .ag-tpl.on{ border-color:#7C3AED!important; box-shadow:0 0 0 2px rgba(124,58,237,.25); }
+  .ag-check{ border-left:4px solid #F59E0B; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "accounts/esign/studio/_nav.html" %}
+
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card ag-hero">
+      <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+          <h4 class="mb-1 fw-bold"><i class="bi bi-stars me-2 ag-spark"></i><span style="color:#4C1D95">Agentic flows</span></h4>
+          <div class="text-muted">Drag AI cards onto a canvas: summarise each document that comes for signature, check it against a policy, convert it, decide where it goes — and tell the right people.</div>
+          <div class="mt-2"><span class="ag-chip {% if ai.offline %}off{% endif %}" title="{{ ai.detail }}"><i class="bi {% if ai.offline %}bi-cpu{% else %}bi-stars{% endif %}"></i>{{ ai.label }}</span></div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-outline-ag" href="{% url 'accounts:esign_agent_import' %}"><i class="bi bi-box-arrow-in-down me-1"></i>Import</a>
+          <button class="btn btn-ag" data-bs-toggle="modal" data-bs-target="#newAgent"><i class="bi bi-plus-circle me-1"></i>New agent</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if checks %}
+  <div class="col-12">
+    <div class="card ag-check">
+      <div class="card-body py-3">
+        <div class="fw-semibold mb-2"><i class="bi bi-person-check me-1 text-warning"></i>{{ checks|length }} agent{{ checks|length|pluralize }} waiting for your check</div>
+        <div class="list-group list-group-flush">
+          {% for s in checks %}
+          <div class="list-group-item px-0 d-flex flex-wrap align-items-center gap-2">
+            <div class="flex-grow-1 min-w-0"><div class="fw-semibold text-truncate">{{ s.node_label }} · {{ s.run.flow_name }}</div>
+              <div class="small text-muted">{{ s.run.subject }} · {{ s.started_at|timesince }} ago · <span class="es-token">{{ s.run.reference }}</span>{% if s.due_at %} · due {{ s.due_at|date:"d M H:i" }}{% endif %}</div></div>
+            <a class="btn btn-sm btn-ag" href="{% url 'accounts:esign_agent_check' s.token %}"><i class="bi bi-check2-circle me-1"></i>Review</a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="col-6 col-lg-3"><div class="card es-kpi h-100" style="border-left-color:#7C3AED"><div class="card-body"><div class="text-muted small">My agents</div><div class="h3 fw-bold mb-0">{{ counts.mine }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card es-kpi h-100" style="border-left-color:#10B981"><div class="card-body"><div class="text-muted small">Running automatically for me</div><div class="h3 fw-bold mb-0">{{ counts.automations }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card es-kpi h-100"><div class="card-body"><div class="text-muted small">Runs in the last 7 days</div><div class="h3 fw-bold mb-0">{{ counts.runs_week }}</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card es-kpi warn h-100"><div class="card-body"><div class="text-muted small">Waiting for my check</div><div class="h3 fw-bold mb-0">{{ counts.checks }}</div></div></div></div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-white pb-0">
+        <ul class="nav nav-tabs card-header-tabs">
+          <li class="nav-item"><a class="nav-link {% if tab == 'mine' %}active{% endif %}" href="?tab=mine"><i class="bi bi-stars me-1"></i>My agents</a></li>
+          <li class="nav-item"><a class="nav-link {% if tab == 'shared' %}active{% endif %}" href="?tab=shared"><i class="bi bi-people me-1"></i>Shared with me {% if counts.shared %}<span class="badge rounded-pill bg-light text-dark border">{{ counts.shared }}</span>{% endif %}</a></li>
+          <li class="nav-item"><a class="nav-link {% if tab == 'runs' %}active{% endif %}" href="?tab=runs"><i class="bi bi-activity me-1"></i>Runs</a></li>
+          <li class="nav-item"><a class="nav-link {% if tab == 'gallery' %}active{% endif %}" href="?tab=gallery"><i class="bi bi-grid-1x2 me-1"></i>Ready-made</a></li>
+        </ul>
+      </div>
+
+      {% if tab == 'mine' %}
+      <div class="card-body es-scroll" tabindex="0" role="region" aria-label="My agents">
+        <div class="row g-3">
+          {% for f in mine %}
+          <div class="col-md-6 col-xl-4">
+            <div class="ag-card p-3 h-100 d-flex flex-column">
+              <div class="d-flex justify-content-between gap-2 align-items-start">
+                <div class="min-w-0"><div class="fw-semibold text-truncate">{{ f.name }}</div>
+                  <div class="small text-muted"><i class="bi {{ f.trigger_icon }} me-1"></i>{{ f.trigger_label }}</div></div>
+                <span class="badge bg-light text-dark border text-nowrap">{% if f.share_scope == 'office' %}<i class="bi bi-building"></i> CO{% elif f.share_scope == 'agency' %}<i class="bi bi-globe2"></i> Agency{% elif f.share_total %}<i class="bi bi-people"></i> {{ f.share_total }}{% else %}<i class="bi bi-lock"></i> Only me{% endif %}</span>
+              </div>
+              {% if f.description %}<div class="small text-muted mt-1" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ f.description }}</div>{% endif %}
+              <div class="st-map ag-mini my-2" data-graph='{{ f.graph|to_json|force_escape }}'></div>
+              <div class="small text-muted mb-2">{{ f.card_count }} card{{ f.card_count|pluralize }} · v{{ f.version }} · {{ f.run_total }} run{{ f.run_total|pluralize }}{% if f.imported_from %} · <i class="bi bi-box-arrow-in-down"></i> imported{% endif %}</div>
+              <div class="mt-auto d-flex flex-wrap gap-1 align-items-center">
+                <a class="btn btn-sm btn-ag" href="{% url 'accounts:esign_agent_run_new' f.pk %}"><i class="bi bi-play-fill"></i> Run</a>
+                <a class="btn btn-sm btn-outline-ag" href="{% url 'accounts:esign_agent_design' f.pk %}"><i class="bi bi-pencil"></i> Design</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_agent_export' f.pk %}" title="Export .unpassagent"><i class="bi bi-box-arrow-up"></i></a>
+                <form method="post" action="{% url 'accounts:esign_agent_duplicate' f.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" title="Duplicate"><i class="bi bi-copy"></i></button></form>
+                <form method="post" action="{% url 'accounts:esign_agent_delete' f.pk %}" class="d-inline" onsubmit="return confirm('{% if f.run_total %}Archive this agent? Its runs are kept.{% else %}Delete this agent?{% endif %}')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button></form>
+                {% if f.is_automatic %}
+                <form method="post" action="{% url 'accounts:esign_agent_toggle' f.pk %}" class="ms-auto">{% csrf_token %}<input type="hidden" name="on" value="{% if f.is_enabled %}0{% else %}1{% endif %}">
+                  <button class="btn btn-sm p-0 border-0 bg-transparent" title="{% if f.is_enabled %}Switch off{% else %}Switch on{% endif %}">{% if f.is_enabled %}<span class="ag-chip live"><span class="dot"></span>On</span>{% else %}<span class="ag-chip off">Off</span>{% endif %}</button></form>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12"><div class="st-empty"><i class="bi bi-stars"></i>No agents yet. Start from a ready-made one, or describe what you want and it is drawn for you.
+            <div class="mt-2"><button class="btn btn-sm btn-ag" data-bs-toggle="modal" data-bs-target="#newAgent"><i class="bi bi-plus-circle me-1"></i>New agent</button></div></div></div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% elif tab == 'shared' %}
+      <div class="card-body es-scroll" tabindex="0" role="region" aria-label="Shared with me">
+        {% for f in shared %}
+        <div class="ag-card p-3 mb-2 d-flex flex-wrap align-items-center gap-3">
+          <div class="st-map ag-mini d-none d-md-block" style="width:220px;height:90px" data-graph='{{ f.graph|to_json|force_escape }}'></div>
+          <div class="flex-grow-1 min-w-0">
+            <div class="fw-semibold">{{ f.name }}</div>
+            <div class="small text-muted">by {{ f.created_by.get_full_name|default:f.created_by.username }} · <i class="bi {{ f.trigger_icon }}"></i> {{ f.trigger_label }} · {{ f.card_count }} cards
+              {% if f.share_scope == 'office' %}· <i class="bi bi-building"></i> whole CO{% elif f.share_scope == 'agency' %}· <i class="bi bi-globe2"></i> whole agency{% endif %}</div>
+            {% if f.description %}<div class="small mt-1">{{ f.description|truncatechars:220 }}</div>{% endif %}
+          </div>
+          <div class="d-flex flex-wrap gap-1 align-items-center">
+            {% if f.is_automatic %}
+              <form method="post" action="{% url 'accounts:esign_agent_subscribe' f.pk %}">{% csrf_token %}
+                {% if f.my_sub and f.my_sub.is_active %}<input type="hidden" name="on" value="0"><button class="btn btn-sm btn-outline-success" title="Stop running it on my documents"><i class="bi bi-toggle-on me-1"></i>On for my documents</button>
+                {% else %}<input type="hidden" name="on" value="1"><button class="btn btn-sm btn-outline-ag" title="Run it automatically on my documents"><i class="bi bi-toggle-off me-1"></i>Use on my documents</button>{% endif %}
+              </form>
+            {% endif %}
+            <a class="btn btn-sm btn-ag" href="{% url 'accounts:esign_agent_run_new' f.pk %}"><i class="bi bi-play-fill"></i> Run</a>
+            {% if f.i_can_edit %}<a class="btn btn-sm btn-outline-ag" href="{% url 'accounts:esign_agent_design' f.pk %}"><i class="bi bi-pencil"></i> Design</a>{% endif %}
+            <form method="post" action="{% url 'accounts:esign_agent_duplicate' f.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary"><i class="bi bi-copy me-1"></i>My own copy</button></form>
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:esign_agent_export' f.pk %}" title="Export"><i class="bi bi-box-arrow-up"></i></a>
+          </div>
+        </div>
+        {% empty %}
+        <div class="st-empty"><i class="bi bi-people"></i>Nothing shared with you yet. Agents shared with your country office, your agency or you by name show up here.</div>
+        {% endfor %}
+      </div>
+
+      {% elif tab == 'runs' %}
+      <div class="card-body border-bottom py-2">
+        <form class="row g-2" method="get"><input type="hidden" name="tab" value="runs">
+          <div class="col-md-5"><input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" placeholder="Agent, document or reference"></div>
+          <div class="col-md-4"><select class="form-select form-select-sm" name="status" onchange="this.form.submit()"><option value="">All statuses</option><option value="open" {% if status == 'open' %}selected{% endif %}>Still going</option>
+            {% for k, label in run_statuses %}<option value="{{ k }}" {% if status == k %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+          <div class="col-md-3"><button class="btn btn-sm btn-outline-primary w-100">Filter</button></div>
+        </form>
+      </div>
+      <div class="table-responsive es-scroll" tabindex="0" role="region" aria-label="Runs">
+        <table class="table align-middle mb-0">
+          <thead class="small text-muted"><tr><th>Document</th><th class="d-none d-md-table-cell">Agent</th><th>How it started</th><th>Status</th><th class="text-end">When</th></tr></thead>
+          <tbody>
+          {% for r in runs %}
+            <tr class="es-row" style="cursor:pointer" onclick="location='{% url 'accounts:esign_agent_run' r.pk %}'">
+              <td><div class="fw-semibold text-truncate" style="max-width:340px">{{ r.subject }}</div><div class="es-token">{{ r.reference }}{% if r.run_as %} · for {{ r.run_as.get_full_name|default:r.run_as.username }}{% endif %}{% if r.is_test %} · <span class="text-warning">dry run</span>{% endif %}</div></td>
+              <td class="small d-none d-md-table-cell">{{ r.flow_name }}</td>
+              <td class="small text-muted">{% if r.trigger == 'manual' %}<i class="bi bi-hand-index-thumb"></i> By hand{% elif r.trigger == 'envelope_received' %}<i class="bi bi-inbox"></i> Came for signature{% elif r.trigger == 'envelope_sent' %}<i class="bi bi-send"></i> Sent{% else %}<i class="bi bi-patch-check"></i> Completed{% endif %}</td>
+              <td><span class="badge bg-{{ r.status_color }}{% if r.status_color == 'warning' %} text-dark{% endif %}">{{ r.get_status_display }}</span></td>
+              <td class="text-end small text-muted text-nowrap">{{ r.created_at|date:"d M Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="st-empty"><i class="bi bi-activity"></i>No runs{% if q or status %} match{% else %} yet{% endif %}.</div></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% else %}
+      <div class="card-body es-scroll" tabindex="0" role="region" aria-label="Ready-made agents">
+        <div class="row g-3">
+          {% for t in templates %}{% if t.key != 'blank' %}
+          <div class="col-md-6 col-xl-4">
+            <form method="post" action="{% url 'accounts:esign_agent_new' %}" class="ag-card p-3 h-100 d-flex flex-column">{% csrf_token %}
+              <input type="hidden" name="template" value="{{ t.key }}">
+              <div class="fw-semibold"><i class="bi {{ t.icon }} me-1" style="color:#7C3AED"></i>{{ t.name }}</div>
+              <div class="small text-muted mb-2">{{ t.description }}</div>
+              <div class="st-map ag-mini mb-2" data-graph='{{ t.graph|to_json|force_escape }}'></div>
+              <button class="btn btn-sm btn-outline-ag mt-auto"><i class="bi bi-pencil me-1"></i>Use this</button>
+            </form>
+          </div>
+          {% endif %}{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="newAgent" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <form class="modal-content" method="post" action="{% url 'accounts:esign_agent_new' %}" id="newForm">
+      {% csrf_token %}
+      <div class="modal-header"><h5 class="modal-title" style="color:#4C1D95"><i class="bi bi-stars me-2"></i>New agent</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="p-3 rounded mb-3" style="background:#F5F3FF;border:1px solid #DDD6FE">
+          <label class="form-label fw-semibold mb-1" for="describe"><i class="bi bi-magic me-1" style="color:#7C3AED"></i>Describe it, and it's drawn for you</label>
+          <textarea class="form-control mb-2" id="describe" rows="3" maxlength="3000" placeholder="e.g. When a document comes to me for signature, summarize it and check it against https://… then email me the issues."></textarea>
+          <div class="d-flex align-items-center gap-2"><button type="button" class="btn btn-sm btn-ag" id="describeGo"><span class="ag-thinking d-none me-1" id="describeSpin"><i></i><i></i><i></i></span>Draw it</button><span class="small text-muted" id="describeMsg"></span></div>
+          <div class="st-map ag-mini mt-2 d-none" id="describeMap" style="height:150px"></div>
+          <input type="hidden" name="graph" id="composedGraph"><input type="hidden" name="compose_name" id="composedName"><input type="hidden" name="description" id="composedDesc">
+        </div>
+        <div class="mb-3"><label class="form-label small fw-semibold">Name</label><input class="form-control" name="name" placeholder="Leave empty to use the template's name" maxlength="150"></div>
+        <div class="st-group-label mb-2">…or start from</div>
+        <input type="hidden" name="template" id="tplKey" value="blank">
+        <div class="row g-3">
+          {% for t in templates %}
+          <div class="col-md-6 col-lg-4">
+            <div class="ag-card p-2 h-100 ag-tpl {% if forloop.first %}on{% endif %}" data-key="{{ t.key }}" tabindex="0">
+              <div class="st-map ag-mini mb-2" data-graph='{{ t.graph|to_json|force_escape }}'></div>
+              <div class="px-1"><div class="fw-semibold"><i class="bi {{ t.icon }} me-1" style="color:#7C3AED"></i>{{ t.name }}</div><div class="small text-muted">{{ t.description }}</div></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-link" data-bs-dismiss="modal">Cancel</button><button class="btn btn-ag"><i class="bi bi-pencil me-1"></i>Open in the designer</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "accounts/esign/studio/_net.html" %}
+{% include "accounts/esign/studio/_flow_map.html" %}
+<script>
+(function(){
+  const TYPES = {{ card_types|to_json }};
+  const strip = g => ({nodes: (g.nodes || []).filter(n => n.type !== "note"), edges: g.edges || []});
+  function draw(){ document.querySelectorAll(".ag-mini[data-graph]").forEach(el => { if (el.dataset.drawn || !el.offsetParent) return; try { FlowMap(el, strip(JSON.parse(el.dataset.graph)), {nodeTypes: TYPES, portLabels: {}, fit: true}); el.dataset.drawn = 1; } catch(e){} }); }
+  draw();
+  const modal = document.getElementById("newAgent");
+  modal.addEventListener("shown.bs.modal", draw);
+  document.querySelectorAll(".ag-tpl").forEach(card => {
+    const pick = () => { document.querySelectorAll(".ag-tpl").forEach(c => c.classList.remove("on")); card.classList.add("on"); document.getElementById("tplKey").value = card.dataset.key; document.getElementById("composedGraph").value = ""; };
+    card.addEventListener("click", pick); card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); pick(); } });
+    card.addEventListener("dblclick", () => { pick(); document.getElementById("newForm").submit(); });
+  });
+  document.getElementById("describeGo").onclick = async () => {
+    const btn = document.getElementById("describeGo"), spin = document.getElementById("describeSpin"), msg = document.getElementById("describeMsg"), text = document.getElementById("describe").value;
+    btn.disabled = true; spin.classList.remove("d-none"); msg.textContent = "";
+    try {
+      const d = await StudioNet.postJSON("{% url 'accounts:esign_agent_compose' %}", {description: text});
+      document.getElementById("composedGraph").value = JSON.stringify(d.graph);
+      document.getElementById("composedName").value = d.name || "";
+      document.getElementById("composedDesc").value = text;
+      document.querySelectorAll(".ag-tpl").forEach(c => c.classList.remove("on"));
+      const map = document.getElementById("describeMap"); map.classList.remove("d-none"); delete map.dataset.drawn;
+      FlowMap(map, strip(d.graph), {nodeTypes: TYPES, portLabels: {}, fit: true});
+      msg.innerHTML = (d.how === "ai" ? "Drawn by AI." : "Drawn by the built-in parser.") + " Open it in the designer to finish it.";
+    } catch (e){ msg.textContent = e.message; msg.classList.add("text-danger"); }
+    finally { btn.disabled = false; spin.classList.add("d-none"); }
+  };
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends base_template %}
+{# accounts/templates/accounts/esign/agents/check.html — a Human check: approve, edit or reject what the agent produced #}
+{% block title %}{{ step.node_label }} — {{ run.flow_name }}{% endblock %}
+{% block extra_css %}{% include "accounts/esign/studio/_styles.html" %}{% include "accounts/esign/agents/_agent_styles.html" %}{% endblock %}
+
+{% block content %}
+{% if request.user.is_authenticated %}{% include "accounts/esign/studio/_nav.html" %}{% endif %}
+
+<div class="card ag-hero mb-4"><div class="card-body p-4 d-flex flex-wrap gap-3 align-items-center">
+  <span class="d-inline-flex align-items-center justify-content-center rounded-3" style="width:52px;height:52px;background:#fff;color:#D97706;font-size:1.5rem;border:1px solid #FDE68A"><i class="bi bi-person-check"></i></span>
+  <div class="flex-grow-1 min-w-0">
+    <div class="small text-uppercase fw-bold text-muted" style="letter-spacing:.06em">{% if node.type == 'policy' %}Policy sign-off{% else %}Human check{% endif %} · agent “{{ run.flow_name }}”</div>
+    <h4 class="mb-0 fw-bold" style="color:#4C1D95">{{ step.node_label }}</h4>
+    <div class="text-muted small">{{ run.subject }} · <span class="es-token">{{ run.reference }}</span>{% if run.run_as %} · for {{ run.run_as.get_full_name|default:run.run_as.username }}{% endif %}</div>
+  </div>
+  {% if can_open_run %}<a class="btn btn-sm btn-outline-ag" href="{% url 'accounts:esign_agent_run' run.pk %}"><i class="bi bi-diagram-3 me-1"></i>Whole run</a>{% endif %}
+</div></div>
+
+{% if step.status != 'waiting' %}
+  <div class="alert alert-permanent alert-{{ step.status_color }} d-flex gap-2 align-items-center"><i class="bi bi-info-circle fs-4"></i>
+    <div><strong>{% if step.port == 'approved' %}Approved{% elif step.port == 'rejected' %}Rejected{% else %}{{ step.get_status_display }}{% endif %}</strong>{% if step.decided_name %} by {{ step.decided_name }}{% endif %}{% if step.decided_at %} on {{ step.decided_at|date:"d M Y H:i" }}{% endif %}.
+      {% if step.decision_comment %}<div class="small">“{{ step.decision_comment }}”</div>{% endif %}
+      <div class="small">Nothing more is needed from you. The run is <strong>{{ run.get_status_display|lower }}</strong>.</div></div></div>
+{% endif %}
+
+<form method="post">{% csrf_token %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    {% if node.type == 'policy' %}
+      <div class="alert alert-permanent alert-warning small"><i class="bi bi-journal-check me-1"></i>The document was checked against <strong>{{ cfg.title|default:"a policy" }}</strong>{% if cfg.version %} {{ cfg.version }}{% endif %} and the result was <strong>{{ step.output_data.outcome_label }}</strong>.
+        {% if step.output_data.signoff_message %}<div class="mt-1">{{ step.output_data.signoff_message }}</div>{% endif %}
+        <div class="mt-1">Signing off accepts it and lets the agent carry on. Declining stops the agent.</div></div>
+    {% elif cfg.context %}<div class="alert alert-permanent alert-info small"><i class="bi bi-chat-left-quote me-1"></i>{{ cfg.context|linebreaksbr }}</div>{% endif %}
+    <div class="card"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="st-group-label">{% if node.type == 'policy' %}What the agent found{% else %}What the agent produced{% endif %}{% if step.output_data.source and step.output_data.source != 'document' %} — {{ step.output_data.source }}{% endif %}</div>
+        {% if step.status == 'waiting' and cfg.allow_edit %}<span class="small text-muted"><i class="bi bi-pencil me-1"></i>You can correct it before approving</span>{% endif %}
+      </div>
+      {% if step.status == 'waiting' and cfg.allow_edit %}
+        <textarea class="form-control ad-ctx" name="text" rows="16" style="font-size:.9rem">{{ step.output_text }}</textarea>
+      {% else %}
+        <div class="ag-out">{{ step.output_text }}</div>
+      {% endif %}
+      <div class="small text-muted mt-2"><i class="bi bi-stars me-1" style="color:#7C3AED"></i>Written by AI — compare it with the document before you approve.</div>
+    </div></div>
+    {% if earlier %}
+    <div class="card mt-3"><div class="card-body">
+      <div class="st-group-label mb-2">Earlier in this run</div>
+      {% for label, text in earlier %}<details class="mb-2"><summary class="small fw-semibold">{{ label }}</summary><div class="ag-out mt-1">{{ text }}</div></details>{% endfor %}
+    </div></div>
+    {% endif %}
+  </div>
+  <div class="col-lg-4">
+    <div class="card" style="position:sticky;top:1rem"><div class="card-body">
+      {% if step.status == 'waiting' %}
+        <label class="form-label small fw-semibold">Comment <span class="text-muted fw-normal">(optional)</span></label>
+        <textarea class="form-control mb-3" name="comment" rows="3" maxlength="4000" placeholder="Why — it's kept with the run"></textarea>
+        <div class="d-grid gap-2">
+          {% if node.type == 'policy' %}
+          <button class="btn btn-success" name="action" value="approve"><i class="bi bi-check2-circle me-1"></i>Sign off — carry on</button>
+          <button class="btn btn-outline-danger" name="action" value="reject" onclick="return confirm('Decline? The agent stops here.')"><i class="bi bi-sign-stop me-1"></i>Don't sign off — stop the agent</button>
+          {% else %}
+          <button class="btn btn-success" name="action" value="approve"><i class="bi bi-check2-circle me-1"></i>Approve — carry on</button>
+          <button class="btn btn-outline-danger" name="action" value="reject" onclick="return confirm('Reject? The agent will take its Rejected path.')"><i class="bi bi-x-octagon me-1"></i>Reject</button>
+          {% endif %}
+        </div>
+        {% if step.due_at %}<div class="small text-muted mt-3"><i class="bi bi-clock me-1"></i>Please decide by {{ step.due_at|date:"d M Y H:i" }}.</div>{% endif %}
+      {% endif %}
+      {% if has_document and can_open_run %}<hr><a class="btn btn-sm btn-outline-secondary w-100" href="{% url 'accounts:esign_agent_run_document' run.pk %}"><i class="bi bi-paperclip me-1"></i>Open the document</a>{% endif %}
+      {% if run.envelope and can_open_run %}<a class="btn btn-sm btn-outline-secondary w-100 mt-2" href="{% url 'accounts:esign_envelope_detail' run.envelope.pk %}"><i class="bi bi-envelope-paper me-1"></i>Open the envelope</a>{% endif %}
+    </div></div>
+  </div>
+</div>
+</form>
+{% endblock %}

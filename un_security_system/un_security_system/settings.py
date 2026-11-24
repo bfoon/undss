@@ -616,6 +616,31 @@ ESIGN_PDF_FONT_BOLD = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 )
 
+# ---------------------------------------------------------------------
+# NES STUDIO — AGENTIC FLOWS (docs/agentic-flows.md)
+# ---------------------------------------------------------------------
+
+# Which model answers. "anthropic" (Claude), "openai" (OpenAI or any
+# OpenAI-compatible server: Azure OpenAI, Ollama, vLLM…) or "offline".
+# Empty = Claude when a key is set, otherwise the built-in offline engine.
+AGENT_AI_PROVIDER = os.getenv("AGENT_AI_PROVIDER", "")
+AGENT_AI_API_KEY = os.getenv("AGENT_AI_API_KEY", "")
+AGENT_AI_MODEL = os.getenv("AGENT_AI_MODEL", "")            # e.g. claude-sonnet-5-5
+AGENT_AI_BASE_URL = os.getenv("AGENT_AI_BASE_URL", "")      # e.g. http://ollama:11434/v1
+AGENT_AI_AUTH_HEADER = os.getenv("AGENT_AI_AUTH_HEADER", "bearer")   # "api-key" for Azure OpenAI
+AGENT_AI_TIMEOUT = int(os.getenv("AGENT_AI_TIMEOUT", "90"))
+AGENT_AI_MAX_INPUT_CHARS = int(os.getenv("AGENT_AI_MAX_INPUT_CHARS", "60000"))
+
+# "thread" runs agents off the request; "sync" runs them inline (tests).
+AGENT_RUN_MODE = os.getenv("AGENT_RUN_MODE", "thread")
+AGENT_MAX_RUNS_PER_HOUR = int(os.getenv("AGENT_MAX_RUNS_PER_HOUR", "120"))
+AGENT_ENVELOPE_TRIGGERS = os.getenv("AGENT_ENVELOPE_TRIGGERS", "True") == "True"
+
+# Knowledge links and webhooks never reach internal addresses unless listed.
+AGENT_LINK_ALLOWED_HOSTS = [h.strip() for h in os.getenv("AGENT_LINK_ALLOWED_HOSTS", "").split(",") if h.strip()]
+AGENT_LINK_TIMEOUT = int(os.getenv("AGENT_LINK_TIMEOUT", "20"))
+
+
 # Canonical public URL used when links are generated outside a browser request
 # (for example Asset-triggered workflows, reminders and background emails).
 SITE_URL = os.getenv("SITE_URL", "https://unpass.gm").strip().rstrip("/")
