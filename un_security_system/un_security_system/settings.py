@@ -185,6 +185,13 @@ DATABASES = {
             'DB_PORT',
             default='5432',
         ),
+
+        # Keep connections for a minute instead of opening one per request,
+        # and check each is still alive before reuse — so a database restart
+        # costs one retried query, not a burst of 500s. The worker and beat
+        # processes are long-lived, which is where this matters most.
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
@@ -751,3 +758,44 @@ ESIGN_PDF_FONT_BOLD = (
 SITE_URL = os.getenv("SITE_URL", "https://unpass.gm").strip().rstrip("/")
 if SITE_URL and not SITE_URL.lower().startswith(("http://", "https://")):
     SITE_URL = "https://" + SITE_URL
+
+# ---------------------------------------------------------------------
+# SCHEDULED JOBS (Celery worker + beat)
+# ---------------------------------------------------------------------
+# Every job that runs on a clock is listed in un_security_system/schedule.py:
+# envelope expiry and reminders, expiry warnings, workflow reminders, archival
+# timestamp refresh, witnessing, audits and retention. docker-compose.yml
+# runs a `worker` and a `beat` container to execute them.
+#
+# Before this, none of them ran — the tasks existed but there was no Celery
+# app, no broker setting and no worker. Check it is all alive with:
+#
+#     python manage.py unpass_doctor
+#
+# Redis database 1, so the queue never shares keys with the Channels layer.
+CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://redis:6379/1")
+CELERY_RESULT_BACKEND = None          # jobs record their own heartbeat
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+CELERY_TASK_ACKS_LATE = True          # a job killed mid-run is retried...
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # ...and never hoarded by one worker
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+from un_security_system.schedule import beat_schedule as _beat_schedule  # noqa: E402
+
+try:
+    CELERY_BEAT_SCHEDULE = _beat_schedule()
+except Exception:  # Celery not installed: the web process still starts.
+    CELERY_BEAT_SCHEDULE = {}
+
+# Where heartbeats and "already warned" markers are kept. Defaults to the
+# broker. Point it at a Redis with persistence if the broker has none.
+UNPASS_STATE_REDIS_URL = config("UNPASS_STATE_REDIS_URL", default="")
+
+# Days before expiry at which parking cards, staff ID cards and module
+# licences are warned about. 0 is the day itself.
+UNPASS_EXPIRY_THRESHOLDS = (30, 14, 7, 1, 0)
+UNPASS_EXPIRY_PARKING_ROLES = ["lsa", "soc"]

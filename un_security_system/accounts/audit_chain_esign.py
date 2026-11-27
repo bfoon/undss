@@ -143,6 +143,31 @@ def chain_enabled() -> bool:
     return bool(getattr(settings, "ESIGN_AUDIT_CHAIN", True))
 
 
+def _chain_head(rows) -> str:
+    """
+    The entry_hash at the end of a chain, found by its LINKS.
+
+    The head is the chained entry nothing else points to. It used to be "the
+    chained entry with the highest id", which is the same thing only while
+    entries are chained in the order their rows were inserted. Two events on
+    one envelope at the same moment break that: the second insert can take
+    the lock first. Picking the head by id then hands the next entry the
+    wrong predecessor — a fork, and a false tamper alarm on an envelope
+    nobody touched. Reproduced on PostgreSQL with eight concurrent writers.
+
+    `rows` is an iterable of (id, prev_hash, entry_hash) for chained entries.
+    If there is somehow more than one tip (a trail damaged before this fix),
+    the newest is extended so the damage is not compounded — and the verifier
+    still reports it.
+    """
+    rows = list(rows)
+    referenced = {prev for _id, prev, _h in rows if prev}
+    tips = [(pk, h) for pk, _prev, h in rows if h not in referenced]
+    if not tips:
+        return ""
+    return max(tips)[1]
+
+
 def chain_event(event) -> bool:
     """
     Link `event` to the end of its envelope's chain and persist the hashes.
@@ -153,6 +178,13 @@ def chain_event(event) -> bool:
     the same envelope cannot both claim the same predecessor and fork the
     chain. The lock is per-envelope, so it does not serialise unrelated
     signing activity.
+
+    Whoever holds the lock also chains every OTHER entry of this envelope that
+    has been written but not yet chained, in id order, before its own. So when
+    eight requests insert at once and take the lock in a different order, the
+    chain still comes out in insertion order — not because the verifier
+    needs that any more (it follows links), but because a chain that reads in
+    the order things happened is the one a person can audit by eye.
     """
     if not chain_enabled():
         return False
@@ -167,23 +199,48 @@ def chain_event(event) -> bool:
                 pk=event.envelope_id
             ).values_list("pk", flat=True).first()
 
-            prev = (
+            current = (
+                EnvelopeEvent.objects.filter(pk=event.pk)
+                .values_list("entry_hash", flat=True).first()
+            )
+            if current:
+                # Another request already chained this entry while chaining
+                # its own. Nothing to do — and recomputing would be wrong.
+                event.entry_hash = current
+                return True
+
+            chained = list(
                 EnvelopeEvent.objects
                 .filter(envelope_id=event.envelope_id, entry_hash__gt="")
-                .exclude(pk=event.pk)
-                .order_by("-id")
-                .values_list("entry_hash", flat=True)
-                .first()
-            ) or ""
-
-            digest = entry_digest(prev, canonical_payload(event))
-
-            EnvelopeEvent.objects.filter(pk=event.pk).update(
-                prev_hash=prev, entry_hash=digest
+                .values_list("id", "prev_hash", "entry_hash")
             )
+            prev = _chain_head(chained)
 
-        event.prev_hash = prev
-        event.entry_hash = digest
+            # Entries waiting to be chained. Bounded below by the first
+            # chained entry: anything older and unchained predates the chain
+            # itself, is legacy, and must stay unchained — hashing it now
+            # would claim a provenance it never had.
+            floor = min((pk for pk, _p, _h in chained), default=None)
+            batch = EnvelopeEvent.objects.filter(
+                envelope_id=event.envelope_id, entry_hash="", id__lte=event.pk,
+            )
+            batch = (batch.filter(id__gt=floor) if floor is not None
+                     else batch.filter(id=event.pk))
+            pending = list(batch.order_by("id"))
+            if not any(row.pk == event.pk for row in pending):
+                pending.append(event)
+
+            digest = ""
+            for row in pending:
+                digest = entry_digest(prev, canonical_payload(row))
+                EnvelopeEvent.objects.filter(pk=row.pk).update(
+                    prev_hash=prev, entry_hash=digest
+                )
+                if row.pk == event.pk:
+                    event.prev_hash = prev
+                    event.entry_hash = digest
+                prev = digest
+
         return True
 
     except Exception:
@@ -243,46 +300,108 @@ def verify_chain(envelope) -> dict:
         return out
 
     out["total"] = len(rows)
-    expected_prev = ""
-    seen_chained = False
-
-    for row in rows:
-        if not row.entry_hash:
-            out["unchained"] += 1
-            continue
-
-        recomputed = entry_digest(row.prev_hash or "", canonical_payload(row))
-
-        if recomputed != row.entry_hash:
-            out["problems"].append({
-                "kind": "content_altered",
-                "event_id": row.pk,
-                "event": row.event,
-                "at": row.at,
-                "detail": (
-                    "The stored hash does not match this entry's contents — "
-                    "the row was modified after it was written."
-                ),
-            })
-        elif seen_chained and (row.prev_hash or "") != expected_prev:
-            out["problems"].append({
-                "kind": "broken_link",
-                "event_id": row.pk,
-                "event": row.event,
-                "at": row.at,
-                "detail": (
-                    "This entry does not follow the one before it — an entry "
-                    "was deleted, inserted or reordered here."
-                ),
-            })
-
-        expected_prev = row.entry_hash
-        out["head"] = row.entry_hash
-        out["chained"] += 1
-        seen_chained = True
-
+    walk = _walk(rows)
+    out["unchained"] = len(walk["unchained"])
+    out["chained"] = len(rows) - out["unchained"]
+    out["head"] = walk["head"]
+    out["problems"] = walk["problems"]
+    out["order"] = [row.pk for row in walk["order"]]
+    # Chained hashes in link order: what the anchor is checked against.
+    out["chain"] = [row.entry_hash for row in walk["order"] if row.entry_hash]
+    out["events"] = [row.event for row in walk["order"] if row.entry_hash]
     out["ok"] = not out["problems"]
     return out
+
+
+def _problem(kind, row, detail):
+    return {"kind": kind, "event_id": row.pk, "event": row.event,
+            "at": row.at, "detail": detail}
+
+
+def _walk(rows) -> dict:
+    """
+    Follow the chain by its links and report what does not fit.
+
+    A hash chain is defined by its links — each entry names the hash of the
+    one before it — so that is how it is walked: from the entry that names no
+    predecessor, to the entry that names it, and so on. Walking it in row-id
+    order instead, as this did before, is the same thing only while entries
+    are chained in insertion order; under concurrent writes they are not, and
+    the old walk reported tampering on trails nobody had touched.
+
+    Following links loses nothing an attacker could exploit:
+
+        edit a row      -> its stored hash does not match its content
+        delete a row    -> its successor names a hash that no longer exists
+        insert a row    -> it shares a predecessor with a genuine entry: a fork
+        move a row      -> broken at the source; at the destination its payload
+                           binds the original envelope, so its hash fails
+        drop the end    -> the signed anchor (count and head) — as before
+
+    Returns {"order", "unchained", "head", "problems"}. `order` is the chain
+    in link order, preceded by any legacy unchained entries in id order and
+    followed by any chained entries the walk could not reach.
+    """
+    unchained = [r for r in rows if not r.entry_hash]
+    chained = [r for r in rows if r.entry_hash]
+    problems = []
+
+    by_hash = {}
+    for row in chained:
+        recomputed = entry_digest(row.prev_hash or "", canonical_payload(row))
+        if recomputed != row.entry_hash:
+            problems.append(_problem(
+                "content_altered", row,
+                "The stored hash does not match this entry's contents — the "
+                "row was modified after it was written."))
+        by_hash.setdefault(row.entry_hash, row)
+
+    children: dict[str, list] = {}
+    for row in chained:
+        children.setdefault(row.prev_hash or "", []).append(row)
+    for kids in children.values():
+        kids.sort(key=lambda r: r.pk)
+
+    for prev, kids in children.items():
+        if len(kids) > 1:
+            for row in kids[1:]:
+                problems.append(_problem(
+                    "forked", row,
+                    "This entry claims the same predecessor as another entry. "
+                    "Exactly one can follow any entry — one of these was "
+                    "inserted."))
+        if prev and prev not in by_hash:
+            for row in kids:
+                problems.append(_problem(
+                    "broken_link", row,
+                    "The entry this one follows no longer exists — an entry "
+                    "was deleted here."))
+
+    # Walk from the start. Where the chain forks, follow the earliest-written
+    # branch; the fork itself is already reported.
+    order, seen = [], set()
+    node = (children.get("") or [None])[0]
+    while node is not None and node.pk not in seen:
+        order.append(node)
+        seen.add(node.pk)
+        nxt = children.get(node.entry_hash) or []
+        node = nxt[0] if nxt else None
+
+    reported = {p["event_id"] for p in problems}
+    stray = [r for r in chained if r.pk not in seen]
+    for row in stray:
+        if row.pk not in reported:
+            problems.append(_problem(
+                "broken_link", row,
+                "This entry cannot be reached from the start of the trail — "
+                "an entry between them was deleted or altered."))
+
+    return {
+        "order": unchained + order + sorted(stray, key=lambda r: r.pk),
+        "unchained": unchained,
+        "head": order[-1].entry_hash if order else "",
+        "problems": problems,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -418,16 +537,46 @@ def verify_anchor(envelope, seal) -> dict:
     out["present"] = True
     state = verify_chain(envelope)
 
-    out["head_matches"] = state["head"] == seal.audit_chain_head
-    out["length_matches"] = state["chained"] == (seal.audit_chain_length or 0)
-    out["truncated"] = state["chained"] < (seal.audit_chain_length or 0)
+    # The anchor attests the trail AS IT WAS AT COMPLETION: its length, and
+    # the hash it ended on. Entries after that are normal — every download
+    # of the signed copy appends one — so the question is not "does the
+    # trail still end on the anchored hash?" but "is the anchored hash still
+    # exactly where the anchor says, with the later entries chained after
+    # it?". The first reading made every completed envelope fail its anchor
+    # check the moment anyone downloaded it.
+    anchored_len = seal.audit_chain_length or 0
+    chain = state.get("chain", [])
+    try:
+        position = chain.index(seal.audit_chain_head)
+    except ValueError:
+        position = -1
+
+    prefix_ok = position == anchored_len - 1 and anchored_len > 0
+    out["head_matches"] = prefix_ok
+    out["length_matches"] = prefix_ok
+    out["truncated"] = len(chain) < anchored_len or position == -1
+    after = state.get("events", [])[position + 1:] if prefix_ok else []
+    out["after_anchor"] = len(after)
+    out["after_anchor_events"] = after
+
+    # Nothing that creates a signature should happen after completion. An
+    # entry like that after the anchor is not a download — it is the shape of
+    # a signature added to a closed envelope.
+    late = sorted({e for e in after if e in _CLOSED_EVENTS})
+    out["late_signing_events"] = late
 
     if not seal.audit_anchor:
         out["detail"] = (
             "The head and length were recorded but never signed, so they "
             "attest only as strongly as the database they sit in."
         )
-        out["ok"] = out["head_matches"] and out["length_matches"]
+        out["ok"] = prefix_ok and state["ok"] and not late
+        if out["ok"] and out.get("after_anchor"):
+            out["detail"] += (
+                f" {out['after_anchor']} later entr"
+                f"{'y' if out['after_anchor'] == 1 else 'ies'} chain after it.")
+        elif not out["ok"]:
+            _anchor_detail(out, state, seal)
         return out
 
     # Validate the detached CMS signature over the recorded statement.
@@ -472,26 +621,58 @@ def verify_anchor(envelope, seal) -> dict:
         logger.warning("NES audit chain: anchor check failed", exc_info=True)
         return out
 
+    _anchor_detail(out, state, seal)
+    out["ok"] = (
+        out["signature_intact"]
+        and prefix_ok
+        and state["ok"]
+        and not late
+    )
+    return out
+
+
+#: Events that only make sense BEFORE an envelope completes.
+_CLOSED_EVENTS = {"signed", "approved", "attested", "completed", "sealed",
+                  "declined", "returned"}
+
+
+def _anchor_detail(out: dict, state: dict, seal) -> None:
+    """Plain-words explanation of an anchor check, written into `out`."""
+    anchored_len = seal.audit_chain_length or 0
     if out["truncated"]:
-        missing = (seal.audit_chain_length or 0) - state["chained"]
+        present = len(state.get("chain", []))
+        missing = max(anchored_len - present, 0)
         out["detail"] = (
             f"{missing} entr{'y' if missing == 1 else 'ies'} present at "
             f"completion {'is' if missing == 1 else 'are'} now missing."
+            if missing else
+            "The entry the trail ended on at completion is no longer in it — "
+            "the trail before completion was altered."
         )
     elif not out["head_matches"]:
         out["detail"] = (
-            "The trail no longer ends where it did at completion. Entries "
-            "after the anchor are expected on an active envelope; on a "
-            "completed one, investigate."
+            "The trail at completion is no longer a prefix of the trail now: "
+            "entries were inserted before the anchor."
         )
-
-    out["ok"] = (
-        out["signature_intact"]
-        and out["head_matches"]
-        and out["length_matches"]
-        and state["ok"]
-    )
-    return out
+    elif not state.get("ok", True):
+        kinds = sorted({p["kind"] for p in state.get("problems", [])})
+        out["detail"] = (
+            "The trail itself fails verification (" + ", ".join(kinds)
+            + ") — an entry was altered, removed or inserted."
+        )
+    elif out.get("late_signing_events"):
+        out["detail"] = (
+            "Signing activity was recorded AFTER completion ("
+            + ", ".join(out["late_signing_events"])
+            + "). A closed envelope cannot be signed — investigate."
+        )
+    elif out.get("after_anchor"):
+        out["detail"] = (
+            f"Intact. {out['after_anchor']} entr"
+            f"{'y' if out['after_anchor'] == 1 else 'ies'} added after "
+            "completion (" + ", ".join(sorted(set(out['after_anchor_events'])))
+            + "), each chained after the anchored one."
+        )
 
 
 def chain_export(envelope) -> list[dict]:
@@ -501,7 +682,14 @@ def chain_export(envelope) -> list[dict]:
     """
     from .models_esign import EnvelopeEvent
 
-    rows = EnvelopeEvent.objects.filter(envelope=envelope).order_by("id")
+    # In chain order, not row order, so that an auditor walking the file top
+    # to bottom — "each entry's prev_hash is the entry_hash above it" — gets
+    # the answer the verifier gets. The two orders differ whenever events
+    # were written concurrently.
+    rows = _walk(list(
+        EnvelopeEvent.objects.filter(envelope=envelope)
+        .select_related("recipient", "actor").order_by("id")
+    ))["order"]
     out = []
     for r in rows:
         out.append({

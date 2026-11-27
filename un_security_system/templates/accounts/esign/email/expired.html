@@ -1,0 +1,22 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}Envelope expired{% endblock %}
+{% block body %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    <b>{{ subject_line }}</b> passed its deadline before every signature was
+    collected, and has expired. The signing links sent for it no longer work.
+  </p>
+  {% if outstanding %}
+  <div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin-bottom:14px;">
+    <div style="font-size:12px;color:#6B7280;font-weight:700;margin-bottom:6px;">Still waiting on</div>
+    {% for r in outstanding %}
+      <div style="font-size:13px;">{{ r.name }} &lt;{{ r.email }}&gt;</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    To collect the remaining signatures, duplicate the envelope and send it again.
+  </p>
+  {% if action_url %}
+  <p style="margin:0;"><a href="{{ action_url }}" style="color:#1E2761;font-weight:700;">Open the envelope</a></p>
+  {% endif %}
+{% endblock %}

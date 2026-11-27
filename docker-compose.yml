@@ -1,4 +1,32 @@
-version: '3.8'
+# Settings shared by every container that runs UN PASS code: the web server,
+# the worker that runs scheduled jobs, and beat, which decides when.
+x-app: &app
+  build: .
+  volumes:
+    - .:/app
+    # NES signing material: seal.p12, root-ca.crt, the policy PDF.
+    # Read-only, so nothing running in the container can replace the key.
+    - ./secrets:/etc/unpass:ro
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+  environment:
+    # Django
+    - DEBUG=1
+    - SECRET_KEY=supersecret
+    - ALLOWED_HOSTS=*
+    # DB params read by decouple in settings.py. The password comes from
+    # DB_PASSWORD in the .env beside this file, falling back to the old value
+    # so an existing installation keeps working unchanged.
+    - DB_NAME=un_security
+    - DB_USER=postgres
+    - DB_PASSWORD=${DB_PASSWORD:-postgres}
+    - DB_HOST=db
+    - DB_PORT=5432
+    # Scheduled jobs. Database 1, so it never shares keys with Channels (0).
+    - CELERY_BROKER_URL=redis://redis:6379/1
 
 services:
   db:
@@ -6,7 +34,11 @@ services:
     environment:
       POSTGRES_DB: un_security
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # Only read the FIRST time the volume is created. Changing it later does
+      # not change the password inside an existing database — run
+      #   ALTER ROLE postgres PASSWORD '...';
+      # as well, or the app will be locked out.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # You don't need to expose 5432 unless your host needs to connect directly:
@@ -17,41 +49,63 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    # Append-only file on a volume: the job queue, the job heartbeats and the
+    # "this expiry warning was already sent" markers survive a restart.
+    # Without it, recreating this container re-sends every warning once.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     # No need to expose unless host connects directly:
     # ports:
     #   - "6379:6379"
+    restart: unless-stopped
 
   web:
-    build: .
+    <<: *app
     command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - .:/app
-      # NES signing material: seal.p12, root-ca.crt, the policy PDF.
-      # Read-only, so nothing running in the container can replace the key.
-      - ./secrets:/etc/unpass:ro
     ports:
       - "8000:8000"
+
+  # Runs the scheduled jobs: envelope expiry and reminders, expiry warnings,
+  # workflow reminders, archival timestamp refresh, witnessing, audits.
+  worker:
+    <<: *app
+    command: celery -A un_security_system worker --loglevel=info --concurrency=2
+    restart: unless-stopped
+
+  # Decides WHEN each job runs (un_security_system/schedule.py). Exactly one
+  # beat, ever: two would run every job twice. Do not scale this service.
+  beat:
+    <<: *app
+    command: celery -A un_security_system beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    restart: unless-stopped
+
+  # Nightly database backup to ./backups, each one test-read before it is
+  # kept, fourteen kept. The witnessing design says restoration comes from
+  # backups — so there have to be some.
+  db-backup:
+    image: postgres:15
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_started
     environment:
-      # Django
-      - DEBUG=1
-      - SECRET_KEY=supersecret
-      - ALLOWED_HOSTS=*
-      # DB params read by decouple in settings.py
-      - DB_NAME=un_security
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_HOST=db
-      - DB_PORT=5432
-      # You can keep DATABASE_URL or remove it. It won’t be used unless you parse it.
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/un_security
+      PGHOST: db
+      PGUSER: postgres
+      PGPASSWORD: ${DB_PASSWORD:-postgres}
+      PGDATABASE: un_security
+      BACKUP_KEEP_DAYS: "14"
+      BACKUP_AT: "01:50"
+      TZ: Africa/Banjul
+    volumes:
+      - ./backups:/backups
+      - ./scripts/db_backup.sh:/db_backup.sh:ro
+    entrypoint: ["/bin/sh", "/db_backup.sh"]
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  redis_data:

@@ -46,7 +46,13 @@ class Command(BaseCommand):
             self.stderr.write(self.style.WARNING(
                 "SITE_URL is not set — reminder emails will contain relative links."))
         if not opts["skip_reminders"]:
-            self._reminders(dry, opts["reminder_days"])
+            # Send on this thread. This command runs from cron or a worker
+            # and exits as soon as it returns; mail left on a daemon thread
+            # would be lost with the process.
+            from accounts.asset_email import deliver_synchronously
+
+            with deliver_synchronously():
+                self._reminders(dry, opts["reminder_days"])
         if not opts["skip_retention"]:
             self._retention(dry, opts["retention_days"])
 

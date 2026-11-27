@@ -1,6 +1,39 @@
+import contextlib
+import logging
 import threading
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+# Scheduled jobs set this so mail goes out before the job returns. A daemon
+# thread is right inside a web request (the user should not wait on SMTP) and
+# wrong everywhere else: a management command run by cron, or a worker being
+# restarted, exits — and takes every unsent daemon thread with it, silently.
+# Reminders queued that way were simply never delivered.
+_SYNC = threading.local()
+
+
+@contextlib.contextmanager
+def deliver_synchronously(raise_errors: bool = True):
+    """
+    Within this block, `send_email_async` sends on the calling thread.
+
+    With `raise_errors`, an SMTP failure raises instead of vanishing, so the
+    job that asked for the email can count it as failed. Callers like
+    esign_notify._send already catch and log, so this surfaces failures in
+    the logs and the job heartbeat rather than breaking the loop.
+    """
+    previous = getattr(_SYNC, "on", False), getattr(_SYNC, "raise_errors", False)
+    _SYNC.on, _SYNC.raise_errors = True, raise_errors
+    try:
+        yield
+    finally:
+        _SYNC.on, _SYNC.raise_errors = previous
+
+
+def delivering_synchronously() -> bool:
+    return bool(getattr(_SYNC, "on", False))
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 
@@ -47,7 +80,7 @@ def _send_email(
             # A bad attachment must never stop the message itself going out.
             continue
 
-    msg.send(fail_silently=True)
+    msg.send(fail_silently=not getattr(_SYNC, "raise_errors", False))
 
 
 def send_email_async(
@@ -59,8 +92,13 @@ def send_email_async(
     attachments: list | None = None,
 ):
     """
-    Non-blocking email send using a background thread.
+    Non-blocking email send using a background thread — except inside
+    `deliver_synchronously()`, where it sends before returning.
     """
+    if delivering_synchronously():
+        _send_email(subject, to_emails, html_template, context,
+                    text_template, attachments)
+        return
     threading.Thread(
         target=_send_email,
         args=(subject, to_emails, html_template, context, text_template, attachments),

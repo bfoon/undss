@@ -12,3 +12,6 @@ secrets/
 # Python
 __pycache__/
 *.pyc
+
+# Database backups — big, and they contain everything.
+backups/

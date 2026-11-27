@@ -7,6 +7,10 @@ channels-redis==4.1.0
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 celery==5.3.4
+# Pinned with celery and redis. Left unpinned, pip installs kombu 5.7, whose
+# Redis transport refuses the redis==5.0.1 pinned below — the worker then
+# dies on its first connection and no scheduled job ever runs.
+kombu>=5.3.4,<5.4
 redis==5.0.1
 Pillow==10.1.0
 python-decouple==3.8

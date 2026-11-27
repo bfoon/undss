@@ -445,3 +445,31 @@ def _detail_url(request, envelope):
         return request.build_absolute_uri(path)
     base = getattr(settings, "SITE_URL", "").rstrip("/")
     return f"{base}{path}" if base else path
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Expiry — sent by the scheduler, never from a request
+# ─────────────────────────────────────────────────────────────────────────────
+
+def notify_expired(envelope: Envelope):
+    """
+    Tell the sender their envelope lapsed, and who had not yet signed.
+
+    Before this, an envelope could pass its deadline and flip to "expired"
+    with nobody told — the sender found out only by going to look. Signers
+    are not emailed: their links have stopped working, and an email saying so
+    invites a reply to an address nobody reads.
+    """
+    outstanding = [
+        r for r in envelope.signers()
+        if getattr(r, "status", "") not in (
+            EnvelopeRecipient.STATUS_SIGNED, EnvelopeRecipient.STATUS_DECLINED,
+        )
+    ]
+    _send(
+        f"Expired unsigned: {envelope.subject}",
+        _sender_email(envelope),
+        "expired",
+        _ctx(envelope, outstanding=outstanding,
+             action_url=_detail_url(None, envelope)),
+    )

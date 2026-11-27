@@ -56,6 +56,9 @@ from .studio_common_esign import (
 
 REPORT_TABLE = "accounts_esign_report_definition"
 
+# Set once the table is known to exist, so later calls skip even the lookup.
+_REPORT_TABLE_READY = False
+
 MAX_WIDGETS = 80
 MAX_FILTERS = 50
 MAX_CONFIG_BYTES = 700_000
@@ -123,7 +126,24 @@ def ensure_report_tables():
 
     No existing model/table is modified and no Django migration record is
     touched. Safe to call repeatedly.
+
+    Returns immediately when the table is already there. This runs on every
+    reports page load, and on PostgreSQL `CREATE TABLE IF NOT EXISTS` checks
+    the CREATE privilege BEFORE it notices the table exists — so an
+    application that connects as a role allowed only to read and write rows
+    (which is how it should connect) got "permission denied for schema
+    public" on every visit. Verified against PostgreSQL 16.
     """
+    global _REPORT_TABLE_READY
+    if _REPORT_TABLE_READY:
+        return
+    try:
+        if REPORT_TABLE in connection.introspection.table_names():
+            _REPORT_TABLE_READY = True
+            return
+    except Exception:
+        pass
+
     vendor = connection.vendor
 
     with connection.cursor() as cur:
