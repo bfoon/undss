@@ -274,6 +274,29 @@ def audit_all_chains() -> dict:
             "problems": sorted(kinds),
         })
 
+    # The ledger guard: a rule that is missing or switched off is reported
+    # with the damage, because it is how damage would have been let in.
+    try:
+        from django.db import connection
+
+        from .db_guard import guard_status
+
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cur:
+                rules = guard_status(cur)
+            off = [f"{r['table']}: {r['trigger']}" for r in rules
+                   if r["present"] and not r["enabled"]]
+            summary["guard_rules"] = len(rules)
+            summary["guard_missing"] = sum(1 for r in rules if not r["present"])
+            if off:
+                summary["guard_disabled"] = off
+                summary["damaged"].append({"envelope": "LEDGER GUARD",
+                                           "problems": ["switched off: "
+                                                        + "; ".join(off)]})
+    except Exception:
+        logger.warning("NES chain audit: could not read the guard state",
+                       exc_info=True)
+
     if summary["damaged"]:
         _alert_chain_damage(summary["damaged"])
     return summary

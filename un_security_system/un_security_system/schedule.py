@@ -92,6 +92,13 @@ JOBS = [
         "about": "Confirms every signature ID still recomputes and nothing immutable moved.",
     },
     {
+        "name": "nes-key-watch",
+        "target": "accounts.key_watch:sweep",
+        "cron": "40 6 * * *",
+        "max_age": 26 * 3600,
+        "about": "Emails anyone whose signature gained a key they were not told about.",
+    },
+    {
         "name": "nes-chain-audit",
         "target": "accounts.scheduler:audit_all_chains",
         "cron": "45 3 * * *",

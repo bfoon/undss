@@ -21,8 +21,11 @@ x-app: &app
     # DB_PASSWORD in the .env beside this file, falling back to the old value
     # so an existing installation keeps working unchanged.
     - DB_NAME=un_security
-    - DB_USER=postgres
-    - DB_PASSWORD=${DB_PASSWORD:-postgres}
+    # The application's own role. Until `unpass_harden_db --create-app-role`
+    # has been run and APP_DB_USER / APP_DB_PASSWORD put in .env, this falls
+    # back to the owner, exactly as before.
+    - DB_USER=${APP_DB_USER:-postgres}
+    - DB_PASSWORD=${APP_DB_PASSWORD:-${DB_PASSWORD:-postgres}}
     - DB_HOST=db
     - DB_PORT=5432
     # Scheduled jobs. Database 1, so it never shares keys with Channels (0).
@@ -39,6 +42,11 @@ services:
       #   ALTER ROLE postgres PASSWORD '...';
       # as well, or the app will be locked out.
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    # Log every schema change — CREATE, ALTER, DROP, including anyone
+    # switching off a ledger guard — to the container log, which is outside
+    # the reach of SQL. `docker compose logs db | grep -iE "trigger|alter"`.
+    command: ["postgres", "-c", "log_statement=ddl",
+              "-c", "log_line_prefix=%m [%p] %u@%d "]
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # You don't need to expose 5432 unless your host needs to connect directly:

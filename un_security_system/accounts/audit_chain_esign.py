@@ -300,7 +300,14 @@ def verify_chain(envelope) -> dict:
         return out
 
     out["total"] = len(rows)
-    walk = _walk(rows)
+    try:
+        from .db_guard import detached_values
+
+        restore = detached_values(r.pk for r in rows if r.entry_hash)
+    except Exception:
+        restore = {}
+    walk = _walk(rows, restore)
+    out["detached"] = walk.get("detached", [])
     out["unchained"] = len(walk["unchained"])
     out["chained"] = len(rows) - out["unchained"]
     out["head"] = walk["head"]
@@ -318,7 +325,17 @@ def _problem(kind, row, detail):
             "at": row.at, "detail": detail}
 
 
-def _walk(rows) -> dict:
+def _restored(row, values: dict):
+    """A copy of `row` with detached references put back, for re-hashing."""
+    import copy
+
+    clone = copy.copy(row)
+    for column, value in values.items():
+        setattr(clone, column, value)
+    return clone
+
+
+def _walk(rows, restore: dict | None = None) -> dict:
     """
     Follow the chain by its links and report what does not fit.
 
@@ -346,9 +363,20 @@ def _walk(rows) -> dict:
     chained = [r for r in rows if r.entry_hash]
     problems = []
 
+    restore = restore or {}
+    detached = []
     by_hash = {}
     for row in chained:
         recomputed = entry_digest(row.prev_hash or "", canonical_payload(row))
+        if recomputed != row.entry_hash and row.pk in restore:
+            # A person this entry named was deleted later, and the database
+            # guard logged who it was. Hash it as it was written.
+            again = entry_digest(row.prev_hash or "",
+                                 canonical_payload(_restored(row, restore[row.pk])))
+            if again == row.entry_hash:
+                recomputed = again
+                detached.append({"event_id": row.pk, "event": row.event,
+                                 "columns": sorted(restore[row.pk])})
         if recomputed != row.entry_hash:
             problems.append(_problem(
                 "content_altered", row,
@@ -401,6 +429,7 @@ def _walk(rows) -> dict:
         "unchained": unchained,
         "head": order[-1].entry_hash if order else "",
         "problems": problems,
+        "detached": detached,
     }
 
 
@@ -686,10 +715,17 @@ def chain_export(envelope) -> list[dict]:
     # to bottom — "each entry's prev_hash is the entry_hash above it" — gets
     # the answer the verifier gets. The two orders differ whenever events
     # were written concurrently.
-    rows = _walk(list(
+    all_rows = list(
         EnvelopeEvent.objects.filter(envelope=envelope)
         .select_related("recipient", "actor").order_by("id")
-    ))["order"]
+    )
+    try:
+        from .db_guard import detached_values
+
+        restore = detached_values(r.pk for r in all_rows if r.entry_hash)
+    except Exception:
+        restore = {}
+    rows = _walk(all_rows, restore)["order"]
     out = []
     for r in rows:
         out.append({
@@ -707,6 +743,11 @@ def chain_export(envelope) -> list[dict]:
             "meta": r.meta or {},
             "prev_hash": r.prev_hash or "",
             "entry_hash": r.entry_hash or "",
-            "payload": canonical_payload(r),
+            # The payload as hashed. Where a person this entry named was
+            # deleted later, their id is put back from the guard's log, so
+            # the offline re-walk still works; `detached` says which.
+            "payload": canonical_payload(_restored(r, restore[r.pk])
+                                         if r.pk in restore else r),
+            "detached": restore.get(r.pk, {}),
         })
     return out

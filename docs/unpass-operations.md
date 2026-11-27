@@ -140,25 +140,20 @@ the guard becomes a speed bump.
 Verified on PostgreSQL 16: a role that can only read and write rows is
 refused `DROP TRIGGER` and `ALTER TABLE … DISABLE TRIGGER`; `postgres` is not.
 
-Create the role once, as `postgres`:
+Create it with one command (it prints the two lines to put in `.env`):
 
-```sql
-CREATE ROLE unpass_app LOGIN PASSWORD 'choose-a-long-one';
-GRANT CONNECT ON DATABASE un_security TO unpass_app;
-GRANT USAGE ON SCHEMA public TO unpass_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO unpass_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO unpass_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO unpass_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-    GRANT USAGE, SELECT ON SEQUENCES TO unpass_app;
-```
+    scripts/owner.sh unpass_harden_db --create-app-role
+    # APP_DB_USER=unpass_app
+    # APP_DB_PASSWORD=<generated>
 
-Then point `web`, `worker` and `beat` at it (`DB_USER=unpass_app` and its
-password), and keep `postgres` for anything that changes the schema:
+`docker-compose.yml` now gives `web`, `worker` and `beat` `APP_DB_USER` /
+`APP_DB_PASSWORD` when they are set, and falls back to `postgres` when they
+are not, so nothing breaks before you create the role. Anything that changes
+the schema goes through `scripts/owner.sh`, which runs one command as
+`postgres` and exits:
 
-    docker compose run --rm -e DB_USER=postgres -e DB_PASSWORD=... web python manage.py migrate
-    docker compose run --rm -e DB_USER=postgres -e DB_PASSWORD=... web python manage.py ensure_security_console
+    scripts/owner.sh migrate
+    scripts/owner.sh ensure_security_console
 
 The reports page used to issue `CREATE TABLE IF NOT EXISTS` on every visit,
 which a restricted role is refused even when the table exists. That is fixed
@@ -220,7 +215,41 @@ cannot explain, and emails `ESIGN_WITNESS_ALERT_EMAILS` about the rest.
 
 ---
 
-## 4. Deploying this change
+## 4. What someone with database access can no longer do
+
+`unpass_harden_db --install-guards` (as `postgres`, via `scripts/owner.sh`)
+puts PostgreSQL triggers on the NES ledger. Run `unpass_harden_db` with no
+flags to see their state; `unpass_doctor` and the nightly chain audit check
+them too, and a **disabled** rule is reported as damage and e-mailed to ICT.
+
+| Table | Refused |
+|---|---|
+| envelope events | editing, deleting or re-hashing an entry once the envelope was sent |
+| envelopes | deleting one that was sent; reopening a closed one |
+| seals | changing fingerprints, anchors or level once written |
+| signing identities, keys, marks | deleting; reviving a retired key or mark; changing anything but retirement fields |
+| attestations, witness records | anything but verification results / nothing at all |
+| all of the above | `TRUNCATE` |
+
+Deleting a user who acted on an envelope used to make the trail fail
+verification, because Django sets the actor to NULL. The guard now logs the
+original id to `nes_guard_detached` and the verifier puts it back before
+re-hashing, so the trail still verifies. Users with a signing identity cannot
+be deleted at all — deactivate them.
+
+The application role cannot drop or disable these triggers and cannot write
+to the detachment log. `postgres` still can: that is what the DDL log is for.
+The `db` service now runs with `log_statement=ddl`, so every
+`DROP`/`ALTER`/`DISABLE TRIGGER` lands in the PostgreSQL log with the user
+who ran it.
+
+**New signing keys are announced.** Every key added through the app e-mails
+its owner. Each morning `nes-key-watch` looks for keys nobody announced — the
+fingerprint of a key inserted directly into the database — and e-mails the
+owner and ICT. The first run records the existing keys silently as the
+baseline.
+
+## 5. Deploying this change
 
 First commit the server's existing migration files (section 2), so the one
 new migration this change needs lands on top of the real history:
@@ -228,7 +257,9 @@ new migration this change needs lands on top of the real history:
     git pull
     docker compose build
     docker compose run --rm web python manage.py makemigrations accounts   # one new choice on EnvelopeEvent
-    docker compose run --rm web python manage.py migrate
+    scripts/owner.sh migrate
+    scripts/owner.sh unpass_harden_db --install-guards
+    scripts/owner.sh unpass_harden_db --create-app-role     # then add the two lines to .env
     git add -- '*/migrations/*.py' && git commit -m "Migration: expired event" && git push
     docker compose up -d
     docker compose exec web python manage.py unpass_doctor

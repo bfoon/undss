@@ -1246,6 +1246,18 @@ def esign_envelope_delete(request, pk):
         )
         return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
+    # A draft that was sent before — returned and reworked — carries the
+    # record of that earlier round: who was asked, who viewed, who sent it
+    # back. That record is evidence, and the database's ledger guard refuses
+    # to delete it; say so here rather than fail at the database.
+    if envelope.events.filter(event="sent").exists():
+        messages.error(
+            request,
+            "This draft was sent in an earlier round, so its audit trail is a "
+            "record of what happened and cannot be deleted. Void it instead.",
+        )
+        return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
+
     subject = envelope.subject
     doc_count = envelope.documents.count()
 

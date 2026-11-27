@@ -300,17 +300,29 @@ class Command(BaseCommand):
         self.report(INFO, f"Server time zone {server_tz}; Django stores UTC "
                           f"and shows {settings.TIME_ZONE}")
 
+        from accounts.db_guard import guard_status
+
         with connection.cursor() as cur:
-            cur.execute("SELECT 1 FROM pg_trigger WHERE tgname = "
-                        "'nes_signature_identity_immutable_trg'")
-            guard = cur.fetchone()
-        if guard:
-            self.report(OK, "Signature-ID immutability guard installed")
-        else:
-            self.report(WARN, "Signature-ID immutability guard not installed",
-                        "IDs are protected by the model only; QuerySet.update() "
-                        "and raw SQL can change them.",
-                        "python manage.py esign_identity --install-guard")
+            rules = guard_status(cur)
+        missing = [r for r in rules if not r["present"]]
+        disabled = [r for r in rules if r["present"] and not r["enabled"]]
+        if disabled:
+            self.report(
+                FAIL, f"{len(disabled)} ledger guard rule(s) are SWITCHED OFF",
+                "\n".join(f"{r['table']}: {r['trigger']}" for r in disabled),
+                "Someone with the owner's password disabled them. Check "
+                "`docker compose logs db | grep -iE 'trigger|alter'` before "
+                "re-installing: ./scripts/owner.sh unpass_harden_db "
+                "--install-guards")
+        if missing:
+            self.report(
+                WARN, f"{len(missing)} of {len(rules)} ledger guard rule(s) "
+                      "not installed",
+                "Audit entries, anchors, keys and attestations can be edited "
+                "or deleted by anyone who can write rows.",
+                "./scripts/owner.sh unpass_harden_db --install-guards")
+        if rules and not missing and not disabled:
+            self.report(OK, f"Ledger guard: all {len(rules)} rules in place")
 
     def _migration_checks(self):
         from django.apps import apps

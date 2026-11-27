@@ -291,6 +291,19 @@ def _add_key(identity, *, public_key_spki_b64, encrypted_private_key_b64,
 
     identity.key_revision = revision
     identity.save(update_fields=["key_revision", "updated_at"])
+
+    # Tell the owner, once the key is really stored. A key added in their
+    # name that they did not add is the one attack the server cannot
+    # recognise on its own — but the person it impersonates can, from their
+    # own inbox. See accounts/key_watch.py for the sweep that catches keys
+    # added without going through here.
+    try:
+        from .key_watch import announce
+
+        transaction.on_commit(lambda: announce(key))
+    except Exception:
+        logger.warning("NES: could not schedule the key notice for %s",
+                       identity.signature_id, exc_info=True)
     return key
 
 
