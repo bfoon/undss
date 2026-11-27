@@ -151,7 +151,12 @@
             <div class="font-monospace mb-2">{{ server_fp }}</div>
             <div class="text-muted">Every Sentinel pins this key when it enrols. If it ever changes, every Sentinel raises an alarm.</div>
           {% else %}
-            <div class="text-danger">No publication key yet. Run <code>scripts/owner.sh nes_sentinel keygen</code>.</div>
+            <div class="text-danger mb-1">No publication key found.</div>
+            <div class="text-muted">On the server host, from the project folder:</div>
+            <pre class="small bg-light border rounded p-2 my-1">scripts/sentinel_keygen.sh
+docker compose up -d</pre>
+            <div class="text-muted">Without Docker: <code>python manage.py nes_sentinel keygen</code>.
+              Then <code>nes_sentinel status</code> shows where it looked.</div>
           {% endif %}
           <form method="post" class="mt-3">
             {% csrf_token %}<input type="hidden" name="action" value="test">

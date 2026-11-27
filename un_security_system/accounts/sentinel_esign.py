@@ -141,8 +141,8 @@ def private_key():
     if cached and _KEY_CACHE.get("stamp") == stamp:
         return cached
     if stamp is None:
-        raise SentinelError(503, "The Sentinel publication key has not been created "
-                                 "(manage.py nes_sentinel keygen).")
+        raise SentinelError(503, f"No Sentinel publication key at {path}. Under Docker: "
+                                 "scripts/sentinel_keygen.sh on the host, then docker compose up -d.")
     key = serialization.load_pem_private_key(path.read_bytes(), password=_passphrase())
     _KEY_CACHE.update(key=key, stamp=stamp)
     return key
