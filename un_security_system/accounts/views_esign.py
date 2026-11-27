@@ -1128,6 +1128,7 @@ def esign_send(request, pk):
         return redirect("accounts:esign_sign", token=signers[0].token)
 
     messages.success(request, f"Sent. Envelope ID {envelope.short_id}.")
+    _warn_if_mail_broken(request)
     return redirect("accounts:esign_envelope_detail", pk=envelope.pk)
 
 
@@ -2082,7 +2083,23 @@ def _handle_sign_submit(request, recipient):
     esign_notify.notify_sender_signed(request, recipient)
 
     if envelope.all_signed():
-        finalize_envelope(envelope, request=request)
+        # The signature is already saved. If building the final document
+        # fails, the signer must not see a server error for something that
+        # is not theirs to fix: the envelope stays "all signed, not yet
+        # completed", ICT is told, and `nes-finalize-retry` finishes it as
+        # soon as the cause is fixed.
+        try:
+            finalize_envelope(envelope, request=request)
+        except Exception as exc:  # noqa: BLE001
+            from .esign_finalize import report_stuck
+
+            report_stuck(envelope, exc)
+            messages.success(
+                request,
+                "Signed. Thank you. The final document is still being prepared — "
+                "everyone will receive it by e-mail as soon as it is ready.",
+            )
+            return redirect("accounts:esign_review", token=recipient.token)
         esign_notify.notify_completed(request, envelope)
     else:
         nxt = envelope.next_pending_signer()
@@ -2313,3 +2330,30 @@ def esign_signature_default(request, pk):
     prof.save()
     messages.success(request, "Default signature updated.")
     return redirect("accounts:esign_signatures")
+
+
+def _warn_if_mail_broken(request):
+    """Tell the sender now, not a week later, if invitations cannot go out."""
+    try:
+        from .asset_email import mail_config_problems, mail_state
+
+        problems = mail_config_problems()
+        if problems:
+            messages.warning(
+                request,
+                "The envelope was sent, but UN PASS cannot e-mail right now ("
+                + "; ".join(problems)
+                + "), so recipients were not told. Ask ICT to fix e-mail, then use Resend.",
+            )
+            return
+        state = mail_state()
+        if state.get("last_error_at") and state.get("last_error_at", "") > state.get("last_ok", ""):
+            messages.warning(
+                request,
+                "The last e-mail UN PASS tried to send failed ("
+                + state.get("last_error", "")[:160]
+                + "). If recipients do not receive the invitation, ask ICT to run "
+                  "unpass_doctor --mail-test.",
+            )
+    except Exception:
+        pass

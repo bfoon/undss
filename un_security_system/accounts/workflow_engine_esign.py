@@ -645,10 +645,11 @@ def _stamp_workflow_form_pdf(raw, run, *, envelope_id="", status_label=""):
             overlay_buf.seek(0)
 
             overlay_reader = PdfReader(overlay_buf)
+            # Attach first, then merge: pypdf 7 refuses to merge onto a page
+            # that still belongs to its reader.
+            target = writer.add_page(page)
             if overlay_reader.pages:
-                page.merge_page(overlay_reader.pages[0])
-
-            writer.add_page(page)
+                target.merge_page(overlay_reader.pages[0])
 
         out = io.BytesIO()
         writer.write(out)

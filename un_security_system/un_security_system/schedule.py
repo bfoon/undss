@@ -92,6 +92,27 @@ JOBS = [
         "about": "Confirms every signature ID still recomputes and nothing immutable moved.",
     },
     {
+        "name": "nes-sentinel-publish",
+        "target": "accounts.sentinel_esign:publish",
+        "cron": "* * * * *",
+        "max_age": 15 * 60,
+        "about": "Signs new audit entries and seal fingerprints into the Sentinel ledger.",
+    },
+    {
+        "name": "nes-sentinel-notify",
+        "target": "accounts.sentinel_esign:notify",
+        "cron": "*/2 * * * *",
+        "max_age": 30 * 60,
+        "about": "E-mails tamper alerts to owners, watchers and ICT; flags silent Sentinels.",
+    },
+    {
+        "name": "nes-finalize-retry",
+        "target": "accounts.esign_finalize:retry_stuck",
+        "cron": "*/10 * * * *",
+        "max_age": 2 * 3600,
+        "about": "Completes envelopes that are fully signed but whose final document failed to build.",
+    },
+    {
         "name": "nes-key-watch",
         "target": "accounts.key_watch:sweep",
         "cron": "40 6 * * *",

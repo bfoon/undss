@@ -56,6 +56,10 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=0,
                             help="Audit trails: check only the newest N.")
         parser.add_argument("--json", action="store_true")
+        parser.add_argument("--mail", action="store_true", help="only the e-mail checks")
+        parser.add_argument("--pdf", action="store_true", help="only the document-stamping checks")
+        parser.add_argument("--mail-test", metavar="ADDRESS",
+                            help="send a real test e-mail now and show the mail server's answer")
 
     # ------------------------------------------------------------------
     def handle(self, *args, **opts):
@@ -64,7 +68,16 @@ class Command(BaseCommand):
         if opts["run"]:
             return self.run_now(opts["run"])
 
-        everything = not (opts["jobs"] or opts["db"] or opts["chain"])
+        if opts.get("mail_test"):
+            return self.mail_test(opts["mail_test"])
+        everything = not (opts["jobs"] or opts["db"] or opts["chain"]
+                          or opts["mail"] or opts["pdf"])
+        if everything or opts["mail"]:
+            self.section("E-mail")
+            self.check_mail()
+        if everything or opts["pdf"]:
+            self.section("Signed documents (Envelope ID and signatures on the page)")
+            self.check_pdf()
         if everything or opts["jobs"]:
             self.section("Scheduled jobs")
             self.check_jobs()
@@ -74,6 +87,9 @@ class Command(BaseCommand):
         if everything or opts["chain"]:
             self.section("Audit trails")
             self.check_chains(opts["limit"])
+        if everything or opts["chain"]:
+            self.section("Sentinels (independent tamper witnesses)")
+            self.check_sentinels()
 
         fails = sum(1 for r in self.results if r["level"] == FAIL)
         warns = sum(1 for r in self.results if r["level"] == WARN)
@@ -525,6 +541,163 @@ class Command(BaseCommand):
     # ==================================================================
     # 3. Audit trails
     # ==================================================================
+    # ------------------------------------------------------------------
+    _MAIL_HINTS = [
+        ("5.7.139", "Office 365 refused the password sign-in. Either the password is wrong, "
+                    "or SMTP AUTH is off for this mailbox (Microsoft 365 admin → user → Mail → "
+                    "Manage email apps → Authenticated SMTP), or basic auth is disabled for the "
+                    "tenant — then use the Graph backend (docs/unpass-mail.md)."),
+        ("5.7.30", "Office 365 no longer accepts password sign-in here. Use the Graph backend "
+                   "(docs/unpass-mail.md)."),
+        ("5.7.57", "Not signed in: EMAIL_HOST_USER / EMAIL_HOST_PASSWORD are missing or wrong."),
+        ("535", "The mail server rejected the user name or password."),
+        ("SendAsDenied", "The mailbox in DEFAULT_FROM_EMAIL is not the one you sign in as, and "
+                         "has not granted it Send As."),
+        ("timed out", "Nothing answered on that port — a firewall is blocking outbound "
+                      "587/465, or EMAIL_HOST is wrong."),
+        ("Connection refused", "Nothing is listening on EMAIL_HOST:EMAIL_PORT."),
+        ("Name or service not known", "EMAIL_HOST does not resolve."),
+        ("CERTIFICATE_VERIFY_FAILED", "The mail server's certificate is not trusted."),
+    ]
+
+    def _hint(self, error: str) -> str:
+        for needle, text in self._MAIL_HINTS:
+            if needle.lower() in (error or "").lower():
+                return text
+        return ""
+
+    def check_mail(self):
+        from accounts.asset_email import mail_config_problems, mail_state
+
+        backend = getattr(settings, "EMAIL_BACKEND", "")
+        host = getattr(settings, "EMAIL_HOST", "")
+        user = getattr(settings, "EMAIL_HOST_USER", "")
+        who = f"{backend.rsplit('.', 1)[-1]}"
+        if backend.endswith("smtp.EmailBackend"):
+            who += f" → {host}:{getattr(settings, 'EMAIL_PORT', '')} as {user or '(nobody)'}"
+        problems = mail_config_problems()
+        if problems:
+            self.report(FAIL, "E-mail is not configured: " + "; ".join(problems), who,
+                        "Put the EMAIL_* settings in the .env beside docker-compose.yml "
+                        "(see docs/unpass-mail.md), then docker compose restart web worker beat")
+        else:
+            self.report(OK, "E-mail is configured", who)
+        if "office365" in (host or "").lower() and backend.endswith("smtp.EmailBackend"):
+            self.report(WARN, "Office 365 password SMTP is switched off by default at the end of December 2026",
+                        "", "Move to the Graph backend before then — docs/unpass-mail.md")
+        state = mail_state()
+        if state.get("last_error_at") and state.get("last_error_at", "") > state.get("last_ok", ""):
+            err = state.get("last_error", "")
+            self.report(FAIL, f"The last e-mail failed ({state['last_error_at'][:16]})", err[:300],
+                        self._hint(err) or "Run: unpass_doctor --mail-test you@your.org")
+        elif state.get("last_ok"):
+            self.report(OK, f"Last e-mail sent {state['last_ok'][:16]} "
+                            f"({state.get('sent', 0)} sent, {state.get('failed', 0)} failed since tracking began)")
+        else:
+            self.report(INFO, "No e-mail sent since this check was added",
+                        fix="Prove it works: unpass_doctor --mail-test you@your.org")
+
+    def mail_test(self, address):
+        from accounts.asset_email import _send_email, deliver_synchronously
+
+        self.stdout.write(f"Sending a test e-mail to {address} with "
+                          f"{getattr(settings, 'EMAIL_BACKEND', '')} …")
+        try:
+            with deliver_synchronously(raise_errors=True):
+                _send_email(
+                    subject="UN PASS e-mail test", to_emails=[address],
+                    html_template="emails/expiry/digest.html",
+                    context={"subject": "UN PASS e-mail test", "heading": "E-mail works",
+                             "intro": "If you are reading this, UN PASS can send e-mail. "
+                                      "Signing invitations will arrive.",
+                             "rows": [], "columns": [], "footer": "",
+                             "brand": getattr(settings, "ESIGN_BRAND", "NES")},
+                )
+        except Exception as exc:  # noqa: BLE001
+            err = f"{type(exc).__name__}: {exc}"
+            self.stdout.write(self.style.ERROR(f"FAILED — {err}"))
+            hint = self._hint(err)
+            if hint:
+                self.stdout.write(f"→ {hint}")
+            raise SystemExit(1)
+        self.stdout.write(self.style.SUCCESS("Sent. Check the inbox (and the spam folder)."))
+
+    def check_pdf(self):
+        from accounts import esign_finalize as F
+
+        ok, detail = F.stamp_selftest()
+        if ok:
+            self.report(OK, "Envelope ID and signatures stamp onto pages", detail)
+        else:
+            self.report(FAIL, "Pages cannot be stamped — completed documents would show no "
+                              "Envelope ID and no signatures", detail,
+                        "Rebuild the image: docker compose build && docker compose up -d")
+        try:
+            stuck = F.stuck_envelopes()
+            self.report(FAIL if stuck else OK,
+                        f"{len(stuck)} envelope(s) fully signed but never completed" if stuck
+                        else "No envelope is stuck between signed and completed",
+                        ", ".join(e.envelope_id[:12] for e in stuck[:5]),
+                        "manage.py esign_reissue --stuck --apply" if stuck else "")
+            from accounts.models_esign import Envelope
+            recent = Envelope.objects.filter(status=Envelope.STATUS_COMPLETED).order_by("-completed_at")[:30]
+            bad = [e for e in recent if F.missing_stamp(e)]
+            self.report(FAIL if bad else OK,
+                        f"{len(bad)} of the last {len(recent)} completed documents have no Envelope ID on the page"
+                        if bad else f"The last {len(recent)} completed documents carry their Envelope ID",
+                        ", ".join(e.envelope_id[:12] for e in bad[:5]),
+                        "manage.py esign_reissue --apply --email" if bad else "")
+        except Exception as exc:  # noqa: BLE001
+            self.report(WARN, "Could not inspect completed documents", str(exc))
+
+    def check_sentinels(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        try:
+            from accounts import sentinel_esign as S
+            from accounts.models_esign_sentinel import SentinelAlert, SentinelNode
+        except Exception as exc:
+            self.report(WARN, "Sentinel code not loaded", str(exc))
+            return
+        try:
+            if not S.enabled():
+                self.report(INFO, "Sentinels are switched off (ESIGN_SENTINEL_ENABLED)")
+                return
+            if not S.key_ready():
+                self.report(FAIL, "No Sentinel publication key", str(S.key_path()),
+                            "scripts/owner.sh nes_sentinel keygen")
+                return
+            self.report(OK, "Publication key loaded",
+                        S.pretty_fingerprint(S.fingerprint(S.public_key_b64())))
+            ledger = S.verify_ledger()
+            if ledger["ok"]:
+                self.report(OK, f"Ledger: all {ledger['blocks']} blocks link and verify")
+            else:
+                self.report(FAIL, f"Ledger: {len(ledger['problems'])} damaged block(s)",
+                            str(ledger["problems"][:5]),
+                            "Every Sentinel will already have raised this. Restore from backup.")
+            nodes = list(SentinelNode.objects.filter(status=SentinelNode.STATUS_ACTIVE))
+            if not nodes:
+                self.report(WARN, "No Sentinel enrolled",
+                            "Nothing outside this server holds a copy of the ledger.",
+                            "Esign → Sentinels → Create enrolment code; give it to another office.")
+            else:
+                hours = float(getattr(settings, "ESIGN_SENTINEL_SILENT_HOURS", 6))
+                cutoff = timezone.now() - timedelta(hours=hours)
+                quiet = [n.name for n in nodes if not n.last_seen_at or n.last_seen_at < cutoff]
+                self.report(WARN if quiet else OK,
+                            f"{len(nodes) - len(quiet)} of {len(nodes)} Sentinel(s) checked in "
+                            f"within {hours:g}h", ", ".join(quiet))
+            open_alerts = SentinelAlert.objects.filter(resolved_at__isnull=True).count()
+            self.report(FAIL if open_alerts else OK,
+                        f"{open_alerts} open tamper alert(s)" if open_alerts else "No open tamper alerts",
+                        fix="Esign → Sentinels" if open_alerts else "")
+        except Exception as exc:
+            self.report(WARN, "Could not check Sentinels", str(exc),
+                        "Run makemigrations/migrate for the Sentinel models.")
+
     def check_chains(self, limit):
         from accounts.audit_chain_esign import verify_anchor, verify_chain
         from accounts.models_esign import Envelope

@@ -332,44 +332,30 @@ REST_FRAMEWORK = {
 # EMAIL
 # ---------------------------------------------------------------------
 
-EMAIL_BACKEND = os.getenv(
-    "EMAIL_BACKEND",
-    "django.core.mail.backends.smtp.EmailBackend",
-)
-
-EMAIL_HOST = os.getenv(
-    "EMAIL_HOST",
-    "smtp.office365.com",
-)
-
-EMAIL_PORT = int(
-    os.getenv(
-        "EMAIL_PORT",
-        587,
-    )
-)
-
-EMAIL_USE_TLS = (
-    os.getenv(
-        "EMAIL_USE_TLS",
-        "True",
-    ) == "True"
-)
-
-EMAIL_HOST_USER = os.getenv(
-    "EMAIL_HOST_USER",
-    "",
-)
-
-EMAIL_HOST_PASSWORD = os.getenv(
-    "EMAIL_HOST_PASSWORD",
-    "",
-)
-
-DEFAULT_FROM_EMAIL = os.getenv(
-    "DEFAULT_FROM_EMAIL",
-    EMAIL_HOST_USER,
-)
+# Read from the environment first, then from .env (python-decouple), so mail
+# settings can live in the .env beside docker-compose.yml. They used to be
+# environment-only: settings kept in a local docker-compose.yml were lost the
+# moment that file was replaced, and every e-mail then failed silently.
+#
+# Office 365: Microsoft disables password ("basic") SMTP AUTH by default for
+# existing tenants at the end of December 2026. To keep sending after that,
+# switch to the Graph backend, which signs in with an app registration:
+#   EMAIL_BACKEND=accounts.mail_graph.GraphEmailBackend
+#   MS_GRAPH_TENANT_ID=…  MS_GRAPH_CLIENT_ID=…  MS_GRAPH_CLIENT_SECRET=…
+#   DEFAULT_FROM_EMAIL=the mailbox to send as
+# See docs/unpass-mail.md.
+EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.office365.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=False, cast=bool)
+EMAIL_TIMEOUT = config("EMAIL_TIMEOUT", default=30, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
+MS_GRAPH_TENANT_ID = config("MS_GRAPH_TENANT_ID", default="")
+MS_GRAPH_CLIENT_ID = config("MS_GRAPH_CLIENT_ID", default="")
+MS_GRAPH_CLIENT_SECRET = config("MS_GRAPH_CLIENT_SECRET", default="")
 
 
 # ---------------------------------------------------------------------

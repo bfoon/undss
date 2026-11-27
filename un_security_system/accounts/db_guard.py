@@ -278,6 +278,11 @@ TRIGGERS = [
      "nes_guard_columns('{verified,verify_detail,verified_at}')"),
     ("accounts_witnessrecord", "nes_guard_witnessrecord_trg",
      "BEFORE UPDATE OR DELETE", "FOR EACH ROW", "nes_guard_columns('{}')"),
+    ("accounts_sentinelblock", "nes_guard_sentinelblock_trg",
+     "BEFORE UPDATE OR DELETE", "FOR EACH ROW", "nes_guard_append_only()"),
+    ("accounts_sentinelalert", "nes_guard_sentinelalert_trg",
+     "BEFORE UPDATE OR DELETE", "FOR EACH ROW",
+     "nes_guard_columns('{notified_at,resolved_at,resolved_by_id,resolution_note}')"),
     ("nes_guard_detached", "nes_guard_detached_trg",
      "BEFORE UPDATE OR DELETE", "FOR EACH ROW", "nes_guard_append_only()"),
 ]
@@ -287,6 +292,7 @@ TRUNCATE_TABLES = [
     "accounts_signatureidentity", "accounts_signaturekey",
     "accounts_signaturemark", "accounts_signatureattestation",
     "accounts_witnessrecord", "nes_guard_detached",
+    "accounts_sentinelblock", "accounts_sentinelalert",
 ]
 
 #: The identity rule that already shipped (esign_identity --install-guard).

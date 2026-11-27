@@ -412,6 +412,26 @@ def _draw_envelope_token(c, width, height, envelope):
     c.restoreState()
 
 
+class StampError(RuntimeError):
+    """The Envelope ID or a signature could not be put on a page."""
+
+
+def stamp_page(target, overlay, *, what: str = "page"):
+    """
+    Merge `overlay` onto `target`, a page already added to a PdfWriter.
+
+    Works on pypdf 3 through 7. Raises StampError instead of returning a page
+    without its marks: a signed document that does not show its signatures
+    is worse than an error the sender can see.
+    """
+    try:
+        target.merge_page(overlay)
+    except Exception as exc:
+        logging.getLogger(__name__).exception("NES: could not stamp %s", what)
+        raise StampError(f"Could not stamp {what}: {exc}") from exc
+    return target
+
+
 def _is_workflow_child_envelope(envelope) -> bool:
     """Workflow child envelope IDs belong in audit records, not stacked on the PDF."""
     return str(getattr(envelope, "reference", "") or "").upper().startswith("WF-")
@@ -755,15 +775,14 @@ def build_final_pdf(envelope: Envelope) -> bytes:
             c.save()
             overlay_buf.seek(0)
 
-            try:
-                overlay_page = PdfReader(
-                    overlay_buf
-                ).pages[0]
-                page.merge_page(overlay_page)
-            except Exception:
-                pass
-
-            writer.add_page(page)
+            # Attach the page to the writer FIRST, then stamp the writer's
+            # copy. pypdf 7 refuses to merge onto a page that still belongs
+            # to a reader — and this used to be wrapped in `except: pass`, so
+            # every completed document silently lost its Envelope ID and
+            # every signature. A stamp failure is now loud.
+            target = writer.add_page(page)
+            stamp_page(target, PdfReader(overlay_buf).pages[0],
+                       what=f"envelope {envelope.envelope_id} page {page_index}")
 
     out = io.BytesIO()
     writer.write(out)

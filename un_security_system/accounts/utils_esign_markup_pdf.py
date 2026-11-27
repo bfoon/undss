@@ -360,7 +360,7 @@ def render_markup_pdf(envelope, marks, page_iter, brand="NES"):
     `marks`     — list of dicts shaped like EnvelopeAnnotation.as_dict()
     `page_iter` — yields (document_id, document_name, page_number, pypdf page)
     """
-    from pypdf import PageObject, PdfReader, PdfWriter
+    from pypdf import PdfReader, PdfWriter
 
     writer = PdfWriter()
 
@@ -430,10 +430,10 @@ def render_markup_pdf(envelope, marks, page_iter, brand="NES"):
         c.save()
         buf.seek(0)
 
-        sheet = PageObject.create_blank_page(width=page_w + margin_w, height=page_h)
+        # A blank page created by the writer, so pypdf 7 lets us merge onto it.
+        sheet = writer.add_blank_page(width=page_w + margin_w, height=page_h)
         sheet.merge_page(page)                       # original artwork first
         sheet.merge_page(PdfReader(buf).pages[0])    # then marks and cards
-        writer.add_page(sheet)
 
     _overflow_pages(writer, leftovers, fallback_size, envelope, brand,
                     "Comments continued")

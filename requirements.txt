@@ -17,8 +17,12 @@ python-decouple==3.8
 whitenoise==6.6.0
 python-dotenv
 qrcode[pil]
-reportlab
-pypdf
+# Pinned: an unpinned pypdf jumped to 7.x on rebuild, and 7.x refused the
+# page stamping NES used — documents completed without Envelope ID or
+# signatures. The code now works on 7 as well, but versions only change
+# deliberately from here on.
+reportlab>=4.0,<6
+pypdf>=4.0,<7
 icalendar
 openpyxl
 python-docx

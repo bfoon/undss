@@ -30,6 +30,9 @@ x-app: &app
     - DB_PORT=5432
     # Scheduled jobs. Database 1, so it never shares keys with Channels (0).
     - CELERY_BROKER_URL=redis://redis:6379/1
+    # NES Sentinel publication key — created on the host with
+    # scripts/sentinel_keygen.sh, read-only in here like the seal.
+    - ESIGN_SENTINEL_KEY=${ESIGN_SENTINEL_KEY:-/etc/unpass/nes_sentinel_ed25519.pem}
 
 services:
   db:

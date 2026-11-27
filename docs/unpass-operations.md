@@ -249,15 +249,26 @@ fingerprint of a key inserted directly into the database — and e-mails the
 owner and ICT. The first run records the existing keys silently as the
 baseline.
 
-## 5. Deploying this change
+## 5. Sentinels: witnesses outside this server
+
+Everything above protects the trail from the application and from anyone
+holding its database password. Someone who owns the server outright — the
+`postgres` account, the disk, the code — can still change things. Sentinels
+are how that gets noticed: small programs other offices install on their own
+machines, each holding a signed copy of the NES ledger and checking UN PASS
+against it all day. See `docs/nes-sentinel.md` (ICT) and `sentinel/README.md`
+(the office installing one).
+
+## 6. Deploying this change
 
 First commit the server's existing migration files (section 2), so the one
 new migration this change needs lands on top of the real history:
 
     git pull
     docker compose build
-    docker compose run --rm web python manage.py makemigrations accounts   # one new choice on EnvelopeEvent
+    scripts/owner.sh makemigrations accounts     # the "expired" event choice + the Sentinel models
     scripts/owner.sh migrate
+    scripts/sentinel_keygen.sh                             # once: Sentinel publication key
     scripts/owner.sh unpass_harden_db --install-guards
     scripts/owner.sh unpass_harden_db --create-app-role     # then add the two lines to .env
     git add -- '*/migrations/*.py' && git commit -m "Migration: expired event" && git push
