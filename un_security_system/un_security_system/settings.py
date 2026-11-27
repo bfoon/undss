@@ -785,15 +785,16 @@ ESIGN_PDF_FONT_BOLD = (
 # NES STUDIO — AGENTIC FLOWS (docs/agentic-flows.md)
 # ---------------------------------------------------------------------
 
-# Which model answers. "anthropic" (Claude), "openai" (OpenAI or any
+# Which model answers. "gemini" (Google Gemini — automatic when GEMINI_API_KEY,
+# BFoon's key, is set; Flash-Lite first, then Flash), "anthropic" (Claude), "openai" (OpenAI or any
 # OpenAI-compatible server: Azure OpenAI, Ollama, vLLM…) or "offline".
 # Empty = Claude when a key is set, otherwise the built-in offline engine.
-AGENT_AI_PROVIDER = os.getenv("AGENT_AI_PROVIDER", "")
-AGENT_AI_API_KEY = os.getenv("AGENT_AI_API_KEY", "")
-AGENT_AI_MODEL = os.getenv("AGENT_AI_MODEL", "")            # e.g. claude-sonnet-5-5
-AGENT_AI_BASE_URL = os.getenv("AGENT_AI_BASE_URL", "")      # e.g. http://ollama:11434/v1
-AGENT_AI_AUTH_HEADER = os.getenv("AGENT_AI_AUTH_HEADER", "bearer")   # "api-key" for Azure OpenAI
-AGENT_AI_TIMEOUT = int(os.getenv("AGENT_AI_TIMEOUT", "90"))
+AGENT_AI_PROVIDER = config("AGENT_AI_PROVIDER", default="")      # "gemini" is picked automatically when GEMINI_API_KEY is set
+AGENT_AI_API_KEY = config("AGENT_AI_API_KEY", default="")
+AGENT_AI_MODEL = config("AGENT_AI_MODEL", default="")            # e.g. claude-sonnet-5-5
+AGENT_AI_BASE_URL = config("AGENT_AI_BASE_URL", default="")      # e.g. http://ollama:11434/v1
+AGENT_AI_AUTH_HEADER = config("AGENT_AI_AUTH_HEADER", default="bearer")   # "api-key" for Azure OpenAI
+AGENT_AI_TIMEOUT = config("AGENT_AI_TIMEOUT", default=90, cast=int)
 AGENT_AI_MAX_INPUT_CHARS = int(os.getenv("AGENT_AI_MAX_INPUT_CHARS", "60000"))
 
 # "thread" runs agents off the request; "sync" runs them inline (tests).

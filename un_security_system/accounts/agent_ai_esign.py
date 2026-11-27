@@ -5,7 +5,9 @@ UN PASS — Agentic Flows: the one place that talks to a language model.
 Pick a provider in settings (or the environment). Nothing else in the app
 knows which one is in use.
 
-    AGENT_AI_PROVIDER   "anthropic" (Claude), "openai" (OpenAI or any
+    AGENT_AI_PROVIDER   "gemini" (Google Gemini, the key BFoon uses — picked
+                        automatically when GEMINI_API_KEY is set), "anthropic"
+                        (Claude), "openai" (OpenAI or any
                         OpenAI-compatible server: Azure OpenAI, Ollama, vLLM,
                         LM Studio…), or "offline". Empty = Claude when a key is
                         set, otherwise offline.
@@ -49,7 +51,11 @@ DEFAULT_MODELS = {
 DEFAULT_BASE = {
     "anthropic": "https://api.anthropic.com",
     "openai": "https://api.openai.com/v1",
+    # Gemini's OpenAI-compatible endpoint: same request shape as "openai".
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
 }
+#: Fast, generous free quota first; the stronger Flash only as the fallback.
+GEMINI_DEFAULT_MODELS = "gemini-flash-lite-latest,gemini-flash-latest"
 ANTHROPIC_VERSION = "2023-06-01"
 
 #: Prepended to every system prompt. Documents are data, never instructions:
@@ -92,11 +98,15 @@ def provider_name() -> str:
         return "anthropic"
     if explicit in ("openai", "azure", "azure_openai", "ollama", "compatible", "openai_compatible"):
         return "openai"
+    if explicit in ("gemini", "google"):
+        return "gemini"
     if explicit == "offline":
         return "offline"
     # Auto: whichever key is present.
     if _api_key("anthropic"):
         return "anthropic"
+    if _gemini_key():
+        return "gemini"
     if _api_key("openai") and _setting("AGENT_AI_BASE_URL", ""):
         return "openai"
     if os.getenv("OPENAI_API_KEY"):
@@ -104,10 +114,22 @@ def provider_name() -> str:
     return "offline"
 
 
+def _gemini_key() -> str:
+    return str(_setting("GEMINI_API_KEY", "")).strip()
+
+
+def gemini_models() -> list[str]:
+    raw = (str(_setting("AGENT_AI_MODEL", "")).strip() if provider_name() == "gemini" else "") \
+        or str(_setting("BFOON_GEMINI_MODELS", "")).strip() or GEMINI_DEFAULT_MODELS
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
 def _api_key(provider=None) -> str:
     key = str(_setting("AGENT_AI_API_KEY", "")).strip()
     if key:
         return key
+    if provider == "gemini":
+        return _gemini_key()
     if provider in (None, "anthropic"):
         key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         if key or provider == "anthropic":
@@ -117,6 +139,8 @@ def _api_key(provider=None) -> str:
 
 def model_name() -> str:
     p = provider_name()
+    if p == "gemini":
+        return gemini_models()[0]
     return str(_setting("AGENT_AI_MODEL", "")).strip() or DEFAULT_MODELS.get(p, "built-in")
 
 
@@ -142,6 +166,13 @@ def info() -> dict:
     elif p == "anthropic":
         label = f"Claude · {model_name()}"
         detail = "Agents use Anthropic's Claude."
+    elif p == "gemini":
+        models = gemini_models()
+        label = f"Gemini · {models[0]}"
+        detail = ("Agents use Google Gemini" +
+                  (f", falling back to {', '.join(models[1:])} when it is busy" if len(models) > 1 else "") +
+                  ". On Google's free tier, what is sent may be kept by Google; enable billing on the "
+                  "Google project to stop that.")
     else:
         base = str(_setting("AGENT_AI_BASE_URL", "")) or DEFAULT_BASE["openai"]
         host = re.sub(r"^https?://", "", base).split("/")[0]
@@ -175,6 +206,8 @@ def complete(system: str, prompt: str, *, max_tokens: int = 1500, json_expected:
         try:
             if p == "anthropic":
                 result = _anthropic(system, prompt, max_tokens, timeout)
+            elif p == "gemini":
+                result = _gemini(system, prompt, max_tokens, timeout)
             else:
                 result = _openai(system, prompt, max_tokens, timeout)
             if json_expected:
@@ -255,10 +288,31 @@ def _anthropic(system, prompt, max_tokens, timeout) -> AIResult:
                     tokens_in=int(usage.get("input_tokens") or 0), tokens_out=int(usage.get("output_tokens") or 0))
 
 
-def _openai(system, prompt, max_tokens, timeout) -> AIResult:
-    base = (str(_setting("AGENT_AI_BASE_URL", "")) or DEFAULT_BASE["openai"]).rstrip("/")
+def _gemini(system, prompt, max_tokens, timeout) -> AIResult:
+    """Each Gemini model in turn: a busy or unknown model hands over to the next."""
+    base = (str(_setting("AGENT_AI_BASE_URL", "")) if str(_setting("AGENT_AI_PROVIDER", "")).lower()
+            in ("gemini", "google") else "") or DEFAULT_BASE["gemini"]
+    models = gemini_models()
+    last = None
+    for i, model in enumerate(models):
+        try:
+            result = _openai(system, prompt, max_tokens, timeout, model=model, base=base, key=_api_key("gemini"))
+            result.provider = "gemini"
+            return result
+        except _Retryable as exc:
+            last = exc
+        except AIError as exc:
+            if "does not know the model" not in str(exc) or i == len(models) - 1:
+                raise
+            last = exc
+        logger.warning("Agents: Gemini %s failed (%s) — trying the next model", model, last)
+    raise _Retryable(str(last) if last else "Gemini did not answer.")
+
+
+def _openai(system, prompt, max_tokens, timeout, *, model=None, base=None, key=None) -> AIResult:
+    base = (base or str(_setting("AGENT_AI_BASE_URL", "")) or DEFAULT_BASE["openai"]).rstrip("/")
     url = base if base.endswith("/chat/completions") else base + "/chat/completions"
-    key = _api_key("openai")
+    key = _api_key("openai") if key is None else key
     headers = {}
     if key:
         if str(_setting("AGENT_AI_AUTH_HEADER", "bearer")).lower() == "api-key":
@@ -267,14 +321,14 @@ def _openai(system, prompt, max_tokens, timeout) -> AIResult:
             headers["Authorization"] = f"Bearer {key}"
     token_param = str(_setting("AGENT_AI_MAX_TOKENS_PARAM", "max_tokens")) or "max_tokens"
     data = _post(url, headers, {
-        "model": model_name(),
+        "model": model or model_name(),
         token_param: _room(max_tokens),
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
     }, timeout)
     choices = data.get("choices") or []
     text = ((choices[0].get("message") or {}).get("content") if choices else "") or ""
     usage = data.get("usage") or {}
-    return AIResult(text=str(text).strip(), model=data.get("model") or model_name(), provider="openai",
+    return AIResult(text=str(text).strip(), model=data.get("model") or model or model_name(), provider="openai",
                     tokens_in=int(usage.get("prompt_tokens") or 0), tokens_out=int(usage.get("completion_tokens") or 0))
 
 

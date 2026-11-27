@@ -38,7 +38,7 @@ The Contractor must provide a performance guarantee of 10 percent of the contrac
 Contact: john.doe@acmesolar.com, +220 771 2345. Bank account no. 0012345678 at Trust Bank.
 """
 
-OFFLINE = dict(AGENT_RUN_MODE="sync", AGENT_AI_PROVIDER="offline", AGENT_AI_API_KEY="",
+OFFLINE = dict(AGENT_RUN_MODE="sync", AGENT_AI_PROVIDER="offline", AGENT_AI_API_KEY="", GEMINI_API_KEY="",
                EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend", SITE_URL="https://unpass.test")
 
 
@@ -307,6 +307,34 @@ class AIProviderTests(AgentTestBase):
         with mock.patch.object(A, "_post", side_effect=fake_post):
             run = self.run_text(flow)
         self.assertEqual(run.steps.get(node_id="c").port, "proc")
+
+    @override_settings(AGENT_AI_PROVIDER="", AGENT_AI_API_KEY="", AGENT_AI_MODEL="", AGENT_AI_BASE_URL="",
+                       GEMINI_API_KEY="g-key", BFOON_GEMINI_MODELS="gemini-flash-lite-latest,gemini-flash-latest",
+                       AGENT_AI_RETRIES=0)
+    def test_gemini_from_bfoon_key_with_fallback(self):
+        import os
+        import urllib.error
+        from . import agent_ai_esign as A
+
+        calls = []
+
+        def fake_post(url, headers, body, timeout):
+            calls.append((url, headers.get("Authorization"), body["model"]))
+            if body["model"] == "gemini-flash-lite-latest":
+                raise A._Retryable("busy")
+            return {"model": body["model"], "choices": [{"message": {"content": "A Gemini summary."}}]}
+
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "", "OPENAI_API_KEY": ""}):
+            self.assertEqual(A.provider_name(), "gemini")
+            self.assertFalse(A.info()["offline"])
+            self.assertIn("Gemini", A.info()["label"])
+            flow = self.flow({"nodes": [n("s", "start"), n("sum", "summarize")], "edges": [e("s", "next", "sum")]})
+            with mock.patch.object(A, "_post", side_effect=fake_post):
+                run = self.run_text(flow)
+        self.assertEqual(run.steps.get(node_id="sum").output_text, "A Gemini summary.")
+        self.assertEqual([c[2] for c in calls], ["gemini-flash-lite-latest", "gemini-flash-latest"])
+        self.assertTrue(calls[0][0].startswith("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"))
+        self.assertEqual(calls[0][1], "Bearer g-key")
 
     def test_offline_info(self):
         from . import agent_ai_esign as A
