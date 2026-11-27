@@ -398,119 +398,259 @@ ESIGN_BRAND_FULL = "NES — Not eSign"
 
 
 # ---------------------------------------------------------------------
+# NES — WHERE THE OFFICE'S SIGNING MATERIAL LIVES
+# ---------------------------------------------------------------------
+# Every secret and certificate NES needs sits in one directory OUTSIDE the
+# code, mounted into the container read-only (see docker-compose.yml). Nothing
+# below holds a passphrase, a key or a secret in this file: those come from
+# the environment (.env), so this file can be committed and shared safely.
+#
+#   /etc/unpass/
+#     seal.p12                        the office seal: key + certificate + chain
+#     root-ca.crt                     the CA that issued it (optional)
+#     nes-signature-policy-v1.pdf     the published policy (optional)
+#
+# Each feature below switches itself on when its material is present, and
+# stays off — with envelopes completing exactly as before — when it is not.
+# `python manage.py esign_pades --check` reports what was found.
+from decouple import Csv as _NES_Csv
+
+NES_SECRETS_DIR = config("NES_SECRETS_DIR", default="/etc/unpass")
+
+
+def _nes_path(name: str) -> str:
+    """A file in the secrets directory, or "" when it is not there."""
+    path = os.path.join(NES_SECRETS_DIR, name)
+    return path if os.path.exists(path) else ""
+
+
+# The public address of this installation, for links written into documents.
+# Read here rather than from SITE_URL further down, which is defined later.
+_NES_SITE = os.getenv("SITE_URL", "https://unpass.gm").strip().rstrip("/")
+if _NES_SITE and not _NES_SITE.lower().startswith(("http://", "https://")):
+    _NES_SITE = "https://" + _NES_SITE
+
+
+# ---------------------------------------------------------------------
 # NES — PAdES DIGITAL SEAL  (ETSI EN 319 142)
 # ---------------------------------------------------------------------
 # Embeds a cryptographic signature inside every completed PDF, so Adobe
 # Acrobat and any ETSI-conformant validator can confirm the document is
 # authentic and unmodified without access to UN PASS.
 #
-# Off until a signing certificate exists. While off, envelopes complete
-# exactly as before — the visible signatures, the envelope token and the
-# Certificate of Completion are unchanged.
+# On automatically once seal.p12 exists in the secrets directory. Force it
+# either way with ESIGN_PADES_ENABLED=1 / 0 in .env.
 #
 # Check the configuration with:   python manage.py esign_pades --check
-# Generate a test certificate:    python manage.py esign_pades --make-dev-cert
-ESIGN_PADES_ENABLED = False
+# Test certificate (NOT for real documents). /etc/unpass is mounted
+# read-only, so write through the project mount, which is the same folder:
+#   python manage.py esign_pades --make-dev-cert /app/secrets/seal.p12
 
 # Option A — a PKCS#12 / PFX bundle holding the key, certificate and chain.
-ESIGN_PADES_PKCS12 = ""
-ESIGN_PADES_PKCS12_PASSPHRASE = ""
+ESIGN_PADES_PKCS12 = config(
+    "ESIGN_PADES_PKCS12", default=os.path.join(NES_SECRETS_DIR, "seal.p12")
+)
+ESIGN_PADES_PKCS12_PASSPHRASE = config(
+    "ESIGN_PADES_PKCS12_PASSPHRASE", default=""
+)
 
-# Option B — separate PEM files. Used only when PKCS12 above is empty.
-ESIGN_PADES_CERT = ""
-ESIGN_PADES_KEY = ""
-ESIGN_PADES_KEY_PASSPHRASE = ""
-ESIGN_PADES_CHAIN = []          # intermediate/issuing CA certificates, PEM
+# Option B — separate PEM files. Used only when the PKCS#12 above is absent.
+ESIGN_PADES_CERT = config("ESIGN_PADES_CERT", default="")
+ESIGN_PADES_KEY = config("ESIGN_PADES_KEY", default="")
+ESIGN_PADES_KEY_PASSPHRASE = config("ESIGN_PADES_KEY_PASSPHRASE", default="")
+ESIGN_PADES_CHAIN = config(
+    "ESIGN_PADES_CHAIN", default="", cast=_NES_Csv()
+)   # intermediate/issuing CA certificates, PEM, comma-separated
+
+ESIGN_PADES_ENABLED = config(
+    "ESIGN_PADES_ENABLED",
+    default=bool(
+        os.path.exists(ESIGN_PADES_PKCS12)
+        or (ESIGN_PADES_CERT and ESIGN_PADES_KEY)
+    ),
+    cast=bool,
+)
 
 # Baseline conformance target: b-b | b-t | b-lt | b-lta
 #   b-b    signature + certificate                     (no TSA needed)
 #   b-t    + RFC 3161 trusted timestamp                (needs a TSA)
-#   b-lt   + embedded revocation data, long-term        (recommended)
-#   b-lta  + archival document timestamp
+#   b-lt   + embedded revocation data, long-term
+#   b-lta  + archival document timestamp, renewable    (archival — chosen)
 # The run steps down automatically if a TSA or OCSP responder is unreachable,
-# and records the level it actually reached.
-ESIGN_PADES_LEVEL = "b-lt"
+# and records the level it actually reached, so asking for b-lta costs
+# nothing on a bad day and gives the archival level on every other.
+ESIGN_PADES_LEVEL = config("ESIGN_PADES_LEVEL", default="b-lta")
 
-# RFC 3161 timestamp authority. Required for b-t and above. A UN-operated or
-# commercial TSA both work; without one the seal is capped at b-b.
-ESIGN_PADES_TSA_URL = ""
-ESIGN_PADES_TSA_USERNAME = ""
-ESIGN_PADES_TSA_PASSWORD = ""
+# RFC 3161 timestamp authority. Required for b-t and above; without one the
+# seal is capped at b-b, which fails POPP authenticity parameter (ii) — the
+# date and time of the signature.
+#
+# DigiCert by default: free, no account, and its root is already in Adobe's
+# Approved Trust List and the Windows and most Linux trust stores, so a
+# recipient sees the timestamp as trusted with nothing to configure. A
+# timestamp is worth whatever the RECIPIENT's validator makes of it.
+#
+# It is a fair-use service with no SLA. If UNDP or the Regional Bureau ICT
+# provide a corporate TSA, set ESIGN_PADES_TSA_URL in .env and it wins.
+# Confirm what your network can reach:  manage.py esign_pades --tsa-survey
+#
+# Only a hash is ever sent. The authority never sees the document.
+ESIGN_PADES_TSA_URL = config(
+    "ESIGN_PADES_TSA_URL", default="http://timestamp.digicert.com"
+)
+ESIGN_PADES_TSA_USERNAME = config("ESIGN_PADES_TSA_USERNAME", default="")
+ESIGN_PADES_TSA_PASSWORD = config("ESIGN_PADES_TSA_PASSWORD", default="")
 
-# Root CAs trusted when UN PASS validates a seal itself (the verify page).
-# Readers use their own trust store; this only affects the in-app check.
-ESIGN_PADES_TRUST_ROOTS = []
+# Root CAs trusted when UN PASS validates a seal itself (the verify page, and
+# revocation collection at b-lt). Readers use their own trust store; this
+# only affects UN PASS's own checks.
+#
+# By default: the operating system's CA bundle — which already holds
+# DigiCert's roots, so the default timestamp validates — plus the office's
+# own CA if root-ca.crt is in the secrets directory, so an office seal
+# issued by a private CA validates too. A bundle file or a directory both
+# work; every certificate in them is read.
+ESIGN_PADES_TRUST_ROOTS = config(
+    "ESIGN_PADES_TRUST_ROOTS",
+    default=",".join(p for p in (
+        "/etc/ssl/certs/ca-certificates.crt"
+        if os.path.exists("/etc/ssl/certs/ca-certificates.crt") else "",
+        _nes_path("root-ca.crt"),
+    ) if p),
+    cast=_NES_Csv(),
+)
 
 ESIGN_PADES_FIELD_NAME = "NESDocumentSeal"
 ESIGN_PADES_DIGEST = "sha256"
-ESIGN_PADES_REASON = ""          # blank -> "Completed in NES ..."
-ESIGN_PADES_LOCATION = ""        # e.g. "Banjul, The Gambia"
+ESIGN_PADES_REASON = config("ESIGN_PADES_REASON", default="")
+# Blank -> "Completed in NES — all signatures collected".
 
-# Seal the Certificate of Completion as well as the document. On by default:
-# the certificate is the record of WHO signed, so leaving it unsealed would
+# Where the seal is applied, as shown in a reader's signature panel.
+# e.g.  ESIGN_PADES_LOCATION=<city>, <country>   in .env
+ESIGN_PADES_LOCATION = config("ESIGN_PADES_LOCATION", default="")
+
+# Seal the Certificate of Completion as well as the document. On: the
+# certificate is the record of WHO signed, so leaving it unsealed would
 # protect the contract and leave the evidence about it editable.
 ESIGN_PADES_SEAL_CERTIFICATE = True
 
 # ---------------------------------------------------------------------
 # NES — DECLARED SIGNATURE POLICY  (ETSI EN 319 122-1 signed attributes)
 # ---------------------------------------------------------------------
-# What the seal asserts. `proof_of_origin` is correct here: the organisation
-# attests this is the authentic completed record. It is deliberately NOT
-# proof_of_approval — the approvals belong to the people who signed inside
-# the document, not to the server that sealed it.
-# One of: proof_of_origin | proof_of_approval | proof_of_receipt |
-#         proof_of_delivery | proof_of_sender | proof_of_creation
+# What the seal asserts. proof_of_origin: the office attests this is the
+# authentic completed record. Deliberately NOT proof_of_approval — the
+# approvals belong to the people who signed inside the document.
 ESIGN_PADES_COMMITMENT = "proof_of_origin"
 
-# The published rules the seal is issued under, asserted by OID and bound to
-# a hash of the policy document so the text cannot be swapped afterwards.
-# Both the OID and a readable document are required, or the attribute is
-# omitted — an OID with a fabricated digest is worse than no attribute.
-# Register an OID under your organisation's arc; do not invent one in a
-# namespace you do not control.
-ESIGN_PADES_POLICY_OID = ""
-ESIGN_PADES_POLICY_URI = ""      # where that policy is published
-ESIGN_PADES_POLICY_DOC = ""      # local path to the exact policy file
+# The published rules the seal is issued under, by OID, bound to a hash of
+# the policy document. BOTH the OID and the document are required, or the
+# attribute is left out — an OID with nothing behind it is worse than none.
+#
+# Leave ESIGN_PADES_POLICY_OID empty until the office owns an OID arc (an
+# IANA Private Enterprise Number is free). Never invent one in a namespace
+# you do not control. Once set, the policy is expected at:
+#   file:  /etc/unpass/nes-signature-policy-v1.pdf
+#   web:   <SITE_URL>/policies/nes-signature-policy-v1.pdf
+ESIGN_PADES_POLICY_OID = config("ESIGN_PADES_POLICY_OID", default="")
+ESIGN_PADES_POLICY_DOC = config(
+    "ESIGN_PADES_POLICY_DOC",
+    default=_nes_path("nes-signature-policy-v1.pdf"),
+)
+ESIGN_PADES_POLICY_URI = config(
+    "ESIGN_PADES_POLICY_URI",
+    default=(
+        f"{_NES_SITE}/policies/nes-signature-policy-v1.pdf"
+        if ESIGN_PADES_POLICY_OID else ""
+    ),
+)
 
 # ---------------------------------------------------------------------
 # NES — LONG-TERM VALIDITY
 # ---------------------------------------------------------------------
 # A signature is not verifiable forever by default. Document timestamps
 # extend the window, and each refresh adds one before the previous goes
-# stale. Run this on a schedule:
+# stale. This MUST run on a schedule — a lapsed chain cannot be repaired:
 #
 #   docker compose exec web python manage.py esign_pades --refresh-ltv
 #
-# 180 days is a safe cadence for commercial TSA certificates, which
-# typically run a few years. Shorter is harmless; much longer risks the
-# chain lapsing, after which it cannot be repaired.
-ESIGN_PADES_REFRESH_DAYS = 180
+# 180 days is a safe cadence for commercial TSA certificates.
+ESIGN_PADES_REFRESH_DAYS = config(
+    "ESIGN_PADES_REFRESH_DAYS", default=180, cast=int
+)
+
+# ---------------------------------------------------------------------
+# NES — ARCHIVAL FILE FORMAT (PDF/A, ISO 19005)
+# ---------------------------------------------------------------------
+# The seal proves a document has not changed. PDF/A is the separate promise
+# that it will still *render* in forty years: fonts embedded, colour
+# device-independent, no JavaScript, no external references.
+#
+# Order matters and is not negotiable:
+#
+#     flatten  ->  PDF/A  ->  PAdES seal  ->  archival timestamps
+#
+# Conversion rewrites the file, so it happens BEFORE sealing. Everything
+# after it appends without touching the conforming revision.
+#
+# On by default: pikepdf is in requirements.txt and the image installs the
+# fonts (fonts-liberation) and Ghostscript. Without pikepdf, envelopes still
+# complete as ordinary PDFs and the reason is recorded.
+#
+#   manage.py esign_pades --pdfa-check          engines, fonts, ICC profile
+#   manage.py esign_pades --pdfa-verify <ID>    check one stored document
+#   manage.py esign_pades --pdfa <ID>           convert and re-seal one
+#   manage.py esign_pades --pdfa-backfill       report on everything sealed
+ESIGN_PDFA_ENABLED = config("ESIGN_PDFA_ENABLED", default=True, cast=bool)
+
+# The document: basic conformance, what archives ask for.
+ESIGN_PDFA_LEVEL = "2b"
+
+# The Certificate of Completion: PDF/A-3 permits embedded files, so it
+# carries its own evidence inside it — the audit trail, the signed anchor,
+# the certificate chain, each signatory's public key.
+ESIGN_PDFA_CERTIFICATE_LEVEL = "3b"
+ESIGN_PDFA_EMBED_EVIDENCE = True
+
+# auto: lossless structural upgrade first, Ghostscript for third-party
+# uploads whose fonts are missing. LibreOffice stays off — it redraws the
+# page, which is never a good idea for a contract.
+ESIGN_PDFA_ENGINE = "auto"
+ESIGN_PDFA_ALLOW_RERENDER = False
+ESIGN_PDFA_GHOSTSCRIPT = "gs"
+
+# Drawn with Liberation Sans (installed by the Dockerfile): its advance
+# widths match Helvetica exactly, so nothing on the page moves.
+ESIGN_PDFA_EMBED_FONTS = True
+ESIGN_PDFA_FONT_PATHS = []
+
+# Empty: the system sRGB profile, or one NES builds itself. No download.
+ESIGN_PDFA_ICC = ""
+
+# For a formal ISO 19005 verdict, point this at veraPDF in .env:
+#   ESIGN_PDFA_VERAPDF=/opt/verapdf/verapdf
+# Without it NES runs its own structural checks and says plainly so.
+ESIGN_PDFA_VERAPDF = config("ESIGN_PDFA_VERAPDF", default="")
+
+# Check each converted file the moment it is produced.
+ESIGN_PDFA_VERIFY_ON_WRITE = True
+
+ESIGN_PDFA_TIMEOUT = 180
 
 # ---------------------------------------------------------------------
 # NES — TAMPER-EVIDENT AUDIT TRAIL
 # ---------------------------------------------------------------------
-# Hash-links every audit entry to the one before it, so editing, deleting,
-# inserting or reordering an entry becomes visible. Completion additionally
-# signs the chain head and entry count, which is what makes entries removed
-# from the END of the trail detectable.
-#
-# Leave this on. Turning it off stops new entries being linked; entries
-# already written keep their hashes and still verify.
+# Hash-links every audit entry to the one before it; completion signs the
+# chain head and entry count so entries removed from the END are detectable.
+# Leave this on.
 ESIGN_AUDIT_CHAIN = True
 
 # ---------------------------------------------------------------------
 # NES — CROSS-OFFICE WITNESSING
 # ---------------------------------------------------------------------
 # Participating country offices each receive a signed fingerprint of every
-# document sealed here: the document hash, the audit-chain head, the time.
-# Forging a document then means altering every office's copy at once, in
-# databases you do not control.
+# document sealed here. Only fingerprints travel — never the document.
 #
-# Only fingerprints travel — never the document, the signature images, the
-# field values or recipient addresses. A SHA-256 proves tampering and reveals
-# nothing about content. So witnessing DETECTS and PROVES alteration; it does
-# not restore the file. Restoration comes from backups and from evidence
-# packages archived at completion.
+# On automatically once this office has a code. Then pair with each peer:
 #
 #   manage.py esign_witness --new-token        a token to give a peer
 #   manage.py esign_witness --export-cert P    our certificate, for a peer
@@ -518,63 +658,53 @@ ESIGN_AUDIT_CHAIN = True
 #   manage.py esign_witness --ping             check the link
 #   manage.py esign_witness --send-pending     cron, every 15 minutes
 #   manage.py esign_witness --audit            cron, nightly
-ESIGN_WITNESS_ENABLED = False
 
-# This office's code, as it appears in every statement we issue. Required.
-# Keep it stable — it is written into signed statements that outlive the
-# deployment. e.g. "UNDP-GM".
-ESIGN_WITNESS_OFFICE_CODE = ""
+# This office's code, written into every signed statement and expected to
+# outlive the deployment — choose it once and keep it, e.g. UNDSS-GM.
+ESIGN_WITNESS_OFFICE_CODE = config("ESIGN_WITNESS_OFFICE_CODE", default="")
 
-# Where integrity alerts are emailed. Falls back to ADMINS when unset; if
-# both are empty, alerts are recorded but nobody is told, which defeats the
-# point.
-ESIGN_WITNESS_ALERT_EMAILS = []
+ESIGN_WITNESS_ENABLED = config(
+    "ESIGN_WITNESS_ENABLED",
+    default=bool(ESIGN_WITNESS_OFFICE_CODE),
+    cast=bool,
+)
 
-# Seconds to wait on a peer. Kept short: distribution is queued and retried,
-# so a slow office should never hold up a run.
+# Where integrity alerts are emailed, comma-separated. If this and ADMINS
+# are both empty, alerts are recorded but nobody is told.
+ESIGN_WITNESS_ALERT_EMAILS = config(
+    "ESIGN_WITNESS_ALERT_EMAILS", default="", cast=_NES_Csv()
+)
+
+# Seconds to wait on a peer. Distribution is queued and retried.
 ESIGN_WITNESS_TIMEOUT = 15
 
 # ---------------------------------------------------------------------
 # NES — SIGNING IDENTITIES AND SOLE CONTROL
 # ---------------------------------------------------------------------
-# Each person gets one signing identity, for life:
-#
-#     NES-GM-2BE9-W79Q-MTVY-TC
-#
-# The ID never changes — not when they redraw their signature, not when they
-# rotate their key. Only the owner can change either; there is deliberately
-# no administrative override, because an administrator who could change
-# someone's signature could sign as them.
-#
-# The keypair is generated in the signatory's browser and the private key is
-# encrypted there under a passphrase only they know. This server stores a
-# public key and an opaque blob, so it cannot sign as anyone — and neither
-# can whoever takes the database or a backup. A forgotten passphrase cannot
-# be recovered by anyone: the signatory rotates to a new key and keeps the
-# same signature ID.
+# Each person gets one signing identity, for life:  NES-GM-2BE9-W79Q-MTVY-TC
+# Keys are generated in the signatory's browser; this server cannot sign as
+# anyone. Only the owner can change their signature; there is no override.
 #
 #   manage.py esign_identity --status
-#   manage.py esign_identity --install-guard     ← do this once, on Postgres
+#   manage.py esign_identity --install-guard     <- once, on PostgreSQL
 #   manage.py esign_identity --verify-ids
 #   manage.py esign_identity --audit
 
-# Secret the lifetime signature ID is derived under. Set this explicitly and
-# then leave it alone: rotating it does not invalidate IDs already issued
-# (they are stored), but it does stop them recomputing, which is how the
-# office proves it issued them rather than someone inventing one.
-# Falls back to SECRET_KEY when empty.
-ESIGN_SIGNATURE_ID_SECRET = ""
+# Secret the lifetime signature IDs are derived under. SET THIS IN .env
+# BEFORE THE FIRST PERSON ENROLS, and never change it afterwards: IDs issued
+# under one secret stop recomputing under another, which is how the office
+# proves it issued them. When empty it falls back to SECRET_KEY — and this
+# project's SECRET_KEY is committed to the repository, so anyone with the
+# code could mint IDs that look genuine. Generate one with:
+#   python -c "import secrets; print(secrets.token_urlsafe(48))"
+ESIGN_SIGNATURE_ID_SECRET = config("ESIGN_SIGNATURE_ID_SECRET", default="")
 
-# Refuse to accept a signature from someone who HAS an active signing
-# identity but did not use it. Leave False while people are still enrolling;
-# turn it on once they have, to close the gap where a signature could be
-# applied as an image instead.
-#
-# External signers with no account are never blocked by this — they cannot
-# have an identity. The audit trail and the certificate always record which
-# kind of signature was used, so the weaker one is never mistaken for the
-# stronger.
-ESIGN_REQUIRE_ATTESTATION = False
+# Refuse a signature from someone who HAS a signing identity but did not use
+# it. Leave off while staff enrol; turn on (ESIGN_REQUIRE_ATTESTATION=1) once
+# they have. External signers with no account are never blocked by this.
+ESIGN_REQUIRE_ATTESTATION = config(
+    "ESIGN_REQUIRE_ATTESTATION", default=False, cast=bool
+)
 
 
 # ---------------------------------------------------------------------

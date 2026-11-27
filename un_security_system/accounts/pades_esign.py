@@ -261,16 +261,30 @@ def _validation_context(cfg: dict, *, fetching: bool):
     and to validate a seal afterwards.
     """
     from pyhanko_certvalidator import ValidationContext
-    from pyhanko.keys import load_cert_from_pemder
+    from pyhanko.keys import load_certs_from_pemder
 
+    # Each entry may be a single certificate, a bundle holding many (the
+    # operating system's /etc/ssl/certs/ca-certificates.crt is one), or a
+    # directory of either. Reading only the first certificate of a bundle —
+    # which is what a single-certificate loader does — would silently trust
+    # one arbitrary root and reject every other.
     roots = []
     for path in cfg["trust_roots"]:
-        try:
-            roots.append(load_cert_from_pemder(path))
-        except Exception:
-            logger.warning(
-                "NES PAdES: trust root %s could not be read — ignoring it", path
+        if os.path.isdir(path):
+            files = sorted(
+                os.path.join(path, name) for name in os.listdir(path)
+                if name.lower().endswith((".pem", ".crt", ".cer", ".der"))
             )
+        else:
+            files = [path]
+        for file in files:
+            try:
+                roots.extend(load_certs_from_pemder([file]))
+            except Exception:
+                logger.warning(
+                    "NES PAdES: trust root %s could not be read — ignoring it",
+                    file,
+                )
 
     kwargs: dict[str, Any] = {"allow_fetching": fetching}
     if roots:
@@ -930,6 +944,183 @@ def refresh_ltv(envelope, *, force: bool = False) -> dict:
         )
         report["detail"] = str(exc)
         return report
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Choosing a timestamp authority
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A country office that cannot buy a TSA still needs one: without proof of
+# signing time the seal fails POPP authenticity parameter (ii), and it is the
+# one requirement no amount of code can satisfy locally. These are the public
+# RFC 3161 authorities that answer without an account.
+#
+# They are listed with their drawbacks rather than as a menu of equals. The
+# thing that actually separates them is not speed or uptime — it is whose
+# trust store already contains the authority's root, because a timestamp is
+# only worth what the *recipient's* validator makes of it. A timestamp from a
+# root nobody trusts is a timestamp that looks authoritative and proves
+# nothing to anyone outside this office.
+#
+# `--tsa-survey` probes every one of them from the office's own network and
+# reports what came back, so the choice is made on evidence rather than on
+# this list's say-so.
+
+PUBLIC_TSAS = [
+    {
+        "name": "DigiCert",
+        "url": "http://timestamp.digicert.com",
+        "recommended": True,
+        "production": True,
+        "widely_trusted": True,
+        "note": (
+            "The default recommendation. Its root is already in Adobe's "
+            "Approved Trust List and in the Windows and most Linux trust "
+            "stores, so a recipient opening the sealed PDF sees the "
+            "timestamp as trusted with nothing to configure. No account, no "
+            "key, no registration."
+        ),
+        "caveat": (
+            "A fair-use service with no SLA, and DigiCert's terms describe "
+            "it as timestamping for code and document signing with DigiCert "
+            "certificates. Read those terms before an office depends on it "
+            "institutionally — nobody at DigiCert has promised you anything."
+        ),
+    },
+    {
+        "name": "Sectigo",
+        "url": "http://timestamp.sectigo.com",
+        "recommended": False,
+        "production": True,
+        "widely_trusted": True,
+        "note": (
+            "Equivalent in character to DigiCert and a sound second choice, "
+            "or a fallback when DigiCert is unreachable from your network."
+        ),
+        "caveat": "Fair-use, no SLA, same terms-of-use question.",
+    },
+    {
+        "name": "Certum",
+        "url": "http://time.certum.pl",
+        "recommended": False,
+        "production": True,
+        "widely_trusted": True,
+        "note": (
+            "A European CA's public endpoint. Worth probing if the office "
+            "prefers an EU-domiciled authority; its root is widely "
+            "distributed."
+        ),
+        "caveat": (
+            "Free endpoint, not the qualified service. Do not describe it as "
+            "a qualified timestamp under eIDAS — that is a different, paid "
+            "product."
+        ),
+    },
+    {
+        "name": "FreeTSA",
+        "url": "https://freetsa.org/tsr",
+        "recommended": False,
+        "production": True,
+        "widely_trusted": False,
+        "note": (
+            "Genuinely free and unrestricted, which the commercial endpoints "
+            "above are not. Run by volunteers."
+        ),
+        "caveat": (
+            "It signs with its own root, which no validator trusts by "
+            "default. To make its timestamps mean anything you must add its "
+            "CA to ESIGN_PADES_TRUST_ROOTS *and* to the trust store of "
+            "everyone who will ever verify the document — which, for a "
+            "record sent outside the office, is nobody. Reasonable for "
+            "internal records and for proving the plumbing works; weak for "
+            "anything contested."
+        ),
+    },
+    {
+        "name": "Codegic",
+        "url": "https://pki.codegic.com/codegic-service/timestamp",
+        "recommended": False,
+        "production": False,
+        "widely_trusted": False,
+        "note": "Useful for a one-off test of the signing path.",
+        "caveat": (
+            "The vendor states plainly that it is for testing, with no "
+            "production integration and no SLA. Never seal a real record "
+            "with it."
+        ),
+    },
+]
+
+
+def survey_tsas(candidates: list[dict] | None = None,
+                *, include_configured: bool = True) -> list[dict]:
+    """
+    Probe each candidate authority and report what actually came back.
+
+    Returns the candidates in the order they should be considered: the ones
+    that answered, trusted-by-this-configuration first, then by round-trip
+    time. Never raises — an authority that times out is a result, not an
+    error.
+
+    The point is not to rank them for the office but to let the office rank
+    them with evidence from its own network, behind its own proxy and
+    firewall, where the answer may be nothing like the answer anywhere else.
+    """
+    import time
+
+    rows = []
+    seen = set()
+
+    if include_configured:
+        cfg = pades_config()
+        if cfg["tsa_url"]:
+            rows.append({
+                "name": "configured",
+                "url": cfg["tsa_url"],
+                "recommended": False,
+                "production": True,
+                "widely_trusted": None,
+                "note": "The authority this installation is set to use.",
+                "caveat": "",
+            })
+            seen.add(cfg["tsa_url"])
+
+    for entry in (candidates if candidates is not None else PUBLIC_TSAS):
+        if entry["url"] in seen:
+            continue
+        rows.append(dict(entry))
+        seen.add(entry["url"])
+
+    # An authority that does not answer is the normal case here, not an
+    # incident: the whole point is to find out which ones this network can
+    # reach. Logging a stack trace for each would bury the answer.
+    previous = logger.level
+    logger.setLevel(logging.CRITICAL)
+    try:
+        for row in rows:
+            started = time.monotonic()
+            try:
+                result = probe_tsa(row["url"])
+            except Exception as exc:      # probe_tsa should not raise, but
+                result = {"ok": False, "error": str(exc)}   # a survey must
+            row["elapsed"] = time.monotonic() - started     # not die on one
+            row["probe"] = result
+            row["answered"] = bool(result.get("ok"))
+            row["trusted_here"] = result.get("trusted_here")
+    finally:
+        logger.setLevel(previous)
+
+    def rank(row):
+        return (
+            0 if row["answered"] else 1,
+            0 if row.get("trusted_here") else 1,
+            0 if row.get("widely_trusted") else 1,
+            0 if row.get("production", True) else 1,
+            row.get("elapsed", 999),
+        )
+
+    rows.sort(key=rank)
+    return rows
 
 
 def probe_tsa(url: str, *, username: str = "", password: str = "") -> dict:

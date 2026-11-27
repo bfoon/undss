@@ -1,0 +1,16 @@
+# The Dockerfile does `COPY . .`, so anything not excluded here is baked into
+# the image — and anyone who can pull the image can read it. Secrets reach
+# the container at run time instead: .env is read from the mounted project
+# directory, and ./secrets is mounted read-only at /etc/unpass.
+.env
+.env.*
+!.env.example
+**/.env
+secrets/
+*.p12
+*.pfx
+*.key
+
+.git
+**/__pycache__
+**/*.pyc

@@ -1,0 +1,14 @@
+# Secrets — never commit these.
+# .env holds passphrases and the signature-ID secret; ./secrets holds the
+# office seal's private key. A key in git is a key anyone with the repo holds.
+.env
+.env.*
+!.env.example
+secrets/
+*.p12
+*.pfx
+*.key
+
+# Python
+__pycache__/
+*.pyc

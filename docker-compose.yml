@@ -29,6 +29,9 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
+      # NES signing material: seal.p12, root-ca.crt, the policy PDF.
+      # Read-only, so nothing running in the container can replace the key.
+      - ./secrets:/etc/unpass:ro
     ports:
       - "8000:8000"
     depends_on:

@@ -1,164 +1,40 @@
-UPDATED FILES — NES: rename, sealing, tamper-evidence, witnessing, sole control
-For bfoon/undss, against base commit 6df96c1. Paths mirror your project.
+UPDATED FILES — NES configuration
+For bfoon/undss. Paths mirror your project. Apply on top of the previous
+NES drops (nes-pdfa-and-tsa.zip and earlier).
 
-Copy in with:
     cp -r undss/. /path/to/your/undss/
 
-Then:
-    docker compose build web
-    docker compose exec web python manage.py makemigrations accounts
-    docker compose exec web python manage.py migrate
-    docker compose exec web python manage.py esign_identity --install-guard
-    docker compose exec web python manage.py collectstatic --noinput
+CHANGED / NEW
+  un_security_system/un_security_system/settings.py   NES block reads .env
+  un_security_system/.env.example                     every NES variable
+  un_security_system/accounts/pades_esign.py          trust roots: read
+                                                      whole CA bundles
+  Dockerfile           + ca-certificates, fonts-liberation, ghostscript
+  docker-compose.yml   + ./secrets mounted read-only at /etc/unpass
+  .gitignore           NEW — keeps .env and ./secrets out of git
+  .dockerignore        NEW — keeps them out of the image
 
-Read docs/nes-signing-identity.md first for the signature IDs and sole control.
+SET UP, IN ORDER
+  1. mkdir secrets
+  2. cp un_security_system/.env.example un_security_system/.env
+  3. In .env, set ESIGN_SIGNATURE_ID_SECRET now, before anyone enrols:
+       python -c "import secrets; print(secrets.token_urlsafe(48))"
+  4. Put the office seal at secrets/seal.p12 and its passphrase in .env
+     as ESIGN_PADES_PKCS12_PASSPHRASE. For a test certificate only:
+       docker compose exec web python manage.py esign_pades \
+           --make-dev-cert /app/secrets/seal.p12 --dev-cert-passphrase '...'
+  5. docker compose build web && docker compose up -d
+  6. docker compose exec web python manage.py makemigrations accounts
+     docker compose exec web python manage.py migrate
+     docker compose exec web python manage.py esign_identity --install-guard
+  7. docker compose exec web python manage.py esign_pades --check
+     docker compose exec web python manage.py esign_pades --pdfa-check
+     docker compose exec web python manage.py esign_pades --tsa-survey
+
+CRON (host crontab; adjust the path)
+  17 2 1 * *   cd /srv/undss && docker compose exec -T web python manage.py esign_pades --refresh-ltv
+  40 2 1 * *   cd /srv/undss && docker compose exec -T web python manage.py esign_pades --register 30 --out /app/registers/
+  25 1 * * *   cd /srv/undss && docker compose exec -T web python manage.py esign_witness --audit
+  */15 * * * * cd /srv/undss && docker compose exec -T web python manage.py esign_witness --send-pending
+
 Delete this file afterwards; it is not part of the project.
-
-----------------------------------------------------------------------
-NEW FILES (28)
-----------------------------------------------------------------------
-  docs/nes-signature-policy-v1.md
-  docs/nes-signing-identity.md
-  docs/nes-standards-un-undp.md
-  docs/nes-tsa-and-oid-setup.md
-  un_security_system/accounts/admin_esign_pades.py
-  un_security_system/accounts/audit_chain_esign.py
-  un_security_system/accounts/evidence_esign.py
-  un_security_system/accounts/identity_esign.py
-  un_security_system/accounts/management/commands/esign_identity.py
-  un_security_system/accounts/management/commands/esign_pades.py
-  un_security_system/accounts/management/commands/esign_witness.py
-  un_security_system/accounts/models_esign_identity.py
-  un_security_system/accounts/models_esign_pades.py
-  un_security_system/accounts/models_esign_witness.py
-  un_security_system/accounts/pades_esign.py
-  un_security_system/accounts/signature_id.py
-  un_security_system/accounts/urls_esign_identity.py
-  un_security_system/accounts/urls_esign_pades.py
-  un_security_system/accounts/urls_esign_witness.py
-  un_security_system/accounts/views_esign_identity.py
-  un_security_system/accounts/views_esign_pades.py
-  un_security_system/accounts/views_esign_witness.py
-  un_security_system/accounts/witness_esign.py
-  un_security_system/static/accounts/esign/identity.js
-  un_security_system/templates/accounts/esign/_seal_badge.html
-  un_security_system/templates/accounts/esign/identity.html
-  un_security_system/templates/accounts/esign/seal_verify.html
-  un_security_system/templates/accounts/esign/witness_status.html
-
-----------------------------------------------------------------------
-MODIFIED FILES (113)
-----------------------------------------------------------------------
-  install_esign_usage_dashboard.py
-  requirements.txt
-  un_security_system/accounts/admin.py
-  un_security_system/accounts/admin_esign.py
-  un_security_system/accounts/admin_esign_studio.py
-  un_security_system/accounts/api_mobile.py
-  un_security_system/accounts/api_mobile_booking.py
-  un_security_system/accounts/apps.py
-  un_security_system/accounts/context_processors.py
-  un_security_system/accounts/context_processors_esign.py
-  un_security_system/accounts/converters_esign.py
-  un_security_system/accounts/dashboard_esign_access.py
-  un_security_system/accounts/dashboard_esign_views.py
-  un_security_system/accounts/docgen_esign.py
-  un_security_system/accounts/docx_form_import_esign.py
-  un_security_system/accounts/esign_access.py
-  un_security_system/accounts/esign_condition_engine.py
-  un_security_system/accounts/esign_delivery.py
-  un_security_system/accounts/esign_formula_runtime.py
-  un_security_system/accounts/esign_notify.py
-  un_security_system/accounts/form_formula_esign.py
-  un_security_system/accounts/form_pdf_esign.py
-  un_security_system/accounts/management/commands/check_esign.py
-  un_security_system/accounts/management/commands/ensure_esign_dashboard.py
-  un_security_system/accounts/management/commands/ensure_esign_reports.py
-  un_security_system/accounts/management/commands/esign_studio_maintenance.py
-  un_security_system/accounts/middleware.py
-  un_security_system/accounts/models.py
-  un_security_system/accounts/models_esign.py
-  un_security_system/accounts/models_esign_docgen.py
-  un_security_system/accounts/models_esign_markup.py
-  un_security_system/accounts/models_esign_studio.py
-  un_security_system/accounts/pdf_delivery.py
-  un_security_system/accounts/pdf_tools_esign.py
-  un_security_system/accounts/report_bi_esign.py
-  un_security_system/accounts/services.py
-  un_security_system/accounts/studio_common_esign.py
-  un_security_system/accounts/studio_library_esign.py
-  un_security_system/accounts/templatetags/esign_studio_tags.py
-  un_security_system/accounts/trigger_engine_esign.py
-  un_security_system/accounts/urls.py
-  un_security_system/accounts/urls_esign_docgen.py
-  un_security_system/accounts/utils_esign.py
-  un_security_system/accounts/utils_esign_markup_pdf.py
-  un_security_system/accounts/views_esign.py
-  un_security_system/accounts/views_esign_docgen.py
-  un_security_system/accounts/views_esign_forms.py
-  un_security_system/accounts/views_esign_markup.py
-  un_security_system/accounts/views_esign_reports.py
-  un_security_system/accounts/views_esign_self.py
-  un_security_system/accounts/views_esign_studio.py
-  un_security_system/accounts/views_esign_workflow.py
-  un_security_system/accounts/workflow_engine_esign.py
-  un_security_system/accounts/workflow_notify_esign.py
-  un_security_system/accounts/workflow_portability_esign.py
-  un_security_system/static/accounts/esign/formula-builder.js
-  un_security_system/static/accounts/esign/formula.js
-  un_security_system/static/accounts/esign/report_builder.css
-  un_security_system/static/accounts/esign/report_builder.js
-  un_security_system/static/accounts/esign/vendor/THIRD-PARTY-NOTICES.txt
-  un_security_system/templates/accounts/assets/asset_management.html
-  un_security_system/templates/accounts/esign/_markup.html
-  un_security_system/templates/accounts/esign/_pdf_loader.html
-  un_security_system/templates/accounts/esign/base_public.html
-  un_security_system/templates/accounts/esign/dashboard.html
-  un_security_system/templates/accounts/esign/envelope_detail.html
-  un_security_system/templates/accounts/esign/envelope_new.html
-  un_security_system/templates/accounts/esign/envelope_prepare.html
-  un_security_system/templates/accounts/esign/markup_review.html
-  un_security_system/templates/accounts/esign/review.html
-  un_security_system/templates/accounts/esign/self_sign_new.html
-  un_security_system/templates/accounts/esign/sign.html
-  un_security_system/templates/accounts/esign/signature_studio.html
-  un_security_system/templates/accounts/esign/studio/_nav.html
-  un_security_system/templates/accounts/esign/studio/_pdf_viewer.html
-  un_security_system/templates/accounts/esign/studio/_report_builder_css.html
-  un_security_system/templates/accounts/esign/studio/_report_builder_js.html
-  un_security_system/templates/accounts/esign/studio/_styles.html
-  un_security_system/templates/accounts/esign/studio/editor.html
-  un_security_system/templates/accounts/esign/studio/forms.html
-  un_security_system/templates/accounts/esign/studio/home.html
-  un_security_system/templates/accounts/esign/studio/import_flow.html
-  un_security_system/templates/accounts/esign/studio/public_base.html
-  un_security_system/templates/accounts/esign/studio/reports.html
-  un_security_system/templates/accounts/esign/studio/task.html
-  un_security_system/templates/accounts/esign/studio/tool.html
-  un_security_system/templates/accounts/esign/studio/workflows.html
-  un_security_system/templates/esign_analytics/dashboard.html
-  un_security_system/templates/esign_analytics/dashboard_report.html
-  un_security_system/templates/partials/_nav.html
-  un_security_system/templates/partials/_nav_items.html
-  un_security_system/templates/tenancy/sharing.html
-  un_security_system/templates/vehicles/packages/esig/document_upload.html
-  un_security_system/templates/vehicles/packages/esig/envelope_prepare.html
-  un_security_system/templates/vehicles/packages/package_detail.html
-  un_security_system/templates/vehicles/packages/package_step_action.html
-  un_security_system/tenancy/README.md
-  un_security_system/tenancy/catalog.py
-  un_security_system/tenancy/context_processors.py
-  un_security_system/tenancy/middleware.py
-  un_security_system/tenancy/mixins.py
-  un_security_system/tenancy/services.py
-  un_security_system/un_security_system/settings.py
-  un_security_system/vehicles/apps.py
-  un_security_system/vehicles/forms.py
-  un_security_system/vehicles/models.py
-  un_security_system/vehicles/models_mailflow.py
-  un_security_system/vehicles/package_esign.py
-  un_security_system/vehicles/package_studio.py
-  un_security_system/vehicles/signals.py
-  un_security_system/vehicles/views.py
-  unpass_mobile/lib/core/api.dart
-  unpass_mobile/lib/main.dart
