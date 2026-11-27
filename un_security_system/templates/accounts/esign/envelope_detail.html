@@ -428,3 +428,7 @@
 })();
 </script>
 {% endblock %}
+
+{% block bfoon %}
+{% include "accounts/esign/_bfoon.html" with bfoon_mode="detail" bfoon_pk=envelope.pk %}
+{% endblock %}

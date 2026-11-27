@@ -225,4 +225,5 @@ EsignMarkup.init({
   sync();
 })();
 </script>
+{% include "accounts/esign/_bfoon.html" with bfoon_mode="review" bfoon_token=recipient.token %}
 {% endblock %}

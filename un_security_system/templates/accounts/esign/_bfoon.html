@@ -1,0 +1,932 @@
+{% comment %}
+BFoon — the NES reading buddy. A leaf in UNDP blue that lives in the corner.
+
+Every NES page (/accounts/esign/…) for a signed-in user gets the global
+BFoon from base.html's `bfoon` block. Document pages override that block, or
+(public signing pages) include it in extra_js:
+    {% include "accounts/esign/_bfoon.html" with bfoon_mode="sign" bfoon_token=recipient.token %}
+    {% include "accounts/esign/_bfoon.html" with bfoon_mode="review" bfoon_token=recipient.token %}
+    {% include "accounts/esign/_bfoon.html" with bfoon_mode="detail" bfoon_pk=envelope.pk %}
+    {% include "accounts/esign/_bfoon.html" with bfoon_mode="global" %}
+
+Search, "pages you have looked at" and reminders run entirely in this page.
+Only "Summarise" and questions go to the server (and from there, if
+configured, to Google Gemini). Open by default on every page; the leaf in the
+corner opens and closes it.
+{% endcomment %}
+{% load static %}
+<div id="bfoon" class="bf-open" data-mode="{{ bfoon_mode }}"
+     data-envelope="{{ envelope.envelope_id|default:'' }}"
+     {% if bfoon_token %}
+       data-text-url="{% url 'accounts:esign_bfoon_text_token' bfoon_token %}"
+       data-ask-url="{% url 'accounts:esign_bfoon_ask_token' bfoon_token %}"
+     {% elif bfoon_pk %}
+       data-text-url="{% url 'accounts:esign_bfoon_text' bfoon_pk %}"
+       data-ask-url="{% url 'accounts:esign_bfoon_ask' bfoon_pk %}"
+       data-file-url="{% url 'accounts:esign_document_file' bfoon_pk 0 %}"
+     {% endif %}
+     {% if user.is_authenticated %}
+       data-search-url="{% url 'accounts:esign_bfoon_search' %}"
+       data-recent-url="{% url 'accounts:esign_bfoon_recent' %}"
+     {% endif %}
+     data-subject="{{ envelope.subject|default:'' }}"
+     data-csrf="{{ csrf_token }}">
+
+  <section class="bf-panel" role="dialog" aria-label="BFoon reading assistant" aria-hidden="false">
+    <header class="bf-head">
+      <div class="bf-head-leaf" aria-hidden="true">
+        <svg viewBox="0 0 64 64"><use href="#bf-leaf-face"/></svg>
+      </div>
+      <div class="bf-head-text">
+        <div class="bf-title">BFoon</div>
+        <div class="bf-sub" id="bfSub">your reading buddy</div>
+      </div>
+      <button type="button" class="bf-x" data-bf="close" aria-label="Close BFoon" title="Close (Esc)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9m0-9l-9 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+
+    <nav class="bf-tabs" role="tablist">
+      <button type="button" role="tab" data-tab="read" aria-selected="true" id="bfTabRead">Reading</button>
+      <button type="button" role="tab" data-tab="search" aria-selected="false">Search</button>
+      <button type="button" role="tab" data-tab="ask" aria-selected="false">Ask</button>
+    </nav>
+
+    <div class="bf-body">
+      <!-- Reading: a tree that grows a leaf for every page you have looked at -->
+      <div class="bf-pane" data-pane="read">
+        <div class="bf-tree-wrap">
+          <svg class="bf-tree" id="bfTree" viewBox="0 0 220 150" aria-hidden="true"></svg>
+          <div class="bf-tree-caption" id="bfTreeCaption">Loading the document…</div>
+        </div>
+        <div class="bf-chips" id="bfUnseen"></div>
+        <div class="bf-note" id="bfFields"></div>
+        <div class="bf-results" id="bfRecent"></div>
+      </div>
+
+      <!-- Search -->
+      <div class="bf-pane" data-pane="search" hidden>
+        <div class="bf-scope" id="bfScope" role="radiogroup" aria-label="Where to search" hidden>
+          <button type="button" role="radio" data-scope="here" aria-checked="true">This document</button>
+          <button type="button" role="radio" data-scope="all" aria-checked="false">All my documents</button>
+        </div>
+        <form class="bf-search" id="bfSearchForm" autocomplete="off">
+          <input type="search" id="bfQuery" placeholder="Find words in the document…" aria-label="Search" maxlength="120">
+        </form>
+        <div class="bf-results" id="bfResults" aria-live="polite"></div>
+      </div>
+
+      <!-- Ask -->
+      <div class="bf-pane" data-pane="ask" hidden>
+        <div class="bf-target" id="bfTarget"></div>
+        <div class="bf-actions">
+          <button type="button" class="bf-btn" data-bf="summary">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h7M3 12h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            Summarise document
+          </button>
+          <button type="button" class="bf-btn bf-btn-ghost" data-bf="page" id="bfPageBtn">Explain this page</button>
+        </div>
+        <div class="bf-chat" id="bfChat" aria-live="polite"></div>
+        <form class="bf-ask" id="bfAskForm" autocomplete="off">
+          <input type="text" id="bfQuestion" placeholder="Ask about this document…" maxlength="500" aria-label="Ask a question">
+          <button type="submit" aria-label="Ask">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </form>
+        <div class="bf-privacy" id="bfPrivacy"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="bf-bubble" id="bfBubble" role="status" aria-live="polite" hidden></div>
+  <div class="bf-card" id="bfCard" role="tooltip" hidden></div>
+
+  <button type="button" class="bf-mascot" data-bf="toggle" aria-label="Open or close BFoon" aria-expanded="true" title="BFoon">
+    <span class="bf-drift" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <svg viewBox="0 0 64 64" aria-hidden="true"><use href="#bf-leaf-face"/></svg>
+    <span class="bf-badge" id="bfBadge" hidden></span>
+  </button>
+
+  <!-- The leaf: drawn once, used three times -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="bfLeafGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#3FA9F5"/>
+        <stop offset=".55" stop-color="#0468B1"/>
+        <stop offset="1" stop-color="#024A80"/>
+      </linearGradient>
+      <linearGradient id="bfSproutGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#8FD3FF"/><stop offset="1" stop-color="#2E8FD8"/>
+      </linearGradient>
+      <symbol id="bf-leaf-face" viewBox="0 0 64 64">
+        <g class="bf-sway">
+          <path class="bf-stem" d="M32 60 C31 54 31 50 32 46" stroke="#024A80" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <g class="bf-sprout">
+            <path d="M33 14 C38 4 48 3 52 6 C49 13 41 16 33 14 Z" fill="url(#bfSproutGrad)"/>
+            <path d="M34 13.5 C40 10 45 8 50 6.5" stroke="#E6F4FF" stroke-width="1" fill="none" opacity=".8"/>
+          </g>
+          <path d="M32 47 C14 45 7 31 10 20 C12 12 20 9 32 10 C44 9 52 12 54 20 C57 31 50 45 32 47 Z" fill="url(#bfLeafGrad)"/>
+          <path d="M32 46 L32 13" stroke="#BFE3FF" stroke-width="1.4" opacity=".55"/>
+          <path d="M32 34 L20 26 M32 27 L22 19 M32 34 L44 26 M32 27 L42 19" stroke="#BFE3FF" stroke-width="1.1" opacity=".4" stroke-linecap="round"/>
+          <ellipse cx="18" cy="17" rx="6" ry="3" fill="#fff" opacity=".18" transform="rotate(-25 18 17)"/>
+          <g class="bf-eyes">
+            <ellipse cx="25" cy="27" rx="4.2" ry="4.8" fill="#fff"/>
+            <ellipse cx="39" cy="27" rx="4.2" ry="4.8" fill="#fff"/>
+            <circle class="bf-pupil" cx="26" cy="28" r="2.2" fill="#0B1F33"/>
+            <circle class="bf-pupil" cx="40" cy="28" r="2.2" fill="#0B1F33"/>
+            <circle cx="26.8" cy="27" r=".8" fill="#fff"/><circle cx="40.8" cy="27" r=".8" fill="#fff"/>
+          </g>
+          <ellipse cx="20" cy="34" rx="3" ry="1.6" fill="#FF8FB1" opacity=".35"/>
+          <ellipse cx="44" cy="34" rx="3" ry="1.6" fill="#FF8FB1" opacity=".35"/>
+          <path class="bf-mouth" d="M28 35 Q32 39 36 35" stroke="#0B1F33" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        </g>
+      </symbol>
+    </defs>
+  </svg>
+</div>
+
+<style>
+#bfoon{--bf-blue:#0468B1;--bf-deep:#024A80;--bf-sky:#E8F3FC;--bf-ink:#0B1F33;--bf-mute:#5B6B7C;
+  position:fixed;right:18px;bottom:18px;z-index:1080;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--bf-ink)}
+#bfoon *{box-sizing:border-box}
+#bfoon svg{display:block}
+
+/* the mascot */
+#bfoon .bf-mascot{position:relative;width:66px;height:66px;margin-left:auto;display:block;border:0;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff,#DCEEFC 70%);box-shadow:0 8px 24px rgba(4,104,177,.35),inset 0 0 0 3px #fff;
+  cursor:pointer;padding:6px;transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
+#bfoon .bf-mascot:hover{transform:translateY(-3px) scale(1.06)}
+#bfoon .bf-mascot:focus-visible,#bfoon button:focus-visible,#bfoon input:focus-visible{outline:3px solid #7CC4FA;outline-offset:2px}
+#bfoon .bf-mascot svg{width:100%;height:100%;overflow:visible}
+#bfoon .bf-badge{position:absolute;top:-2px;right:-2px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#E0457B;
+  color:#fff;font-size:11px;font-weight:700;line-height:20px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.25);animation:bf-pop .4s}
+
+.bf-sway{transform-origin:32px 60px;animation:bf-sway 4.2s ease-in-out infinite}
+.bf-sprout{transform-origin:33px 14px;animation:bf-sprout 2.8s ease-in-out infinite}
+.bf-eyes{transform-origin:32px 27px;animation:bf-blink 5s infinite}
+.bf-pupil{transition:transform .3s}
+@keyframes bf-sway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes bf-sprout{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(10deg)}}
+@keyframes bf-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes bf-pop{0%{transform:scale(0)}70%{transform:scale(1.2)}100%{transform:scale(1)}}
+@keyframes bf-hop{0%,100%{transform:translateY(0)}30%{transform:translateY(-12px) rotate(-6deg)}60%{transform:translateY(0) rotate(4deg)}80%{transform:translateY(-4px)}}
+@keyframes bf-wiggle{0%,100%{transform:rotate(0)}20%{transform:rotate(-12deg)}40%{transform:rotate(10deg)}60%{transform:rotate(-6deg)}80%{transform:rotate(4deg)}}
+#bfoon.bf-happy .bf-mascot{animation:bf-hop .8s}
+#bfoon.bf-nudge .bf-mascot{animation:bf-wiggle .7s 2}
+#bfoon.bf-thinking .bf-sway{animation-duration:.9s}
+#bfoon.bf-thinking .bf-pupil{transform:translate(1.5px,-2px)}
+
+/* little leaves drifting off the mascot while it thinks */
+#bfoon .bf-drift{position:absolute;inset:0;pointer-events:none}
+#bfoon .bf-drift i{position:absolute;left:44%;top:30%;width:9px;height:6px;border-radius:0 80% 0 80%;background:#5DB6F2;opacity:0}
+#bfoon.bf-thinking .bf-drift i{animation:bf-drift 1.8s ease-out infinite}
+#bfoon.bf-thinking .bf-drift i:nth-child(2){animation-delay:.45s;background:#0468B1}
+#bfoon.bf-thinking .bf-drift i:nth-child(3){animation-delay:.9s;background:#8FD3FF}
+#bfoon.bf-thinking .bf-drift i:nth-child(4){animation-delay:1.35s;background:#2E8FD8}
+@keyframes bf-drift{0%{opacity:0;transform:translate(0,0) rotate(0)}15%{opacity:1}100%{opacity:0;transform:translate(-46px,-58px) rotate(260deg)}}
+
+/* the panel */
+#bfoon .bf-panel{width:min(360px,calc(100vw - 28px));max-height:min(540px,calc(100vh - 120px));margin-bottom:12px;display:flex;flex-direction:column;
+  background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 18px 48px rgba(2,74,128,.28),0 0 0 1px rgba(4,104,177,.12);
+  transform-origin:calc(100% - 33px) calc(100% + 40px);transition:transform .38s cubic-bezier(.2,1.4,.4,1),opacity .25s}
+#bfoon:not(.bf-open) .bf-panel{transform:scale(.2) translateY(30px);opacity:0;pointer-events:none;visibility:hidden;transition:transform .25s,opacity .2s,visibility 0s .25s}
+#bfoon .bf-head{display:flex;align-items:center;gap:10px;padding:12px 12px 10px;color:#fff;
+  background:linear-gradient(135deg,#0468B1 0%,#0A7FD1 60%,#3FA9F5 100%);position:relative;overflow:hidden}
+#bfoon .bf-head::after{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.08)}
+#bfoon .bf-head-leaf{width:40px;height:40px;border-radius:50%;background:#fff;padding:3px;flex:none}
+#bfoon .bf-title{font-weight:800;font-size:16px;letter-spacing:.2px}
+#bfoon .bf-sub{font-size:12px;opacity:.85}
+#bfoon .bf-head-text{flex:1;min-width:0}
+#bfoon .bf-x{width:32px;height:32px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;padding:8px;position:relative;z-index:1}
+#bfoon .bf-x:hover{background:rgba(255,255,255,.3)}
+#bfoon .bf-tabs{display:flex;gap:4px;padding:8px 10px 0;background:var(--bf-sky)}
+#bfoon .bf-tabs button{flex:1;border:0;background:transparent;padding:8px 4px 9px;border-radius:10px 10px 0 0;font-weight:600;color:var(--bf-mute);cursor:pointer}
+#bfoon .bf-tabs button[aria-selected="true"]{background:#fff;color:var(--bf-blue)}
+#bfoon .bf-body{flex:1;overflow:auto;padding:14px}
+#bfoon .bf-note{font-size:13px;color:var(--bf-mute);margin-top:10px}
+#bfoon .bf-note b{color:var(--bf-ink)}
+
+/* the reading tree */
+#bfoon .bf-tree-wrap{text-align:center}
+#bfoon .bf-tree{width:100%;height:auto}
+#bfoon .bf-tree .bf-leafpage{cursor:pointer;transition:transform .2s}
+#bfoon .bf-tree .bf-leafpage:hover{transform:scale(1.18)}
+#bfoon .bf-tree .bf-leafpage.seen path{fill:url(#bfLeafGrad);stroke:#024A80}
+#bfoon .bf-tree .bf-leafpage path{fill:#fff;stroke:#9DB7CC;stroke-dasharray:3 2;transition:fill .5s}
+#bfoon .bf-tree .bf-leafpage.fresh{animation:bf-pop .6s}
+#bfoon .bf-tree-caption{font-weight:700;margin-top:4px}
+#bfoon .bf-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+#bfoon .bf-chip{border:1px dashed #9DB7CC;background:#fff;color:var(--bf-ink);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer}
+#bfoon .bf-chip:hover{border-color:var(--bf-blue);color:var(--bf-blue)}
+
+/* search */
+#bfoon .bf-search input,#bfoon .bf-ask input{width:100%;border:1.5px solid #CFE0EE;border-radius:12px;padding:9px 12px;font:inherit;background:#fff}
+#bfoon .bf-search input:focus,#bfoon .bf-ask input:focus{border-color:var(--bf-blue);outline:none}
+#bfoon .bf-results{margin-top:10px}
+#bfoon .bf-hit{display:block;width:100%;text-align:left;border:0;background:#F6FAFD;border-radius:10px;padding:8px 10px;margin-bottom:6px;cursor:pointer;color:inherit;font:inherit}
+#bfoon .bf-hit:hover{background:var(--bf-sky)}
+#bfoon .bf-hit small{display:block;color:var(--bf-blue);font-weight:700;font-size:11px;margin-bottom:2px}
+#bfoon .bf-hit mark{background:#CDE8FB;color:inherit;border-radius:3px;padding:0 1px}
+
+/* ask */
+#bfoon .bf-actions{display:flex;gap:6px;flex-wrap:wrap}
+#bfoon .bf-btn{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;
+  background:var(--bf-blue);color:#fff;box-shadow:0 4px 12px rgba(4,104,177,.3);transition:transform .15s}
+#bfoon .bf-btn svg{width:14px;height:14px}
+#bfoon .bf-btn:hover{transform:translateY(-1px)}
+#bfoon .bf-btn-ghost{background:#fff;color:var(--bf-blue);box-shadow:inset 0 0 0 1.5px var(--bf-blue)}
+#bfoon .bf-btn[disabled]{opacity:.55;cursor:wait;transform:none}
+#bfoon .bf-chat{margin:12px 0}
+#bfoon .bf-msg{border-radius:14px;padding:9px 12px;margin-bottom:8px;white-space:pre-wrap;word-wrap:break-word;animation:bf-in .35s ease-out}
+#bfoon .bf-msg.me{background:var(--bf-blue);color:#fff;margin-left:40px;border-bottom-right-radius:4px}
+#bfoon .bf-msg.bot{background:#F2F7FB;margin-right:16px;border-bottom-left-radius:4px}
+#bfoon .bf-msg .bf-src{display:block;margin-top:6px;font-size:11px;color:var(--bf-mute);white-space:normal}
+#bfoon .bf-msg.typing{display:inline-flex;gap:4px}
+#bfoon .bf-msg.typing i{width:7px;height:7px;border-radius:50%;background:var(--bf-blue);opacity:.4;animation:bf-dot 1s infinite}
+#bfoon .bf-msg.typing i:nth-child(2){animation-delay:.15s}#bfoon .bf-msg.typing i:nth-child(3){animation-delay:.3s}
+@keyframes bf-dot{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+@keyframes bf-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#bfoon .bf-ask{display:flex;gap:6px}
+#bfoon .bf-ask button{flex:none;width:40px;border:0;border-radius:12px;background:var(--bf-blue);color:#fff;cursor:pointer;padding:11px}
+#bfoon .bf-privacy{font-size:11px;color:var(--bf-mute);margin-top:8px}
+
+/* search scope, results with more on hover */
+#bfoon .bf-scope{display:flex;background:var(--bf-sky);border-radius:999px;padding:3px;margin-bottom:8px}
+#bfoon .bf-scope button{flex:1;border:0;background:transparent;border-radius:999px;padding:6px 8px;font-weight:600;font-size:12px;color:var(--bf-mute);cursor:pointer}
+#bfoon .bf-scope button[aria-checked="true"]{background:#fff;color:var(--bf-blue);box-shadow:0 1px 4px rgba(2,74,128,.15)}
+#bfoon .bf-res{display:block;text-decoration:none;color:inherit;background:#F6FAFD;border-radius:12px;padding:9px 11px;margin-bottom:7px;border:1px solid transparent;
+  transition:border-color .15s,transform .15s;animation:bf-in .3s ease-out both}
+#bfoon .bf-res:hover,#bfoon .bf-res:focus-visible{border-color:#9CCBEF;transform:translateX(-2px);outline:none}
+#bfoon .bf-res-top{display:flex;align-items:center;gap:6px}
+#bfoon .bf-res-title{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bfoon .bf-pill{flex:none;font-size:10px;font-weight:700;border-radius:999px;padding:2px 7px;background:#E3EEF7;color:var(--bf-deep);text-transform:uppercase;letter-spacing:.3px}
+#bfoon .bf-pill.completed{background:#DFF3E8;color:#17663D}#bfoon .bf-pill.sent{background:#E1F0FB;color:#0468B1}
+#bfoon .bf-pill.voided,#bfoon .bf-pill.declined,#bfoon .bf-pill.expired{background:#FBE5EA;color:#9B1C3A}#bfoon .bf-pill.draft{background:#EEE;color:#555}
+#bfoon .bf-res-snip{font-size:12.5px;color:#33475B;margin-top:3px}
+#bfoon .bf-res-snip mark,#bfoon .bf-card mark{background:#CDE8FB;color:inherit;border-radius:3px;padding:0 1px}
+#bfoon .bf-res-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--bf-mute);margin-top:4px}
+#bfoon .bf-res-act{margin-left:auto;display:flex;gap:4px}
+#bfoon .bf-mini{border:0;background:#fff;color:var(--bf-blue);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;cursor:pointer;box-shadow:inset 0 0 0 1px #BFD9EE}
+#bfoon .bf-mini:hover{background:var(--bf-blue);color:#fff}
+#bfoon .bf-card{position:fixed;width:300px;background:#fff;border-radius:14px;padding:12px 14px;z-index:1;
+  box-shadow:0 16px 40px rgba(2,74,128,.28),0 0 0 1px rgba(4,104,177,.14);font-size:12.5px;animation:bf-in .2s ease-out;pointer-events:none}
+#bfoon .bf-card h6{margin:0 0 4px;font-size:14px;font-weight:800;color:var(--bf-ink)}
+#bfoon .bf-card dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0}
+#bfoon .bf-card dt{color:var(--bf-mute);font-weight:600}#bfoon .bf-card dd{margin:0}
+#bfoon .bf-card .bf-quote{background:#F6FAFD;border-left:3px solid var(--bf-blue);border-radius:6px;padding:7px 9px;color:#33475B}
+#bfoon .bf-target{display:flex;align-items:center;gap:8px;background:var(--bf-sky);border-radius:12px;padding:7px 10px;margin-bottom:10px;font-size:12.5px}
+#bfoon .bf-target b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bfoon .bf-target svg{width:22px;height:22px;flex:none}
+
+/* speech bubble */
+#bfoon .bf-bubble{position:absolute;right:76px;bottom:14px;width:max-content;max-width:min(270px,calc(100vw - 110px));background:#fff;color:var(--bf-ink);
+  border-radius:14px 14px 4px 14px;padding:10px 12px;box-shadow:0 10px 28px rgba(2,74,128,.25),0 0 0 1px rgba(4,104,177,.12);animation:bf-in .3s;font-size:13px}
+#bfoon .bf-bubble b{color:var(--bf-blue)}
+
+/* a leaf stamp on every page you have looked at */
+.bf-seen-stamp{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(2,74,128,.3);
+  padding:4px;pointer-events:none;z-index:5;animation:bf-pop .5s}
+.bf-flash{animation:bf-flash 1.4s ease-out}
+@keyframes bf-flash{0%{box-shadow:0 0 0 0 rgba(4,104,177,.0)}20%{box-shadow:0 0 0 6px rgba(4,104,177,.55)}100%{box-shadow:0 0 0 0 rgba(4,104,177,0)}}
+
+@media (max-width:576px){#bfoon{right:10px;bottom:10px}#bfoon .bf-mascot{width:56px;height:56px}}
+@media (prefers-reduced-motion:reduce){#bfoon *,.bf-seen-stamp{animation:none!important;transition:none!important}}
+@media print{#bfoon,.bf-seen-stamp{display:none!important}}
+</style>
+
+<script>
+(function () {
+  "use strict";
+  const root = document.getElementById("bfoon");
+  if (!root || root.dataset.ready) return;
+  root.dataset.ready = "1";
+
+  const MODE = root.dataset.mode || "global";          // sign | review | detail | global
+  const HAS_DOC = !!root.dataset.textUrl;               // on a document page
+  const HAS_ALL = !!root.dataset.searchUrl;             // signed in: can search everything
+  const ENV = root.dataset.envelope || "";
+  const $ = (sel) => root.querySelector(sel);
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } }
+  };
+  const SEEN_KEY = "bfoon:seen:" + ENV;
+  const seen = new Set(HAS_DOC ? (store.get(SEEN_KEY) || []) : []);
+  let docs = [];
+  let config = {};
+  let nudged = false;
+  let scope = HAS_DOC ? "here" : "all";
+  let target = HAS_DOC ? { askUrl: root.dataset.askUrl, subject: root.dataset.subject || "This document", local: true } : null;
+
+  // The mascot and the header leaf get a real copy of the leaf (not <use>),
+  // so their eyes can follow the pointer.
+  (function inlineLeaves() {
+    const sym = document.getElementById("bf-leaf-face");
+    root.querySelectorAll(".bf-mascot > svg, .bf-head-leaf > svg").forEach(function (svg) {
+      svg.textContent = "";
+      Array.from(sym.childNodes).forEach(n => svg.appendChild(n.cloneNode(true)));
+    });
+  })();
+
+  /* ── helpers ───────────────────────────────────────────────────────── */
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  function snip(sn) { return sn ? esc(sn.before) + "<mark>" + esc(sn.match) + "</mark>" + esc(sn.after) : ""; }
+  function getJSON(url) {
+    return fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status));
+  }
+  function leafIcon() { return '<svg viewBox="0 0 64 64" aria-hidden="true"><use href="#bf-leaf-face"/></svg>'; }
+
+  /* ── open / close: open by default on every page ───────────────────── */
+  function setOpen(open) {
+    root.classList.toggle("bf-open", open);
+    $(".bf-panel").setAttribute("aria-hidden", open ? "false" : "true");
+    $(".bf-mascot").setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) hideBubble(); else hideCard();
+  }
+  root.addEventListener("click", function (e) {
+    const btn = e.target.closest("[data-bf]");
+    if (!btn) return;
+    const act = btn.dataset.bf;
+    if (act === "toggle") { setOpen(!root.classList.contains("bf-open")); celebrate(); }
+    else if (act === "close") setOpen(false);
+    else if (act === "summary") ask("summary");
+    else if (act === "page") ask("page");
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && root.classList.contains("bf-open") && root.contains(document.activeElement)) setOpen(false);
+  });
+
+  /* ── tabs ──────────────────────────────────────────────────────────── */
+  root.querySelectorAll(".bf-tabs [data-tab]").forEach(function (tab) {
+    tab.addEventListener("click", function () { showTab(tab.dataset.tab); });
+  });
+  function showTab(name) {
+    root.querySelectorAll(".bf-tabs [data-tab]").forEach(t => t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false"));
+    root.querySelectorAll(".bf-pane").forEach(p => { p.hidden = p.dataset.pane !== name; });
+    hideCard();
+    if (name === "search") setTimeout(() => $("#bfQuery").focus(), 50);
+    if (name === "ask") renderTarget();
+  }
+
+  /* ── moods ─────────────────────────────────────────────────────────── */
+  function mood(cls, ms) {
+    root.classList.remove("bf-happy", "bf-nudge");
+    void root.offsetWidth;
+    root.classList.add(cls);
+    setTimeout(() => root.classList.remove(cls), ms || 1600);
+  }
+  function celebrate() { mood("bf-happy", 900); }
+  function say(html, ms) {
+    const b = $("#bfBubble");
+    b.innerHTML = html;
+    b.hidden = false;
+    clearTimeout(say.t);
+    say.t = setTimeout(hideBubble, ms || 7000);
+  }
+  function hideBubble() { $("#bfBubble").hidden = true; }
+
+  /* ── what this page is about ───────────────────────────────────────── */
+  if (!HAS_DOC) {
+    $("#bfTabRead").textContent = "Recent";
+    $("#bfTree").style.display = "none";
+    $("#bfPageBtn").hidden = true;
+    $("#bfQuery").placeholder = "Search all your NES documents…";
+  } else if (HAS_ALL) {
+    $("#bfScope").hidden = false;
+  }
+  if (MODE === "detail") { $("#bfPageBtn").hidden = true; $("#bfTabRead").textContent = "Overview"; }
+
+  if (HAS_DOC) {
+    getJSON(root.dataset.textUrl).then(function (data) {
+      docs = data.docs || [];
+      config = data.config || {};
+      renderPrivacy();
+      updateReading();
+      greet();
+    }).catch(function () {
+      $("#bfTreeCaption").textContent = "I couldn't read this document's text, but I'm still keeping watch.";
+      updateReading();
+    });
+  }
+  if (HAS_ALL) {
+    getJSON(root.dataset.recentUrl).then(function (data) {
+      if (!HAS_DOC) { config = data.config || {}; renderPrivacy(); }
+      renderRecent(data.results || []);
+      if (!HAS_DOC) greet();
+    }).catch(() => {});
+  }
+
+  function totalPages() { return docs.reduce((n, d) => n + d.pages.length, 0); }
+  function pageKey(docId, page) { return docId + ":" + page; }
+
+  function greet() {
+    if (!HAS_DOC) {
+      $("#bfTreeCaption").textContent = "Your recent documents";
+      $("#bfSub").textContent = "search, summarise, ask";
+      let greeted = false;
+      try { greeted = sessionStorage.getItem("bfoon:greeted") === "1"; sessionStorage.setItem("bfoon:greeted", "1"); } catch (e) {}
+      if (!greeted) say("Hi, I'm <b>BFoon</b>. Search any of your NES documents, or pick one and I'll summarise it.", 6500);
+      return;
+    }
+    const n = totalPages();
+    if (!n) return;
+    $("#bfSub").textContent = n === 1 ? "1 page to read" : n + " pages to read";
+    if (MODE === "detail") return;
+    const left = n - countSeen();
+    if (left > 0) say("Hi, I'm <b>BFoon</b>. I'll grow a leaf for every page you read — <b>" + left + "</b> to go.", 6000);
+  }
+
+  /* ── Reading: which pages you have actually looked at ──────────────── */
+  function countSeen() {
+    let n = 0;
+    docs.forEach(d => d.pages.forEach((_t, i) => { if (seen.has(pageKey(d.id, i + 1))) n++; }));
+    return n;
+  }
+  function stamp(el) {
+    if (!el || el.querySelector(".bf-seen-stamp")) return;
+    const s = document.createElement("span");
+    s.className = "bf-seen-stamp";
+    s.title = "BFoon: you looked at this page";
+    s.innerHTML = leafIcon();
+    el.appendChild(s);
+  }
+  const timers = new WeakMap();
+  const io = ("IntersectionObserver" in window) ? new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      const el = entry.target;
+      if (entry.intersectionRatio >= 0.55) {
+        if (!timers.has(el)) {
+          timers.set(el, setTimeout(function () {
+            const key = pageKey(el.dataset.doc, el.dataset.page);
+            if (!seen.has(key)) {
+              seen.add(key);
+              store.set(SEEN_KEY, Array.from(seen));
+              stamp(el);
+              updateReading(key);
+            }
+          }, 1300));
+        }
+      } else if (timers.has(el)) {
+        clearTimeout(timers.get(el));
+        timers.delete(el);
+      }
+    });
+  }, { threshold: [0, 0.55, 0.8] }) : null;
+  function watchPages() {
+    document.querySelectorAll("[data-doc][data-page]").forEach(function (el) {
+      if (el.dataset.bfWatched || root.contains(el)) return;
+      el.dataset.bfWatched = "1";
+      if (seen.has(pageKey(el.dataset.doc, el.dataset.page))) stamp(el);
+      if (io) io.observe(el);
+    });
+  }
+  if (HAS_DOC && MODE !== "detail") {
+    watchPages();
+    new MutationObserver(() => { clearTimeout(watchPages.t); watchPages.t = setTimeout(watchPages, 120); })
+      .observe(document.body, { childList: true, subtree: true });
+  }
+
+  function updateReading(freshKey) {
+    if (!HAS_DOC) return;
+    const svg = $("#bfTree");
+    const n = totalPages();
+    const pages = [];
+    docs.forEach(d => d.pages.forEach((_t, i) => pages.push({ doc: d.id, page: i + 1, name: d.name })));
+    let out = '<path d="M110 148 C108 120 112 100 110 78" stroke="#7A5A3A" stroke-width="7" fill="none" stroke-linecap="round"/>' +
+              '<path d="M110 100 C92 92 78 80 66 62 M110 92 C128 84 142 72 154 56 M110 80 C104 62 100 48 96 34 M110 80 C118 62 124 50 128 36" ' +
+              'stroke="#7A5A3A" stroke-width="3" fill="none" stroke-linecap="round" opacity=".85"/>' +
+              '<ellipse cx="110" cy="148" rx="46" ry="5" fill="#E8F3FC"/>';
+    // A short document hangs its leaves on the branch tips, big; a long one
+    // fills the crown on a golden-angle spiral, so leaves never stack.
+    const TIPS = [[66, 62], [154, 56], [96, 34], [128, 36], [84, 74], [138, 68], [110, 24], [76, 50],
+                  [146, 44], [118, 50], [100, 56], [58, 78]];
+    const shown = pages.slice(0, 120);
+    const few = shown.length <= TIPS.length;
+    shown.forEach(function (p, i) {
+      let x, y, scale;
+      if (few) {
+        [x, y] = TIPS[i];
+        scale = shown.length <= 4 ? 1.9 : 1.55;
+      } else {
+        const ang = i * 2.399963;
+        const r = 18 + 52 * Math.sqrt((i + 0.5) / shown.length);
+        x = 110 + Math.cos(ang) * r * 1.15;
+        y = 62 + Math.sin(ang) * r * 0.62;
+        scale = 1.15 - (i / shown.length) * 0.3;
+      }
+      const rot = Math.atan2(y - 92, x - 110) * 57.3 + 90;     // tip points away from the trunk
+      const key = pageKey(p.doc, p.page);
+      out += '<g class="bf-leafpage' + (seen.has(key) ? " seen" : "") + (key === freshKey ? " fresh" : "") +
+        '" data-doc="' + esc(p.doc) + '" data-page="' + p.page + '" tabindex="0" role="button" aria-label="Page ' + p.page + '"' +
+        ' transform="translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ') rotate(' + rot.toFixed(0) + ') scale(' + scale.toFixed(2) + ')">' +
+        '<path d="M0 0 C-7 -3 -9 -12 -4 -18 C1 -14 4 -8 0 0 Z" stroke-width="1"/>' +
+        (few ? '<text x="-3.5" y="-7" font-size="5.5" font-weight="700" text-anchor="middle" transform="rotate(' + (-rot).toFixed(0) + ' -3.5 -9)" ' +
+               'fill="' + (seen.has(key) ? "#fff" : "#7F98AD") + '">' + p.page + "</text>" : "") + "</g>";
+    });
+    svg.innerHTML = out;
+    svg.querySelectorAll(".bf-leafpage").forEach(function (g) {
+      const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      title.textContent = "Page " + g.dataset.page + (seen.has(pageKey(g.dataset.doc, g.dataset.page)) ? " — read" : " — not looked at yet");
+      g.appendChild(title);
+      g.addEventListener("click", () => goTo(g.dataset.doc, g.dataset.page));
+      g.addEventListener("keydown", e => { if (e.key === "Enter") goTo(g.dataset.doc, g.dataset.page); });
+    });
+
+    const done = countSeen();
+    const cap = $("#bfTreeCaption");
+    const unseen = pages.filter(p => !seen.has(pageKey(p.doc, p.page)));
+    if (MODE === "detail") {
+      svg.style.display = "none";
+      cap.innerHTML = n ? "This envelope has <b>" + n + "</b> page" + (n === 1 ? "" : "s") +
+        " in " + docs.length + " file" + (docs.length === 1 ? "" : "s") + "." : "";
+      const quick = $("#bfFields");
+      quick.innerHTML = "";
+      [["Summarise it", () => ask("summary")], ["Search inside it", () => showTab("search")], ["Ask a question", () => { showTab("ask"); setTimeout(() => $("#bfQuestion").focus(), 60); }]]
+        .forEach(function (pair) {
+          const b = document.createElement("button");
+          b.type = "button"; b.className = "bf-chip"; b.textContent = pair[0]; b.onclick = pair[1];
+          quick.appendChild(b);
+        });
+      quick.className = "bf-chips";
+    } else if (!n) {
+      cap.textContent = "Scroll through the document and I'll keep count.";
+    } else if (done >= n) {
+      cap.textContent = "You've looked at every page. The tree is full!";
+      if (freshKey) { celebrate(); say("<b>Every page read.</b> Nicely done — the tree is in full leaf.", 5000); }
+    } else {
+      cap.textContent = "You've looked at " + done + " of " + n + " pages";
+      if (freshKey) celebrate();
+    }
+    const chips = $("#bfUnseen");
+    chips.innerHTML = "";
+    if (MODE !== "detail" && unseen.length && unseen.length < n) {
+      unseen.slice(0, 12).forEach(function (p) {
+        const c = document.createElement("button");
+        c.type = "button";
+        c.className = "bf-chip";
+        c.textContent = "p. " + p.page + (docs.length > 1 ? " · " + p.name.slice(0, 18) : "");
+        c.addEventListener("click", () => goTo(p.doc, p.page));
+        chips.appendChild(c);
+      });
+    }
+    const badge = $("#bfBadge");
+    const left = MODE === "detail" ? 0 : unseen.length;
+    badge.hidden = !left;
+    badge.textContent = left;
+    renderFields();
+  }
+
+  function renderFields() {
+    if (MODE !== "sign") return;
+    const box = $("#bfFields");
+    box.innerHTML = "";
+    try {
+      if (typeof pendingFields === "function") {
+        const left = pendingFields();
+        if (left.length) {
+          const pagesLeft = Array.from(new Set(left.map(f => f.page))).sort((a, b) => a - b);
+          box.innerHTML = "<b>" + left.length + "</b> field" + (left.length === 1 ? "" : "s") +
+            " still need you, on page " + pagesLeft.join(", ") + ".";
+        } else if (typeof orderedFields !== "undefined" && orderedFields.length) {
+          box.innerHTML = "All your fields are filled in.";
+        }
+      }
+    } catch (e) { /* the signing page owns that state */ }
+  }
+  if (MODE === "sign") setInterval(renderFields, 3000);
+
+  function goTo(docId, page) {
+    const el = document.querySelector('[data-doc="' + CSS.escape(String(docId)) + '"][data-page="' + CSS.escape(String(page)) + '"]');
+    if (el && !root.contains(el)) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.classList.remove("bf-flash"); void el.offsetWidth; el.classList.add("bf-flash");
+      return;
+    }
+    if (root.dataset.fileUrl) window.open(fileUrl(root.dataset.fileUrl, docId, page), "_blank", "noopener");
+  }
+  function fileUrl(pattern, docId, page) {
+    return pattern.replace(/\/0\/?$/, "/" + encodeURIComponent(docId) + "/") + (page ? "#page=" + page : "");
+  }
+
+  /* Before signing: a gentle, once-only reminder about pages not looked at. */
+  if (MODE === "sign") {
+    document.addEventListener("submit", function (e) {
+      if (nudged || root.contains(e.target)) return;
+      const form = e.target;
+      if (form.id !== "esForm" && !form.querySelector('[name="fields_payload"]')) return;
+      const unseen = [];
+      docs.forEach(d => d.pages.forEach((_t, i) => { if (!seen.has(pageKey(d.id, i + 1))) unseen.push(i + 1); }));
+      if (!unseen.length || !totalPages()) return;
+      nudged = true;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      mood("bf-nudge", 1500);
+      setOpen(true);
+      showTab("read");
+      say("Before you sign — you haven't looked at page" + (unseen.length > 1 ? "s " : " ") + "<b>" +
+          unseen.slice(0, 6).join(", ") + (unseen.length > 6 ? "…" : "") + "</b>. Have a look, or press sign again to carry on.", 12000);
+    }, true);
+  }
+
+  /* ── Results everywhere: a row, and more on hover ──────────────────── */
+  const WHERE = { title: "in the title", reference: "in the reference", people: "in the people", file: "in a file name", text: "inside the document" };
+  const cards = new Map();
+
+  function resultEl(r, i) {
+    const a = document.createElement("a");
+    a.className = "bf-res";
+    a.href = r.where === "text" && r.doc ? fileUrl(r.file_url, r.doc, r.page) : r.url;
+    if (r.where === "text") { a.target = "_blank"; a.rel = "noopener"; }
+    a.style.animationDelay = Math.min(i, 10) * 40 + "ms";
+    const where = r.page ? "p. " + r.page + (r.hits > 1 ? " · " + r.hits + " matches" : "") : (WHERE[r.where] || "");
+    a.innerHTML =
+      '<div class="bf-res-top"><span class="bf-res-title">' + esc(r.subject) + '</span>' +
+      '<span class="bf-pill ' + esc(r.status) + '">' + esc(r.status_label) + "</span></div>" +
+      (r.snippet ? '<div class="bf-res-snip">' + snip(r.snippet) + "</div>" : "") +
+      '<div class="bf-res-meta"><span>' + esc(where) + "</span><span>" + esc(r.sender) + "</span>" +
+      "<span>" + esc(r.completed || r.sent || r.created) + "</span>" +
+      '<span class="bf-res-act"><button type="button" class="bf-mini" data-act="sum">Summarise</button>' +
+      '<button type="button" class="bf-mini" data-act="ask">Ask</button></span></div>';
+    cards.set(a, r);
+    a.addEventListener("mouseenter", () => showCard(a));
+    a.addEventListener("focus", () => showCard(a));
+    a.addEventListener("mouseleave", hideCard);
+    a.addEventListener("blur", hideCard);
+    a.addEventListener("click", function (e) {
+      const act = e.target.closest("[data-act]");
+      if (!act) return;
+      e.preventDefault();
+      setTarget({ askUrl: r.ask_url, subject: r.subject, local: false, pk: r.pk });
+      if (act.dataset.act === "sum") ask("summary");
+      else { showTab("ask"); setTimeout(() => $("#bfQuestion").focus(), 60); }
+    });
+    return a;
+  }
+
+  function showCard(el) {
+    const r = cards.get(el);
+    if (!r) return;
+    const c = $("#bfCard");
+    const people = (r.recipients || []).map(p => esc(p.name) + ' <span style="color:#5B6B7C">· ' + esc(p.role) + ", " + esc(p.status) + "</span>").join("<br>");
+    c.innerHTML =
+      "<h6>" + esc(r.subject) + "</h6>" +
+      '<span class="bf-pill ' + esc(r.status) + '">' + esc(r.status_label) + "</span>" +
+      "<dl><dt>Envelope</dt><dd style=\"font-family:monospace;font-size:11px\">" + esc(r.envelope_id) + "</dd>" +
+      (r.reference ? "<dt>Reference</dt><dd>" + esc(r.reference) + "</dd>" : "") +
+      "<dt>From</dt><dd>" + esc(r.sender || "—") + "</dd>" +
+      "<dt>Created</dt><dd>" + esc(r.created) + "</dd>" +
+      (r.sent ? "<dt>Sent</dt><dd>" + esc(r.sent) + "</dd>" : "") +
+      (r.completed ? "<dt>Completed</dt><dd>" + esc(r.completed) + "</dd>" : "") +
+      (people ? "<dt>People</dt><dd>" + people + (r.recipient_count > 6 ? "<br>+" + (r.recipient_count - 6) + " more" : "") + "</dd>" : "") +
+      ((r.documents || []).length ? "<dt>Files</dt><dd>" + r.documents.map(esc).join("<br>") + "</dd>" : "") +
+      "</dl>" +
+      (r.more ? '<div class="bf-quote">' + (r.page ? "<b>Page " + r.page + ":</b> " : "") + snip(r.more) + "</div>" : "");
+    c.hidden = false;
+    const panel = $(".bf-panel").getBoundingClientRect();
+    const row = el.getBoundingClientRect();
+    const w = 300;
+    let left = panel.left - w - 12;
+    if (left < 8) left = Math.max(8, Math.min(innerWidth - w - 8, row.left));
+    let top = Math.min(row.top, innerHeight - c.offsetHeight - 12);
+    if (left === row.left || left === 8) top = Math.max(8, row.top - c.offsetHeight - 8);
+    c.style.left = left + "px";
+    c.style.top = Math.max(8, top) + "px";
+  }
+  function hideCard() { const c = $("#bfCard"); if (c) c.hidden = true; }
+
+  function renderRecent(list) {
+    if (HAS_DOC) return;
+    const box = $("#bfRecent");
+    box.innerHTML = "";
+    if (!list.length) { box.innerHTML = '<div class="bf-note">No documents yet.</div>'; return; }
+    list.forEach((r, i) => box.appendChild(resultEl({ ...r, where: "", snippet: null, more: null }, i)));
+    recentList = list;
+    renderTarget();
+  }
+  let recentList = [];
+
+  /* ── Search: this document in the page; everything else on the server ─ */
+  root.querySelectorAll("#bfScope [data-scope]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      scope = b.dataset.scope;
+      root.querySelectorAll("#bfScope [data-scope]").forEach(x => x.setAttribute("aria-checked", x === b ? "true" : "false"));
+      $("#bfQuery").placeholder = scope === "all" ? "Search all your NES documents…" : "Find words in this document…";
+      runSearch($("#bfQuery").value);
+      $("#bfQuery").focus();
+    });
+  });
+
+  function norm(s) { return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+
+  function runSearch(q) {
+    q = (q || "").trim();
+    const box = $("#bfResults");
+    hideCard();
+    if (q.length < 2) { box.innerHTML = ""; return; }
+    if (scope === "all") return searchAll(q);
+    const nq = norm(q);
+    const hits = [];
+    docs.forEach(function (d) {
+      d.pages.forEach(function (text, i) {
+        const nt = norm(text);
+        let from = 0, idx;
+        while ((idx = nt.indexOf(nq, from)) !== -1 && hits.length < 60) {
+          hits.push({ doc: d.id, name: d.name, page: i + 1, text: text, at: idx });
+          from = idx + nq.length;
+        }
+      });
+    });
+    if (!hits.length) {
+      box.innerHTML = '<div class="bf-note">No match for “' + esc(q) + "” in this document." +
+        (HAS_ALL ? ' <button type="button" class="bf-mini" id="bfTryAll">Search all my documents</button>' : "") + "</div>";
+      const t = $("#bfTryAll");
+      if (t) t.onclick = () => root.querySelector('#bfScope [data-scope="all"]').click();
+      return;
+    }
+    const pagesHit = new Set(hits.map(h => h.doc + ":" + h.page)).size;
+    box.innerHTML = '<div class="bf-note"><b>' + hits.length + "</b> match" + (hits.length === 1 ? "" : "es") +
+      " on " + pagesHit + " page" + (pagesHit === 1 ? "" : "s") + "</div>";
+    hits.slice(0, 40).forEach(function (h, i) {
+      const r = {
+        subject: "Page " + h.page + (docs.length > 1 ? " · " + h.name : ""), status: "", status_label: "here",
+        snippet: { before: (h.at > 60 ? "…" : "") + h.text.slice(Math.max(0, h.at - 60), h.at), match: h.text.slice(h.at, h.at + q.length), after: h.text.slice(h.at + q.length, h.at + q.length + 80) + "…" },
+      };
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "bf-hit";
+      b.style.animation = "bf-in .3s ease-out both"; b.style.animationDelay = Math.min(i, 10) * 30 + "ms";
+      b.innerHTML = "<small>" + esc(r.subject) + "</small>" + snip(r.snippet).replace(/\s+/g, " ");
+      b.addEventListener("click", () => goTo(h.doc, h.page));
+      box.appendChild(b);
+    });
+  }
+
+  let searchSeq = 0;
+  function searchAll(q) {
+    const box = $("#bfResults");
+    const seq = ++searchSeq;
+    box.innerHTML = '<div class="bf-note">Looking through your documents…</div>';
+    root.classList.add("bf-thinking");
+    getJSON(root.dataset.searchUrl + "?q=" + encodeURIComponent(q))
+      .then(function (data) {
+        if (seq !== searchSeq) return;
+        const list = data.results || [];
+        box.innerHTML = "";
+        const head = document.createElement("div");
+        head.className = "bf-note";
+        head.innerHTML = list.length
+          ? "<b>" + list.length + "</b> document" + (list.length === 1 ? "" : "s") + " — hover for details"
+          : "Nothing found for “" + esc(q) + "”.";
+        if (data.pending) head.innerHTML += " <span>(" + data.pending + " older documents are still being read; try again shortly.)</span>";
+        box.appendChild(head);
+        list.forEach((r, i) => box.appendChild(resultEl(r, i)));
+        if (list.length) celebrate();
+      })
+      .catch(() => { if (seq === searchSeq) box.innerHTML = '<div class="bf-note">Search is not available right now.</div>'; })
+      .finally(() => { if (seq === searchSeq) root.classList.remove("bf-thinking"); });
+  }
+  $("#bfSearchForm").addEventListener("submit", e => { e.preventDefault(); runSearch($("#bfQuery").value); });
+  $("#bfQuery").addEventListener("input", function () {
+    clearTimeout(runSearch.t);
+    const v = this.value;
+    runSearch.t = setTimeout(() => runSearch(v), scope === "all" ? 350 : 160);
+  });
+
+  /* ── Ask: summaries and questions about this document, or any you choose ─ */
+  function setTarget(t) { target = t; renderTarget(); }
+  function renderTarget() {
+    const box = $("#bfTarget");
+    if (target) {
+      box.innerHTML = leafIcon() + "<span>About</span><b>" + esc(target.subject) + "</b>" +
+        (HAS_ALL ? '<button type="button" class="bf-mini" id="bfChange">Change</button>' : "");
+      const ch = $("#bfChange");
+      if (ch) ch.onclick = function () {
+        if (HAS_DOC && !target.local) { setTarget({ askUrl: root.dataset.askUrl, subject: root.dataset.subject || "This document", local: true }); }
+        else { target = null; renderTarget(); }
+      };
+    } else {
+      box.innerHTML = leafIcon() + "<span>Pick a document to summarise or ask about:</span>";
+      const wrap = document.createElement("div");
+      wrap.className = "bf-chips";
+      wrap.style.justifyContent = "flex-start";
+      recentList.slice(0, 6).forEach(function (r) {
+        const c = document.createElement("button");
+        c.type = "button";
+        c.className = "bf-chip";
+        c.textContent = r.subject.slice(0, 34);
+        c.title = r.subject + " — " + r.status_label;
+        c.onclick = () => setTarget({ askUrl: r.ask_url, subject: r.subject, local: false, pk: r.pk });
+        wrap.appendChild(c);
+      });
+      const s = document.createElement("button");
+      s.type = "button"; s.className = "bf-chip"; s.textContent = "Search for one…";
+      s.onclick = () => showTab("search");
+      wrap.appendChild(s);
+      box.appendChild(wrap);
+    }
+    root.querySelectorAll(".bf-actions .bf-btn").forEach(b => { if (!busy) b.disabled = !target; });
+    $("#bfPageBtn").hidden = !(target && target.local) || MODE === "detail" || !HAS_DOC;
+  }
+
+  function renderPrivacy() {
+    const p = $("#bfPrivacy");
+    if (config.ai) {
+      p.textContent = "Summaries and answers are written by " + config.provider + " and can be wrong — check the page it cites." +
+        (config.redact ? " E-mails, phone and account numbers are masked before sending." : "") +
+        (config.free_tier_notice ? " On Google's free tier, what is sent may be kept by Google." : "");
+    } else {
+      p.textContent = "AI is off here, so summaries and answers are worked out from the document's own sentences, on this server.";
+    }
+  }
+
+  function currentPage() {
+    let best = null, bestArea = 0;
+    document.querySelectorAll("[data-doc][data-page]").forEach(function (el) {
+      if (root.contains(el)) return;
+      const r = el.getBoundingClientRect();
+      const vis = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+      if (vis > bestArea) { bestArea = vis; best = el; }
+    });
+    return best ? { doc: best.dataset.doc, page: parseInt(best.dataset.page, 10) } : null;
+  }
+
+  function bubble(cls, text) {
+    const m = document.createElement("div");
+    m.className = "bf-msg " + cls;
+    m.textContent = text;
+    $("#bfChat").appendChild(m);
+    m.scrollIntoView({ block: "nearest" });
+    return m;
+  }
+
+  let busy = false;
+  function ask(mode, question) {
+    if (busy) return;
+    if (!target) { showTab("ask"); say("Pick a document first — from the list, or search for one.", 5000); mood("bf-nudge", 1400); return; }
+    const payload = { mode: mode };
+    if (mode === "question") payload.question = question;
+    if (mode === "page") {
+      const p = currentPage();
+      if (!p) { say("Scroll to a page first, then ask me to explain it."); return; }
+      payload.page = p;
+    }
+    setOpen(true);
+    showTab("ask");
+    busy = true;
+    root.querySelectorAll(".bf-actions .bf-btn").forEach(b => b.disabled = true);
+    const about = target.local ? "" : " — " + target.subject;
+    bubble("me", mode === "summary" ? "Summarise" + (about || " this document") : mode === "page" ? "Explain page " + payload.page.page : question + about);
+    const typing = document.createElement("div");
+    typing.className = "bf-msg bot typing";
+    typing.innerHTML = "<i></i><i></i><i></i>";
+    $("#bfChat").appendChild(typing);
+    root.classList.add("bf-thinking");
+
+    fetch(target.askUrl, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": root.dataset.csrf, "Accept": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(r => r.json().catch(() => ({ ok: false, error: "Unexpected answer from the server." })))
+      .then(function (data) {
+        typing.remove();
+        if (!data.ok) { bubble("bot", data.error || "Something went wrong."); return; }
+        const m = bubble("bot", data.answer);
+        const src = document.createElement("span");
+        src.className = "bf-src";
+        src.textContent = data.source === "gemini"
+          ? "Written by Gemini (" + data.model + ")" + (data.cached ? " · remembered" : "")
+          : (data.note || "Worked out here, without AI.");
+        m.appendChild(src);
+        celebrate();
+      })
+      .catch(function () { typing.remove(); bubble("bot", "I couldn't reach the server. Check your connection and try again."); })
+      .finally(function () {
+        busy = false;
+        root.classList.remove("bf-thinking");
+        renderTarget();
+      });
+  }
+  $("#bfAskForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    const q = $("#bfQuestion").value.trim();
+    if (!q) return;
+    if (!target) { ask("question", q); return; }
+    $("#bfQuestion").value = "";
+    ask("question", q);
+  });
+
+  /* The leaf's eyes follow the pointer a little. */
+  document.addEventListener("pointermove", function (e) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const r = $(".bf-mascot").getBoundingClientRect();
+    const dx = Math.max(-1.6, Math.min(1.6, (e.clientX - (r.left + r.width / 2)) / 120));
+    const dy = Math.max(-1.4, Math.min(1.4, (e.clientY - (r.top + r.height / 2)) / 120));
+    root.querySelectorAll(".bf-mascot .bf-pupil, .bf-head-leaf .bf-pupil").forEach(p => p.style.transform = "translate(" + dx + "px," + dy + "px)");
+  }, { passive: true });
+
+  renderTarget();
+  setOpen(true);   // open by default, every time
+})();
+</script>

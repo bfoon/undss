@@ -570,6 +570,9 @@ urlpatterns = [
     # NES Sentinels: independent tamper witnesses installed by other offices
     path("", include("accounts.urls_esign_sentinel")),
 
+    # BFoon: search, summaries and reading reminders on NES documents
+    path("", include("accounts.urls_esign_bfoon")),
+
     # NES signing identities (sole control)
     path("", include("accounts.urls_esign_identity")),
 

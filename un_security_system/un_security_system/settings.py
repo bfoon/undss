@@ -357,6 +357,21 @@ MS_GRAPH_TENANT_ID = config("MS_GRAPH_TENANT_ID", default="")
 MS_GRAPH_CLIENT_ID = config("MS_GRAPH_CLIENT_ID", default="")
 MS_GRAPH_CLIENT_SECRET = config("MS_GRAPH_CLIENT_SECRET", default="")
 
+# ---------------------------------------------------------------------
+# BFOON — the NES reading assistant (accounts/bfoon_esign.py)
+# ---------------------------------------------------------------------
+# Search, "pages you have looked at" and reminders run in the browser and need
+# nothing here. Summaries and questions use Google Gemini when a key is set:
+# a Flash model first, then Flash-Lite, then a summary made here without AI.
+# Google's FREE tier may use what is sent to improve its products and human
+# reviewers may read it; enabling billing on the Google project stops that.
+GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
+BFOON_AI_ENABLED = config("BFOON_AI_ENABLED", default=True, cast=bool)
+BFOON_GEMINI_MODELS = config("BFOON_GEMINI_MODELS", default="gemini-flash-latest,gemini-flash-lite-latest")
+BFOON_REDACT = config("BFOON_REDACT", default=True, cast=bool)
+BFOON_FREE_TIER_NOTICE = config("BFOON_FREE_TIER_NOTICE", default=True, cast=bool)
+BFOON_ASKS_PER_HOUR = config("BFOON_ASKS_PER_HOUR", default=30, cast=int)
+
 
 # ---------------------------------------------------------------------
 # ESIGN — OFFICE TO PDF

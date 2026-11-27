@@ -673,4 +673,5 @@ renderAll().catch(err => {
   if (box) EsignPdf.showError(box, err, (DOCS[0] || {}).url);
 });
 </script>
+{% include "accounts/esign/_bfoon.html" with bfoon_mode="sign" bfoon_token=recipient.token %}
 {% endblock %}

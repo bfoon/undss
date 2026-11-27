@@ -113,6 +113,13 @@ JOBS = [
         "about": "Completes envelopes that are fully signed but whose final document failed to build.",
     },
     {
+        "name": "bfoon-index",
+        "target": "accounts.bfoon_esign:warm_index",
+        "cron": "*/30 * * * *",
+        "max_age": 3 * 3600,
+        "about": "Reads new NES documents ahead of time so BFoon search is instant.",
+    },
+    {
         "name": "nes-key-watch",
         "target": "accounts.key_watch:sweep",
         "cron": "40 6 * * *",
