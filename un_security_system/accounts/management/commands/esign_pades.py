@@ -35,6 +35,23 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--make-office-ca", metavar="DIR",
+            help="Create the office's own root CA and a seal certificate that "
+                 "chains to it, with a revocation list UN PASS publishes.",
+        )
+        parser.add_argument("--office", default="", help="Organisation name for --make-office-ca.")
+        parser.add_argument("--base-url", default="", help="Public address for the CRL (default SITE_URL).")
+        parser.add_argument(
+            "--sign-anchors", action="store_true",
+            help="Sign audit anchors that were recorded but never signed.",
+        )
+        parser.add_argument(
+            "--upgrade-all", action="store_true",
+            help="Seal every completed envelope that has no seal, add validation "
+                 "data (DSS) and an archival timestamp to every seal below B-LTA, "
+                 "and sign every unsigned anchor. --limit applies.",
+        )
+        parser.add_argument(
             "--check", action="store_true",
             help="Report configuration and run a sign/validate self-test.",
         )
@@ -105,6 +122,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         did_something = False
+
+        if opts.get("make_office_ca"):
+            self.make_office_ca(opts["make_office_ca"], opts.get("office") or "",
+                                opts.get("base_url") or "", bool(opts.get("force")))
+            return
+
+        if opts.get("sign_anchors"):
+            self.sign_anchors(int(opts.get("limit") or 200))
+            did_something = True
+
+        if opts.get("upgrade_all"):
+            self.upgrade_all(int(opts.get("limit") or 200))
+            did_something = True
 
         if opts.get("make_dev_cert"):
             self.make_dev_cert(opts["make_dev_cert"], opts["dev_cert_passphrase"])
@@ -340,6 +370,96 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     # --make-dev-cert
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # --make-office-ca / --sign-anchors / --upgrade-all
+    # ------------------------------------------------------------------
+    def make_office_ca(self, out_dir: str, office: str, base_url: str, force: bool):
+        from django.conf import settings
+
+        from accounts import office_ca_esign as CA
+
+        office = office or getattr(settings, "ESIGN_PADES_ORGANIZATION", "") or "UN PASS"
+        base = (base_url or getattr(settings, "SITE_URL", "")).rstrip("/")
+        if not base.startswith("https://"):
+            raise CommandError("The CRL address must be https:// — pass --base-url https://your-unpass-address")
+        try:
+            r = CA.create(out_dir, office=office, base_url=base, force=force)
+        except FileExistsError as exc:
+            raise CommandError(f"Refusing to overwrite: {exc}. Move them aside, or --force.")
+        self.stdout.write(self.style.SUCCESS("\nOffice PKI created"))
+        for label, path in r["paths"].items():
+            self.stdout.write(f"  {label:<15} {path}")
+        self.stdout.write(f"\n  Root CA fingerprint (SHA-256) — publish this, read it to partner offices:\n"
+                          f"    {r['root_fingerprint']}")
+        self.stdout.write(f"  Seal serial {r['seal_serial']}, valid until {r['seal_expires']:%Y-%m-%d}")
+        self.stdout.write(f"  Revocation list: {r['crl_url']}")
+        self.stdout.write("\nAdd these lines to .env (beside docker-compose.yml), then "
+                          "docker compose restart web worker beat:\n")
+        self.stdout.write(f"ESIGN_PADES_PKCS12_PASSPHRASE={r['seal_passphrase']}")
+        self.stdout.write(f"ESIGN_OFFICE_CA_KEY_PASSPHRASE={r['ca_passphrase']}")
+        self.stdout.write("ESIGN_PADES_LEVEL=b-lta")
+        self.stdout.write("\nBack up the three files and the two passphrases together, offline. "
+                          "Then: esign_pades --check, and esign_pades --upgrade-all.\n")
+
+    def sign_anchors(self, limit: int):
+        from accounts.audit_chain_esign import sign_recorded_anchor
+        from accounts.models_esign_pades import EnvelopeSeal
+
+        rows = (EnvelopeSeal.objects.exclude(audit_chain_head="")
+                .filter(audit_anchor="").select_related("envelope")[:limit])
+        done = 0
+        for seal in rows:
+            try:
+                r = sign_recorded_anchor(seal.envelope, seal)
+            except Exception as exc:  # noqa: BLE001
+                r = {"ok": False, "detail": str(exc)}
+            mark = self.style.SUCCESS("signed") if r["ok"] else self.style.ERROR("failed")
+            self.stdout.write(f"  {mark}  {seal.envelope.envelope_id}  {'' if r['ok'] else r['detail']}")
+            done += bool(r["ok"])
+        self.stdout.write(f"{done} anchor(s) signed.")
+
+    def upgrade_all(self, limit: int):
+        from django.core.files.base import ContentFile
+
+        from accounts import pades_esign as P
+        from accounts.models_esign import Envelope
+        from accounts.models_esign_pades import EnvelopeSeal
+        from accounts.utils_esign import log_event
+
+        ready, reason = P.pades_configured()
+        if not ready:
+            raise CommandError(f"No seal certificate: {reason}  →  esign_pades --make-office-ca")
+        sealed = refreshed = failed = 0
+        for env in Envelope.objects.filter(status=Envelope.STATUS_COMPLETED).order_by("id")[:limit]:
+            seal = EnvelopeSeal.objects.filter(envelope=env).first()
+            try:
+                if seal is None or not seal.is_sealed:
+                    raw = self._stored_pdf(env)
+                    out, info = P.seal_pdf(raw, env)
+                    if info.get("status") != "sealed":
+                        raise RuntimeError(info.get("detail") or info.get("status"))
+                    env.completed_pdf.save(f"{env.envelope_id}-signed.pdf", ContentFile(out), save=False)
+                    env.save(update_fields=["completed_pdf"])
+                    info.pop("audit", None)          # keep the anchor recorded at completion
+                    P.record_seal(env, info)
+                    log_event(env, "sealed",
+                              note=f"Office seal applied after completion, PAdES "
+                                   f"{(info.get('level_achieved') or '').upper()}"[:255],
+                              meta={"level": info.get("level_achieved"),
+                                    "sha256": info.get("document_sha256")})
+                    sealed += 1
+                    self.stdout.write(f"  sealed     {env.envelope_id}  {(info.get('level_achieved') or '').upper()}")
+                elif (seal.level_achieved or "") != "b-lta":
+                    rep = P.refresh_ltv(env, force=True)
+                    refreshed += bool(rep.get("ok"))
+                    self.stdout.write(f"  refreshed  {env.envelope_id}  "
+                                      f"{(rep.get('level_before') or '').upper()} → {(rep.get('level_after') or '').upper()}")
+            except Exception as exc:  # noqa: BLE001
+                failed += 1
+                self.stdout.write(self.style.ERROR(f"  failed     {env.envelope_id}: {exc}"))
+        self.stdout.write(f"{sealed} sealed, {refreshed} upgraded, {failed} failed.")
+        self.sign_anchors(limit)
+
     def make_dev_cert(self, path: str, passphrase: str):
         from cryptography import x509
         from cryptography.hazmat.primitives import hashes, serialization

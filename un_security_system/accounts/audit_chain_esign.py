@@ -661,7 +661,9 @@ def verify_anchor(envelope, seal) -> dict:
 
 
 #: Events that only make sense BEFORE an envelope completes.
-_CLOSED_EVENTS = {"signed", "approved", "attested", "completed", "sealed",
+#: ("sealed" is not here: the office seal is legitimately re-applied after
+#: completion when a certificate is installed later or a seal is upgraded.)
+_CLOSED_EVENTS = {"signed", "approved", "attested", "completed",
                   "declined", "returned"}
 
 
@@ -750,4 +752,67 @@ def chain_export(envelope) -> list[dict]:
                                          if r.pk in restore else r),
             "detached": restore.get(r.pk, {}),
         })
+    return out
+
+
+def sign_recorded_anchor(envelope, seal) -> dict:
+    """
+    Sign an anchor whose head and length were recorded at completion but not
+    signed (there was no seal certificate then).
+
+    The statement signed is exactly the one recorded — same head, length and
+    anchored_at — so the ordinary verifier accepts it. What it proves is
+    honest: the CMS signing time and the TSA token say *when* it was signed,
+    so it attests that the trail has not been cut short since that moment,
+    not since completion. The detail says so in words.
+    """
+    import asyncio
+
+    from . import pades_esign as P
+
+    out = {"ok": False, "detail": ""}
+    if seal is None or not seal.audit_chain_head:
+        out["detail"] = "No recorded head to sign."
+        return out
+    if seal.audit_anchor:
+        out.update(ok=True, detail="Already signed.")
+        return out
+    ready, reason = P.pades_configured()
+    if not ready:
+        out["detail"] = reason
+        return out
+
+    at_text = seal.audit_anchored_at.isoformat() if seal.audit_anchored_at else ""
+    statement = anchor_statement(envelope, seal.audit_chain_head,
+                                 seal.audit_chain_length or 0, at_text)
+    signer = P.load_seal_signer()
+    cfg = P.pades_config()
+    try:
+        timestamper = P._timestamper(cfg)
+    except Exception:
+        timestamper = None
+
+    async def _sign(ts):
+        return await signer.async_sign_general_data(statement, cfg["digest"],
+                                                    detached=True, timestamper=ts)
+    try:
+        content_info = asyncio.run(_sign(timestamper))
+        stamped = timestamper is not None
+    except Exception:
+        if timestamper is None:
+            raise
+        content_info = asyncio.run(_sign(None))
+        stamped = False
+
+    from django.utils import timezone
+
+    seal.audit_anchor = base64.b64encode(content_info.dump()).decode("ascii")
+    seal.audit_anchor_timestamped = stamped
+    seal.audit_detail = (
+        f"Head recorded at completion ({at_text[:19]}) and signed later, on "
+        f"{timezone.now():%Y-%m-%d %H:%M} UTC, when a seal certificate was installed. "
+        "It proves the trail is unshortened since the signing time."
+    )[:2000]
+    seal.save(update_fields=["audit_anchor", "audit_anchor_timestamped", "audit_detail"])
+    out.update(ok=True, timestamped=stamped, detail=seal.audit_detail)
     return out

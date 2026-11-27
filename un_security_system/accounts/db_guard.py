@@ -183,9 +183,13 @@ BEGIN
     IF coalesce(OLD.audit_chain_head, '') = '' THEN
         RETURN NEW;
     END IF;
+    -- The anchor signature may be ADDED once to a head that was recorded
+    -- unsigned (no certificate at completion); it can never be replaced.
     touched := nes_guard_changed(to_jsonb(OLD), to_jsonb(NEW))
                && ARRAY['audit_chain_head', 'audit_chain_length',
-                        'audit_anchor', 'audit_anchored_at']::text[];
+                        'audit_anchored_at']::text[]
+               OR (coalesce(OLD.audit_anchor, '') <> ''
+                   AND coalesce(NEW.audit_anchor, '') IS DISTINCT FROM OLD.audit_anchor);
     IF touched THEN
         PERFORM nes_guard_refuse(
             format('the audit anchor of envelope %s was set at completion and '

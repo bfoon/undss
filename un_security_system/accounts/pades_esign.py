@@ -286,9 +286,24 @@ def _validation_context(cfg: dict, *, fetching: bool):
                     file,
                 )
 
+    # The office's own CA (accounts/office_ca_esign.py), when there is one:
+    # its root is trusted and a fresh CRL signed by it is handed over
+    # directly, so the Document Security Store is filled at sealing time
+    # without UN PASS having to fetch its own CRL over the network.
+    crls = []
+    try:
+        from . import office_ca_esign
+
+        office_roots, crls = office_ca_esign.validation_material()
+        roots.extend(office_roots)
+    except Exception:
+        logger.warning("NES PAdES: office CA material unavailable", exc_info=True)
+
     kwargs: dict[str, Any] = {"allow_fetching": fetching}
     if roots:
         kwargs["trust_roots"] = roots
+    if crls:
+        kwargs["crls"] = crls
     return ValidationContext(**kwargs)
 
 

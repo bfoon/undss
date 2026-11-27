@@ -474,6 +474,15 @@ ESIGN_PADES_ENABLED = config(
 # nothing on a bad day and gives the archival level on every other.
 ESIGN_PADES_LEVEL = config("ESIGN_PADES_LEVEL", default="b-lta")
 
+# The office's own CA (accounts/office_ca_esign.py), created with
+#   esign_pades --make-office-ca /out
+# office-ca.crt / office-ca.key live beside seal.p12 in NES_SECRETS_DIR.
+ESIGN_OFFICE_CA_CERT = config("ESIGN_OFFICE_CA_CERT", default=_nes_path("office-ca.crt"))
+ESIGN_OFFICE_CA_KEY = config("ESIGN_OFFICE_CA_KEY", default=_nes_path("office-ca.key"))
+ESIGN_OFFICE_CA_KEY_PASSPHRASE = config("ESIGN_OFFICE_CA_KEY_PASSPHRASE", default="")
+# Hex serials of seal certificates to revoke, comma-separated.
+ESIGN_OFFICE_CA_REVOKED = config("ESIGN_OFFICE_CA_REVOKED", default="")
+
 # RFC 3161 timestamp authority. Required for b-t and above; without one the
 # seal is capped at b-b, which fails POPP authenticity parameter (ii) — the
 # date and time of the signature.

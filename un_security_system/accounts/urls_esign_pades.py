@@ -24,6 +24,10 @@ urlpatterns = [
         name="esign_token_seal_verify",
     ),
 
+    # The office CA's public certificate and revocation list
+    path("esign/pki/office-ca.crt", V.office_ca_certificate, name="esign_office_ca_crt"),
+    path("esign/pki/office-ca.crl", V.office_ca_crl, name="esign_office_ca_crl"),
+
     # Offline evidence package (ASiC-E container, ETSI EN 319 162)
     path(
         "esign/<int:pk>/evidence/",

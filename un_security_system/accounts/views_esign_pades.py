@@ -299,3 +299,39 @@ def esign_token_seal_verify(request, token):
     ctx["public"] = True
     ctx["base_template"] = "accounts/esign/base_public.html"
     return render(request, "accounts/esign/seal_verify.html", ctx)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The office CA's public material — what a PDF reader fetches to check a seal
+# ─────────────────────────────────────────────────────────────────────────────
+
+def office_ca_certificate(request):
+    """The office root CA certificate (public). Linked from the seal's AIA."""
+    from django.http import Http404, HttpResponse
+
+    from . import office_ca_esign as CA
+
+    if not CA.present():
+        raise Http404
+    from cryptography.hazmat.primitives import serialization
+
+    der = CA.load_ca_cert().public_bytes(serialization.Encoding.DER)
+    response = HttpResponse(der, content_type="application/pkix-cert")
+    response["Content-Disposition"] = 'inline; filename="office-ca.crt"'
+    response["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
+def office_ca_crl(request):
+    """The office CA's current revocation list (public). Linked from the seal's CDP."""
+    from django.http import Http404, HttpResponse
+
+    from . import office_ca_esign as CA
+
+    der = CA.current_crl_der() if CA.present() else None
+    if not der:
+        raise Http404
+    response = HttpResponse(der, content_type="application/pkix-crl")
+    response["Content-Disposition"] = 'inline; filename="office-ca.crl"'
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
