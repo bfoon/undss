@@ -1009,4 +1009,5 @@ class ConsumableStockLogAdmin(admin.ModelAdmin):
 
 from .admin_esign import *  # noqa: F401,F403
 from .admin_esign_studio import *  # noqa: F401,F403
+from .admin_esign_agents import *  # noqa: F401,F403
 from .admin_esign_pades import *  # noqa: F401,F403

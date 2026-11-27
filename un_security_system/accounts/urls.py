@@ -576,5 +576,8 @@ urlpatterns = [
     # NES signing identities (sole control)
     path("", include("accounts.urls_esign_identity")),
 
+    # NES Studio — Agentic flows (AI cards on the Flow Studio canvas)
+    path("", include("accounts.urls_esign_agents")),
+
 
 ]

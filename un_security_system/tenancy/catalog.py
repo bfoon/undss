@@ -306,6 +306,16 @@ FEATURES: Tuple[FeatureDef, ...] = (
         delegable=True,
         url_rules=("accounts:esign_markup_*",),
     ),
+    FeatureDef(
+        code="esign_agents",
+        name="NES Agentic flows",
+        category="ict",
+        description="AI agents on the Flow Studio canvas: summarise, check, convert and route documents.",
+        requires=("esign",),
+        default_enabled=True,
+        delegable=True,
+        url_rules=("accounts:esign_agent*",),
+    ),
 
     # ── People & HR ────────────────────────────────────────────────────────
     FeatureDef(
