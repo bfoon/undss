@@ -1,0 +1,51 @@
+# /etc/systemd/system/nes-sentinel.service
+# NES Sentinel as a locked-down systemd service. install-linux.sh puts it here.
+[Unit]
+Description=NES Sentinel — independent tamper witness for UN PASS
+Documentation=file:///opt/nes-sentinel/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=nes-sentinel
+Group=nes-sentinel
+ExecStart=/opt/nes-sentinel/nes-sentinel run
+Restart=always
+RestartSec=30
+Environment=NES_SENTINEL_HOME=/var/lib/nes-sentinel
+StateDirectory=nes-sentinel
+StateDirectoryMode=0700
+UMask=0077
+# Optional: encrypt the node key with a passphrase kept by systemd.
+#   systemd-creds encrypt --name=passphrase pass.txt /etc/nes-sentinel/passphrase.cred
+# LoadCredentialEncrypted=passphrase:/etc/nes-sentinel/passphrase.cred
+
+# ── hardening: it only needs to read its folder and make HTTPS/SMTP calls ──
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+RemoveIPC=yes
+
+[Install]
+WantedBy=multi-user.target

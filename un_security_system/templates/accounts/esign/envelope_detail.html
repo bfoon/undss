@@ -57,6 +57,10 @@
       {% endif %}
       <span class="ed-token">Envelope ID: {{ envelope.envelope_id }}</span>
       {% include "accounts/esign/_seal_badge.html" %}
+      <a class="badge bg-light text-un-primary text-decoration-none border"
+         href="{% url 'accounts:esign_envelope_watchers' envelope.pk %}"
+         title="Who is told if a Sentinel finds this document was tampered with">
+        <i class="bi bi-eye me-1"></i>Tamper watchers</a>
       {% if envelope.reference %}<span class="small text-muted">Ref {{ envelope.reference }}</span>{% endif %}
       {% if envelope.asset %}
         <a class="small" href="{% url 'accounts:asset_detail' envelope.asset.id %}">

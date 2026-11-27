@@ -1,0 +1,17 @@
+# docker compose run --rm sentinel enroll --server https://unpass.example.org --code NES-…
+# docker compose up -d
+services:
+  sentinel:
+    build: .
+    image: nes-sentinel:1.0.0
+    restart: unless-stopped
+    volumes:
+      - sentinel-data:/data
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 64
+volumes:
+  sentinel-data:

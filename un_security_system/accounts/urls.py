@@ -567,6 +567,9 @@ urlpatterns = [
     # NES cross-office witnessing
     path("", include("accounts.urls_esign_witness")),
 
+    # NES Sentinels: independent tamper witnesses installed by other offices
+    path("", include("accounts.urls_esign_sentinel")),
+
     # NES signing identities (sole control)
     path("", include("accounts.urls_esign_identity")),
 

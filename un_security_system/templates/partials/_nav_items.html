@@ -375,6 +375,19 @@
               <span class="appnav-badge" title="{{ nes_witness_alerts }} unresolved integrity alert{{ nes_witness_alerts|pluralize }}">{{ nes_witness_alerts }}</span>
             {% endif %}
           </a>
+
+          {% if user.role == 'ict_focal' or user.is_superuser %}
+          {% url 'accounts:esign_sentinel_home' as u_sentinel %}
+          <a class="appnav-link appnav-link-sub {% if request.path == u_sentinel %}is-active{% endif %}"
+             href="{{ u_sentinel }}"
+             data-appnav-label="NES Sentinels">
+            <i class="bi bi-shield-shaded" aria-hidden="true"></i>
+            <span>Sentinels</span>
+            {% if nes_sentinel_alerts %}
+              <span class="appnav-badge" title="{{ nes_sentinel_alerts }} open tamper alert{{ nes_sentinel_alerts|pluralize }}">{{ nes_sentinel_alerts }}</span>
+            {% endif %}
+          </a>
+          {% endif %}
         </div>
       </div>
     {% endif %}

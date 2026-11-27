@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Tamper watchers · {{ envelope.subject }} | NES{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0 px-md-2" style="max-width:860px;">
+  <a href="{% url 'accounts:esign_envelope_detail' envelope.pk %}" class="small text-decoration-none">
+    <i class="bi bi-arrow-left"></i> {{ envelope.subject }}
+  </a>
+  <h4 class="text-un-primary fw-bold mt-2 mb-1"><i class="bi bi-eye me-2"></i>Tamper watchers</h4>
+  <p class="text-muted">
+    If any Sentinel finds that this document or its audit trail was changed, these people are
+    e-mailed at once — by UN PASS and, in case UN PASS itself was the target, by the Sentinel
+    directly. The owner is always told.
+  </p>
+
+  <div class="d-flex gap-3 flex-wrap mb-3">
+    <div class="border rounded px-3 py-2"><div class="small text-muted">Witnessed blocks</div><div class="fw-bold">{{ blocks }}</div></div>
+    <div class="border rounded px-3 py-2"><div class="small text-muted">Active Sentinels</div><div class="fw-bold">{{ nodes }}</div></div>
+    <div class="border rounded px-3 py-2"><div class="small text-muted">Alerts</div><div class="fw-bold {% if alerts %}text-danger{% endif %}">{{ alerts|length }}</div></div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="list-group list-group-flush">
+      <div class="list-group-item d-flex align-items-center">
+        <i class="bi bi-person-badge me-2 text-un-primary"></i>
+        <span class="fw-semibold">{{ envelope.created_by.get_full_name|default:envelope.created_by.email|default:"—" }}</span>
+        <span class="badge bg-light text-muted ms-2">owner</span>
+      </div>
+      {% for w in watchers %}
+        <div class="list-group-item d-flex align-items-center">
+          <i class="bi bi-eye me-2 text-muted"></i>
+          <span>{{ w.user.get_full_name|default:w.user.email }}</span>
+          <span class="small text-muted ms-2">{{ w.user.email }}</span>
+          {% if may_edit %}
+          <form method="post" class="ms-auto">
+            {% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="watcher" value="{{ w.pk }}">
+            <button class="btn btn-sm btn-link text-danger p-0">Remove</button>
+          </form>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if may_edit %}
+  <form method="post" class="d-flex gap-2 mb-4">
+    {% csrf_token %}<input type="hidden" name="action" value="add">
+    <input name="who" class="form-control" placeholder="Colleague's e-mail or username" required maxlength="254">
+    <button class="btn btn-primary text-nowrap"><i class="bi bi-plus"></i> Add watcher</button>
+  </form>
+  {% endif %}
+
+  {% if alerts %}
+  <h6 class="fw-bold text-danger">Alerts on this document</h6>
+  {% for a in alerts %}
+    <div class="border-start border-3 {% if a.severity == 'critical' %}border-danger{% else %}border-warning{% endif %} ps-2 mb-2 small">
+      <b>{{ a.kind }}</b> · {{ a.node.name|default:"server" }} · {{ a.reported_at|date:"d M Y H:i" }}
+      {% if a.resolved_at %}<span class="badge bg-success">closed</span>{% endif %}
+      <div>{{ a.detail }}</div>
+    </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

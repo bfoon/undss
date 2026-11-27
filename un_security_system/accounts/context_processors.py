@@ -66,6 +66,7 @@ def agency_service_flags(request):
         # signed-in user and only when witnessing is on, so it costs nothing
         # on the pages that do not care.
         "nes_witness_alerts": _witness_alert_count(request),
+        "nes_sentinel_alerts": _sentinel_alert_count(request),
         "esign_pdfjs_base": getattr(
             settings,
             "ESIGN_PDFJS_BASE",
@@ -92,5 +93,20 @@ def _witness_alert_count(request) -> int:
         from .models_esign_witness import WitnessAlert
 
         return WitnessAlert.objects.filter(resolved=False).count()
+    except Exception:
+        return 0
+
+
+def _sentinel_alert_count(request) -> int:
+    """Open Sentinel tamper alerts, for ICT's nav badge. Never raises."""
+    try:
+        user = getattr(request, "user", None)
+        if not (user and getattr(user, "is_authenticated", False)):
+            return 0
+        if not (user.is_superuser or getattr(user, "role", "") == "ict_focal"):
+            return 0
+        from .models_esign_sentinel import SentinelAlert
+
+        return SentinelAlert.objects.filter(resolved_at__isnull=True).count()
     except Exception:
         return 0

@@ -1,0 +1,59 @@
+# Builds the NES Sentinel for Linux and Windows on every tag `sentinel-v*`
+# (or by hand), with SHA256SUMS so installers can check what they run.
+name: NES Sentinel
+on:
+  workflow_dispatch:
+  push:
+    tags: ["sentinel-v*"]
+    paths: ["sentinel/**"]
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install -r sentinel/requirements.txt pyinstaller==6.11.1
+      - run: pyinstaller --onefile --name nes-sentinel --clean --noconfirm sentinel/nes_sentinel.py
+      - run: python sentinel/nes_sentinel.py --version
+      - name: Secret storage round-trip (DPAPI on Windows, 0600 elsewhere)
+        working-directory: sentinel
+        run: >
+          python -c "import tempfile, pathlib, nes_sentinel as n;
+          p = pathlib.Path(tempfile.mkdtemp()) / 'k';
+          n.write_secret(p, b'nes-test'); assert n.read_secret(p) == b'nes-test';
+          assert p.read_bytes() != b'nes-test' or not n.IS_WINDOWS; print('secret storage ok')"
+      - run: ./dist/nes-sentinel --version
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nes-sentinel-${{ runner.os }}
+          path: dist/*
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: out }
+      - run: |
+          mkdir -p pkg/linux pkg/windows
+          cp out/nes-sentinel-Linux/nes-sentinel pkg/linux/ && chmod +x pkg/linux/nes-sentinel
+          cp out/nes-sentinel-Windows/nes-sentinel.exe pkg/windows/
+          for d in linux windows; do
+            cp sentinel/README.md sentinel/requirements.txt sentinel/nes_sentinel.py pkg/$d/
+          done
+          cp sentinel/install-linux.sh sentinel/nes-sentinel.service pkg/linux/
+          cp sentinel/install-windows.ps1 pkg/windows/
+          (cd pkg/linux && sha256sum nes-sentinel nes_sentinel.py > SHA256SUMS)
+          (cd pkg/windows && sha256sum nes-sentinel.exe nes_sentinel.py > SHA256SUMS)
+          (cd pkg && zip -qr ../nes-sentinel-linux.zip linux && zip -qr ../nes-sentinel-windows.zip windows)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nes-sentinel-packages
+          path: "nes-sentinel-*.zip"

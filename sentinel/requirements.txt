@@ -1,0 +1,2 @@
+# NES Sentinel has exactly one dependency outside the Python standard library.
+cryptography>=42,<51

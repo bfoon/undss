@@ -685,6 +685,24 @@ ESIGN_WITNESS_ALERT_EMAILS = config(
 # Seconds to wait on a peer. Distribution is queued and retried.
 ESIGN_WITNESS_TIMEOUT = 15
 
+# ─────────────────────────────────────────────────────────────────────────────
+# NES — SENTINELS (independent tamper witnesses other offices install)
+# ─────────────────────────────────────────────────────────────────────────────
+# See accounts/models_esign_sentinel.py and docs/nes-sentinel.md.
+ESIGN_SENTINEL_ENABLED = config("ESIGN_SENTINEL_ENABLED", default=True, cast=bool)
+# Ed25519 key that signs every ledger block. Created by `nes_sentinel keygen`.
+# Default: next to ESIGN_PADES_KEY, or <BASE_DIR>/secure/. Keep it out of git.
+ESIGN_SENTINEL_KEY = config("ESIGN_SENTINEL_KEY", default="")
+ESIGN_SENTINEL_KEY_PASSPHRASE = config("ESIGN_SENTINEL_KEY_PASSPHRASE", default="")
+# Give Sentinels the owner's and watchers' e-mail addresses so they can raise
+# the alarm themselves if this server is the thing that was compromised.
+ESIGN_SENTINEL_SHARE_CONTACTS = config("ESIGN_SENTINEL_SHARE_CONTACTS", default=True, cast=bool)
+ESIGN_SENTINEL_POLL_SECONDS = config("ESIGN_SENTINEL_POLL_SECONDS", default=300, cast=int)
+ESIGN_SENTINEL_AUDIT_BATCH = config("ESIGN_SENTINEL_AUDIT_BATCH", default=25, cast=int)
+ESIGN_SENTINEL_AUDIT_EVERY_HOURS = config("ESIGN_SENTINEL_AUDIT_EVERY_HOURS", default=24, cast=float)
+ESIGN_SENTINEL_SILENT_HOURS = config("ESIGN_SENTINEL_SILENT_HOURS", default=6, cast=float)
+ESIGN_SENTINEL_ALERTS_PER_HOUR = 200
+
 # ---------------------------------------------------------------------
 # NES — SIGNING IDENTITIES AND SOLE CONTROL
 # ---------------------------------------------------------------------

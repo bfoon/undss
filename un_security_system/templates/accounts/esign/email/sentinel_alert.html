@@ -1,0 +1,41 @@
+{% extends "accounts/esign/email/_base_email.html" %}
+{% block header_tag %}{% if alert.kind == "test" %}Sentinel test{% else %}Tamper alert{% endif %}{% endblock %}
+{% block body %}
+  <p style="margin:0 0 14px;font-size:15px;line-height:1.6;font-weight:700;color:{% if alert.severity == 'critical' %}#B91C1C{% else %}#92400E{% endif %};">
+    {{ title }}
+  </p>
+  {% if envelope %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    Document: <b>{{ envelope.subject }}</b><br>
+    Envelope ID: <span style="font-family:monospace;">{{ envelope.envelope_id }}</span>
+  </p>
+  {% elif alert.envelope_uid %}
+  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+    Envelope ID: <span style="font-family:monospace;">{{ alert.envelope_uid }}</span>
+    — this envelope no longer exists on the server.
+  </p>
+  {% endif %}
+  <div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin-bottom:14px;">
+    <div style="font-size:12px;color:#6B7280;font-weight:700;margin-bottom:6px;">What was seen</div>
+    <div style="font-size:13px;line-height:1.6;">{{ alert.detail|linebreaksbr }}</div>
+    {% if evidence %}
+    <table style="margin-top:8px;font-size:12px;border-collapse:collapse;">
+      {% for k, v in evidence %}
+      <tr><td style="color:#6B7280;padding:2px 10px 2px 0;vertical-align:top;">{{ k }}</td>
+          <td style="font-family:monospace;word-break:break-all;">{{ v }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </div>
+  <p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:#374151;">
+    {% if node %}Reported by the Sentinel <b>{{ node.name }}</b>{% if node.office_code %} ({{ node.office_code }}){% endif %},
+    an independent copy of the NES ledger kept outside this server.{% else %}Raised by UN PASS.{% endif %}
+    Reported {{ alert.reported_at|date:"d M Y H:i" }}.
+  </p>
+  {% if alert.kind != "test" %}
+  <p style="margin:0;font-size:13px;line-height:1.6;color:#374151;">
+    Do not re-send or re-sign the document until ICT has looked at it. Keep any copy
+    you already downloaded: a Sentinel can confirm whether your copy is the one that was signed.
+  </p>
+  {% endif %}
+{% endblock %}
