@@ -11,11 +11,11 @@ BFoon from base.html's `bfoon` block. Document pages override that block, or
 
 Search, "pages you have looked at" and reminders run entirely in this page.
 Only "Summarise" and questions go to the server (and from there, if
-configured, to Google Gemini). Open by default on every page; the leaf in the
-corner opens and closes it.
+configured, to Google Gemini). Closed by default: the leaf in the corner
+opens it, and only the leaf and the open panel take clicks.
 {% endcomment %}
 {% load static %}
-<div id="bfoon" class="bf-open" data-mode="{{ bfoon_mode }}"
+<div id="bfoon" data-mode="{{ bfoon_mode }}"
      data-envelope="{{ envelope.envelope_id|default:'' }}"
      {% if bfoon_token %}
        data-text-url="{% url 'accounts:esign_bfoon_text_token' bfoon_token %}"
@@ -32,7 +32,7 @@ corner opens and closes it.
      data-subject="{{ envelope.subject|default:'' }}"
      data-csrf="{{ csrf_token }}">
 
-  <section class="bf-panel" role="dialog" aria-label="BFoon reading assistant" aria-hidden="false">
+  <section class="bf-panel" role="dialog" aria-label="BFoon reading assistant" aria-hidden="true">
     <header class="bf-head">
       <div class="bf-head-leaf" aria-hidden="true">
         <svg viewBox="0 0 64 64"><use href="#bf-leaf-face"/></svg>
@@ -101,7 +101,7 @@ corner opens and closes it.
   <div class="bf-bubble" id="bfBubble" role="status" aria-live="polite" hidden></div>
   <div class="bf-card" id="bfCard" role="tooltip" hidden></div>
 
-  <button type="button" class="bf-mascot" data-bf="toggle" aria-label="Open or close BFoon" aria-expanded="true" title="BFoon">
+  <button type="button" class="bf-mascot" data-bf="toggle" aria-label="Open BFoon, your reading buddy" aria-expanded="false" title="BFoon — search, summarise, ask">
     <span class="bf-drift" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
     <svg viewBox="0 0 64 64" aria-hidden="true"><use href="#bf-leaf-face"/></svg>
     <span class="bf-badge" id="bfBadge" hidden></span>
@@ -147,7 +147,12 @@ corner opens and closes it.
 
 <style>
 #bfoon{--bf-blue:#0468B1;--bf-deep:#024A80;--bf-sky:#E8F3FC;--bf-ink:#0B1F33;--bf-mute:#5B6B7C;
-  position:fixed;right:18px;bottom:18px;z-index:1080;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--bf-ink)}
+  position:fixed;right:18px;bottom:18px;z-index:1080;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--bf-ink);
+  pointer-events:none}
+/* Only what you can see takes clicks: the leaf, the open panel, bubbles. The
+   rest of the corner stays clickable for the page underneath. */
+#bfoon .bf-mascot,#bfoon.bf-open .bf-panel,#bfoon .bf-bubble{pointer-events:auto}
+#bfoon:not(.bf-open) .bf-panel{display:none}
 #bfoon *{box-sizing:border-box}
 #bfoon svg{display:block}
 
@@ -156,6 +161,13 @@ corner opens and closes it.
   background:radial-gradient(circle at 35% 30%,#fff,#DCEEFC 70%);box-shadow:0 8px 24px rgba(4,104,177,.35),inset 0 0 0 3px #fff;
   cursor:pointer;padding:6px;transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
 #bfoon .bf-mascot:hover{transform:translateY(-3px) scale(1.06)}
+#bfoon .bf-mascot:hover .bf-sprout{animation-duration:.7s}
+#bfoon .bf-mascot::after{content:"Ask BFoon";position:absolute;right:74px;top:50%;transform:translateY(-50%) translateX(8px);white-space:nowrap;
+  background:#0468B1;color:#fff;font-weight:700;font-size:12px;padding:5px 10px;border-radius:999px;opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;box-shadow:0 4px 12px rgba(4,104,177,.35)}
+#bfoon:not(.bf-open) .bf-mascot:hover::after{opacity:1;transform:translateY(-50%)}
+#bfoon:not(.bf-open) .bf-mascot{animation:bf-breathe 3.6s ease-in-out infinite}
+@keyframes bf-breathe{0%,100%{box-shadow:0 8px 24px rgba(4,104,177,.35),inset 0 0 0 3px #fff}50%{box-shadow:0 8px 30px rgba(4,104,177,.55),0 0 0 6px rgba(63,169,245,.18),inset 0 0 0 3px #fff}}
 #bfoon .bf-mascot:focus-visible,#bfoon button:focus-visible,#bfoon input:focus-visible{outline:3px solid #7CC4FA;outline-offset:2px}
 #bfoon .bf-mascot svg{width:100%;height:100%;overflow:visible}
 #bfoon .bf-badge{position:absolute;top:-2px;right:-2px;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#E0457B;
@@ -189,7 +201,8 @@ corner opens and closes it.
 #bfoon .bf-panel{width:min(360px,calc(100vw - 28px));max-height:min(540px,calc(100vh - 120px));margin-bottom:12px;display:flex;flex-direction:column;
   background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 18px 48px rgba(2,74,128,.28),0 0 0 1px rgba(4,104,177,.12);
   transform-origin:calc(100% - 33px) calc(100% + 40px);transition:transform .38s cubic-bezier(.2,1.4,.4,1),opacity .25s}
-#bfoon:not(.bf-open) .bf-panel{transform:scale(.2) translateY(30px);opacity:0;pointer-events:none;visibility:hidden;transition:transform .25s,opacity .2s,visibility 0s .25s}
+#bfoon.bf-open .bf-panel{animation:bf-grow .38s cubic-bezier(.2,1.4,.4,1)}
+@keyframes bf-grow{from{transform:scale(.2) translateY(30px);opacity:0}to{transform:none;opacity:1}}
 #bfoon .bf-head{display:flex;align-items:center;gap:10px;padding:12px 12px 10px;color:#fff;
   background:linear-gradient(135deg,#0468B1 0%,#0A7FD1 60%,#3FA9F5 100%);position:relative;overflow:hidden}
 #bfoon .bf-head::after{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.08)}
@@ -337,7 +350,7 @@ corner opens and closes it.
   }
   function leafIcon() { return '<svg viewBox="0 0 64 64" aria-hidden="true"><use href="#bf-leaf-face"/></svg>'; }
 
-  /* ── open / close: open by default on every page ───────────────────── */
+  /* ── open / close: closed until the leaf is clicked ─────────────────── */
   function setOpen(open) {
     root.classList.toggle("bf-open", open);
     $(".bf-panel").setAttribute("aria-hidden", open ? "false" : "true");
@@ -385,6 +398,12 @@ corner opens and closes it.
     say.t = setTimeout(hideBubble, ms || 7000);
   }
   function hideBubble() { $("#bfBubble").hidden = true; }
+  $("#bfBubble").addEventListener("click", function () { setOpen(true); hideBubble(); });
+  $("#bfBubble").style.cursor = "pointer";
+  function onceThisSession(key) {
+    try { if (sessionStorage.getItem(key) === "1") return false; sessionStorage.setItem(key, "1"); } catch (e) {}
+    return true;
+  }
 
   /* ── what this page is about ───────────────────────────────────────── */
   if (!HAS_DOC) {
@@ -424,9 +443,7 @@ corner opens and closes it.
     if (!HAS_DOC) {
       $("#bfTreeCaption").textContent = "Your recent documents";
       $("#bfSub").textContent = "search, summarise, ask";
-      let greeted = false;
-      try { greeted = sessionStorage.getItem("bfoon:greeted") === "1"; sessionStorage.setItem("bfoon:greeted", "1"); } catch (e) {}
-      if (!greeted) say("Hi, I'm <b>BFoon</b>. Search any of your NES documents, or pick one and I'll summarise it.", 6500);
+      if (onceThisSession("bfoon:greeted")) say("Hi, I'm <b>BFoon</b>. Click me to search, summarise or ask about any NES document.", 5000);
       return;
     }
     const n = totalPages();
@@ -434,7 +451,8 @@ corner opens and closes it.
     $("#bfSub").textContent = n === 1 ? "1 page to read" : n + " pages to read";
     if (MODE === "detail") return;
     const left = n - countSeen();
-    if (left > 0) say("Hi, I'm <b>BFoon</b>. I'll grow a leaf for every page you read — <b>" + left + "</b> to go.", 6000);
+    if (left > 0 && onceThisSession("bfoon:greeted:" + ENV))
+      say("I'll grow a leaf for every page you read — <b>" + left + "</b> to go. Click me any time.", 5000);
   }
 
   /* ── Reading: which pages you have actually looked at ──────────────── */
@@ -622,10 +640,9 @@ corner opens and closes it.
       e.preventDefault();
       e.stopImmediatePropagation();
       mood("bf-nudge", 1500);
-      setOpen(true);
-      showTab("read");
       say("Before you sign — you haven't looked at page" + (unseen.length > 1 ? "s " : " ") + "<b>" +
-          unseen.slice(0, 6).join(", ") + (unseen.length > 6 ? "…" : "") + "</b>. Have a look, or press sign again to carry on.", 12000);
+          unseen.slice(0, 6).join(", ") + (unseen.length > 6 ? "…" : "") + "</b>. Have a look, or press sign again to carry on. " +
+          "Click me to see which.", 12000);
     }, true);
   }
 
@@ -927,6 +944,6 @@ corner opens and closes it.
   }, { passive: true });
 
   renderTarget();
-  setOpen(true);   // open by default, every time
+  setOpen(false);  // closed until someone clicks the leaf
 })();
 </script>

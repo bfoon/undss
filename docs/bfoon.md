@@ -1,11 +1,12 @@
 # BFoon — the NES reading buddy
 
-A small leaf in UNDP blue in the bottom-right corner of every NES page. Open by
-default; the leaf opens and closes it (Esc closes it too).
+A small leaf in UNDP blue in the bottom-right corner of every NES page. Closed
+by default; click the leaf to open it (Esc or the leaf closes it). Only the leaf
+and the open panel take clicks, so it never blocks the page underneath.
 
 | Where | What it does |
 |---|---|
-| Signing and review pages | **Reading**: a tree that grows a numbered leaf for every page you have actually looked at (on screen for over a second), a leaf stamp on each page, chips for pages not yet seen, and the fields still to fill. Before you sign with pages unread it reminds you once. |
+| Signing and review pages | **Reading**: a tree that grows a numbered leaf for every page you have actually looked at (on screen for over a second), a leaf stamp on each page, chips for pages not yet seen, and the fields still to fill. Before you sign with pages unread it reminds you once, in a bubble. |
 | Envelope page | **Overview**: pages and files, with Summarise / Search / Ask. |
 | Any NES page (signed in) | **Search all my documents**: titles, references, envelope ids, people, file names and the words inside every document you may see. Hover a result for sender, people, dates, files and a longer quote; click to open it at the page. **Summarise** or **Ask** about any result from anywhere. |
 
